@@ -27,11 +27,11 @@ with the next task).
 - [ ] P1.5 Renderer (PixiJS: layers, zoom presets, aggregation, overlays, selection, follow)
 - [ ] P1.6 UI shell and Explore view (Home, Play shelf, New Dish, Dish screen, input contract)
 - [ ] P1.7 Inspector (Summary/Why/Details, reason‑code copy, shortcuts, cell inspector)
-- [ ] P1.8 Explore tools and undo (Add Life, Feed, Look, one‑gesture commands, time‑rewind undo)
-- [ ] P1.9 Persistence (IndexedDB adapter, slots, autosave, background pause, export/import .pixelmeba)
+- [x] (df43c74) P1.8 Explore tools and undo (Add Life, Feed, Look, one‑gesture commands, time‑rewind undo)
+- [x] (df43c74) P1.9 Persistence (IndexedDB adapter, slots, autosave, background pause, export/import .pixelmeba)
 - [ ] P1.10 Duplicate dish, event feed, history, charts
-- [ ] P1.11 Android spike (cap init/add; SDK detection; ANDROID_SETUP.md if blocked)
-- [ ] P1.12 Development‑seed report (docs/reports/tune-g1.md)
+- [x] (778f3be) P1.11 Android spike (cap init/add; SDK detection; ANDROID_SETUP.md if blocked)
+- [x] (e6f0457) P1.12 Development‑seed report (docs/reports/tune-g1.md)
 - [ ] G1 gate: deterministic‑state · blocked‑division‑proposal · finite‑feeding · enzyme‑source · inherited‑variation · predation · photosynthesis · e2e garden/place‑and‑undo/save‑reload · opening‑loop review → tag `g1`
 
 ## Phase 2 — Core Abilities, Comparison, What if?

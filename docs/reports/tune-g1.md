@@ -299,4 +299,27 @@ relationship is described as "coincides with", never "because".
      air.
    - If a later review finds the Sunbead-only first division at 29.3 s misleading for the
      tutorial ("See a Sprinter split" goal), that is a presentation question, not a recipe one.
+## Candidate measurements (lead, 2026-09-27)
+
+The three proposals, and 1 + 3 together, were run in memory on the six development seeds for
+600 s, Standard preset, with `tuneSeed` from this tool; `content/` was not changed. The
+unchanged recipe reproduced all six endpoint hashes above. Every candidate met both D06 targets
+on 6/6 seeds.
+
+| Candidate | Starch converted by 600 s (C) | B06 births | B06 alive | B04 alive | Seeds with B04 extinct |
+|---|---|---|---|---|---|
+| V1 as is | 9.8–13.0 | 2–7 | 9–13 | 0–2 | 3/6 |
+| 1: starch-patch sugar 0.10 | 22.1–26.0 | 1–8 | 8–14 | 0–28 | 3/6 |
+| 3: debris patch to (58,48) | 9.8–26.6 | 3–18 | 9–25 | 0–72 | 2/6 |
+| 1 + 3 | 22.1–23.2 | 2–9 | 2–14 | 0–249 | 2/6 |
+
+- Candidate 1 more than doubles starch conversion on every seed, so "starch → sugar" stays
+  visible longer, but Crumbsmiths do not persist better: the sugar they unlock drifts to others.
+- Candidate 3 helps Crumbsmiths on some seeds and makes Recyclers swing from extinction to a
+  bloom of 72.
+- 1 + 3 gives Recycler booms above 230 on two seeds and extinction on two.
+
+**Decision (DECISIONS D-0015): keep FIRST_DISH_V1.** The targets are met, starch conversion is
+visible in the first minute, and no candidate improves the opening without adding seed-to-seed
+swings. The proposals are re-measured when the launch ecology lands (P3 tuning).
 <!-- analysis:end -->

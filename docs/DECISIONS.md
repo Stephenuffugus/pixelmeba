@@ -131,3 +131,10 @@ Decision: species charts are small multiples — one sparkline per species, labe
 Reason: identity never depends on color; charts stay honest for color-vision deficiencies; matches the "readable without color" principle.
 Affects: src/ui/panels/HistorySheet.tsx.
 Owner review: no
+
+## D-0015 · 2026-09-27 · P1.12 · Keep FIRST_DISH_V1; no V2 at G1
+Context: the G1 seed report meets the D06 pacing targets on 6/6 seeds. It shows Crumbsmiths stalling after about 60 s and Recyclers emptying their patch by about 120 s. Three one-setting recipe revisions were proposed.
+Decision: keep FIRST_DISH_V1. All candidates were measured in memory on the six seeds (table in docs/reports/tune-g1.md). The starch-sugar bootstrap doubles conversion but does not help Crumbsmiths persist. Moving the debris patch makes Recycler outcomes swing from extinction to a bloom. Neither is a clear improvement to the opening.
+Reason: BUILD_DIRECTIVE P1.12 tunes the recipe only when targets are missed; "targets to check, not to force". Extinction and quiet corners are valid outcomes, and the guide text already says "None of this is guaranteed."
+Affects: content/recipes (unchanged). Re-measure the proposals at P3 tuning when the launch ecology is enabled.
+Owner review: no
