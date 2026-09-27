@@ -13,7 +13,7 @@ import { recordInput } from './ledger';
 import { recordBirth } from './lineage';
 import { canOccupy, initialDecisionTimer } from './movement';
 import { founderGenome } from './founders';
-import { markField } from './transport';
+import { markField, updateDerived } from './transport';
 import { rebuildIndex } from './spatial';
 import { initFounder } from './branches';
 import { detFloat, detPermutation, STREAMS } from './rng';
@@ -66,6 +66,15 @@ export function stageCommands(world: World): void {
 export function applyNow(world: World, commandId: string, payload: CommandPayload): Command {
   const cmd = queueCommand(world, commandId, payload, world.tick);
   stageCommands(world);
+  // A paused edit is a complete transaction: fold transient bookkeeping now so nothing live is
+  // left outside saved state, and leave derived state exactly as a reload would rebuild it.
+  if (world.capacityHitThisTick) {
+    world.capacityLimitedTicks++;
+    world.history.pendingCapacity = true;
+    world.capacityHitThisTick = false;
+  }
+  rebuildIndex(world);
+  updateDerived(world);
   return cmd;
 }
 

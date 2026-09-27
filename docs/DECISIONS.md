@@ -110,3 +110,10 @@ Decision: the deposit layer draws a faint warm haze where sugar exceeds a small 
 Reason: "understandable before deep"; Explore must show where food is.
 Affects: src/worker/snapshot.ts, src/render/layers.ts.
 Owner review: no
+
+## D-0012 · 2026-09-27 · G0 follow-up · Determinism-review findings
+Context: the determinism/persistence reviewer (sixth dimension of the G0 review) reported three minor issues after g0 was tagged.
+Decision: (1) stage 6 scratch is cleared in a finally block, so an exception can never leak demand totals into a later tick or another dish in the same worker; (2) a paused edit (applyNow) folds the capacity-hit flag into its bookkeeping immediately, so no transient flag is ever live at a save boundary; (3) the spatial index is rebuilt at the end of stage 9 and after every paused edit, so derived state at a tick boundary equals what deserialization rebuilds.
+Reason: SPEC §15 — derived caches must never differ between a continuous run and a reload.
+Affects: src/sim/intake.ts, commands.ts, births.ts; regression test in tests/sim/review-regressions.test.ts.
+Owner review: no

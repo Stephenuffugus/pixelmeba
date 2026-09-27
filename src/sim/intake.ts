@@ -91,6 +91,14 @@ export function isIntakeEligible(world: World, slot: number): boolean {
 }
 
 export function stageIntake(world: World): void {
+  try {
+    intakeBody(world);
+  } finally {
+    clearScratch();
+  }
+}
+
+function intakeBody(world: World): void {
   const e = world.ents;
   const c = e.cols;
   const load = world.derived.cellLoad;
@@ -354,18 +362,18 @@ export function stageIntake(world: World): void {
     markField(world, 'acid');
   }
 
-  // Clear demand scratch.
+}
+
+/** Zero every demand entry written this pass (also runs when the stage throws). */
+function clearScratch(): void {
   for (let t = 0; t < touched.length; t++) {
     const key = touched[t]!;
     const fi = Math.floor(key / CELL_COUNT);
     demand[fi]![key - fi * CELL_COUNT] = 0;
   }
-  for (let i = 0; i < e.highWater; i++) {
-    if (route[i] === ROUTE_NONE) continue;
-    const cell = entCell[i]!;
-    demandN[cell] = 0;
-    demandO2[cell] = 0;
-  }
+  touched.length = 0;
+  demandN.fill(0);
+  demandO2.fill(0);
 }
 
 const fracNCell = new Float64Array(CELL_COUNT);

@@ -156,6 +156,8 @@ export function stageBirths(world: World): void {
     commitDivision(world, i, slot, target);
   }
   if (capacityHit) world.capacityHitThisTick = true;
+  // Leave the index canonical at the tick boundary (daughters included), as a reload would.
+  rebuildIndex(world);
   // Clear the just-born marker so daughters act from the next tick.
   for (let i = 0; i < e.highWater; i++) if (c.alive[i] === 1) c.flags[i] = c.flags[i]! & ~FLAG.justBorn;
 }

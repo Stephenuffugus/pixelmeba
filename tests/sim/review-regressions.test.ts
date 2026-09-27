@@ -3,13 +3,13 @@
  * Each test reproduces the reviewer's failure scenario and pins the corrected behavior.
  */
 import { describe, expect, it } from 'vitest';
-import { queueCommand } from '../../src/sim/commands';
+import { applyNow, queueCommand } from '../../src/sim/commands';
 import { FLAG } from '../../src/sim/entities';
 import { cellIndex, ST_STONE } from '../../src/sim/grid';
 import { stageIntake } from '../../src/sim/intake';
 import { checkLedger } from '../../src/sim/ledger';
 import { stageSenseAndMove } from '../../src/sim/movement';
-import { rebuildIndex } from '../../src/sim/spatial';
+import { forEachInCell, rebuildIndex } from '../../src/sim/spatial';
 import { deserializeWorld, serializeWorld, stateHash } from '../../src/sim/serialize';
 import { run, step } from '../../src/sim/tick';
 import { R } from '../../src/sim/reasons';
@@ -153,6 +153,18 @@ describe('G0 review regressions', () => {
     hold(15);
     expect(w.ents.cols.flags[s]! & FLAG.stressed).not.toBe(0);
     void cell;
+  });
+
+  it('a paused inoculation is in the spatial index immediately, exactly as a reload would rebuild it', () => {
+    const w = clearWater();
+    applyNow(w, 'p', { kind: 'inoculate', speciesId: 'B01', x: 64.5, y: 64.5, radius: 0.4, count: 5 });
+    const seen: number[] = [];
+    forEachInCell(w, CELL, (s) => {
+      seen.push(s);
+    });
+    expect(seen).toHaveLength(5);
+    const reloaded = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(w))) as ReturnType<typeof serializeWorld>);
+    expect(Array.from(reloaded.derived.cellLoad)).toEqual(Array.from(w.derived.cellLoad));
   });
 
   it('the energy ledger records only energy actually paid, maintenance before movement', () => {
