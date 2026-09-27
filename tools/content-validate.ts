@@ -8,6 +8,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { computeContentHash, validateContent, type ContentIssue } from '../src/sim/content/registry';
 import { CONTENT_DIR, REPO_ROOT, loadRawPacksFs } from './lib/content-fs';
 
@@ -46,6 +47,19 @@ export const LARGE_FRAMES: readonly FrameRequirement[] = [
   { anims: ['death'], frames: 4 },
 ];
 export const ATLAS_HEADINGS = ['e', 's', 'w', 'n'] as const;
+
+/**
+ * BUILD_DIRECTIVE P1.4 sprite sizes and headings for the Phase 1 species, checked independently of
+ * the content records so a content edit cannot quietly weaken the art requirements. A01 has no
+ * self-propulsion, so its looping animation is "idle".
+ */
+export const P14_SPRITES: Readonly<Record<string, { readonly size: number; readonly headings?: number; readonly loop?: string }>> = {
+  B01: { size: 16, headings: 4 },
+  B04: { size: 16, headings: 4 },
+  B06: { size: 16, headings: 4 },
+  A01: { size: 16, headings: 1, loop: 'idle' },
+  P01: { size: 32 },
+};
 
 export function requiredFrames(frameSize: number): readonly FrameRequirement[] {
   return frameSize >= 32 ? LARGE_FRAMES : SMALL_FRAMES;
@@ -113,7 +127,19 @@ export function checkAtlas(atlas: unknown, species: readonly AtlasSpeciesRef[], 
     if (sprite.speciesId !== sp.id) err(`${base}.speciesId`, `${who}: atlas says species "${String(sprite.speciesId)}"`);
     if (sprite.size !== sp.frameSize) err(`${base}.size`, `${who}: atlas frame size ${String(sprite.size)} ≠ content frameSize ${sp.frameSize}`);
     if (sprite.headings !== sp.headings) err(`${base}.headings`, `${who}: atlas has ${String(sprite.headings)} heading(s), content needs ${sp.headings}`);
+    const spec = P14_SPRITES[sp.id];
+    if (spec) {
+      // Reported only when atlas and content agree with each other (otherwise the mismatch error above
+      // already names the problem): this catches both being weakened together.
+      if (sprite.size === sp.frameSize && sprite.size !== spec.size) err(`${base}.size`, `${who}: BUILD_DIRECTIVE P1.4 requires ${spec.size}×${spec.size} frames, atlas has ${String(sprite.size)}`);
+      if (spec.headings !== undefined && sprite.headings === sp.headings && sprite.headings !== spec.headings) err(`${base}.headings`, `${who}: BUILD_DIRECTIVE P1.4 requires ${spec.headings} heading(s), atlas has ${String(sprite.headings)}`);
+    }
     const anims = isObj(sprite.animations) ? sprite.animations : {};
+    if (spec?.loop) {
+      const a = anims[spec.loop];
+      // Missing entirely (a short one is reported by the frame-count check below).
+      if (!isObj(a) || !isInt(a.frames) || a.frames <= 0) err(`${base}.animations.${spec.loop}`, `${who}: BUILD_DIRECTIVE P1.4 requires a 4-frame "${spec.loop}" animation`);
+    }
     const declared = (name: string): number => {
       const a = anims[name];
       return isObj(a) && isInt(a.frames) ? a.frames : 0;
@@ -232,4 +258,7 @@ async function main(): Promise<void> {
   );
 }
 
-if (process.argv[1]?.endsWith('content-validate.ts')) await main();
+// Run as a script (npx tsx tools/content-validate[.ts]) but not when imported by tests.
+const invoked = process.argv[1] ? resolve(process.argv[1]) : '';
+const self = fileURLToPath(import.meta.url);
+if (invoked === self || `${invoked}.ts` === self) await main();

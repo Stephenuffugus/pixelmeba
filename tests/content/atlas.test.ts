@@ -41,9 +41,22 @@ const messages = (a: unknown, opts: Parameters<typeof checkAtlas>[2] = {}) => ch
 
 describe('atlas completeness (P1.4)', () => {
   it('the committed atlas has every required frame for every enabled species, and its image matches', () => {
-    expect(enabled.map((s) => s.id)).toEqual(['A01', 'B01', 'B04', 'B06', 'P01']);
+    // Later phases enable more species; the five Phase 1 organisms must always be among them.
+    expect(enabled.map((s) => s.id)).toEqual(expect.arrayContaining(['A01', 'B01', 'B04', 'B06', 'P01']));
     expect(checkAtlas(atlas(), enabled, { png })).toEqual([]);
     expect(pngSize(png)).toEqual({ width: atlas().width, height: atlas().height });
+  });
+
+  it('enforces the P1.4 sizes and headings even if content and atlas agree on something smaller', () => {
+    const a = atlas();
+    const weak = JSON.parse(JSON.stringify(a)) as typeof a;
+    weak.sprites.b01_sprinter!.headings = 1;
+    const refs = enabled.map((r) => (r.id === 'B01' ? { ...r, headings: 1 } : r));
+    const out = checkAtlas(weak, refs).map((i) => i.message);
+    expect(out.some((m) => m.includes('B01') && m.includes('requires 4 heading'))).toBe(true);
+    const noIdle = JSON.parse(JSON.stringify(a)) as typeof a;
+    delete (noIdle.sprites.a01_sunbead!.animations as Record<string, unknown>).idle;
+    expect(checkAtlas(noIdle, enabled).map((i) => i.message).some((m) => m.includes('A01') && m.includes('"idle"'))).toBe(true);
   });
 
   it('requires the P1.4 frame counts, per heading, mapped to atlas animation names', () => {
@@ -122,7 +135,9 @@ describe('atlas completeness (P1.4)', () => {
       const res = spawnSync(tsx, [join(REPO_ROOT, 'tools', 'content-validate.ts'), '--atlas', manifestPath], { cwd: REPO_ROOT, encoding: 'utf8' });
       expect(res.status).toBe(1);
       expect(res.stderr).toContain('missing frame "p01_amoeba/death/e/3"');
-      expect(res.stderr).toContain('content: 1 error(s)');
+      // Only the atlas error is asserted: other content errors (e.g. a stale contentHash mid-edit) are
+      // reported by their own checks and must not make this test fail for an unrelated reason.
+      expect(res.stderr).toMatch(/content: \d+ error\(s\)/);
     });
   });
 });
