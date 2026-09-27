@@ -40,6 +40,7 @@ import { FeedSheet } from '../panels/FeedSheet';
 import { InspectorSheet } from '../panels/Inspector';
 import { MoreSheet, SaveSheet } from '../panels/MoreSheet';
 import { HistorySheet } from '../panels/HistorySheet';
+import { FamilyMarkers } from '../panels/FamilyMarkers';
 import { IconMore } from '../icons';
 import { autosave } from '../state';
 import type { Speed } from '@worker/protocol';
@@ -184,6 +185,7 @@ export function DishScreen() {
             <IconZoomOut />
           </button>
         </div>
+        <FamilyMarkers />
         {candidates.value ? <CandidateList /> : null}
         {m?.capacityReached ? <div class="capacity-banner">Simulation capacity reached — a limit of the game, not the ecosystem.</div> : null}
         {toast.value ? (

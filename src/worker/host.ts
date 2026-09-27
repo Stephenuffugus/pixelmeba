@@ -6,14 +6,14 @@
  * within a work budget; if it falls behind it drops the backlog (never skips biological ticks or
  * changes dt) and reports the effective speed it actually achieved (SPEC §3.1, §16).
  */
-import { applyNow } from '@sim/commands';
+import { applyNow, type CommandPayload } from '@sim/commands';
 import type { ContentRegistry } from '@sim/content/registry';
 import { realizeRecipe } from '@sim/recipes';
 import { deserializeWorld, serializeWorld, stateHash, type WorldState } from '@sim/serialize';
 import { step } from '@sim/tick';
 import type { World } from '@sim/world';
-import { buildInspector, packDeposits, packEntities, packOverlay, visualEvents } from './snapshot';
-import type { DishInfo, DishSource, FromWorker, OverlayId, Selection, SlotSummary, SnapshotMsg, Speed, ToWorker } from './protocol';
+import { buildFamily, buildInspector, packDeposits, packEntities, packOverlay, visualEvents } from './snapshot';
+import { stamp, type DishInfo, type DishSource, type Envelope, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 import { buildSaveFile, loadSaveFile, SaveFileError } from '@persist/saveFile';
 import { AUTOSAVE_SLOT, type SaveStore, type SlotInfo } from '@persist/store';
 
@@ -39,6 +39,9 @@ interface Dish {
   overlay: OverlayId | null;
   selection: Selection | null;
   undo: WorldState | null;
+  /** Last known-good state and the commands applied since, for rollback on error (ARCH §7). */
+  checkpoint: WorldState;
+  replay: { readonly tick: number; readonly commandId: string; readonly payload: CommandPayload }[];
   ticksWindow: number[];
   effectiveSpeed: number;
   failed: boolean;
@@ -47,6 +50,10 @@ interface Dish {
 const MAX_PUMP_MS = 30;
 const SNAPSHOT_INTERVAL_MS = 100;
 const MAX_BACKLOG_TICKS = 20;
+/** A fresh rollback checkpoint every 30 simulated seconds (serialize ≈ 20 ms at 700 organisms). */
+const CHECKPOINT_TICKS = 300;
+/** Requests that change a world and are rolled back if they throw part-way. */
+const MUTATING = new Set<ToWorker['type']>(['command', 'step', 'undo']);
 
 export class DishHost {
   private readonly dishes: Record<string, Dish> = {};
@@ -56,12 +63,17 @@ export class DishHost {
 
   constructor(
     private readonly registry: ContentRegistry,
-    private readonly post: (msg: FromWorker, transfer?: Transferable[]) => void,
+    private readonly postRaw: (msg: FromWorker & Envelope, transfer?: Transferable[]) => void,
     private readonly clock: HostClock,
     private readonly store: SaveStore | null = null,
     private readonly persistent = false,
   ) {
     this.lastPump = clock.now();
+  }
+
+  /** Every packet leaves stamped with the protocol version. */
+  private post(msg: FromWorker, transfer?: Transferable[]): void {
+    this.postRaw(stamp(msg), transfer);
   }
 
   private iso(): string {
@@ -150,6 +162,8 @@ export class DishHost {
       overlay: null,
       selection: null,
       undo: null,
+      checkpoint: serializeWorld(world),
+      replay: [],
       ticksWindow: [],
       effectiveSpeed: 0,
       failed: false,
@@ -168,6 +182,8 @@ export class DishHost {
   }
 
   handle(msg: ToWorker): void {
+    const target = 'dishId' in msg ? this.dishes[msg.dishId] : undefined;
+    const tickBefore = target?.world.tick ?? 0;
     try {
       this.dispatch(msg);
     } catch (e) {
@@ -176,6 +192,8 @@ export class DishHost {
       if (dish) {
         dish.speed = 0;
         dish.failed = true;
+        // A request that threw part-way may have left partial changes: restore the last valid state.
+        if (dish === target && MUTATING.has(msg.type)) this.rollback(dish, tickBefore);
       }
       this.post({
         type: 'error',
@@ -225,8 +243,16 @@ export class DishHost {
       }
       case 'command': {
         const d = this.need(msg.dishId);
-        if (msg.undoable) d.undo = serializeWorld(d.world);
+        const before = msg.undoable ? serializeWorld(d.world) : null;
+        const tick = d.world.tick;
         const cmd = applyNow(d.world, msg.commandId, msg.payload);
+        if (before) {
+          d.undo = before;
+          // The pre-command state doubles as the rollback checkpoint.
+          d.checkpoint = before;
+          d.replay = [];
+        }
+        d.replay.push({ tick, commandId: msg.commandId, payload: msg.payload });
         this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: cmd.result ?? null });
         this.sendSnapshot(d);
         return;
@@ -238,6 +264,8 @@ export class DishHost {
           return;
         }
         d.world = deserializeWorld(d.undo);
+        d.checkpoint = d.undo;
+        d.replay = [];
         d.undo = null;
         d.speed = 0;
         d.lastEventId = d.world.counters.nextEventId - 1;
@@ -270,6 +298,9 @@ export class DishHost {
           name: `${d.name} (copy)`,
           speed: 0,
           undo: null,
+          checkpoint: state,
+          replay: [],
+          failed: false,
           ticksWindow: [],
           lastGeometryVersion: -1,
           selection: null,
@@ -285,7 +316,14 @@ export class DishHost {
       case 'history': {
         const d = this.need(msg.dishId);
         const h = d.world.history;
-        this.post({ type: 'history', requestId: msg.requestId, dishId: d.id, seconds: h.seconds, minutes: h.minutes, compacted: h.compacted });
+        const seconds = msg.lastSeconds !== undefined && msg.lastSeconds >= 0 ? h.seconds.slice(-msg.lastSeconds) : h.seconds;
+        this.post({ type: 'history', requestId: msg.requestId, dishId: d.id, seconds, minutes: h.minutes, compacted: h.compacted });
+        return;
+      }
+      case 'family': {
+        // Read-only: answers from lineage records and entity columns, never touches the world.
+        const d = this.need(msg.dishId);
+        this.post({ type: 'family', requestId: msg.requestId, dishId: d.id, family: buildFamily(d.world, msg.birthId) });
         return;
       }
       case 'release':
@@ -345,6 +383,37 @@ export class DishHost {
   }
 
   /** Advance the active dish according to wall-clock time. Call frequently (≈ every 16 ms). */
+  private checkpoint(d: Dish): void {
+    d.checkpoint = serializeWorld(d.world);
+    d.replay = [];
+  }
+
+  /**
+   * Restore the dish to its state at `tick` (ARCH §7: an error preserves the last valid state): the
+   * last checkpoint, plus the commands applied since, re-run deterministically. If the replay itself
+   * fails, the checkpoint alone is kept.
+   */
+  private rollback(d: Dish, tick: number): void {
+    let w = deserializeWorld(d.checkpoint);
+    try {
+      let k = 0;
+      for (;;) {
+        while (k < d.replay.length && d.replay[k]!.tick === w.tick) {
+          const r = d.replay[k++]!;
+          applyNow(w, r.commandId, r.payload);
+        }
+        if (w.tick >= tick) break;
+        step(w);
+      }
+    } catch {
+      w = deserializeWorld(d.checkpoint);
+      d.replay = [];
+    }
+    d.world = w;
+    d.lastEventId = Math.min(d.lastEventId, w.counters.nextEventId - 1);
+    d.lastGeometryVersion = -1;
+  }
+
   pump(): void {
     const now = this.clock.now();
     const elapsed = Math.min(250, now - this.lastPump);
@@ -357,11 +426,14 @@ export class DishHost {
       if (d.acc > MAX_BACKLOG_TICKS) d.acc = MAX_BACKLOG_TICKS;
       const start = this.clock.now();
       while (d.acc >= 1) {
+        if (d.world.tick - d.checkpoint.tick >= CHECKPOINT_TICKS) this.checkpoint(d);
+        const t0 = d.world.tick;
         try {
           step(d.world);
         } catch (e) {
           d.speed = 0;
           d.failed = true;
+          this.rollback(d, t0);
           this.post({ type: 'error', dishId: d.id, message: e instanceof Error ? e.message : String(e), lastValidTick: d.world.tick });
           break;
         }

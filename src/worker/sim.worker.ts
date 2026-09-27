@@ -5,21 +5,35 @@
 import { buildRegistry } from '@sim/content/registry';
 import { loadRawPacksVite } from '@sim/content/raw-vite';
 import { DishHost } from './host';
-import type { FromWorker, ToWorker } from './protocol';
+import { PROTOCOL_VERSION, type Envelope, type FromWorker, type ToWorker } from './protocol';
 import { IdbBackend } from '@persist/idb';
 import { MemoryBackend, SaveStore } from '@persist/store';
 
 const scope = self as unknown as {
-  postMessage(msg: FromWorker, transfer?: Transferable[]): void;
-  onmessage: ((ev: MessageEvent<ToWorker>) => void) | null;
+  postMessage(msg: FromWorker & Envelope, transfer?: Transferable[]): void;
+  onmessage: ((ev: MessageEvent<ToWorker & Partial<Envelope>>) => void) | null;
 };
 
 const registry = buildRegistry(loadRawPacksVite());
 const queued: ToWorker[] = [];
 let host: DishHost | null = null;
 scope.onmessage = (ev) => {
-  if (host) host.handle(ev.data);
-  else queued.push(ev.data);
+  const msg = ev.data;
+  if (msg.protocolVersion !== PROTOCOL_VERSION) {
+    // An app from a different build: refuse rather than misread (ARCH §7).
+    scope.postMessage({
+      type: 'error',
+      dishId: 'dishId' in msg ? msg.dishId : '',
+      ...('requestId' in msg ? { requestId: msg.requestId } : {}),
+      kind: 'protocol',
+      message: `protocol version mismatch: app ${String(msg.protocolVersion)}, worker ${PROTOCOL_VERSION}`,
+      lastValidTick: 0,
+      protocolVersion: PROTOCOL_VERSION,
+    });
+    return;
+  }
+  if (host) host.handle(msg);
+  else queued.push(msg);
 };
 
 async function boot(): Promise<void> {

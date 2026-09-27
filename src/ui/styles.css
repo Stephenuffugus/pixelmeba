@@ -79,7 +79,7 @@ textarea {
 .btn {
   min-height: var(--target);
   min-width: var(--target);
-  padding: 0.6rem 1rem;
+  padding: 10px 16px;
   border-radius: var(--radius-s);
   border: 1px solid var(--line);
   background: var(--surface);
@@ -88,7 +88,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 8px;
   font-weight: 600;
   touch-action: manipulation;
 }
@@ -115,7 +115,8 @@ textarea {
   border-color: transparent;
 }
 .btn.selected,
-.btn[aria-pressed='true'] {
+.btn[aria-pressed='true'],
+.btn[role='tab'][aria-selected='true'] {
   background: var(--text);
   color: var(--surface);
   border-color: var(--text);
@@ -130,12 +131,14 @@ textarea {
 .page {
   height: 100%;
   overflow: auto;
-  padding: calc(1.25rem + var(--safe-top)) calc(1rem + var(--safe-right)) calc(1.25rem + var(--safe-bottom)) calc(1rem + var(--safe-left));
+  padding: calc(20px + var(--safe-top)) calc(16px + var(--safe-right)) calc(20px + var(--safe-bottom)) calc(16px + var(--safe-left));
   background: radial-gradient(ellipse at 50% 30%, #1d3440 0%, var(--outside) 70%);
   color: var(--surface);
 }
 .page h1 {
-  font-size: 2rem;
+  /* 200 % text (UX §4.1): the wordmark stays within a 360 px screen instead of forcing sideways scroll. */
+  font-size: min(2rem, 12vw);
+  overflow-wrap: anywhere;
   margin: 0.25rem 0;
   letter-spacing: 0.02em;
 }
@@ -145,7 +148,8 @@ textarea {
 }
 .home-grid {
   display: grid;
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
   max-width: 720px;
   margin: 0 auto;
 }
@@ -153,7 +157,8 @@ textarea {
   background: var(--surface);
   color: var(--text);
   border-radius: var(--radius);
-  padding: 1rem;
+  padding: 16px;
+  overflow-wrap: break-word;
   box-shadow: var(--shadow);
 }
 .card h2 {
@@ -166,7 +171,8 @@ textarea {
 }
 .card-row {
   display: flex;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 16px;
   align-items: center;
 }
 .card-thumb {
@@ -180,7 +186,7 @@ textarea {
 .secondary-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 8px;
 }
 .secondary-row .btn {
   flex: 1 1 8rem;
@@ -191,16 +197,16 @@ textarea {
   position: relative;
   height: 100%;
   display: grid;
-  grid-template-rows: auto 1fr auto;
-  grid-template-columns: 1fr;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   background: var(--outside);
 }
 .topbar {
   grid-row: 1;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: calc(0.35rem + var(--safe-top)) calc(0.5rem + var(--safe-right)) 0.35rem calc(0.5rem + var(--safe-left));
+  gap: 6px;
+  padding: calc(6px + var(--safe-top)) calc(8px + var(--safe-right)) 6px calc(8px + var(--safe-left));
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   min-height: 56px;
@@ -208,6 +214,7 @@ textarea {
 .topbar .title {
   flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -226,8 +233,8 @@ textarea {
   gap: 2px;
 }
 .speed-group .btn {
-  min-width: 44px;
-  padding: 0.4rem 0.5rem;
+  min-width: var(--target);
+  padding: 6px 8px;
 }
 .viewport {
   grid-row: 2;
@@ -244,23 +251,29 @@ textarea {
   grid-row: 3;
   background: var(--surface);
   border-top: 1px solid var(--line);
-  padding: 0.5rem calc(0.5rem + var(--safe-right)) calc(0.5rem + var(--safe-bottom)) calc(0.5rem + var(--safe-left));
+  padding: 8px calc(8px + var(--safe-right)) calc(8px + var(--safe-bottom)) calc(8px + var(--safe-left));
   display: flex;
-  gap: 0.5rem;
+  gap: 8px;
   align-items: stretch;
+}
+.bottombar > .btn {
+  padding: 6px;
 }
 .actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
+  gap: 8px;
   flex: 1 1 auto;
+  min-width: 0;
 }
 .actions .btn {
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 3px;
   min-height: 64px;
-  padding: 0.4rem 0.25rem;
+  padding: 6px 4px;
   font-size: var(--fs-small);
+  line-height: 1.15;
+  text-align: center;
 }
 .speed-cycle {
   display: none;
@@ -274,7 +287,7 @@ textarea {
   }
   .topbar .btn {
     min-width: 48px;
-    padding: 0.4rem;
+    padding: 6px;
   }
 }
 .speed-badge {
@@ -285,8 +298,8 @@ textarea {
 
 @media (orientation: landscape) and (min-width: 700px) {
   .dish-screen {
-    grid-template-columns: 1fr minmax(280px, 340px);
-    grid-template-rows: auto 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+    grid-template-rows: auto minmax(0, 1fr);
   }
   .topbar {
     grid-column: 1 / span 2;
@@ -307,6 +320,12 @@ textarea {
     grid-template-columns: 1fr;
     flex: none;
   }
+  /* Side panel: icon beside the label keeps all actions in view on short landscape screens. */
+  .actions .btn {
+    flex-direction: row;
+    min-height: var(--target);
+    gap: 8px;
+  }
 }
 
 /* ---------------------------------------------------------------- sheets & panels */
@@ -316,15 +335,25 @@ textarea {
   right: 0;
   bottom: 0;
   max-height: 70%;
-  overflow: auto;
+  /* The sheet itself never scrolls; its .sheet-scroll child does. A scrolling element laid directly
+     over the WebGL canvas made Chromium's compositor drop the canvas above it (seen under SwiftShader). */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overflow-wrap: break-word;
   background: var(--surface);
   border-radius: var(--radius) var(--radius) 0 0;
   box-shadow: var(--shadow);
-  padding: 0.75rem 1rem calc(1rem + var(--safe-bottom));
+  padding: 12px 16px calc(16px + var(--safe-bottom));
   z-index: 5;
 }
 .sheet.collapsed {
   max-height: 40%;
+}
+.sheet-scroll {
+  overflow: auto;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 .sheet header {
   display: flex;
@@ -346,14 +375,14 @@ textarea {
     right: 0.75rem;
     top: 0.75rem;
     bottom: 0.75rem;
-    width: min(360px, 45%);
+    width: min(360px, max(45%, 280px), 100% - 24px);
     max-height: none;
     border-radius: var(--radius);
   }
 }
 .stat-row {
   display: grid;
-  grid-template-columns: 5.5rem 1fr 3.5rem;
+  grid-template-columns: minmax(0, 5.5rem) minmax(2.5rem, 1fr) minmax(0, 3.5rem);
   align-items: center;
   gap: 0.5rem;
   font-size: var(--fs-small);
@@ -396,6 +425,7 @@ textarea {
 }
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.25rem;
   margin: 0.75rem 0 0.5rem;
 }
@@ -405,7 +435,7 @@ textarea {
 }
 .kv {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
   gap: 0.2rem 0.75rem;
   font-size: var(--fs-small);
 }
@@ -509,14 +539,16 @@ textarea {
 }
 .zoom-buttons {
   position: absolute;
-  right: 0.5rem;
-  top: 0.5rem;
+  right: 8px;
+  top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 6px;
   z-index: 3;
 }
+/* Icon-only: a fixed 48 px target that does not grow with text size, so it never crowds the dish. */
 .zoom-buttons .btn {
+  padding: 0;
   background: rgba(245, 244, 239, 0.92);
 }
 .capacity-banner {
@@ -531,6 +563,128 @@ textarea {
   border-radius: 999px;
   font-size: var(--fs-small);
   z-index: 3;
+}
+
+/* ---------------------------------------------------------------- inspector shortcuts (UX §5.3) */
+.shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+  gap: 0.4rem;
+  margin: 0.6rem 0 0.25rem;
+}
+.shortcuts .btn {
+  font-size: var(--fs-small);
+  padding: 0.4rem 0.6rem;
+  text-align: center;
+}
+.answer {
+  margin: 0.5rem 0;
+  padding: 0.6rem 0.75rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+}
+.answer h3,
+.why h3 {
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+}
+.answer p,
+.why p {
+  margin: 0.2rem 0;
+}
+.answer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.family-list {
+  list-style: none;
+  margin: 0.4rem 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+.family-list .btn {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  font-weight: 500;
+  font-size: var(--fs-small);
+}
+.why {
+  margin: 0.25rem 0 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+}
+.why.focused {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+.why ul {
+  margin: 0.25rem 0 0 1.1rem;
+  padding: 0;
+}
+/* Rings over living relatives; shape (double vs dashed) carries the meaning, not color. */
+.family-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 2;
+}
+.family-marker {
+  position: absolute;
+  left: -11px;
+  top: -11px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px dashed var(--text);
+  box-shadow: 0 0 0 2px rgba(245, 244, 239, 0.9);
+}
+.family-marker.close {
+  border: 4px double var(--text);
+}
+
+/* ---------------------------------------------------------------- history */
+.spark-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: center;
+}
+.chart-group {
+  font-size: 0.95rem;
+  margin: 0.75rem 0 0.25rem;
+}
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+}
+
+/* ---------------------------------------------------------------- settings */
+.text-size {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.text-size legend {
+  padding: 0;
+  margin-bottom: 0.35rem;
+}
+.text-size .segmented {
+  flex-wrap: wrap;
+}
+.setting-note {
+  margin: -0.5rem 0 0;
+  font-size: var(--fs-small);
 }
 
 @media (prefers-reduced-motion: reduce) {

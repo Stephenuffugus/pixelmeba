@@ -3,7 +3,7 @@
  * listeners, and stale snapshots (older generation for the same dish) are discarded.
  */
 import type { CommandPayload, CommandResult } from '@sim/commands';
-import type { DishInfo, DishSource, FromWorker, OverlayId, Selection, SlotSummary, SnapshotMsg, Speed, ToWorker } from './protocol';
+import { PROTOCOL_VERSION, stamp, type DishInfo, type DishSource, type Envelope, type FamilyAnswer, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 
 export class WorkerRequestError extends Error {
   constructor(
@@ -17,8 +17,8 @@ export class WorkerRequestError extends Error {
 type Pending = { resolve: (v: FromWorker) => void; reject: (e: Error) => void };
 
 export interface WorkerLike {
-  postMessage(msg: ToWorker, transfer?: Transferable[]): void;
-  onmessage: ((ev: MessageEvent<FromWorker>) => void) | null;
+  postMessage(msg: ToWorker & Envelope, transfer?: Transferable[]): void;
+  onmessage: ((ev: MessageEvent<FromWorker & Partial<Envelope>>) => void) | null;
   terminate?(): void;
 }
 
@@ -50,7 +50,24 @@ export class SimClient {
     this.errorListeners.push(fn);
   }
 
-  private receive(msg: FromWorker): void {
+  /** Every packet leaves stamped with the protocol version. */
+  private send(msg: ToWorker): void {
+    this.worker.postMessage(stamp(msg));
+  }
+
+  private receive(msg: FromWorker & Partial<Envelope>): void {
+    if (msg.protocolVersion !== PROTOCOL_VERSION) {
+      // A worker from a different build: refuse its packets rather than misread them.
+      const text = `protocol version mismatch: worker ${String(msg.protocolVersion)}, app ${PROTOCOL_VERSION}`;
+      for (const fn of this.errorListeners) fn({ dishId: 'dishId' in msg ? msg.dishId : '', message: text });
+      const id = 'requestId' in msg ? msg.requestId : undefined;
+      const pending = id !== undefined ? this.pending[id] : undefined;
+      if (id !== undefined && pending) {
+        pending.reject(new WorkerRequestError(text, 'protocol'));
+        delete this.pending[id];
+      }
+      return;
+    }
     if (msg.type === 'snapshot') {
       const last = this.lastGen[msg.dishId] ?? 0;
       if (msg.gen <= last) return; // stale
@@ -77,7 +94,7 @@ export class SimClient {
     const requestId = this.nextRequest++;
     return new Promise<T>((resolve, reject) => {
       this.pending[requestId] = { resolve: resolve as (v: FromWorker) => void, reject };
-      this.worker.postMessage(build(requestId));
+      this.send(build(requestId));
     });
   }
 
@@ -117,8 +134,8 @@ export class SimClient {
     return { hash: msg.hash, tick: msg.tick };
   }
 
-  async history(dishId: string): Promise<Extract<FromWorker, { type: 'history' }>> {
-    return this.request((requestId) => ({ type: 'history', requestId, dishId }));
+  async history(dishId: string, lastSeconds?: number): Promise<Extract<FromWorker, { type: 'history' }>> {
+    return this.request((requestId) => (lastSeconds === undefined ? { type: 'history', requestId, dishId } : { type: 'history', requestId, dishId, lastSeconds }));
   }
 
   async saveSlot(dishId: string, slotId: string, name: string): Promise<SlotSummary> {
@@ -155,23 +172,29 @@ export class SimClient {
     return msg.info;
   }
 
+  /** Living relatives of an organism ("Where is its family?"); a read-only query. */
+  async family(dishId: string, birthId: number): Promise<FamilyAnswer> {
+    const msg = await this.request<Extract<FromWorker, { type: 'family' }>>((requestId) => ({ type: 'family', requestId, dishId, birthId }));
+    return msg.family;
+  }
+
   setSpeed(dishId: string, speed: Speed): void {
-    this.worker.postMessage({ type: 'setSpeed', dishId, speed });
+    this.send({ type: 'setSpeed', dishId, speed });
   }
 
   stepOnce(dishId: string): void {
-    this.worker.postMessage({ type: 'step', dishId });
+    this.send({ type: 'step', dishId });
   }
 
   view(dishId: string, overlay: OverlayId | null, selection: Selection | null): void {
-    this.worker.postMessage({ type: 'view', dishId, overlay, selection });
+    this.send({ type: 'view', dishId, overlay, selection });
   }
 
   activate(dishId: string): void {
-    this.worker.postMessage({ type: 'activate', dishId });
+    this.send({ type: 'activate', dishId });
   }
 
   dispose(dishId: string): void {
-    this.worker.postMessage({ type: 'dispose', dishId });
+    this.send({ type: 'dispose', dishId });
   }
 }

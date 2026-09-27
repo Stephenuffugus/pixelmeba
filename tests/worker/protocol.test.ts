@@ -9,7 +9,7 @@ import type { CommandPayload } from '../../src/sim/commands';
 import { queueCommand } from '../../src/sim/commands';
 import { realizeRecipe } from '../../src/sim/recipes';
 import { stateHash } from '../../src/sim/serialize';
-import { run } from '../../src/sim/tick';
+import { run, step } from '../../src/sim/tick';
 import { SimClient, WorkerRequestError, type WorkerLike } from '../../src/worker/client';
 import { DishHost } from '../../src/worker/host';
 import { PROTOCOL_VERSION, type FromWorker, type ToWorker } from '../../src/worker/protocol';
@@ -61,7 +61,8 @@ function manualWorker() {
       onmessage = fn;
     },
   };
-  const deliver = (m: unknown) => onmessage!({ data: m as FromWorker } as MessageEvent<FromWorker>);
+  // Hand-delivered replies carry the protocol version like real worker packets (unless a test overrides it).
+  const deliver = (m: unknown) => onmessage!({ data: { protocolVersion: PROTOCOL_VERSION, ...(m as object) } as unknown as FromWorker } as MessageEvent<FromWorker>);
   return { sent, worker, deliver };
 }
 
@@ -71,7 +72,7 @@ function connected() {
   const posted: FromWorker[] = [];
   const host = new DishHost(registry(), (m) => {
     posted.push(m);
-    queueMicrotask(() => onmessage?.({ data: m } as MessageEvent<FromWorker>));
+    queueMicrotask(() => onmessage?.({ data: m } as unknown as MessageEvent<FromWorker>));
   }, { now: () => 0 });
   const sentToWorker: ToWorker[] = [];
   const worker: WorkerLike = {
@@ -86,7 +87,7 @@ function connected() {
       onmessage = fn;
     },
   };
-  return { host, client: new SimClient(worker), posted, sentToWorker, inject: (m: unknown) => onmessage!({ data: m as FromWorker } as MessageEvent<FromWorker>) };
+  return { host, client: new SimClient(worker), posted, sentToWorker, inject: (m: unknown) => onmessage!({ data: { protocolVersion: PROTOCOL_VERSION, ...(m as object) } as unknown as FromWorker } as MessageEvent<FromWorker>) };
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -247,10 +248,7 @@ describe('worker protocol (P1.3)', () => {
       expect(PROTOCOL_VERSION).toBe(1);
     });
 
-    // KNOWN GAP (reported, src/worker is not editable in this task): BUILD_DIRECTIVE P1.3 requires
-    // `protocolVersion` on messages, but neither DishHost nor SimClient stamps it. Change `it.fails`
-    // to `it` once host.ts/client.ts stamp PROTOCOL_VERSION on every packet.
-    it.fails('every packet in both directions carries protocolVersion', async () => {
+    it('every packet in both directions carries protocolVersion', async () => {
       const c = connected();
       await c.client.create('d1', RECIPE);
       await c.client.command('d1', 'c1', SUGAR);
@@ -259,6 +257,18 @@ describe('worker protocol (P1.3)', () => {
       expect(c.posted.length).toBeGreaterThan(3);
       for (const m of c.posted) expect((m as { protocolVersion?: number }).protocolVersion, m.type).toBe(PROTOCOL_VERSION);
       for (const m of c.sentToWorker) expect((m as { protocolVersion?: number }).protocolVersion, m.type).toBe(PROTOCOL_VERSION);
+    });
+
+    it('the client refuses packets from a different protocol version and rejects the request', async () => {
+      const w = manualWorker();
+      const client = new SimClient(w.worker);
+      const errors: string[] = [];
+      client.onError((e) => errors.push(e.message));
+      const p = client.hash('d1');
+      const req = w.sent.at(-1) as { requestId: number };
+      w.deliver({ type: 'hash', requestId: req.requestId, dishId: 'd1', hash: 'x', tick: 0, protocolVersion: PROTOCOL_VERSION + 1 });
+      await expect(p).rejects.toBeInstanceOf(WorkerRequestError);
+      expect(errors[0]).toMatch(/protocol version mismatch/);
     });
   });
 
@@ -325,6 +335,14 @@ describe('worker protocol (P1.3)', () => {
       const stoppedAt = h.host.world('d1')!.tick;
       expect(stoppedAt).toBeGreaterThanOrEqual(before);
       expect(err[0]!.lastValidTick).toBe(stoppedAt);
+      // The world was rolled back to the last completed tick: the sabotage is gone and the state equals
+      // an undisturbed run to the same tick.
+      expect(h.host.world('d1')!.fields.oxygen).toBeInstanceOf(Float64Array);
+      const ref = harness();
+      ref.host.handle({ type: 'create', requestId: 1, dishId: 'r', source: RECIPE });
+      const rw = ref.host.world('r')!;
+      while (rw.tick < stoppedAt) step(rw);
+      expect(h.hash('d1', 90)).toBe(stateHash(rw));
       h.host.handle({ type: 'setSpeed', dishId: 'd1', speed: 4 });
       h.advance(1000);
       expect(h.host.world('d1')!.tick).toBe(stoppedAt);
@@ -332,11 +350,7 @@ describe('worker protocol (P1.3)', () => {
       expect(h.of('snapshot').at(-1)!.speed).toBe(0);
     });
 
-    // KNOWN GAP (reported): the host pauses a failing dish but does not roll back a request that
-    // threw part-way, so the world keeps partial mutations (here: a consumed command seq) and its
-    // hash no longer equals the last valid state (ARCH §7 "last valid state preserved"). Change
-    // `it.fails` to `it` once DishHost restores the pre-request state on error.
-    it.fails('a throwing command leaves the last valid state (and hash) exactly as it was', () => {
+    it('a throwing command leaves the last valid state (and hash) exactly as it was', () => {
       const h = harness();
       h.host.handle({ type: 'create', requestId: 1, dishId: 'd1', source: RECIPE });
       h.host.handle({ type: 'step', dishId: 'd1' });

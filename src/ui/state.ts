@@ -5,7 +5,7 @@
 import { batch, signal } from '@preact/signals';
 import type { CommandPayload } from '@sim/commands';
 import { SimClient } from '@worker/client';
-import type { DishInfo, InspectorPayload, OverlayId, Selection, SnapshotMsg, Speed } from '@worker/protocol';
+import type { DishInfo, FamilyAnswer, InspectorPayload, OverlayId, Selection, SnapshotMsg, Speed } from '@worker/protocol';
 import type { DishRenderer } from '@render/renderer';
 import { clearFeed, pushFeed } from './feed';
 
@@ -38,7 +38,12 @@ export interface Settings {
   readonly reducedMotion: boolean;
   readonly overlayOpacity: number;
   readonly showPrompts: boolean;
+  /** Text size as a multiple of the device's default (UX §2 Settings "text size"; §4.1 up to 200 %). */
+  readonly textScale: number;
 }
+
+/** Text sizes offered in Settings (UX §4.1 acceptance runs at 100 % and 200 %). */
+export const TEXT_SCALES = [1, 1.25, 1.5, 2] as const;
 
 export const route = signal<Route>({ name: 'home' });
 export const dishInfo = signal<DishInfo | null>(null);
@@ -53,7 +58,14 @@ export const overlayMax = signal<number>(0);
 export const toast = signal<string | null>(null);
 export const prompt = signal<string | null>(null);
 export const busy = signal<boolean>(false);
+const REDUCE_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+/** Settings the player chose explicitly (only these are stored; the rest follow the device). */
+let savedPrefs: Partial<Settings> = {};
 export const settings = signal<Settings>(loadSettings());
+/** Living family of the organism asked about with "Where is its family?" (null when not shown). */
+export const familyView = signal<FamilyAnswer | null>(null);
+/** History opened from "What changed?": show "What happened", filtered to one species. */
+export const historyFocus = signal<{ readonly species: number; readonly birthId: number } | null>(null);
 
 let client: SimClient | null = null;
 let renderer: DishRenderer | null = null;
@@ -63,25 +75,62 @@ let lastSnapshot: SnapshotMsg | null = null;
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 let commandCounter = 0;
 
+function systemReducedMotion(): boolean {
+  return typeof matchMedia === 'function' && matchMedia(REDUCE_MOTION_QUERY).matches;
+}
+
 function loadSettings(): Settings {
-  const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const base: Settings = { reducedMotion: reduce, overlayOpacity: 0.45, showPrompts: true };
+  const base: Settings = { reducedMotion: systemReducedMotion(), overlayOpacity: 0.45, showPrompts: true, textScale: 1 };
   try {
     const raw = localStorage.getItem('pixelmeba.settings');
-    return raw ? { ...base, ...(JSON.parse(raw) as Partial<Settings>) } : base;
+    savedPrefs = raw ? (JSON.parse(raw) as Partial<Settings>) : {};
   } catch {
-    return base;
+    savedPrefs = {};
   }
+  const s = { ...base, ...savedPrefs };
+  return { ...s, textScale: TEXT_SCALES.includes(s.textScale as (typeof TEXT_SCALES)[number]) ? s.textScale : 1 };
+}
+
+/**
+ * Push display settings everywhere they matter: the renderer (reduced motion, overlay opacity), the
+ * document text size, and a reduced-motion class/attribute for CSS (UX §7.4, §9).
+ */
+function applyDisplaySettings(): void {
+  const s = settings.value;
+  renderer?.setOptions({ reducedMotion: s.reducedMotion, overlayOpacity: s.overlayOpacity });
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  root.style.fontSize = s.textScale === 1 ? '' : `${Math.round(s.textScale * 100)}%`;
+  root.classList.toggle('reduced-motion', s.reducedMotion);
+  root.dataset.reducedMotion = String(s.reducedMotion);
+  root.dataset.textScale = String(s.textScale);
 }
 
 export function updateSettings(patch: Partial<Settings>): void {
   settings.value = { ...settings.value, ...patch };
+  savedPrefs = { ...savedPrefs, ...patch };
   try {
-    localStorage.setItem('pixelmeba.settings', JSON.stringify(settings.value));
+    localStorage.setItem('pixelmeba.settings', JSON.stringify(savedPrefs));
   } catch {
     /* storage unavailable: settings last for this session only */
   }
-  renderer?.setOptions({ reducedMotion: settings.value.reducedMotion, overlayOpacity: settings.value.overlayOpacity });
+  applyDisplaySettings();
+}
+
+/** Follow the device's reduced-motion preference until the player sets it in Settings. */
+export function initDisplaySettings(): void {
+  applyDisplaySettings();
+  if (typeof matchMedia !== 'function') return;
+  matchMedia(REDUCE_MOTION_QUERY).addEventListener('change', (e) => {
+    if (savedPrefs.reducedMotion !== undefined) return;
+    settings.value = { ...settings.value, reducedMotion: e.matches };
+    applyDisplaySettings();
+  });
+}
+
+/** Whether reduced motion currently follows the device setting (nothing chosen in Settings). */
+export function reducedMotionFollowsDevice(): boolean {
+  return savedPrefs.reducedMotion === undefined;
 }
 
 export function getClient(): SimClient {
@@ -96,7 +145,7 @@ export function getClient(): SimClient {
 export function attachRenderer(r: DishRenderer | null): void {
   renderer = r;
   if (r) {
-    r.setOptions({ reducedMotion: settings.value.reducedMotion, overlayOpacity: settings.value.overlayOpacity });
+    applyDisplaySettings();
     const info = dishInfo.value;
     if (info) r.setSpecies(info.speciesIds, info.speciesAssets);
     if (lastGeometrySnapshot && info && lastGeometrySnapshot.dishId === info.dishId) r.applyGeometry(lastGeometrySnapshot);
@@ -145,6 +194,8 @@ function enterDish(info: DishInfo, promptText: string | null): void {
     dishInfo.value = info;
     selection.value = null;
     inspector.value = null;
+    familyView.value = null;
+    historyFocus.value = null;
     tool.value = { kind: 'look' };
     sheet.value = 'none';
     overlay.value = null;
@@ -177,6 +228,8 @@ export async function saveToSlot(slotId: string, name: string): Promise<boolean>
     const s = await getClient().saveSlot(info.dishId, slotId, name);
     dishInfo.value = { ...info, name: s.name };
     showToast(`Saved "${s.name}".`);
+    // A manual save is an autosave event too (SPEC §14.2), so Continue opens this same moment.
+    await autosave();
     return true;
   } catch (e) {
     showToast(`Couldn't save; your previous save is intact. (${(e as Error).message})`, 4000);
@@ -303,10 +356,43 @@ export function select(sel: Selection | null): void {
   candidates.value = null;
   if (!sel) {
     inspector.value = null;
+    familyView.value = null;
     if (sheet.value === 'inspect') sheet.value = 'none';
   } else sheet.value = 'inspect';
   renderer?.select(sel?.kind === 'entity' ? sel.birthId : null, sel?.kind === 'cell' ? sel.cell : null);
   if (info) getClient().view(info.dishId, overlay.value, sel);
+}
+
+/** "Where is its family?": ask the worker (read-only) for the organism's living relatives. */
+export async function askFamily(birthId: number): Promise<FamilyAnswer | null> {
+  const info = dishInfo.value;
+  if (!info) return null;
+  try {
+    const f = await getClient().family(info.dishId, birthId);
+    if (dishInfo.value?.dishId !== info.dishId) return null;
+    familyView.value = f;
+    return f;
+  } catch (e) {
+    showToast(`Couldn't look up the family: ${(e as Error).message}`, 3500);
+    return null;
+  }
+}
+
+export function clearFamily(): void {
+  familyView.value = null;
+}
+
+/** "What changed?": open History at "What happened" for this organism's kind. */
+export function openHistoryFor(species: number, birthId: number): void {
+  historyFocus.value = { species, birthId };
+  sheet.value = 'history';
+}
+
+/** Select an organism and bring it into view without changing zoom (a player action, not a jump). */
+export function showOrganism(birthId: number, x: number, y: number): void {
+  select({ kind: 'entity', birthId });
+  const r = renderer;
+  if (r) r.camera.centerOn(x, y);
 }
 
 export function setOverlay(id: OverlayId | null): void {

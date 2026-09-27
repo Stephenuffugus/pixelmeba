@@ -1,5 +1,5 @@
 import { IconBack } from '../icons';
-import { route, settings, updateSettings } from '../state';
+import { reducedMotionFollowsDevice, route, settings, TEXT_SCALES, updateSettings } from '../state';
 
 export function SimplePage({ title, body, settings: showSettings }: { title: string; body: string; settings?: boolean }) {
   const s = settings.value;
@@ -19,11 +19,22 @@ export function SimplePage({ title, body, settings: showSettings }: { title: str
           {showSettings ? (
             <div style={{ display: 'grid', gap: '0.75rem' }}>
               <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', minHeight: '48px' }}>
-                <input type="checkbox" checked={s.reducedMotion} onChange={(e) => updateSettings({ reducedMotion: (e.currentTarget).checked })} />
+                <input type="checkbox" checked={s.reducedMotion} onChange={(e) => updateSettings({ reducedMotion: e.currentTarget.checked })} data-testid="setting-reduced-motion" />
                 Reduced motion
               </label>
+              {reducedMotionFollowsDevice() ? <p class="setting-note">Follows your device setting until you change it here.</p> : null}
+              <fieldset class="text-size">
+                <legend>Text size</legend>
+                <div class="segmented" role="group" aria-label="Text size">
+                  {TEXT_SCALES.map((t) => (
+                    <button key={t} class="btn" aria-pressed={s.textScale === t} onClick={() => updateSettings({ textScale: t })} data-testid={`text-size-${Math.round(t * 100)}`}>
+                      {Math.round(t * 100)} %
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
               <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', minHeight: '48px' }}>
-                <input type="checkbox" checked={s.showPrompts} onChange={(e) => updateSettings({ showPrompts: (e.currentTarget).checked })} />
+                <input type="checkbox" checked={s.showPrompts} onChange={(e) => updateSettings({ showPrompts: e.currentTarget.checked })} />
                 Show gentle prompts
               </label>
               <label style={{ display: 'grid', gap: '0.25rem' }}>
@@ -34,7 +45,7 @@ export function SimplePage({ title, body, settings: showSettings }: { title: str
                   max="0.9"
                   step="0.05"
                   value={s.overlayOpacity}
-                  onInput={(e) => updateSettings({ overlayOpacity: Number((e.currentTarget).value) })}
+                  onInput={(e) => updateSettings({ overlayOpacity: Number(e.currentTarget.value) })}
                 />
               </label>
             </div>

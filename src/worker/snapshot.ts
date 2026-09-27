@@ -3,15 +3,17 @@
  * simulation randomness, no mutation. The worker transfers the typed arrays to the main thread.
  */
 import { CELL_COUNT, GRID_W } from '@sim/constants';
-import { allDivisionBlockers, divisionBlocker } from '@sim/births';
+import { allDivisionBlockers, divisionBlocker, divisionNeeds } from '@sim/births';
 import { FLAG } from '@sim/entities';
 import type { SimEvent } from '@sim/events';
 import { FIELD_IDS, type FieldId } from '@sim/fields';
 import { STRUCTURE_NAMES, SUBSTRATE_NAMES } from '@sim/grid';
 import { hungryPredator } from '@sim/movement';
-import { childrenOf, field as lineageField } from '@sim/lineage';
+import { childrenOf, field as lineageField, has as lineageHas } from '@sim/lineage';
 import { profileOf } from '@sim/profiles';
 import { R } from '@sim/reasons';
+import { PREY_NONE } from '@sim/species';
+import { FILM_DIGESTION_IMPLEMENTED } from '@sim/content/implemented';
 import { entityCell, forEachInCell } from '@sim/spatial';
 import { response, SHOULDER_PH, SHOULDER_SALINITY, SHOULDER_WARMTH, suitabilityAt } from '@sim/suitability';
 import type { World } from '@sim/world';
@@ -36,8 +38,12 @@ import {
   E_Y,
   ENT_STRIDE,
   ID_STRIDE,
+  FAMILY_MAX_MEMBERS,
   type CellInspect,
   type EntityInspect,
+  type FamilyAnswer,
+  type FamilyMember,
+  type FamilyRelation,
   type InspectorPayload,
   type OverlayId,
   type Selection,
@@ -86,9 +92,18 @@ export function packEntities(world: World, ents: Float32Array | null, ids: Uint3
 }
 
 /** Deposit glyph bands: starch, detritus, oil, protein, sugar haze → 0–255 on a soft log scale. */
-export const DEPOSIT_BANDS = 5;
+/** Bands: starch, detritus, oil, protein, sugar haze, catalysis (carbon converted last tick). */
+export const DEPOSIT_BANDS = 6;
 export function packDeposits(world: World, out: Uint8Array | null): Uint8Array {
   const buf = out && out.length === CELL_COUNT * DEPOSIT_BANDS ? out : new Uint8Array(CELL_COUNT * DEPOSIT_BANDS);
+  // Catalysis: the renderer draws dust only where stage 3 really converted something (UX §7 "activity
+  // particles only during conversion"). 1e-5 C per tick ≈ an enzyme activity of 0.001.
+  const cat = world.catalysisCells;
+  const cbase = 5 * CELL_COUNT;
+  for (let i = 0; i < CELL_COUNT; i++) {
+    const v = cat[i]!;
+    buf[cbase + i] = v <= 1e-7 ? 0 : Math.min(255, Math.max(1, Math.round((Math.log10(1 + v * 1e5) / 3) * 255)));
+  }
   const kinds: FieldId[] = ['starch', 'detritus', 'oil', 'protein', 'sugar'];
   kinds.forEach((id, k) => {
     const f = world.fields[id];
@@ -202,6 +217,7 @@ function inspectEntity(world: World, slot: number): EntityInspect {
     intakeLastSecond: c.intakeLastSecond[slot]!,
     lastIntakeTick: c.lastIntakeTick[slot]!,
     divisionBlockers: blockers,
+    divisionNeeds: divisionNeeds(world, slot),
     proposalPending: c.propG0[slot]! >= 0,
     predation,
     suitFactors: {
@@ -233,6 +249,14 @@ function inspectEntity(world: World, slot: number): EntityInspect {
       changedFromParent: parentGenome !== undefined && parentGenome !== c.genome[slot],
     },
     foodHere,
+    diet: {
+      metabolism: sp.def.metabolism,
+      prey: Array.from(sp.prey.keys()).filter((j) => sp.prey[j] !== PREY_NONE),
+      abilities: sp.abilities,
+      // Film digestion is a P3.3 mechanic: claim it only when this world has a film field and the
+      // simulation consumes it. Until then the inspector must not describe it (honest labels).
+      digestsFilm: sp.def.digestsFilm && world.fields.film !== undefined && FILM_DIGESTION_IMPLEMENTED,
+    },
   };
 }
 
@@ -277,5 +301,133 @@ export function buildInspector(world: World, sel: Selection): InspectorPayload {
       divided: (lineageField(L, 'deathCause', sel.birthId) ?? 0) === -1,
       children,
     },
+  };
+}
+
+function relationOf(stepsUp: number, stepsDown: number): FamilyRelation {
+  if (stepsDown === 0) return stepsUp === 1 ? 'parent' : 'ancestor';
+  if (stepsUp === 0) return stepsDown === 1 ? 'child' : 'descendant';
+  if (stepsUp === 1 && stepsDown === 1) return 'sibling';
+  return 'relative';
+}
+
+/**
+ * "Where is its family?" (SPEC §12.1, UX §5.3): living organisms that share a recorded ancestor
+ * with `birthId`, back to its introduced founder. A pure read of lineage records and entity
+ * columns, visited in slot order; parent links always point to lower birthIds, so every walk ends.
+ */
+export function buildFamily(world: World, birthId: number): FamilyAnswer {
+  const L = world.lineage;
+  const c = world.ents.cols;
+  const n = L.parent.length;
+  // Steps from the asked-about organism up to each of its retained ancestors (-1 = not on the chain).
+  const up = new Int32Array(n).fill(-1);
+  let root = birthId;
+  let historyIncomplete = !lineageHas(L, birthId);
+  if (!historyIncomplete) {
+    let b = birthId;
+    let d = 0;
+    up[b - L.base] = 0;
+    for (;;) {
+      const p = L.parent[b - L.base]!;
+      if (p === 0) break;
+      if (!lineageHas(L, p)) {
+        historyIncomplete = true;
+        break;
+      }
+      d++;
+      up[p - L.base] = d;
+      b = p;
+    }
+    root = b;
+  }
+  // For every retained record: the shared ancestor it reaches going up, and how many steps.
+  const meet = new Int32Array(n).fill(-2); // -2 unknown, -1 not family, else index of shared ancestor
+  const down = new Int32Array(n);
+  const resolve = (start: number): number => {
+    const path: number[] = [];
+    let k = start;
+    let found: number;
+    for (;;) {
+      if (meet[k] !== -2) {
+        found = meet[k]!;
+        break;
+      }
+      if (up[k]! >= 0) {
+        meet[k] = k;
+        down[k] = 0;
+        found = k;
+        break;
+      }
+      path.push(k);
+      const p = L.parent[k]!;
+      if (p === 0 || !lineageHas(L, p)) {
+        found = -1;
+        break;
+      }
+      k = p - L.base;
+    }
+    // Unwind: each record on the path is one step further below the shared ancestor than its parent.
+    for (let q = path.length - 1; q >= 0; q--) {
+      const r = path[q]!;
+      meet[r] = found;
+      if (found >= 0) {
+        const p = L.parent[r]! - L.base;
+        down[r] = down[p]! + 1;
+      }
+    }
+    return found;
+  };
+  const members: FamilyMember[] = [];
+  let livingTotal = 0;
+  let alive = false;
+  if (lineageHas(L, birthId)) {
+    for (let i = 0; i < world.ents.highWater; i++) {
+      if (c.alive[i] !== 1) continue;
+      const b = c.birthId[i]!;
+      if (b === birthId) {
+        alive = true;
+        continue;
+      }
+      if (!lineageHas(L, b)) continue;
+      const k = b - L.base;
+      const m = resolve(k);
+      if (m < 0) continue;
+      livingTotal++;
+      const stepsUp = up[m]!;
+      const stepsDown = down[k]!;
+      members.push({
+        birthId: b,
+        entityId: c.entityId[i]!,
+        speciesIdx: c.species[i]!,
+        x: c.x[i]!,
+        y: c.y[i]!,
+        generation: c.generation[i]!,
+        relation: relationOf(stepsUp, stepsDown),
+        stepsUp,
+        stepsDown,
+      });
+    }
+  } else {
+    for (let i = 0; i < world.ents.highWater; i++) if (c.alive[i] === 1 && c.birthId[i] === birthId) alive = true;
+  }
+  members.sort((a, b) => a.stepsUp + a.stepsDown - (b.stepsUp + b.stepsDown) || a.birthId - b.birthId);
+  const parentId = lineageField(L, 'parent', birthId) ?? 0;
+  let parent: FamilyAnswer['parent'] = null;
+  if (parentId > 0) {
+    let parentAlive = false;
+    for (let i = 0; i < world.ents.highWater; i++) if (c.alive[i] === 1 && c.birthId[i] === parentId) parentAlive = true;
+    parent = { birthId: parentId, alive: parentAlive, divided: lineageField(L, 'deathCause', parentId) === -1 };
+  }
+  return {
+    birthId,
+    tick: world.tick,
+    alive,
+    parent,
+    rootBirthId: root,
+    rootIntroduced: !historyIncomplete && (lineageField(L, 'parent', root) ?? -1) === 0,
+    historyIncomplete,
+    members: members.slice(0, FAMILY_MAX_MEMBERS),
+    livingTotal,
   };
 }

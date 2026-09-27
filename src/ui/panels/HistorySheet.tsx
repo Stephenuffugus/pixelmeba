@@ -9,7 +9,7 @@ import type { HistorySample } from '@sim/history';
 import { drawFrame, loadAtlas } from '../atlas';
 import { feed } from '../feed';
 import { IconClose } from '../icons';
-import { dishInfo, getClient, meta, sheet } from '../state';
+import { dishInfo, getClient, historyFocus, inspector, meta, sheet } from '../state';
 
 const INK = '#256E9E';
 const GRID = '#D9D6CC';
@@ -73,11 +73,22 @@ function Spark({ title, values, seconds, marks, unit, digits = 0, height = 56 }:
           <line x1={pad} x2={W - pad} y1={H - pad} y2={H - pad} stroke={GRID} stroke-width="1" />
           {marks.map((m) => {
             const k = seconds.findIndex((s) => s >= m);
-            return k >= 0 ? <line key={m} x1={x(k)} x2={x(k)} y1={pad} y2={H - pad} stroke={GRID} stroke-width="1" /> : null;
+            return k >= 0 ? (
+              <line key={m} x1={x(k)} x2={x(k)} y1={pad} y2={H - pad} stroke={GRID} stroke-width="1" />
+            ) : null;
           })}
           <path d={area} fill={INK} opacity="0.1" />
-          <path d={path} fill="none" stroke={INK} stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
-          {hover !== null ? <line x1={x(hk)} x2={x(hk)} y1={pad} y2={H - pad} stroke={MUTED} stroke-width="1" /> : null}
+          <path
+            d={path}
+            fill="none"
+            stroke={INK}
+            stroke-width="2"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+          />
+          {hover !== null ? (
+            <line x1={x(hk)} x2={x(hk)} y1={pad} y2={H - pad} stroke={MUTED} stroke-width="1" />
+          ) : null}
           <circle cx={x(hk)} cy={y(values[hk] ?? 0)} r="4" fill={INK} stroke={SURFACE} stroke-width="2" />
         </svg>
       )}
@@ -92,24 +103,49 @@ function SpeciesThumb({ asset }: { asset: string }) {
       if (ref.current) drawFrame(ref.current, a, asset);
     });
   }, [asset]);
-  return <canvas ref={ref} width={32} height={32} aria-hidden="true" style={{ imageRendering: 'pixelated', width: 32, height: 32 }} />;
+  return (
+    <canvas
+      ref={ref}
+      width={32}
+      height={32}
+      aria-hidden="true"
+      style={{ imageRendering: 'pixelated', width: 32, height: 32 }}
+    />
+  );
 }
+
+const CELL = { textAlign: 'right', padding: '0.2rem 0.4rem' } as const;
 
 export function HistorySheet() {
   const info = dishInfo.value;
+  const focus = historyFocus.value;
   const [samples, setSamples] = useState<readonly HistorySample[]>([]);
   const [compacted, setCompacted] = useState(false);
-  const [tab, setTab] = useState<'charts' | 'table' | 'events'>('charts');
+  const [tab, setTab] = useState<'charts' | 'table' | 'events'>(focus ? 'events' : 'charts');
+  // "What changed?" opens "What happened" filtered to the organism's kind (UX §5.3).
+  const [filter, setFilter] = useState<number | null>(focus?.species ?? null);
   const tick = meta.value?.tick ?? 0;
+  useEffect(() => {
+    if (!focus) return;
+    setTab('events');
+    setFilter(focus.species);
+  }, [focus]);
+  // The focus belongs to this opening of History only.
+  useEffect(
+    () => () => {
+      historyFocus.value = null;
+    },
+    [],
+  );
   useEffect(() => {
     if (!info) return;
     let cancelled = false;
     const load = () =>
       void getClient()
-        .history(info.dishId)
+        .history(info.dishId, 300)
         .then((h) => {
           if (cancelled) return;
-          setSamples((h.seconds as HistorySample[]).slice(-300));
+          setSamples(h.seconds as HistorySample[]);
           setCompacted(h.compacted);
         });
     load();
@@ -122,97 +158,218 @@ export function HistorySheet() {
   if (!info) return null;
   const seconds = samples.map((s) => s.second);
   const marks = samples.filter((s) => s.interventions > 0).map((s) => s.second);
-  const species = info.speciesIds.map((id, i) => ({ id, i, name: info.speciesNames[i]!, asset: info.speciesAssets[i]! }));
+  const species = info.speciesIds.map((id, i) => ({
+    id,
+    i,
+    name: info.speciesNames[i]!,
+    asset: info.speciesAssets[i]!,
+  }));
   const births = samples.map((s) => s.births.reduce((a, b) => a + b, 0));
   const deaths = samples.map((s) => s.deaths.reduce((a, b) => a + b, 0));
+  const lines =
+    filter === null ? feed.value : feed.value.filter((l) => l.species === filter || l.species < 0);
+  const filterName = filter === null ? null : (info.speciesNames[filter] ?? '?');
+  const focused = focus && inspector.value?.entity?.birthId === focus.birthId ? inspector.value.entity : null;
   void tick;
   return (
-    <section class="sheet" aria-labelledby="history-title">
-      <header>
-        <h2 id="history-title">History</h2>
-        <button class="btn ghost" aria-label="Close" onClick={() => (sheet.value = 'none')}>
-          <IconClose />
-        </button>
-      </header>
-      <p class="sub">Last {samples.length} simulated seconds. Vertical lines mark your changes. A chart shows what happened together, not what caused it.</p>
-      <div class="tabs" role="tablist">
-        {(['charts', 'table', 'events'] as const).map((t) => (
-          <button key={t} class="btn" role="tab" aria-selected={tab === t} aria-pressed={tab === t} onClick={() => setTab(t)}>
-            {t === 'charts' ? 'Charts' : t === 'table' ? 'Table' : 'What happened'}
+    <section class="sheet" aria-labelledby="history-title" data-testid="history">
+      <div class="sheet-scroll">
+        <header>
+          <h2 id="history-title">History</h2>
+          <button class="btn ghost" aria-label="Close" onClick={() => (sheet.value = 'none')}>
+            <IconClose />
           </button>
-        ))}
-      </div>
-      {tab === 'charts' ? (
-        <div role="tabpanel">
-          {species.map((s) => (
-            <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '36px 1fr', gap: '0.5rem', alignItems: 'center' }}>
-              <SpeciesThumb asset={s.asset} />
-              <Spark title={`${s.name} — organisms`} values={samples.map((x) => x.count[s.i] ?? 0)} seconds={seconds} marks={marks} unit="alive" />
-            </div>
+        </header>
+        {focus ? (
+          <button class="btn" onClick={() => (sheet.value = 'inspect')} data-testid="history-back">
+            Back to {info.speciesNames[focus.species] ?? ''} #{focus.birthId}
+          </button>
+        ) : null}
+        <p class="sub">
+          Last {samples.length} simulated seconds. Vertical lines mark your changes. A chart shows what
+          happened together, not what caused it.
+        </p>
+        <div class="tabs" role="tablist">
+          {(['charts', 'table', 'events'] as const).map((t) => (
+            <button key={t} class="btn" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
+              {t === 'charts' ? 'Charts' : t === 'table' ? 'Table' : 'What happened'}
+            </button>
           ))}
-          <Spark title="Oxygen (dish average)" values={samples.map((x) => x.oxygenMean)} seconds={seconds} marks={marks} unit="" digits={3} />
-          <Spark title="Free mineral nutrient (total)" values={samples.map((x) => x.nutrientTotal)} seconds={seconds} marks={marks} unit="units" digits={1} />
-          <Spark title="Dissolved sugar (total)" values={samples.map((x) => x.sugarTotal)} seconds={seconds} marks={marks} unit="carbon" digits={2} />
-          <Spark title="Births per second" values={births} seconds={seconds} marks={marks} unit="" />
-          <Spark title="Deaths per second" values={deaths} seconds={seconds} marks={marks} unit="" />
-          {compacted ? <p class="sub">Older history was summarized into one-minute steps.</p> : null}
         </div>
-      ) : null}
-      {tab === 'table' ? (
-        <div role="tabpanel" style={{ overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums' }}>
-            <caption class="sub" style={{ textAlign: 'left' }}>
-              Every 10th second, newest first
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col" style={{ textAlign: 'left', padding: '0.2rem 0.4rem' }}>
-                  Time
-                </th>
-                {species.map((s) => (
-                  <th key={s.id} scope="col" style={{ textAlign: 'right', padding: '0.2rem 0.4rem' }}>
-                    {s.name}
+        {tab === 'charts' ? (
+          <div role="tabpanel">
+            <h3 class="chart-group">Organisms alive</h3>
+            {species.map((s) => (
+              <div key={s.id} class="spark-row">
+                <SpeciesThumb asset={s.asset} />
+                <Spark
+                  title={`${s.name} — organisms`}
+                  values={samples.map((x) => x.count[s.i] ?? 0)}
+                  seconds={seconds}
+                  marks={marks}
+                  unit="alive"
+                />
+              </div>
+            ))}
+            <h3 class="chart-group">Living biomass</h3>
+            {species.map((s) => (
+              <div key={s.id} class="spark-row">
+                <SpeciesThumb asset={s.asset} />
+                <Spark
+                  title={`${s.name} — living biomass`}
+                  values={samples.map((x) => x.biomass[s.i] ?? 0)}
+                  seconds={seconds}
+                  marks={marks}
+                  unit="carbon"
+                  digits={2}
+                />
+              </div>
+            ))}
+            <h3 class="chart-group">The dish</h3>
+            <Spark
+              title="Oxygen (dish average)"
+              values={samples.map((x) => x.oxygenMean)}
+              seconds={seconds}
+              marks={marks}
+              unit=""
+              digits={3}
+            />
+            <Spark
+              title="Free mineral nutrient (total)"
+              values={samples.map((x) => x.nutrientTotal)}
+              seconds={seconds}
+              marks={marks}
+              unit="units"
+              digits={1}
+            />
+            <Spark
+              title="Dissolved sugar (total)"
+              values={samples.map((x) => x.sugarTotal)}
+              seconds={seconds}
+              marks={marks}
+              unit="carbon"
+              digits={2}
+            />
+            <Spark title="Births per second" values={births} seconds={seconds} marks={marks} unit="" />
+            <Spark title="Deaths per second" values={deaths} seconds={seconds} marks={marks} unit="" />
+            {compacted ? <p class="sub">Older history was summarized into one-minute steps.</p> : null}
+          </div>
+        ) : null}
+        {tab === 'table' ? (
+          // Focusable so keyboard users can scroll the wide table (axe: scrollable-region-focusable).
+          <div role="tabpanel" tabIndex={0} aria-label="History table" style={{ overflowX: 'auto' }}>
+            <table
+              style={{ borderCollapse: 'collapse', fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums' }}
+              data-testid="history-table"
+            >
+              <caption class="sub" style={{ textAlign: 'left' }}>
+                Every 10th second, newest first. Biomass is in carbon (game units).
+              </caption>
+              <thead>
+                <tr>
+                  <th rowSpan={2} scope="col" style={{ textAlign: 'left', padding: '0.2rem 0.4rem' }}>
+                    Time
                   </th>
-                ))}
-                <th scope="col" style={{ textAlign: 'right', padding: '0.2rem 0.4rem' }}>
-                  Oxygen
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {samples
-                .filter((_, k) => (samples.length - 1 - k) % 10 === 0)
-                .reverse()
-                .map((row) => (
-                  <tr key={row.second}>
-                    <th scope="row" style={{ textAlign: 'left', padding: '0.2rem 0.4rem', fontWeight: 400 }}>
-                      {row.second} s
+                  <th colSpan={species.length} scope="colgroup" style={{ ...CELL, textAlign: 'center' }}>
+                    Organisms alive
+                  </th>
+                  <th colSpan={species.length} scope="colgroup" style={{ ...CELL, textAlign: 'center' }}>
+                    Living biomass
+                  </th>
+                  <th rowSpan={2} scope="col" style={CELL}>
+                    Oxygen
+                  </th>
+                </tr>
+                <tr>
+                  {species.map((s) => (
+                    <th key={`n-${s.id}`} scope="col" style={CELL}>
+                      {s.name}
                     </th>
-                    {species.map((s) => (
-                      <td key={s.id} style={{ textAlign: 'right', padding: '0.2rem 0.4rem' }}>
-                        {row.count[s.i] ?? 0}
-                      </td>
-                    ))}
-                    <td style={{ textAlign: 'right', padding: '0.2rem 0.4rem' }}>{row.oxygenMean.toFixed(3)}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-      {tab === 'events' ? (
-        <ul role="tabpanel" style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '0.25rem' }} aria-live="polite">
-          {feed.value.length === 0 ? <li class="sub">Nothing recorded yet.</li> : null}
-          {feed.value.map((l) => (
-            <li key={`${l.key}:${l.tick}`} style={{ display: 'flex', gap: '0.5rem', fontSize: '0.875rem' }}>
-              <span class="sub" style={{ minWidth: '3.5rem', fontVariantNumeric: 'tabular-nums' }}>
-                {Math.floor(l.tick / 10)} s
-              </span>
-              <span>{l.text}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+                  ))}
+                  {species.map((s) => (
+                    <th key={`b-${s.id}`} scope="col" style={CELL}>
+                      {s.name}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {samples
+                  .filter((_, k) => (samples.length - 1 - k) % 10 === 0)
+                  .reverse()
+                  .map((row) => (
+                    <tr key={row.second}>
+                      <th
+                        scope="row"
+                        style={{ textAlign: 'left', padding: '0.2rem 0.4rem', fontWeight: 400 }}
+                      >
+                        {row.second} s
+                      </th>
+                      {species.map((s) => (
+                        <td key={`n-${s.id}`} style={CELL}>
+                          {row.count[s.i] ?? 0}
+                        </td>
+                      ))}
+                      {species.map((s) => (
+                        <td key={`b-${s.id}`} style={CELL}>
+                          {(row.biomass[s.i] ?? 0).toFixed(2)}
+                        </td>
+                      ))}
+                      <td style={CELL}>{row.oxygenMean.toFixed(3)}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+        {tab === 'events' ? (
+          <div role="tabpanel" data-testid="history-events">
+            {focused ? (
+              <p data-testid="history-organism">
+                <strong>
+                  {info.speciesNames[focused.speciesIdx] ?? focused.speciesId} #{focused.birthId}
+                </strong>
+                : generation {focused.generation}.{' '}
+                {focused.parentBirthId > 0
+                  ? focused.genome.changedFromParent
+                    ? 'It inherited a different trait from its parent.'
+                    : 'Same inherited traits as its parent.'
+                  : 'It was added to the dish.'}
+              </p>
+            ) : null}
+            {filterName !== null ? (
+              <div class="filter-row">
+                <span class="sub">Showing {filterName} events and events for the whole dish.</span>
+                <button class="btn" onClick={() => setFilter(null)}>
+                  Show all
+                </button>
+              </div>
+            ) : null}
+            <ul
+              style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '0.25rem' }}
+              aria-live="polite"
+              aria-label="What happened"
+            >
+              {lines.length === 0 ? (
+                <li class="sub">
+                  {filterName !== null ? `Nothing recorded for ${filterName} yet.` : 'Nothing recorded yet.'}
+                </li>
+              ) : null}
+              {lines.map((l) => (
+                <li
+                  key={`${l.key}:${l.tick}`}
+                  style={{ display: 'flex', gap: '0.5rem', fontSize: '0.875rem' }}
+                >
+                  <span class="sub" style={{ minWidth: '3.5rem', fontVariantNumeric: 'tabular-nums' }}>
+                    {Math.floor(l.tick / 10)} s
+                  </span>
+                  <span>{l.text}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }

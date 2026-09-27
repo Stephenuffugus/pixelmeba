@@ -27,41 +27,43 @@ export function AddLifeSheet() {
   if (!info) return null;
   return (
     <section class="sheet" aria-labelledby="addlife-title">
-      <header>
-        <h2 id="addlife-title">Add Life</h2>
-        <button class="btn ghost" aria-label="Close" onClick={() => (sheet.value = 'none')}>
-          <IconClose />
-        </button>
-      </header>
-      <p class="sub">Choose an organism, then tap the dish to place it. Nothing else appears on its own.</p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.5rem 0' }}>
-        <span class="sub">How many</span>
-        <div class="segmented" role="group" aria-label="How many">
-          {[1, 5, 20].map((n) => (
-            <button key={n} class="btn" aria-pressed={count === n} onClick={() => setCount(n)}>
-              {n}
+      <div class="sheet-scroll">
+        <header>
+          <h2 id="addlife-title">Add Life</h2>
+          <button class="btn ghost" aria-label="Close" onClick={() => (sheet.value = 'none')}>
+            <IconClose />
+          </button>
+        </header>
+        <p class="sub">Choose an organism, then tap the dish to place it. Nothing else appears on its own.</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.5rem 0' }}>
+          <span class="sub">How many</span>
+          <div class="segmented" role="group" aria-label="How many">
+            {[1, 5, 20].map((n) => (
+              <button key={n} class="btn" aria-pressed={count === n} onClick={() => setCount(n)}>
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div class="species-grid">
+          {info.speciesIds.map((id, i) => (
+            <button
+              key={id}
+              class="btn species-tile"
+              data-testid={`species-${id}`}
+              onClick={() => {
+                setTool({ kind: 'addLife', speciesId: id, count, radius: 3 });
+                sheet.value = 'none';
+              }}
+            >
+              <Thumb asset={info.speciesAssets[i]!} />
+              <span>{info.speciesNames[i]}</span>
+              <span class="sub" style={{ fontWeight: 400 }}>
+                {DIETS[id] ?? ''}
+              </span>
             </button>
           ))}
         </div>
-      </div>
-      <div class="species-grid">
-        {info.speciesIds.map((id, i) => (
-          <button
-            key={id}
-            class="btn species-tile"
-            data-testid={`species-${id}`}
-            onClick={() => {
-              setTool({ kind: 'addLife', speciesId: id, count, radius: 3 });
-              sheet.value = 'none';
-            }}
-          >
-            <Thumb asset={info.speciesAssets[i]!} />
-            <span>{info.speciesNames[i]}</span>
-            <span class="sub" style={{ fontWeight: 400 }}>
-              {DIETS[id] ?? ''}
-            </span>
-          </button>
-        ))}
       </div>
     </section>
   );

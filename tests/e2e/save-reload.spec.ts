@@ -20,3 +20,19 @@ test('save to a slot, reload the page, and open the same dish paused at the same
   await expect(page.getByTestId('sim-time')).toHaveText(alive);
   await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
 });
+
+test('after a manual save, Continue on Home opens that same moment', async ({ page }) => {
+  await startGarden(page);
+  await page.getByTestId('run-toggle').click();
+  await expect.poll(() => simSeconds(page), { timeout: 15000 }).toBeGreaterThanOrEqual(3);
+  await page.getByTestId('run-toggle').click();
+  const alive = await page.getByTestId('sim-time').innerText();
+  await page.getByTestId('more').click();
+  await page.getByTestId('more-save').click();
+  await page.getByTestId('save-confirm').click();
+  await expect(page.getByRole('status').filter({ hasText: /Saved/ })).toBeVisible();
+  await page.reload();
+  await page.getByTestId('home-continue').click();
+  await expect(page.getByTestId('dish-screen')).toBeVisible();
+  await expect(page.getByTestId('sim-time')).toHaveText(alive);
+});

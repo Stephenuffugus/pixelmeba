@@ -10,6 +10,8 @@ export interface FeedLine {
   readonly key: string;
   readonly tick: number;
   readonly text: string;
+  /** Species index the events belong to, or -1 for dish-wide events (e.g. starch became sugar). */
+  readonly species: number;
   count: number;
 }
 
@@ -50,7 +52,7 @@ export function pushFeed(events: readonly VisualEvent[], speciesNames: readonly 
       last.count++;
       (last as { text: string }).text = describe(ev, name, last.count);
     } else {
-      lines.unshift({ key, tick: ev.tick, text: describe(ev, name, 1), count: 1 });
+      lines.unshift({ key, tick: ev.tick, text: describe(ev, name, 1), species: ev.species, count: 1 });
     }
   }
   feed.value = lines.slice(0, MAX_LINES);
