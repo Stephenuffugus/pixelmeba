@@ -9,15 +9,15 @@ Legend: `[ ]` todo · `[x] (abc1234)` done · `[~]` in progress (at most one at 
 with the next task).
 
 ## Phase 0 — Foundation
-- [ ] P0.1 Repository and toolchain (docs baseline already committed as 9982e8d; add the toolchain on top)
-- [ ] P0.2 Content schema and first packs (5 species, FIRST_DISH materials, WATER_GARDEN, FIRST_DISH_V1, loci, empty registry, validator)
-- [ ] P0.3 Determinism primitives (det/detFloat, canonical serialization, stateHash, sha256)
-- [ ] P0.4 World, fields, transport (stage 2), ledger
-- [ ] P0.5 Entities SoA, genome table, phenotype pipeline, suitability, movement, spatial index
-- [ ] P0.6 Intake/allocation, conversions, maintenance, death, births with immutable proposals
-- [ ] P0.7 Tick loop, commands (stage 1), publish (stage 10), paused transactions
-- [ ] P0.8 Headless runner CLI and save skeleton
-- [ ] G0 gate: neutral‑founders · conservation‑closed‑lid · determinism · no‑free‑growth · fair‑shared‑food · content‑validation → tag `g0`, EXPANSION_RESPONSE §1, §4
+- [x] (b414441) P0.1 Repository and toolchain (docs baseline already committed as 9982e8d; add the toolchain on top)
+- [x] (24f1c39) P0.2 Content schema and first packs (5 species, FIRST_DISH materials, WATER_GARDEN, FIRST_DISH_V1, loci, empty registry, validator)
+- [x] (24f1c39) P0.3 Determinism primitives (det/detFloat, canonical serialization, stateHash, sha256)
+- [x] (24f1c39) P0.4 World, fields, transport (stage 2), ledger
+- [x] (24f1c39) P0.5 Entities SoA, genome table, phenotype pipeline, suitability, movement, spatial index
+- [x] (24f1c39, bd77414) P0.6 Intake/allocation, conversions, maintenance, death, births with immutable proposals
+- [x] (24f1c39) P0.7 Tick loop, commands (stage 1), publish (stage 10), paused transactions
+- [x] (24f1c39) P0.8 Headless runner CLI and save skeleton
+- [x] (bd77414, tag g0) G0 gate: neutral‑founders · conservation‑closed‑lid · determinism · no‑free‑growth · fair‑shared‑food · content‑validation → tag `g0`, EXPANSION_RESPONSE §1, §4
 
 ## Phase 1 — First Playable
 - [ ] P1.1 Five organisms complete (B01, B04, B06 + E_STARCH stage 3, A01 photosynthesis, P01 predation)
