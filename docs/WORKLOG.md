@@ -9,7 +9,7 @@ Legend: `[ ]` todo · `[x] (abc1234)` done · `[~]` in progress (at most one at 
 with the next task).
 
 ## Phase 0 — Foundation
-- [ ] P0.1 Repository and toolchain (baseline docs commit first)
+- [ ] P0.1 Repository and toolchain (docs baseline already committed as 9982e8d; add the toolchain on top)
 - [ ] P0.2 Content schema and first packs (5 species, FIRST_DISH materials, WATER_GARDEN, FIRST_DISH_V1, loci, empty registry, validator)
 - [ ] P0.3 Determinism primitives (det/detFloat, canonical serialization, stateHash, sha256)
 - [ ] P0.4 World, fields, transport (stage 2), ledger

@@ -70,9 +70,10 @@ Build:
 - Scripts from `CLAUDE.md` §Commands (stubs that fail loudly until implemented).
 - `tsconfig` paths: `@sim/*`, `@ui/*`, `@render/*`, `@persist/*`, `@content/*`.
 - Vite config: `base: './'`, worker bundling, `build.target: 'es2022'`.
-- Commit the docs baseline (`docs/`, `CLAUDE.md`, `.gitignore`, `README.md`) as the first commit.
+- The docs baseline (`docs/`, `CLAUDE.md`, `.gitignore`, `README.md`) is already committed as
+  `9982e8d`; build on top of it. Do not rewrite that history.
 Refs: ARCH §1–2.
-Done when: `npm run check` passes on an empty project; `git log` shows the baseline commit.
+Done when: `npm run check` passes on an empty project; `git log` shows your toolchain commit above `9982e8d`.
 
 ### P0.2 Content schema and first packs
 Build:
