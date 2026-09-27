@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "types": ["node", "vite/client"],
+    "paths": {
+      "@sim/*": ["./src/sim/*"],
+      "@ui/*": ["./src/ui/*"],
+      "@render/*": ["./src/render/*"],
+      "@persist/*": ["./src/persistence/*"],
+      "@worker/*": ["./src/worker/*"],
+      "@audio/*": ["./src/audio/*"],
+      "@platform/*": ["./src/platform/*"],
+      "@diag/*": ["./src/diagnostics/*"],
+      "@content/*": ["./content/*"],
+      "@art/*": ["./art/*"]
+    }
+  },
+  "include": ["src", "tools", "tests", "art", "content", "*.ts"],
+  "exclude": ["node_modules", "dist", "android"]
+}
