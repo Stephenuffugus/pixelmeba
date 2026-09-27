@@ -61,11 +61,16 @@ function summarize(samples: readonly HistorySample[]): HistorySample {
   };
 }
 
+/** Samples per one-minute summary. */
+export const SECONDS_PER_SUMMARY = 60;
+
 export function pushSample(h: History, s: HistorySample): void {
   h.seconds.push(s);
-  if (h.seconds.length > HISTORY_SECONDS) {
+  // Compact only once a whole minute lies beyond the 30-minute window, so the most recent 30
+  // simulated minutes are always at per-second resolution (1,800–1,859 samples retained).
+  if (h.seconds.length >= HISTORY_SECONDS + SECONDS_PER_SUMMARY) {
     // Compact the oldest minute into a summary.
-    const minute = h.seconds.splice(0, 60);
+    const minute = h.seconds.splice(0, SECONDS_PER_SUMMARY);
     h.minutes.push(summarize(minute));
     if (h.minutes.length > HISTORY_MINUTES) h.minutes.splice(0, h.minutes.length - HISTORY_MINUTES);
     h.compacted = true;

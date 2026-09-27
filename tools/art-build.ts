@@ -2,7 +2,8 @@
  * npm run art:build [-- --check]
  * Packs every sprite frame (all headings) into public/atlas/organisms.png with 2 px transparent
  * padding and writes public/atlas/manifest.json (ARCH §10.1). Output is byte-deterministic.
- * --check rebuilds in memory and fails if the committed files differ or required frames are missing.
+ * --check rebuilds in memory and fails if the committed files differ or required frames are missing
+ * (sprite requirements here, plus the packed-atlas completeness check shared with content:validate).
  */
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -11,6 +12,7 @@ import { SPRITES } from '../art/src/index';
 import { frameRgba, HEADING_NAMES, LARGE_REQUIRED, orient, SMALL_REQUIRED, SMALL_STATIC_REQUIRED, type AnimName, type SpriteDef } from '../art/src/sprite';
 import { blit, createImage, encodePng } from './lib/png';
 import { REPO_ROOT, loadRegistryFs } from './lib/content-fs';
+import { checkAtlas } from './content-validate';
 
 const PAD = 2;
 const ATLAS_W = 512;
@@ -148,6 +150,12 @@ export function buildAtlas(): { png: Buffer; manifest: AtlasManifest; errors: st
     sprites,
     frames,
   };
+  // The packed result must pass the same completeness check content:validate applies (P1.4).
+  const refs = reg.manifest.enabledSpecies.map((id) => {
+    const sp = reg.species[id]!;
+    return { id, assetId: sp.assetId, frameSize: sp.frameSize, headings: sp.headings };
+  });
+  for (const i of checkAtlas(manifest, refs, { png })) errors.push(`${i.path}: ${i.message}`);
   return { png, manifest, errors };
 }
 

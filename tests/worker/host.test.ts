@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DishHost } from '../../src/worker/host';
-import { SimClient, type WorkerLike } from '../../src/worker/client';
-import type { FromWorker, SnapshotMsg, ToWorker } from '../../src/worker/protocol';
+import type { FromWorker, SnapshotMsg } from '../../src/worker/protocol';
 import { ENT_STRIDE, E_SPECIES } from '../../src/worker/protocol';
 import { registry } from '../helpers/world';
 
@@ -22,6 +21,7 @@ function harness() {
   };
 }
 
+// Client-side stale-snapshot discard and request routing live in protocol.test.ts.
 describe('worker host (P1.3)', () => {
   it('creates a dish from a recipe and publishes a first snapshot with every founder', () => {
     const h = harness();
@@ -97,32 +97,5 @@ describe('worker host (P1.3)', () => {
     h.host.handle({ type: 'create', requestId: 1, dishId: 'd1', source: { kind: 'recipe', recipeId: 'NOPE' } });
     const err = h.out.find((m) => m.type === 'error');
     expect(err && err.type === 'error' && err.message).toContain('unknown recipe');
-  });
-
-  it('the client discards stale snapshots and routes responses by request id', async () => {
-    let onmessage: ((ev: MessageEvent<FromWorker>) => void) | null = null;
-    const host = new DishHost(registry(), (m) => queueMicrotask(() => onmessage?.({ data: m } as MessageEvent<FromWorker>)), { now: () => 0 });
-    const worker: WorkerLike = {
-      postMessage: (msg: ToWorker) => host.handle(msg),
-      get onmessage() {
-        return onmessage;
-      },
-      set onmessage(fn) {
-        onmessage = fn;
-      },
-    };
-    const client = new SimClient(worker);
-    const seen: number[] = [];
-    client.onSnapshot((s) => seen.push(s.gen));
-    const info = await client.create('d1', { kind: 'recipe', recipeId: 'FIRST_DISH_V1' });
-    expect(info.dishId).toBe('d1');
-    // Inject an out-of-order stale snapshot.
-    onmessage!({ data: { type: 'snapshot', dishId: 'd1', gen: 0 } as unknown as FromWorker } as MessageEvent<FromWorker>);
-    const res = await client.command('d1', 'c1', { kind: 'deposit', materialId: 'SUGAR', points: [[64.5, 64.5]], radius: 3, dose: 0.1 });
-    expect(res!.accepted).toBeGreaterThan(0);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(seen.length).toBeGreaterThanOrEqual(2);
-    expect(seen).toEqual([...seen].sort((a, b) => a - b));
-    expect(seen).not.toContain(0);
   });
 });

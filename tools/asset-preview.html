@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pixelmeba · asset preview</title>
+    <style>
+      :root {
+        --bg: #f5f4ef;
+        --text: #172c35;
+        --muted: #6b7b84;
+        --line: #d9dcd6;
+        --primary: #256e9e;
+        --focus: #f2b84b;
+        color-scheme: light;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 0 12px 48px;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      }
+      body > header {
+        background: var(--bg);
+        border-bottom: 1px solid var(--line);
+        padding: 10px 0;
+      }
+      @media (min-width: 700px) and (min-height: 600px) {
+        /* Keep the controls in reach on large screens; on phones they would cover a third of the view. */
+        body > header {
+          position: sticky;
+          top: 0;
+          z-index: 2;
+        }
+      }
+      h1 {
+        font-size: 1.05rem;
+        margin: 0 0 6px;
+      }
+      h2 {
+        font-size: 1rem;
+        margin: 20px 0 6px;
+      }
+      h3 {
+        font-size: 0.95rem;
+        margin: 0;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        align-items: center;
+      }
+      .controls label {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+        min-height: 32px;
+      }
+      select,
+      button,
+      input {
+        font: inherit;
+      }
+      button {
+        min-height: 32px;
+        padding: 0 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--text);
+      }
+      :focus-visible {
+        outline: 3px solid var(--focus);
+        outline-offset: 1px;
+      }
+      .sub {
+        color: var(--muted);
+        margin: 2px 0 8px;
+      }
+      canvas {
+        image-rendering: crisp-edges;
+        image-rendering: pixelated;
+        display: block;
+      }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        padding: 10px;
+        margin: 10px 0;
+      }
+      .card > header {
+        padding: 0 0 6px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+        align-items: baseline;
+      }
+      .badge {
+        font-size: 0.75rem;
+        border-radius: 999px;
+        padding: 1px 8px;
+        background: #e3efed;
+      }
+      .badge.warn {
+        background: #f6d5d1;
+      }
+      .anim {
+        border-top: 1px solid var(--line);
+        padding: 6px 0;
+      }
+      .anim-title {
+        font-weight: 600;
+      }
+      .anim-meta {
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+      .headings {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        margin-top: 4px;
+      }
+      .heading {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: flex-end;
+        min-width: 0;
+        max-width: 100%;
+      }
+      .heading .h-label {
+        flex: 0 0 100%;
+        font-size: 0.75rem;
+        color: var(--muted);
+      }
+      .heading .scroll {
+        flex: 0 1 auto;
+      }
+      .stage {
+        border-radius: 4px;
+      }
+      .scroll {
+        overflow-x: auto;
+        max-width: 100%;
+        min-width: 0;
+      }
+      section,
+      .card,
+      .anim,
+      .headings {
+        min-width: 0;
+        max-width: 100%;
+      }
+      #status {
+        margin: 8px 0;
+      }
+      #status.error {
+        color: #b3473f;
+        font-weight: 600;
+      }
+      table {
+        border-collapse: collapse;
+        font-size: 0.8rem;
+        font-variant-numeric: tabular-nums;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 2px 8px 2px 0;
+        border-bottom: 1px solid var(--line);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Pixelmeba · asset preview</h1>
+      <div class="controls" role="group" aria-label="Preview options">
+        <label><input type="checkbox" id="gray" /> Grayscale</label>
+        <label
+          >Vision
+          <select id="cvd">
+            <option value="none">Typical</option>
+            <option value="protan">Protanopia</option>
+            <option value="deutan">Deuteranopia</option>
+            <option value="tritan">Tritanopia</option>
+          </select></label
+        >
+        <label
+          >Scale
+          <select id="scale">
+            <option value="1">1×</option>
+            <option value="2">2×</option>
+            <option value="3" selected>3×</option>
+            <option value="4">4×</option>
+            <option value="6">6×</option>
+          </select></label
+        >
+        <label
+          >Ground
+          <select id="ground">
+            <option value="water">Water</option>
+            <option value="gel">Gel</option>
+            <option value="sediment">Sediment</option>
+            <option value="outside">Dark</option>
+          </select></label
+        >
+        <label><input type="checkbox" id="reduced" /> Reduced motion</label>
+        <button type="button" id="pause" aria-pressed="false">Pause</button>
+      </div>
+    </header>
+    <p id="status" role="status">Loading atlas…</p>
+
+    <section aria-labelledby="dense-title">
+      <h2 id="dense-title">Dense group</h2>
+      <p class="sub" id="dense-sub">Mixed organisms packed together, drawn exactly as the dish draws them at this zoom.</p>
+      <div class="controls">
+        <label
+          >Zoom
+          <select id="dense-zoom">
+            <option value="8">Neighborhood (8 px/cell)</option>
+            <option value="16">Close (16 px/cell)</option>
+          </select></label
+        >
+        <label
+          >States
+          <select id="dense-states">
+            <option value="mixed">Mixed (move, feed, stress, split)</option>
+            <option value="move">Moving / idle only</option>
+          </select></label
+        >
+        <label>Count <input id="dense-count" type="number" min="1" max="400" value="60" style="width: 5em" /></label>
+        <button type="button" id="dense-shuffle">Shuffle</button>
+      </div>
+      <div class="scroll"><canvas id="dense" class="stage" aria-label="Dense group of mixed organisms"></canvas></div>
+    </section>
+
+    <section aria-labelledby="species-title">
+      <h2 id="species-title">Every species, animation and heading</h2>
+      <p class="sub">Each cell shows the live animation, then its frames as a strip (east, south, west, north).</p>
+      <div id="species"></div>
+    </section>
+
+    <section aria-labelledby="atlas-title">
+      <h2 id="atlas-title">Atlas sheet</h2>
+      <p class="sub" id="atlas-sub"></p>
+      <div class="scroll"><canvas id="sheet" class="stage" aria-label="Whole organism atlas"></canvas></div>
+    </section>
+
+    <script type="module" src="./asset-preview.ts"></script>
+  </body>
+</html>
