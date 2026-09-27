@@ -38,6 +38,10 @@ import {
 import { AddLifeSheet } from '../panels/AddLifeSheet';
 import { FeedSheet } from '../panels/FeedSheet';
 import { InspectorSheet } from '../panels/Inspector';
+import { MoreSheet, SaveSheet } from '../panels/MoreSheet';
+import { HistorySheet } from '../panels/HistorySheet';
+import { IconMore } from '../icons';
+import { autosave } from '../state';
 import type { Speed } from '@worker/protocol';
 
 function formatTime(tick: number): string {
@@ -86,6 +90,12 @@ export function DishScreen() {
     };
   }, []);
 
+  // Autosave every 30 real seconds while this dish is open (SPEC §14.2).
+  useEffect(() => {
+    const t = setInterval(() => void autosave(), 30000);
+    return () => clearInterval(t);
+  }, []);
+
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
@@ -129,6 +139,9 @@ export function DishScreen() {
         </div>
         <button class={`btn ${running ? '' : 'primary'}`} onClick={togglePause} aria-label={running ? 'Pause' : 'Run'} data-testid="run-toggle">
           {running ? <IconPause /> : <IconPlay />}
+        </button>
+        <button class="btn" aria-label="More" onClick={() => (sheet.value = sheet.value === 'more' ? 'none' : 'more')} data-testid="more">
+          <IconMore />
         </button>
         {running ? (
           <button class="btn speed-cycle" aria-label={`Speed ${m?.speed ?? 1}×, tap to change`} onClick={() => setSpeed(m?.speed === 1 ? 2 : m?.speed === 2 ? 4 : 1)}>
@@ -181,6 +194,9 @@ export function DishScreen() {
         {sheet.value === 'addLife' ? <AddLifeSheet /> : null}
         {sheet.value === 'feed' ? <FeedSheet /> : null}
         {sheet.value === 'inspect' ? <InspectorSheet /> : null}
+        {sheet.value === 'more' ? <MoreSheet /> : null}
+        {sheet.value === 'save' ? <SaveSheet /> : null}
+        {sheet.value === 'history' ? <HistorySheet /> : null}
       </div>
 
       <nav class="bottombar" aria-label="Actions">

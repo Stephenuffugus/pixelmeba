@@ -117,3 +117,17 @@ Decision: (1) stage 6 scratch is cleared in a finally block, so an exception can
 Reason: SPEC §15 — derived caches must never differ between a continuous run and a reload.
 Affects: src/sim/intake.ts, commands.ts, births.ts; regression test in tests/sim/review-regressions.test.ts.
 Owner review: no
+
+## D-0013 · 2026-09-27 · P1.9 · IndexedDB for saves on web and Android
+Context: R27 chose Capacitor Filesystem with temp-write-verify-rename on Android. IndexedDB is available inside the Web Worker and the Capacitor Android WebView, stores data in the app's private directory, and commits a multi-store transaction atomically.
+Decision: saves are written from the worker to IndexedDB on both platforms: one readwrite transaction puts the new gzip-compressed record, updates the slot pointer, keeps the predecessor and deletes the older record, all or nothing. Capacitor Filesystem/Share are used for export and sharing only (P4.6/P4.10). If IndexedDB is unavailable (private browsing), saves fall back to memory and the UI says so.
+Reason: true atomicity instead of emulated rename semantics; one code path; no main-thread copies of multi-megabyte saves.
+Affects: src/persistence/{store,idb,compress,saveFile}.ts, src/worker/{host,sim.worker}.ts. Android persistence across process death is to be verified on a device (EXPANSION_RESPONSE §7).
+Owner review: no
+
+## D-0014 · 2026-09-27 · P1.10 · Charts use small multiples, not species colors
+Context: the dataviz validator fails the organisms' identity hues as a categorical chart palette (ochre vs amber normal-vision ΔE 4.8; coral vs green deutan ΔE 2.5; all below 3:1 on the panel surface). No re-stepped hue-matched set passed.
+Decision: species charts are small multiples — one sparkline per species, labelled with its sprite and name — drawn in a single validated ink (#256E9E, 5.3:1). Environment series are separate single-series charts. Every chart has a crosshair tooltip, a text summary and a table view.
+Reason: identity never depends on color; charts stay honest for color-vision deficiencies; matches the "readable without color" principle.
+Affects: src/ui/panels/HistorySheet.tsx.
+Owner review: no

@@ -3,6 +3,8 @@ import { Home } from '../views/Home';
 import { Play } from '../views/Play';
 import { DishScreen } from '../views/DishScreen';
 import { SimplePage } from '../views/SimplePage';
+import { Saves } from '../views/Saves';
+import { NewDish } from '../views/NewDish';
 
 export function App() {
   const r = route.value;
@@ -17,6 +19,10 @@ export function App() {
       return <SimplePage title="Field Guide" body="Every organism, material and tool will be listed here." />;
     case 'settings':
       return <SimplePage title="Settings" body="Sound, motion, text size and overlay options." settings />;
+    case 'saves':
+      return <Saves />;
+    case 'newDish':
+      return <NewDish />;
     case 'about':
       return (
         <SimplePage

@@ -103,7 +103,7 @@ function lab(name: ReasonName, ctx: ReasonContext): string {
     case 'OXYGEN_LIMITED':
       return `Aerobic intake limited by oxygen: ${pct(ctx.value)} supplied.`;
     case 'LIGHT_LIMITED':
-      return `Photosynthesis at ${ctx.value === undefined ? 'unknown' : ctx.value.toFixed(2)} light.`;
+      return `Photosynthesis at ${ctx.value === undefined || !Number.isFinite(ctx.value) ? 'an unknown' : ctx.value.toFixed(2)} light.`;
     case 'CROWDING_INTAKE_HALVED':
       return 'Cell over capacity: intake halved and births blocked until it thins out.';
     case 'DIV_BLOCK_CAPACITY':

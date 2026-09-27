@@ -7,6 +7,7 @@ import type { CommandPayload } from '@sim/commands';
 import { SimClient } from '@worker/client';
 import type { DishInfo, InspectorPayload, OverlayId, Selection, SnapshotMsg, Speed } from '@worker/protocol';
 import type { DishRenderer } from '@render/renderer';
+import { clearFeed, pushFeed } from './feed';
 
 export type Route =
   | { readonly name: 'home' }
@@ -14,7 +15,9 @@ export type Route =
   | { readonly name: 'dish' }
   | { readonly name: 'guide' }
   | { readonly name: 'settings' }
-  | { readonly name: 'about' };
+  | { readonly name: 'about' }
+  | { readonly name: 'saves' }
+  | { readonly name: 'newDish' };
 
 export type Tool =
   | { readonly kind: 'look' }
@@ -44,7 +47,7 @@ export const selection = signal<Selection | null>(null);
 export const inspector = signal<InspectorPayload | null>(null);
 export const candidates = signal<{ x: number; y: number; items: { birthId: number; species: number }[] } | null>(null);
 export const tool = signal<Tool>({ kind: 'look' });
-export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more'>('none');
+export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | 'save' | 'history'>('none');
 export const overlay = signal<OverlayId | null>(null);
 export const overlayMax = signal<number>(0);
 export const toast = signal<string | null>(null);
@@ -110,6 +113,7 @@ function onSnapshot(s: SnapshotMsg): void {
   if (s.geometry) lastGeometrySnapshot = s;
   lastSnapshot = s;
   renderer?.applySnapshot(s);
+  if (dishInfo.value) pushFeed(s.events, dishInfo.value.speciesNames);
   batch(() => {
     meta.value = {
       tick: s.tick,
@@ -131,25 +135,146 @@ export function showToast(text: string, ms = 2600): void {
   toastTimer = setTimeout(() => (toast.value = null), ms);
 }
 
+function newDishId(): string {
+  return `dish-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+}
+
+function enterDish(info: DishInfo, promptText: string | null): void {
+  clearFeed();
+  batch(() => {
+    dishInfo.value = info;
+    selection.value = null;
+    inspector.value = null;
+    tool.value = { kind: 'look' };
+    sheet.value = 'none';
+    overlay.value = null;
+    prompt.value = promptText;
+    route.value = { name: 'dish' };
+  });
+  renderer?.setSpecies(info.speciesIds, info.speciesAssets);
+  lastAutosaveTick = info.tick;
+}
+
+let lastAutosaveTick = -1;
+
+/** Autosave the active dish if it changed since the last autosave (SPEC §14.2). */
+export async function autosave(): Promise<void> {
+  const info = dishInfo.value;
+  const m = meta.value;
+  if (!info || !m || m.tick === lastAutosaveTick) return;
+  try {
+    await getClient().autosave(info.dishId);
+    lastAutosaveTick = m.tick;
+  } catch (e) {
+    showToast(`Autosave failed; your previous save is intact. (${(e as Error).message})`, 4000);
+  }
+}
+
+export async function saveToSlot(slotId: string, name: string): Promise<boolean> {
+  const info = dishInfo.value;
+  if (!info) return false;
+  try {
+    const s = await getClient().saveSlot(info.dishId, slotId, name);
+    dishInfo.value = { ...info, name: s.name };
+    showToast(`Saved "${s.name}".`);
+    return true;
+  } catch (e) {
+    showToast(`Couldn't save; your previous save is intact. (${(e as Error).message})`, 4000);
+    return false;
+  }
+}
+
+export async function loadSlot(slotId: string): Promise<void> {
+  busy.value = true;
+  try {
+    const c = getClient();
+    const old = dishInfo.value;
+    const { info, usedPredecessor } = await c.loadSlot(slotId, newDishId());
+    if (old && old.dishId !== info.dishId) c.dispose(old.dishId);
+    enterDish(info, null);
+    showToast(usedPredecessor ? 'The latest save was damaged, so the previous copy was opened.' : `Opened "${info.name}" — paused where you left it.`, 3500);
+  } catch (e) {
+    showToast(`That save could not be opened: ${(e as Error).message}`, 5000);
+  } finally {
+    busy.value = false;
+  }
+}
+
+export async function importFile(file: File): Promise<void> {
+  busy.value = true;
+  try {
+    const text = await file.text();
+    const c = getClient();
+    const old = dishInfo.value;
+    const info = await c.importDish(text, newDishId());
+    if (old) c.dispose(old.dishId);
+    enterDish(info, null);
+    showToast(`Imported "${info.name}" — paused.`, 3000);
+  } catch (e) {
+    showToast(`Nothing was changed: ${(e as Error).message}`, 5000);
+  } finally {
+    busy.value = false;
+  }
+}
+
+export async function exportCurrent(strip: boolean): Promise<void> {
+  const info = dishInfo.value;
+  if (!info) return;
+  try {
+    const { text, filename } = await getClient().exportDish(info.dishId, strip);
+    const blob = new Blob([text], { type: 'application/vnd.pixelmeba+json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    showToast(`Exported ${filename}.`);
+  } catch (e) {
+    showToast(`Export failed: ${(e as Error).message}`, 4000);
+  }
+}
+
+export async function duplicateCurrent(): Promise<void> {
+  const info = dishInfo.value;
+  if (!info) return;
+  const c = getClient();
+  const copy = await c.duplicate(info.dishId, newDishId());
+  c.activate(copy.dishId);
+  enterDish(copy, null);
+  showToast('Duplicated. You are now in the copy; the original is unchanged.', 3500);
+}
+
+export async function startCustom(opts: {
+  recipeId: string;
+  name: string;
+  seed: number;
+  mutationPreset: 'standard' | 'accelerated' | 'fixed';
+  founderMode: 'identical' | 'varied';
+  empty: boolean;
+}): Promise<void> {
+  busy.value = true;
+  try {
+    const c = getClient();
+    const old = dishInfo.value;
+    if (old) c.dispose(old.dishId);
+    const info = await c.create(newDishId(), { kind: 'recipe', recipeId: opts.recipeId, seed: opts.seed, overrides: { mutationPreset: opts.mutationPreset, founderMode: opts.founderMode, empty: opts.empty } }, opts.name);
+    enterDish(info, null);
+  } finally {
+    busy.value = false;
+  }
+}
+
 export async function startRecipe(recipeId: string, name: string): Promise<void> {
   busy.value = true;
   try {
     const c = getClient();
     const old = dishInfo.value;
     if (old) c.dispose(old.dishId);
-    const dishId = `dish-${Date.now().toString(36)}`;
-    const info = await c.create(dishId, { kind: 'recipe', recipeId }, name);
-    batch(() => {
-      dishInfo.value = info;
-      selection.value = null;
-      inspector.value = null;
-      tool.value = { kind: 'look' };
-      sheet.value = 'none';
-      overlay.value = null;
-      prompt.value = settings.value.showPrompts ? 'Press play and look closely.' : null;
-      route.value = { name: 'dish' };
-    });
-    renderer?.setSpecies(info.speciesIds, info.speciesAssets);
+    const info = await c.create(newDishId(), { kind: 'recipe', recipeId }, name);
+    enterDish(info, settings.value.showPrompts ? 'Press play and look closely.' : null);
   } finally {
     busy.value = false;
   }

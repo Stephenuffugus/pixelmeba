@@ -1,8 +1,18 @@
-import { IconGuide, IconLab, IconNotebook, IconPlay, IconSettings } from '../icons';
-import { dishInfo, route } from '../state';
+import { useEffect, useState } from 'preact/hooks';
+import type { SlotSummary } from '@worker/protocol';
+import { IconGuide, IconLab, IconNotebook, IconPlay, IconSave, IconSettings } from '../icons';
+import { dishInfo, getClient, loadSlot, route } from '../state';
 
 export function Home() {
   const hasDish = dishInfo.value !== null;
+  const [auto, setAuto] = useState<SlotSummary | null>(null);
+  useEffect(() => {
+    if (hasDish) return;
+    void getClient()
+      .listSlots()
+      .then((r) => setAuto(r.slots.find((s) => s.slotId === 'autosave') ?? null))
+      .catch(() => setAuto(null));
+  }, [hasDish]);
   return (
     <main class="page" aria-labelledby="home-title">
       <div class="home-grid">
@@ -18,6 +28,16 @@ export function Home() {
               <IconPlay /> Continue
             </button>
           </section>
+        ) : auto ? (
+          <section class="card" aria-label="Continue">
+            <h2>Continue</h2>
+            <p>
+              {auto.name} — {Math.floor(auto.tick / 10)} s simulated. Opens paused.
+            </p>
+            <button class="btn primary" onClick={() => void loadSlot('autosave')} data-testid="home-continue">
+              <IconPlay /> Continue
+            </button>
+          </section>
         ) : null}
         <section class="card" aria-label="Play">
           <h2>Play</h2>
@@ -27,11 +47,14 @@ export function Home() {
           </button>
         </section>
         <nav class="secondary-row" aria-label="More">
-          <button class="btn" disabled title="Arrives with the Lab view">
-            <IconLab /> Lab
+          <button class="btn" onClick={() => (route.value = { name: 'newDish' })} data-testid="home-new">
+            <IconLab /> New dish
           </button>
           <button class="btn" disabled title="Arrives with favorites and story cards">
             <IconNotebook /> Notebook
+          </button>
+          <button class="btn" onClick={() => (route.value = { name: 'saves' })}>
+            <IconSave /> Saved dishes
           </button>
           <button class="btn" onClick={() => (route.value = { name: 'guide' })}>
             <IconGuide /> Field Guide

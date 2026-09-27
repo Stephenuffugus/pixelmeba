@@ -12,6 +12,7 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     trace: 'retain-on-failure',
+    launchOptions: { args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'] },
   },
   webServer: {
     command: `npx vite build && npx vite preview --port ${PORT} --strictPort --host 127.0.0.1`,

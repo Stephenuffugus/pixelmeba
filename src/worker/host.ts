@@ -13,10 +13,18 @@ import { deserializeWorld, serializeWorld, stateHash, type WorldState } from '@s
 import { step } from '@sim/tick';
 import type { World } from '@sim/world';
 import { buildInspector, packDeposits, packEntities, packOverlay, visualEvents } from './snapshot';
-import type { DishInfo, DishSource, FromWorker, OverlayId, Selection, SnapshotMsg, Speed, ToWorker } from './protocol';
+import type { DishInfo, DishSource, FromWorker, OverlayId, Selection, SlotSummary, SnapshotMsg, Speed, ToWorker } from './protocol';
+import { buildSaveFile, loadSaveFile, SaveFileError } from '@persist/saveFile';
+import { AUTOSAVE_SLOT, type SaveStore, type SlotInfo } from '@persist/store';
 
 export interface HostClock {
   now(): number;
+  /** Wall-clock ISO timestamp for save metadata (never enters the simulation). */
+  iso?(): string;
+}
+
+function summary(s: SlotInfo): SlotSummary {
+  return { slotId: s.slotId, name: s.name, tick: s.tick, savedAt: s.savedAt, recipeId: s.recipeId, bytes: s.bytes };
 }
 
 interface Dish {
@@ -50,8 +58,105 @@ export class DishHost {
     private readonly registry: ContentRegistry,
     private readonly post: (msg: FromWorker, transfer?: Transferable[]) => void,
     private readonly clock: HostClock,
+    private readonly store: SaveStore | null = null,
+    private readonly persistent = false,
   ) {
     this.lastPump = clock.now();
+  }
+
+  private iso(): string {
+    return this.clock.iso ? this.clock.iso() : new Date(0).toISOString();
+  }
+
+  /** Asynchronous requests (storage, checksums). Errors are reported, never thrown. */
+  async handleAsync(msg: ToWorker): Promise<void> {
+    try {
+      switch (msg.type) {
+        case 'saveSlot':
+        case 'autosave': {
+          const d = this.need(msg.dishId);
+          if (!this.store) throw new Error('Saving is unavailable on this device.');
+          const slotId = msg.type === 'autosave' ? AUTOSAVE_SLOT : msg.slotId;
+          const name = msg.type === 'autosave' ? d.name : msg.name;
+          if (msg.type === 'saveSlot') d.name = name;
+          const savedAt = this.iso();
+          const built = await buildSaveFile(d.world, { name, savedAt, recipeId: d.world.content.provenance.recipeId });
+          const info = await this.store.save({ slotId, text: built.text, checksum: built.checksum, name, tick: d.world.tick, savedAt, recipeId: d.world.content.provenance.recipeId });
+          this.post({ type: 'slotSaved', requestId: msg.requestId, slot: summary(info) });
+          return;
+        }
+        case 'listSlots': {
+          const slots = this.store ? await this.store.list() : [];
+          this.post({ type: 'slots', requestId: msg.requestId, slots: slots.map(summary), persistent: this.persistent });
+          return;
+        }
+        case 'loadSlot': {
+          if (!this.store) throw new Error('Saving is unavailable on this device.');
+          const res = await this.store.load(msg.slotId, async (text) => {
+            await loadSaveFile(text);
+            return true;
+          });
+          if (!res) throw new SaveFileError('That save could not be read, and no earlier copy was usable.', 'integrity');
+          const { file, world } = await loadSaveFile(res.text);
+          const dish = this.addDish(msg.newDishId, world, file.meta.name);
+          this.post({ type: 'loaded', requestId: msg.requestId, info: this.info(dish), usedPredecessor: res.usedPredecessor });
+          this.sendSnapshot(dish);
+          return;
+        }
+        case 'deleteSlot': {
+          await this.store?.remove(msg.slotId);
+          this.post({ type: 'done', requestId: msg.requestId });
+          return;
+        }
+        case 'exportDish': {
+          const d = this.need(msg.dishId);
+          const built = await buildSaveFile(d.world, { name: d.name, savedAt: this.iso(), recipeId: d.world.content.provenance.recipeId }, { stripNames: msg.strip });
+          const base = (msg.strip ? 'shared-dish' : d.name).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'dish';
+          this.post({ type: 'exported', requestId: msg.requestId, text: built.text, filename: `${base}.pixelmeba` });
+          return;
+        }
+        case 'importDish': {
+          const { file, world } = await loadSaveFile(msg.text);
+          const dish = this.addDish(msg.newDishId, world, file.meta.name);
+          this.post({ type: 'loaded', requestId: msg.requestId, info: this.info(dish), usedPredecessor: false });
+          this.sendSnapshot(dish);
+          return;
+        }
+        default:
+          this.handle(msg);
+      }
+    } catch (e) {
+      this.post({
+        type: 'error',
+        dishId: 'dishId' in msg ? msg.dishId : '',
+        requestId: 'requestId' in msg ? msg.requestId : undefined,
+        message: e instanceof Error ? e.message : String(e),
+        lastValidTick: 0,
+        ...(e instanceof SaveFileError ? { kind: e.kind } : {}),
+      } as FromWorker);
+    }
+  }
+
+  private addDish(id: string, world: World, name: string): Dish {
+    const dish: Dish = {
+      id,
+      world,
+      name,
+      speed: 0,
+      acc: 0,
+      gen: 0,
+      lastEventId: world.counters.nextEventId - 1,
+      lastGeometryVersion: -1,
+      overlay: null,
+      selection: null,
+      undo: null,
+      ticksWindow: [],
+      effectiveSpeed: 0,
+      failed: false,
+    };
+    this.dishes[id] = dish;
+    this.active = id;
+    return dish;
   }
 
   get activeDishId(): string | null {
@@ -86,24 +191,7 @@ export class DishHost {
     switch (msg.type) {
       case 'create': {
         const world = this.build(msg.source, msg.dishId);
-        const dish: Dish = {
-          id: msg.dishId,
-          world,
-          name: msg.name ?? world.content.provenance.recipeId ?? 'Dish',
-          speed: 0,
-          acc: 0,
-          gen: 0,
-          lastEventId: world.counters.nextEventId - 1,
-          lastGeometryVersion: -1,
-          overlay: null,
-          selection: null,
-          undo: null,
-          ticksWindow: [],
-          effectiveSpeed: 0,
-          failed: false,
-        };
-        this.dishes[msg.dishId] = dish;
-        this.active = msg.dishId;
+        const dish = this.addDish(msg.dishId, world, msg.name ?? world.content.provenance.recipeId ?? 'Dish');
         this.post({ type: 'ready', requestId: msg.requestId, info: this.info(dish) });
         this.sendSnapshot(dish);
         return;
@@ -202,6 +290,8 @@ export class DishHost {
       }
       case 'release':
         return;
+      default:
+        void this.handleAsync(msg);
     }
   }
 
@@ -213,9 +303,20 @@ export class DishHost {
 
   private build(source: DishSource, dishId: string): World {
     if (source.kind === 'recipe') {
+      const o = source.overrides;
       return realizeRecipe(this.registry, source.recipeId, {
         worldId: dishId,
         ...(source.seed !== undefined ? { seed: source.seed } : {}),
+        ...(o
+          ? {
+              transform: (r) => ({
+                ...r,
+                ...(o.mutationPreset ? { mutationPreset: o.mutationPreset } : {}),
+                ...(o.founderMode ? { founderMode: o.founderMode } : {}),
+                ...(o.empty ? { founders: [], fieldPatches: [], scheduledCommands: [] } : {}),
+              }),
+            }
+          : {}),
       });
     }
     return deserializeWorld(source.state);

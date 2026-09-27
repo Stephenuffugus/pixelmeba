@@ -3,7 +3,16 @@
  * listeners, and stale snapshots (older generation for the same dish) are discarded.
  */
 import type { CommandPayload, CommandResult } from '@sim/commands';
-import type { DishInfo, DishSource, FromWorker, OverlayId, Selection, SnapshotMsg, Speed, ToWorker } from './protocol';
+import type { DishInfo, DishSource, FromWorker, OverlayId, Selection, SlotSummary, SnapshotMsg, Speed, ToWorker } from './protocol';
+
+export class WorkerRequestError extends Error {
+  constructor(
+    message: string,
+    readonly kind: string | undefined,
+  ) {
+    super(message);
+  }
+}
 
 type Pending = { resolve: (v: FromWorker) => void; reject: (e: Error) => void };
 
@@ -52,7 +61,7 @@ export class SimClient {
     if (msg.type === 'error') {
       for (const fn of this.errorListeners) fn({ dishId: msg.dishId, message: msg.message });
       if (msg.requestId !== undefined) {
-        this.pending[msg.requestId]?.reject(new Error(msg.message));
+        this.pending[msg.requestId]?.reject(new WorkerRequestError(msg.message, msg.kind));
         delete this.pending[msg.requestId];
       }
       return;
@@ -110,6 +119,40 @@ export class SimClient {
 
   async history(dishId: string): Promise<Extract<FromWorker, { type: 'history' }>> {
     return this.request((requestId) => ({ type: 'history', requestId, dishId }));
+  }
+
+  async saveSlot(dishId: string, slotId: string, name: string): Promise<SlotSummary> {
+    const msg = await this.request<Extract<FromWorker, { type: 'slotSaved' }>>((requestId) => ({ type: 'saveSlot', requestId, dishId, slotId, name }));
+    return msg.slot;
+  }
+
+  async autosave(dishId: string): Promise<SlotSummary> {
+    const msg = await this.request<Extract<FromWorker, { type: 'slotSaved' }>>((requestId) => ({ type: 'autosave', requestId, dishId }));
+    return msg.slot;
+  }
+
+  async listSlots(): Promise<{ slots: readonly SlotSummary[]; persistent: boolean }> {
+    const msg = await this.request<Extract<FromWorker, { type: 'slots' }>>((requestId) => ({ type: 'listSlots', requestId }));
+    return { slots: msg.slots, persistent: msg.persistent };
+  }
+
+  async loadSlot(slotId: string, newDishId: string): Promise<{ info: DishInfo; usedPredecessor: boolean }> {
+    const msg = await this.request<Extract<FromWorker, { type: 'loaded' }>>((requestId) => ({ type: 'loadSlot', requestId, slotId, newDishId }));
+    return { info: msg.info, usedPredecessor: msg.usedPredecessor };
+  }
+
+  async deleteSlot(slotId: string): Promise<void> {
+    await this.request((requestId) => ({ type: 'deleteSlot', requestId, slotId }));
+  }
+
+  async exportDish(dishId: string, strip: boolean): Promise<{ text: string; filename: string }> {
+    const msg = await this.request<Extract<FromWorker, { type: 'exported' }>>((requestId) => ({ type: 'exportDish', requestId, dishId, strip }));
+    return { text: msg.text, filename: msg.filename };
+  }
+
+  async importDish(text: string, newDishId: string): Promise<DishInfo> {
+    const msg = await this.request<Extract<FromWorker, { type: 'loaded' }>>((requestId) => ({ type: 'importDish', requestId, text, newDishId }));
+    return msg.info;
   }
 
   setSpeed(dishId: string, speed: Speed): void {

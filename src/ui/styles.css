@@ -460,6 +460,7 @@ textarea {
   max-width: 90%;
 }
 .prompt {
+  pointer-events: none;
   position: absolute;
   left: 0.75rem;
   right: 0.75rem;
@@ -476,6 +477,9 @@ textarea {
 .prompt p {
   margin: 0;
   flex: 1;
+}
+.prompt .btn {
+  pointer-events: auto;
 }
 .candidates {
   position: absolute;

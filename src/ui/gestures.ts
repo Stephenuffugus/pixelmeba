@@ -31,6 +31,9 @@ export function attachGestures(el: HTMLElement, r: DishRenderer, h: GestureHandl
   const ids = () => Object.keys(pointers).map(Number);
 
   const down = (e: PointerEvent) => {
+    // Only presses that start on the dish itself are dish gestures; sheets, prompts and buttons
+    // layered over the viewport handle their own input.
+    if (e.target !== r.canvas) return;
     el.setPointerCapture(e.pointerId);
     const [x, y] = local(e);
     pointers[e.pointerId] = { x, y, sx: x, sy: y, t: performance.now(), button: e.button };
@@ -111,6 +114,7 @@ export function attachGestures(el: HTMLElement, r: DishRenderer, h: GestureHandl
   };
 
   const wheel = (e: WheelEvent) => {
+    if (e.target !== r.canvas) return;
     e.preventDefault();
     const [x, y] = local(e);
     r.camera.zoomAt(x, y, Math.exp(-e.deltaY * 0.0015));

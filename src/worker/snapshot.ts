@@ -125,7 +125,17 @@ export function visualEvents(events: readonly SimEvent[], sinceId: number): Visu
   const out: VisualEvent[] = [];
   for (const ev of events) {
     if (ev.id <= sinceId) continue;
-    if (ev.type !== 'birth' && ev.type !== 'death' && ev.type !== 'introduce' && ev.type !== 'capture' && ev.type !== 'conversion') continue;
+    if (
+      ev.type !== 'birth' &&
+      ev.type !== 'death' &&
+      ev.type !== 'introduce' &&
+      ev.type !== 'capture' &&
+      ev.type !== 'conversion' &&
+      ev.type !== 'mutation' &&
+      ev.type !== 'branchEstablished' &&
+      ev.type !== 'branchExtinct'
+    )
+      continue;
     out.push({
       type: ev.type,
       tick: ev.tick,

@@ -17,8 +17,15 @@ export type Selection =
   | { readonly kind: 'entity'; readonly birthId: number }
   | { readonly kind: 'cell'; readonly cell: number };
 
+export interface RecipeOverrides {
+  readonly mutationPreset?: 'standard' | 'accelerated' | 'fixed';
+  readonly founderMode?: 'identical' | 'varied' | 'diverse';
+  /** Start from the recipe's habitat only: no founders, patches or scheduled inputs. */
+  readonly empty?: boolean;
+}
+
 export type DishSource =
-  | { readonly kind: 'recipe'; readonly recipeId: string; readonly seed?: number }
+  | { readonly kind: 'recipe'; readonly recipeId: string; readonly seed?: number; readonly overrides?: RecipeOverrides }
   | { readonly kind: 'state'; readonly state: WorldState };
 
 export type ToWorker =
@@ -34,7 +41,23 @@ export type ToWorker =
   | { readonly type: 'duplicate'; readonly requestId: number; readonly dishId: string; readonly newDishId: string }
   | { readonly type: 'hash'; readonly requestId: number; readonly dishId: string }
   | { readonly type: 'history'; readonly requestId: number; readonly dishId: string }
-  | { readonly type: 'release'; readonly buffers: ArrayBuffer[] };
+  | { readonly type: 'release'; readonly buffers: ArrayBuffer[] }
+  | { readonly type: 'saveSlot'; readonly requestId: number; readonly dishId: string; readonly slotId: string; readonly name: string }
+  | { readonly type: 'autosave'; readonly requestId: number; readonly dishId: string }
+  | { readonly type: 'listSlots'; readonly requestId: number }
+  | { readonly type: 'loadSlot'; readonly requestId: number; readonly slotId: string; readonly newDishId: string }
+  | { readonly type: 'deleteSlot'; readonly requestId: number; readonly slotId: string }
+  | { readonly type: 'exportDish'; readonly requestId: number; readonly dishId: string; readonly strip: boolean }
+  | { readonly type: 'importDish'; readonly requestId: number; readonly text: string; readonly newDishId: string };
+
+export interface SlotSummary {
+  readonly slotId: string;
+  readonly name: string;
+  readonly tick: number;
+  readonly savedAt: string;
+  readonly recipeId: string | null;
+  readonly bytes: number;
+}
 
 /** Per-entity record stride in SnapshotMsg.ents (Float32). */
 export const ENT_STRIDE = 12;
@@ -69,7 +92,7 @@ export interface GeometryMsg {
 }
 
 export interface VisualEvent {
-  readonly type: 'birth' | 'death' | 'introduce' | 'capture' | 'conversion';
+  readonly type: 'birth' | 'death' | 'introduce' | 'capture' | 'conversion' | 'mutation' | 'branchEstablished' | 'branchExtinct';
   readonly tick: number;
   readonly species: number;
   readonly cell: number;
@@ -199,4 +222,9 @@ export type FromWorker =
   | { readonly type: 'saved'; readonly requestId: number; readonly dishId: string; readonly json: string; readonly hash: string; readonly tick: number }
   | { readonly type: 'hash'; readonly requestId: number; readonly dishId: string; readonly hash: string; readonly tick: number }
   | { readonly type: 'history'; readonly requestId: number; readonly dishId: string; readonly seconds: unknown; readonly minutes: unknown; readonly compacted: boolean }
-  | { readonly type: 'error'; readonly dishId: string; readonly requestId?: number; readonly message: string; readonly lastValidTick: number };
+  | { readonly type: 'error'; readonly dishId: string; readonly requestId?: number; readonly message: string; readonly lastValidTick: number; readonly kind?: string }
+  | { readonly type: 'slotSaved'; readonly requestId: number; readonly slot: SlotSummary }
+  | { readonly type: 'slots'; readonly requestId: number; readonly slots: readonly SlotSummary[]; readonly persistent: boolean }
+  | { readonly type: 'loaded'; readonly requestId: number; readonly info: DishInfo; readonly usedPredecessor: boolean }
+  | { readonly type: 'exported'; readonly requestId: number; readonly text: string; readonly filename: string }
+  | { readonly type: 'done'; readonly requestId: number };
