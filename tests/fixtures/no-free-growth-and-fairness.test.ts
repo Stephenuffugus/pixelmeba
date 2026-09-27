@@ -1,15 +1,12 @@
 /**
- * G0 fixtures: no free growth (zero compatible food/CO2 or zero required nutrient ⇒ no new biomass;
- * energy and health decline as specified) and fair shared food (identical organisms sharing a cell
- * receive equal proportional allocations; insertion order never decides the winner).
+ * G0 fixture: no free growth (zero compatible food/CO2 or zero required nutrient ⇒ no new biomass;
+ * energy and health decline as specified). The G0 fair-shared-food fixture now lives with the G1
+ * finite-feeding fixture in finite-feeding.test.ts.
  */
 import { describe, expect, it } from 'vitest';
 import { DT, MOVE_COST_PER_CELL, STARVATION_DAMAGE } from '../../src/sim/constants';
 import { cellIndex } from '../../src/sim/grid';
-import { stageIntake } from '../../src/sim/intake';
 import { checkLedger } from '../../src/sim/ledger';
-import { stageSenseAndMove } from '../../src/sim/movement';
-import { rebuildIndex } from '../../src/sim/spatial';
 import { run } from '../../src/sim/tick';
 import { clearWater, place, setField, fillField } from '../helpers/world';
 
@@ -53,38 +50,5 @@ describe('G0 no free growth', () => {
     expect(w.events.totals.birth ?? 0).toBeGreaterThan(0);
     expect(checkLedger(w).ok).toBe(true);
     void s;
-  });
-});
-
-describe('G0 fair shared food', () => {
-  function allocationWith(order: number[]): number[] {
-    const w = clearWater();
-    setField(w, 'sugar', CELL, 0.004);
-    const slots: number[] = [];
-    // Eight identical organisms (the soft capacity) so their requests exceed the scarce pool and
-    // proportional scaling engages; the insertion order is permuted between runs.
-    const xs = [64.1, 64.2, 64.3, 64.4, 64.5, 64.6, 64.7, 64.8];
-    for (const k of order) slots[k] = place(w, 'B01', xs[k]!, 64.5);
-    stageSenseAndMove(w);
-    for (const s of slots) {
-      w.ents.cols.x[s] = 64.5;
-      w.ents.cols.y[s] = 64.5;
-      w.ents.cols.suitability[s] = 1;
-    }
-    rebuildIndex(w);
-    stageIntake(w);
-    return slots.map((s) => w.ents.cols.B[s]! - 1);
-  }
-
-  it('equal allocations within numeric tolerance, independent of insertion order', () => {
-    const a = allocationWith([0, 1, 2, 3, 4, 5, 6, 7]);
-    const b = allocationWith([7, 4, 2, 0, 6, 3, 1, 5]);
-    for (const gain of [...a, ...b]) {
-      expect(gain).toBeGreaterThan(0);
-      expect(gain).toBeCloseTo(a[0]!, 12);
-    }
-    // Requests (8 × 0.018 × avail(0.004) ≈ 0.0055) exceed the 0.004 pool, so it is shared out
-    // completely: total biomass gained = 0.5 × 0.004.
-    expect(a.reduce((x, y) => x + y, 0)).toBeCloseTo(0.002, 12);
   });
 });
