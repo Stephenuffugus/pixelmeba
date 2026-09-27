@@ -80,7 +80,14 @@ Not started (P1.4).
   active‑field tracking.) Target‑population (6,000 agents) measurement is P3.12.
 - Save skeleton: full world serializes to JSON (typed arrays base64) and reloads to an identical
   state hash. Storage adapters, slots and import validation are P1.9.
-- Android: not started (P1.11). No Android SDK in this environment (JDK 25 present).
+- Android spike (P1.11): Capacitor 8.5.2 project `com.lucidwinds.pixelmeba`, minSdk 24,
+  compileSdk and targetSdk 36 (Play requires API 36 from 2026‑08‑31). With JDK 21 and a
+  command‑line SDK, `assembleDebug` built a 6.0 MB debug APK and `bundleRelease` built a 4.3 MB
+  unsigned AAB; a signed build with a throwaway keystore outside the repo verified and was deleted.
+  JDK 25 (the Codespace default) cannot run Gradle 8.14.3. **Not verified:** install and launch on
+  a device or emulator (none here). Open: the template's `INTERNET` permission (ARCH §12 wants
+  none; remove only after a device test), launcher icon and splash (Phase 4). Steps are in
+  `docs/ANDROID_SETUP.md`.
 
 ## 8. Changes and next gate
 - Tuning revisions: none yet.
