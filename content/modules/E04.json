@@ -1,0 +1,27 @@
+{
+  "id": "E04",
+  "name": "Surface anchor",
+  "eligibleAncestors": [
+    "B01", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10", "B11", "B12", "Y01", "Y02"
+  ],
+  "nativeEquivalents": [],
+  "excludes": ["E13"],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": {
+    "attachSeconds": 5,
+    "minEnergy": 35,
+    "attachedUpkeep": 0.1,
+    "detachNoIntakeSeconds": 10,
+    "detachEnergy": 15,
+    "lockoutSeconds": 10
+  },
+  "visualLayer": "anchor_foot",
+  "guide": {
+    "summary": "Lets a swimming cell hold on to a surface and stay in one place.",
+    "biology": "Many real microbes can stick to surfaces with tiny threads or sticky patches, which keeps them near food but stops them roaming.",
+    "rules": "Costs 0.02 energy per second while carried. After 5 seconds in a row beside a solid surface or mesh with more than 35 energy, it attaches: its speed becomes 0 and it pays another 0.10 energy per second. It lets go after 10 seconds without food, when energy falls below 15, when the surface disappears or when it starts resting, and then cannot attach again for 10 seconds. Feeding and being eaten work as usual. Anchored cells cannot use one-way channels. Cannot be combined with Settler.",
+    "example": "Put anchoring Sprinters beside stones near a sugar patch and compare them with free swimmers when the sugar drifts away."
+  },
+  "phase": 3
+}

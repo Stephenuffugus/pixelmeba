@@ -1,0 +1,17 @@
+{
+  "id": "METABOLITE",
+  "name": "Metabolite",
+  "kind": "field",
+  "target": "metabolite",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "Dissolved leftovers from other cells' meals that some microbes eat.",
+    "biology": "When cells break down food they release by-products, and other microbes can live on those leftovers.",
+    "rules": "Adds metabolite carbon that dissolves and diffuses. Carries no minerals. Crossfeeder, Oilwick, Lantern and Rampart eat it. Every aerobic or anaerobic eater also releases 0.20 metabolite for each carbon it eats. No additional modeled reaction.",
+    "example": "Add metabolite near Crossfeeders with no sugar eaters around and see whether they can grow on their own."
+  },
+  "iconId": "food_metabolite",
+  "phase": 3
+}

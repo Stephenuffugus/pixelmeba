@@ -1,0 +1,17 @@
+{
+  "id": "M11",
+  "name": "Leaf wafer",
+  "kind": "object",
+  "target": "wafer",
+  "doses": [1, 1, 1],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "A leaf snack that slowly lets out starch and protein.",
+    "biology": "Fallen leaves break down slowly, feeding decomposers for a long time.",
+    "rules": "Places one food object in a cell holding 6 starch carbon, 4 protein carbon and 1 bound nutrient. Each second it releases 0.012 starch carbon and 0.008 protein carbon into its own cell as deposits, each carrying 0.10 nutrient per carbon, lasting about 500 seconds. The wafer never moves or spreads. An empty wafer leaves a fading stain that blocks nothing. A dish holds up to 128 food objects. No additional modeled reaction.",
+    "example": "Place a wafer between Recyclers and Threadlace and watch who gathers around it."
+  },
+  "iconId": "object_wafer",
+  "phase": 3
+}

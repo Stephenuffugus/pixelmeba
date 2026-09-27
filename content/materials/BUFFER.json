@@ -1,0 +1,17 @@
+{
+  "id": "BUFFER",
+  "name": "Buffer",
+  "kind": "field",
+  "target": "buffer",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "Helps the water hold its pH steady.",
+    "biology": "Buffers soak up some acid or base, so the pH changes less when either is added.",
+    "rules": "Adds buffer capacity that dissolves and diffuses. It does not change pH by itself: it divides the difference between base and acid, so shown pH = 7 + (base - acid) / (1 + buffer), kept between 2 and 12. Buffer 1.0 halves how far pH moves away from 7. No additional modeled reaction.",
+    "example": "Buffer one half of a dish of Bubbles and compare how sour each half becomes."
+  },
+  "iconId": "chem_buffer",
+  "phase": 3
+}

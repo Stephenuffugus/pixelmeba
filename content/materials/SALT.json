@@ -1,0 +1,17 @@
+{
+  "id": "SALT",
+  "name": "Salt",
+  "kind": "field",
+  "target": "salt",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "Makes the water salty.",
+    "biology": "Salty water draws water out of cells, so most microbes dislike it, while a few salt-loving kinds do best in it.",
+    "rules": "Adds salt that dissolves and diffuses and never decays; only sampling or clean water replacement removes it. Salinity is the amount of salt in a cell. Most species do best at 0 to 0.20 (algae 0 to 0.15), and suitability fades to zero within 0.20 above a species' range. Brinecoil prefers 0.4 to 0.8. No additional modeled reaction.",
+    "example": "Paint a salty strip across the dish and see which species stay on each side."
+  },
+  "iconId": "chem_salt",
+  "phase": 3
+}

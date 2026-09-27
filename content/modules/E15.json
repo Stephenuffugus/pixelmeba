@@ -1,0 +1,26 @@
+{
+  "id": "E15",
+  "name": "Exchange junction",
+  "eligibleAncestors": ["B01", "B04", "B06", "B09", "B10", "B11"],
+  "nativeEquivalents": [],
+  "excludes": [],
+  "requires": ["E12"],
+  "surchargePerSecond": 0.02,
+  "params": {
+    "carbonThresholdMultiple": 1.25,
+    "carbonRate": 0.01,
+    "energyPerCarbon": 1,
+    "energyDonorAbove": 70,
+    "energyReceiverBelow": 40,
+    "energyRate": 0.5,
+    "energyDelivery": 0.9
+  },
+  "visualLayer": "exchange_junction",
+  "guide": {
+    "summary": "Lets linked colony members pass spare food and energy to hungry neighbours.",
+    "biology": "Some real cells that grow in chains pass nutrients to one another through tiny connections.",
+    "rules": "Costs 0.02 energy per second while carried. Needs Colony adhesion and works only on links where both ends carry it. Carbon: a member above 1.25 times its starting body sends up to 0.01 × starting body per second to a linked member below 1.25 times its own, paying 1 energy per carbon sent; the receiver pays nothing. Energy: a member above 70 energy sends up to 0.5 energy per second to a linked member below 40; only 90 % arrives and 10 % is lost. A member that gives energy receives none in the same step, and nothing is passed along further in that step.",
+    "example": "Stretch a chain of linked Sprinters across the edge of a sugar patch and see whether members outside the sugar stay fed."
+  },
+  "phase": 7
+}

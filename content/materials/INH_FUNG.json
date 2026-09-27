@@ -1,0 +1,17 @@
+{
+  "id": "INH_FUNG",
+  "name": "Fungal inhibitor",
+  "kind": "field",
+  "target": "inhFung",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "A pretend chemical that slows and harms only yeasts and fungi.",
+    "biology": "Some real substances harm certain kinds of microbes more than others; this made-up chemical stands in for that broad idea.",
+    "rules": "Adds an abstract inhibitor that dissolves, diffuses and loses 0.2 % of its amount each tick. It targets only the yeasts and fungi Y01 Bubble, Y02 Creambud, F01 Threadlace, F02 Cordweaver, F03 Traplace and F04 Sporeveil. A target's exposure is the local amount, halved once in a cell with biofilm; its growth is multiplied by 1 / (1 + exposure) and it loses 8 times the exposure in health each second. Bacteria, algae, consumers, parasites and viruses are unaffected. No additional modeled reaction. This is an abstract game mechanic, not a claim about how any real product works.",
+    "example": "Add a small dose where Bubbles and Sprinters share sugar and see which group takes over."
+  },
+  "iconId": "chem_inh_fung",
+  "phase": 3
+}

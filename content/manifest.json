@@ -1,0 +1,31 @@
+{
+  "simulationVersion": 3,
+  "evolutionRulesVersion": 1,
+  "moduleRegistryVersion": 1,
+  "phenotypeMappingVersion": 1,
+  "contentVersion": 1,
+  "contentHash": "d795100f14bcd09b82c36e84620dc1e20598c81d5b8bb539632190c125e91920",
+  "buildPhase": 1,
+  "enabledSpecies": [
+    "A01",
+    "B01",
+    "B04",
+    "B06",
+    "P01"
+  ],
+  "enabledModules": [],
+  "enabledSystems": [
+    "core",
+    "enzymes"
+  ],
+  "enabledMaterials": [
+    "DEBRIS",
+    "NUTRIENT",
+    "STARCH",
+    "SUGAR"
+  ],
+  "enabledHabitats": [
+    "WATER_GARDEN"
+  ],
+  "developmentalEnabled": false
+}

@@ -1,0 +1,42 @@
+{
+  "id": "P05",
+  "name": "Shellglider",
+  "category": "consumer",
+  "transportClass": "medium",
+  "b0": 4,
+  "intakeRate": 0.5,
+  "maintenanceRate": 0.65,
+  "minDivisionAge": 55,
+  "maxAge": 1400,
+  "speed": 0.45,
+  "sensingRadius": 3,
+  "attackCooldown": 3,
+  "habitats": ["water"],
+  "attachment": null,
+  "metabolism": "aerobic",
+  "energyPerCarbon": 30,
+  "acidPerCarbon": 0,
+  "foodPriority": [],
+  "digestsFilm": false,
+  "prey": [
+    { "id": "B01", "requires": "any" }, { "id": "B03", "requires": "any" }, { "id": "B04", "requires": "any" },
+    { "id": "B05", "requires": "any" }, { "id": "B06", "requires": "any" }, { "id": "B07", "requires": "any" },
+    { "id": "B08", "requires": "any" }, { "id": "B09", "requires": "any" }, { "id": "B10", "requires": "any" },
+    { "id": "B11", "requires": "any" }, { "id": "B12", "requires": "any" }
+  ],
+  "hostIds": [],
+  "drainRate": 0,
+  "tolerances": { "ph": [6, 8], "warmth": [0.35, 0.65], "salinity": [0, 0.2], "moisture": [1, 1] },
+  "nativeAbilities": ["PREDATION", "SHELL"],
+  "lociActive": [true, true, true, true, true, true, true, false],
+  "frameSize": 32,
+  "headings": 1,
+  "assetId": "p05_shellglider",
+  "guide": {
+    "summary": "A slow, shelled grazer that eats bacteria and needs silicate to grow.",
+    "biology": "Some real amoebas build a small hard shell around themselves from mineral grains or silica taken from the water.",
+    "rules": "Lives in water. Moves 0.45 cells per second and notices prey up to 3 cells away. Catches one prey on contact, stores it as a meal of up to twice its own body, and waits 3 seconds before the next catch. Stops hunting when well fed. Eats Sprinter, Dusk, Recycler, Crossfeeder, Crumbsmith, Oilwick, Brothmaker, Lantern, Brinecoil, Sourbud and Sleeper. Binds 0.10 silicate into its shell for every unit of new body, so it grows slower when silicate runs short. Starts with shell mineral equal to 0.10 of its starting body, and splits it when it divides. When it dies or is eaten, all its shell mineral falls as grit, which dissolves back into silicate at 1% per second. Prey for Needlejaw, which must stay in contact for 4 seconds to catch one instead of the usual 1 second.",
+    "example": "Add a Needlejaw to a dish with both Amoebas and Shellgliders and see which group it thins out faster."
+  },
+  "phase": 5
+}

@@ -1,0 +1,17 @@
+{
+  "id": "BASE",
+  "name": "Alkalizer",
+  "kind": "field",
+  "target": "base",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "Makes the water less sour, raising its pH.",
+    "biology": "Alkaline substances balance out acids, but water that is too alkaline is uncomfortable for many microbes too.",
+    "rules": "Adds base equivalents that dissolve and diffuse. Shown pH = 7 + (base - acid) / (1 + buffer), kept between 2 and 12. Each tick equal amounts of acid and base cancel out, so base can undo acid. Most bacteria prefer pH 6 to 8 and algae 6.5 to 8.5; suitability fades to zero over 1.0 pH outside a species' range. No additional modeled reaction.",
+    "example": "When Bubbles have made the water sour, add alkalizer nearby and watch the pH overlay move back toward 7."
+  },
+  "iconId": "chem_base",
+  "phase": 3
+}

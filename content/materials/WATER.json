@@ -1,0 +1,17 @@
+{
+  "id": "WATER",
+  "name": "Water",
+  "kind": "paint",
+  "target": "water",
+  "doses": [0, 0, 0],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "Paints cells as open water.",
+    "biology": "Open water lets dissolved things and swimmers move freely, while many attached microbes need a surface to hold on to.",
+    "rules": "Turns covered cells into water without removing any life, deposits or dissolved fields. Dissolved things spread fastest in water: 0.10 per tick, against 0.025 in gel and 0.01 in sediment. Gas exchange with the air runs at full rate. Water offers no attachment surface of its own; stone edges and attachment mesh provide one. Organisms that cannot live in water respond through ordinary suitability. No additional modeled reaction.",
+    "example": "Paint a water channel through gel and watch sugar spread along it."
+  },
+  "iconId": "paint_water",
+  "phase": 2
+}

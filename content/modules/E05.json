@@ -1,0 +1,22 @@
+{
+  "id": "E05",
+  "name": "Reserve chamber",
+  "eligibleAncestors": [
+    "B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10", "B11", "B12", "B13",
+    "Y01", "Y02", "F01", "F02", "F03", "F04", "A01", "A02", "A03", "A04", "A05", "P01", "P02",
+    "P03", "P04", "P05", "P06", "P07", "P08", "P09", "P10"
+  ],
+  "nativeEquivalents": [],
+  "excludes": [],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": { "capacityBonus": 40, "upkeepPerSecond": 0.03 },
+  "visualLayer": "reserve_pocket",
+  "guide": {
+    "summary": "Gives a cell room to store more energy, but does not give it any energy.",
+    "biology": "Many real cells store spare food inside them, such as oil drops or starch grains, to use later.",
+    "rules": "Raises the energy cap by 40 (from 100 to 140 for a normal-sized body). This is capacity, not energy: the extra room starts empty and fills only from food eaten. Costs 0.02 energy per second plus 0.03 energy per second upkeep while carried. On division the energy is split first, then any energy above a daughter's cap is lost. If the chamber is lost, energy above the normal cap is lost.",
+    "example": "Compare Sprinters with and without a reserve chamber through a sugar feast followed by a long famine."
+  },
+  "phase": 2
+}

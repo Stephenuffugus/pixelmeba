@@ -1,0 +1,26 @@
+{
+  "id": "E11",
+  "name": "Mineral jacket",
+  "eligibleAncestors": ["P01", "P02", "P07"],
+  "nativeEquivalents": [],
+  "excludes": [],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": {
+    "targetPerBody": 0.1,
+    "buildRate": 0.005,
+    "energyPerMineral": 10,
+    "speedPenalty": 0.2,
+    "minEnergy": 15,
+    "handlingBaseSeconds": 1,
+    "handlingPerCoverage": 3
+  },
+  "visualLayer": "jacket_rim",
+  "guide": {
+    "summary": "Lets a grazer coat itself in a thin mineral jacket that makes it slower to catch but also slower to move.",
+    "biology": "Some real single-celled organisms build coats from minerals they collect from the water around them.",
+    "rules": "Costs 0.02 energy per second while carried. Builds a jacket from local free silicate toward 0.10 mineral per unit of body, at up to 0.005 × starting body per second, paying 10 energy per mineral bound. No building while resting, held, below 15 energy or dead. Coverage c is the jacket divided by its target, from 0 to 1. Speed is multiplied by (1 − 0.20c), and Needlejaw needs 1 + 3c seconds of contact to capture it instead of 1. It grants no immunity and no other protection. Division splits the jacket; a daughter without the module drops hers as grit.",
+    "example": "Add silicate to a dish with Needlejaws and compare how long jacketed and plain Amoebas last."
+  },
+  "phase": 5
+}

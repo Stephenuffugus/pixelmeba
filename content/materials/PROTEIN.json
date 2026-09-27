@@ -1,0 +1,17 @@
+{
+  "id": "PROTEIN",
+  "name": "Protein",
+  "kind": "deposit",
+  "target": "protein",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "A solid food that stays where you put it and feeds decomposers.",
+    "biology": "Proteins are large molecules that many microbes must cut into smaller pieces before they can absorb them.",
+    "rules": "Adds a stationary protein deposit that never spreads. Carries no minerals. Velvet, Recycler and Threadlace eat it directly. Brothmaker's protein enzyme, or the Protein enzyme material, turns it into dissolved broth for Brothmaker, Creambud and Traplace. No additional modeled reaction.",
+    "example": "Put protein next to Brothmakers and Creambuds, then open the broth overlay to see who benefits."
+  },
+  "iconId": "food_protein",
+  "phase": 3
+}

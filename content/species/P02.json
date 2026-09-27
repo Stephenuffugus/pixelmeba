@@ -1,0 +1,43 @@
+{
+  "id": "P02",
+  "name": "Ciliate",
+  "category": "consumer",
+  "transportClass": "medium",
+  "b0": 3,
+  "intakeRate": 0.65,
+  "maintenanceRate": 1,
+  "minDivisionAge": 40,
+  "maxAge": 1000,
+  "speed": 2,
+  "sensingRadius": 5,
+  "attackCooldown": 2,
+  "habitats": ["water"],
+  "attachment": null,
+  "metabolism": "aerobic",
+  "energyPerCarbon": 30,
+  "acidPerCarbon": 0,
+  "foodPriority": [],
+  "digestsFilm": false,
+  "prey": [
+    { "id": "B01", "requires": "any" }, { "id": "B03", "requires": "any" }, { "id": "B04", "requires": "any" },
+    { "id": "B05", "requires": "any" }, { "id": "B06", "requires": "free" }, { "id": "B07", "requires": "free" },
+    { "id": "B08", "requires": "free" }, { "id": "B09", "requires": "free" }, { "id": "B10", "requires": "free" },
+    { "id": "B11", "requires": "free" }, { "id": "B12", "requires": "free" }, { "id": "A01", "requires": "any" },
+    { "id": "A03", "requires": "any" }, { "id": "A04", "requires": "any" }
+  ],
+  "hostIds": [],
+  "drainRate": 0,
+  "tolerances": { "ph": [6, 8], "warmth": [0.35, 0.65], "salinity": [0, 0.2], "moisture": [1, 1] },
+  "nativeAbilities": ["PREDATION"],
+  "lociActive": [true, true, true, true, true, true, true, false],
+  "frameSize": 32,
+  "headings": 4,
+  "assetId": "p02_ciliate",
+  "guide": {
+    "summary": "A fast swimmer that chases down loose bacteria and small algae.",
+    "biology": "Ciliates are single cells covered in tiny beating hairs that let them swim quickly and sweep food toward their mouths.",
+    "rules": "Lives in water. Swims 2.0 cells per second and notices prey up to 5 cells away. Catches one prey on contact, stores it as a meal of up to twice its own body, and waits 2 seconds before the next catch. Stops hunting when well fed. Eats Sprinter, Dusk, Recycler, Crossfeeder, Sunbead, Shadeleaf and Turnleaf anywhere, and Crumbsmith, Oilwick, Brothmaker, Lantern, Brinecoil, Sourbud and Sleeper only while they are not attached to a surface. Never eats Velvet or Rampart. Prey for Needlejaw.",
+    "example": "Put Ciliates in a dish with Velvet on a stone edge and loose Sprinters nearby, and see which group shrinks."
+  },
+  "phase": 3
+}

@@ -1,0 +1,17 @@
+{
+  "id": "STARCH",
+  "name": "Starch",
+  "kind": "deposit",
+  "target": "starch",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "A solid food that stays where you put it.",
+    "biology": "Starch is a large molecule that must be broken down before most cells can absorb it.",
+    "rules": "Adds a stationary starch deposit. Recycler eats it directly. Crumbsmith's enzyme turns it into sugar that anyone nearby can eat. No additional modeled reaction.",
+    "example": "Place starch beside Crumbsmiths and watch a sugar haze appear around it."
+  },
+  "iconId": "food_starch",
+  "phase": 1
+}

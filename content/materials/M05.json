@@ -1,0 +1,17 @@
+{
+  "id": "M05",
+  "name": "Protein enzyme",
+  "kind": "activity",
+  "target": "eProtein",
+  "doses": [0.1, 0.5, 1],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "A helper chemical that turns protein into broth.",
+    "biology": "Protein-cutting enzymes break proteins into smaller pieces that dissolve and can be absorbed.",
+    "rules": "Adds protein enzyme activity. It spreads at half the normal rate and loses 2 % per second. Each second it converts up to 0.10 times its activity of protein carbon in its cell, with any bound nutrient, into broth. Enzyme breaker divides its effective activity by (1 + breaker). It never converts living organisms. It is the same activity Brothmaker releases. No additional modeled reaction.",
+    "example": "Put protein enzyme on a protein deposit near Creambuds and follow the broth overlay."
+  },
+  "iconId": "enzyme_protein",
+  "phase": 3
+}

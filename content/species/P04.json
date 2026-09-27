@@ -1,0 +1,43 @@
+{
+  "id": "P04",
+  "name": "Siltworm",
+  "category": "consumer",
+  "transportClass": "large",
+  "b0": 8,
+  "intakeRate": 0.9,
+  "maintenanceRate": 1,
+  "minDivisionAge": 70,
+  "maxAge": 1400,
+  "speed": 0.8,
+  "sensingRadius": 4,
+  "attackCooldown": 3,
+  "habitats": ["sediment"],
+  "attachment": null,
+  "metabolism": "aerobic",
+  "energyPerCarbon": 30,
+  "acidPerCarbon": 0,
+  "foodPriority": [],
+  "digestsFilm": false,
+  "prey": [
+    { "id": "B01", "requires": "any" }, { "id": "B02", "requires": "any" }, { "id": "B03", "requires": "any" },
+    { "id": "B04", "requires": "any" }, { "id": "B05", "requires": "any" }, { "id": "B06", "requires": "inSediment" },
+    { "id": "B07", "requires": "inSediment" }, { "id": "B08", "requires": "inSediment" }, { "id": "B09", "requires": "inSediment" },
+    { "id": "B10", "requires": "inSediment" }, { "id": "B11", "requires": "inSediment" }, { "id": "B12", "requires": "inSediment" },
+    { "id": "B13", "requires": "inSediment" }
+  ],
+  "hostIds": [],
+  "drainRate": 0,
+  "tolerances": { "ph": [6, 8], "warmth": [0.35, 0.65], "salinity": [0, 0.2], "moisture": [0.4, 1] },
+  "nativeAbilities": ["PREDATION", "SEDIMENT_WATER_CROSSING"],
+  "lociActive": [true, true, true, true, true, true, true, false],
+  "frameSize": 32,
+  "headings": 4,
+  "assetId": "p04_siltworm",
+  "guide": {
+    "summary": "A big worm that grazes on bacteria in the mud at the bottom of the dish.",
+    "biology": "Many small real worms creep through mud and sediment, swallowing the microbes that live between the grains.",
+    "rules": "Lives in sediment. It can cross up to 2 water cells in a row to reach more sediment; otherwise it turns back. Moves 0.8 cells per second and notices prey up to 4 cells away. Catches one prey on contact, stores it as a meal of up to twice its own body, and waits 3 seconds before the next catch. Stops hunting when well fed. Eats Sprinter, Velvet, Dusk, Recycler and Crossfeeder anywhere, and Crumbsmith, Oilwick, Brothmaker, Lantern, Brinecoil, Sourbud, Sleeper and Rampart only while they are in sediment. A Traplace can hold one Siltworm in its cell for 8 seconds and drain 0.03 body per second from it.",
+    "example": "Make two sediment patches with a 2-cell strip of water between them, and watch Siltworms cross over to graze the second patch."
+  },
+  "phase": 3
+}

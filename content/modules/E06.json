@@ -1,0 +1,18 @@
+{
+  "id": "E06",
+  "name": "Shade collector",
+  "eligibleAncestors": ["A01", "A02", "A04", "A05"],
+  "nativeEquivalents": ["A03"],
+  "excludes": [],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": { "lightHalf": 0.35, "ceilingFactor": 0.7 },
+  "visualLayer": "shade_patch",
+  "guide": {
+    "summary": "Helps an alga make food in dim light, but it makes less food in bright light.",
+    "biology": "Some real algae carry extra light-catching pigment that helps them grow in shade.",
+    "rules": "Costs 0.02 energy per second while carried. Changes photosynthesis only: light response becomes light divided by 0.35, up to full, so any light of 0.35 or more counts as full light, but the intake ceiling is multiplied by 0.70. Turnleaf uses it only while making food from light. Shadeleaf works in low light natively and cannot gain it.",
+    "example": "Paint shade over half the dish and compare shade-collecting Sunbeads with plain ones on each side."
+  },
+  "phase": 3
+}

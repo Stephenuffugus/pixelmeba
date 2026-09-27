@@ -1,0 +1,17 @@
+{
+  "id": "DEBRIS",
+  "name": "Organic debris",
+  "kind": "deposit",
+  "target": "detritus",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0.1,
+  "guide": {
+    "summary": "Dead material that decomposers can eat.",
+    "biology": "Leftovers of dead organisms hold carbon and minerals that decomposers recycle.",
+    "rules": "Adds detritus carbon with 0.10 bound nutrient per carbon unit. Stationary. It never turns into living organisms by itself.",
+    "example": "Scatter debris near Recyclers and open the resource history to see it shrink."
+  },
+  "iconId": "food_debris",
+  "phase": 1
+}

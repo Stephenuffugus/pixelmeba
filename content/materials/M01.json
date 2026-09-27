@@ -1,0 +1,17 @@
+{
+  "id": "M01",
+  "name": "Soluble broth",
+  "kind": "field",
+  "target": "broth",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0.1,
+  "guide": {
+    "summary": "A rich dissolved food that carries its own minerals.",
+    "biology": "Broths made from broken-down protein feed many yeasts and bacteria.",
+    "rules": "Adds broth carbon with 0.10 bound nutrient per carbon unit. It dissolves and diffuses. Brothmaker, Creambud and Traplace eat it. Brothmaker's protein enzyme also makes broth from protein deposits. No additional modeled reaction.",
+    "example": "Add broth between Creambuds and Brothmakers and see which group grows faster."
+  },
+  "iconId": "food_broth",
+  "phase": 3
+}

@@ -1,0 +1,12 @@
+{
+  "loci": [
+    { "index": 0, "id": "motility", "name": "Motility investment", "descriptorLow": "Drifter", "descriptorHigh": "Racer" },
+    { "index": 1, "id": "feeding", "name": "Feeding investment", "descriptorLow": "Frugal", "descriptorHigh": "Gulper" },
+    { "index": 2, "id": "sensing", "name": "Sensing investment", "descriptorLow": "Nearsighted", "descriptorHigh": "Keen" },
+    { "index": 3, "id": "division", "name": "Division investment", "descriptorLow": "Patient", "descriptorHigh": "Hasty" },
+    { "index": 4, "id": "phShift", "name": "Preferred pH shift", "descriptorLow": "Sourward", "descriptorHigh": "Baseward" },
+    { "index": 5, "id": "salinityShift", "name": "Preferred salinity shift", "descriptorLow": "Freshward", "descriptorHigh": "Saltward" },
+    { "index": 6, "id": "warmthShift", "name": "Preferred warmth shift", "descriptorLow": "Coolward", "descriptorHigh": "Warmward" },
+    { "index": 7, "id": "dormancy", "name": "Dormancy threshold", "descriptorLow": "Stubborn", "descriptorHigh": "Sleepy" }
+  ]
+}

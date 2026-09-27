@@ -1,0 +1,17 @@
+{
+  "id": "OIL",
+  "name": "Oil",
+  "kind": "deposit",
+  "target": "oil",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "A greasy solid food that stays where you put it.",
+    "biology": "Oils and fats hold a lot of carbon, but most microbes need an enzyme to cut them into smaller pieces first.",
+    "rules": "Adds a stationary oil deposit that never spreads. Carries no minerals. Recycler eats it directly. Oilwick's lipid enzyme, or the Lipid enzyme material, turns it into dissolved metabolite that Crossfeeder, Oilwick, Lantern and Rampart can eat. No additional modeled reaction.",
+    "example": "Place oil beside Oilwicks and Crossfeeders and watch a metabolite haze appear around it."
+  },
+  "iconId": "food_oil",
+  "phase": 3
+}

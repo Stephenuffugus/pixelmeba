@@ -1,0 +1,17 @@
+{
+  "id": "M12",
+  "name": "Shell grit",
+  "kind": "deposit",
+  "target": "grit",
+  "doses": [0.1, 0.5, 1],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "Hard mineral bits that slowly dissolve into silicate.",
+    "biology": "Old shells break into grit that slowly returns its minerals to the water.",
+    "rules": "Adds a stationary solid mineral deposit. It is not food. Each second 0.01 times the remaining grit dissolves into free silicate. Shells of dead Glasswheels and Shellgliders become the same grit. No additional modeled reaction.",
+    "example": "Scatter grit near Glasswheels as a slow silicate supply and compare with a single silicate dose."
+  },
+  "iconId": "mineral_grit",
+  "phase": 5
+}

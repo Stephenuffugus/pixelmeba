@@ -1,0 +1,32 @@
+{
+  "id": "E16",
+  "name": "Partner bond",
+  "eligibleAncestors": ["B01", "B05", "B06", "B09", "A01", "A03"],
+  "nativeEquivalents": [],
+  "excludes": [],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": {
+    "bondDistance": 0.5,
+    "bondSeconds": 5,
+    "minEnergy": 20,
+    "bondCost": 3,
+    "maxBonds": 1,
+    "bondUpkeep": 0.05,
+    "transferThresholdMultiple": 1.2,
+    "transferRate": 0.005,
+    "energyPerCarbon": 1,
+    "breakEnergy": 15,
+    "breakLowEnergySeconds": 10,
+    "breakDistance": 0.75,
+    "lockoutSeconds": 10
+  },
+  "visualLayer": "partner_bracket",
+  "guide": {
+    "summary": "Lets a bacterium and an alga pair up and share food.",
+    "biology": "In real ponds some bacteria live right beside algae, and the two can trade materials.",
+    "rules": "Costs 0.02 energy per second while carried. A free, active Sprinter, Crossfeeder, Crumbsmith or Lantern carrier that stays within 0.5 cells of a free, active Sunbead or Shadeleaf carrier for 5 seconds, both with at least 20 energy, may bond for 3 energy each. Each has at most one partner. Partners stop swimming, pay another 0.05 energy per second each and feed as usual. A partner above 1.20 times its starting body sends up to 0.005 × starting body per second of carbon to a partner below that, paying 1 energy per carbon. The bond breaks on death, capture, division or resting, when pulled more than 0.75 cells apart or split by a new barrier, or when either stays below 15 energy for 10 seconds; then 10 seconds must pass before a new bond. Newborns start unbonded. No bonds during Settler stages.",
+    "example": "Put bonding Crumbsmiths beside bonding Sunbeads in a dish with starch and light, and compare pairs with singles."
+  },
+  "phase": 7
+}

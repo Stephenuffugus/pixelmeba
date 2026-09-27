@@ -1,0 +1,40 @@
+{
+  "id": "P03",
+  "name": "Rotifer",
+  "category": "consumer",
+  "transportClass": "medium",
+  "b0": 8,
+  "intakeRate": 1,
+  "maintenanceRate": 1.1,
+  "minDivisionAge": 70,
+  "maxAge": 1400,
+  "speed": 0.7,
+  "sensingRadius": 3,
+  "attackCooldown": 4,
+  "habitats": ["water"],
+  "attachment": null,
+  "metabolism": "aerobic",
+  "energyPerCarbon": 30,
+  "acidPerCarbon": 0,
+  "foodPriority": [],
+  "digestsFilm": false,
+  "prey": [
+    { "id": "A01", "requires": "any" }, { "id": "A02", "requires": "any" }, { "id": "A03", "requires": "any" },
+    { "id": "A04", "requires": "any" }, { "id": "Y01", "requires": "any" }, { "id": "Y02", "requires": "any" }
+  ],
+  "hostIds": [],
+  "drainRate": 0,
+  "tolerances": { "ph": [6, 8], "warmth": [0.35, 0.65], "salinity": [0, 0.2], "moisture": [1, 1] },
+  "nativeAbilities": ["PREDATION"],
+  "lociActive": [true, true, true, true, true, true, true, false],
+  "frameSize": 32,
+  "headings": 4,
+  "assetId": "p03_rotifer",
+  "guide": {
+    "summary": "A big, slow grazer that sweeps algae and yeast out of the water.",
+    "biology": "Rotifers are tiny many-celled animals with a crown of beating hairs that pulls a current of water, and the food in it, into their mouths.",
+    "rules": "Lives in water. Moves 0.7 cells per second and notices prey up to 3 cells away. Its filter feeding is simplified: it catches one prey on contact, stores it as a meal of up to twice its own body, and waits 4 seconds before the next catch. Stops hunting when well fed. Eats Sunbead, Glasswheel, Shadeleaf, Turnleaf, Bubble and Creambud; never eats bacteria. Nothing in the dish eats it.",
+    "example": "Add a few Rotifers to a green Sunbead dish and watch whether the algae thin out, then whether the Rotifers run short of food."
+  },
+  "phase": 3
+}

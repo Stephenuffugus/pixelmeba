@@ -1,0 +1,41 @@
+{
+  "id": "P08",
+  "name": "Waterbear",
+  "category": "consumer",
+  "transportClass": "large",
+  "b0": 10,
+  "intakeRate": 0.9,
+  "maintenanceRate": 0.7,
+  "minDivisionAge": 90,
+  "maxAge": 2400,
+  "speed": 0.35,
+  "sensingRadius": 3,
+  "attackCooldown": 5,
+  "habitats": ["water", "gel", "sediment"],
+  "attachment": null,
+  "metabolism": "aerobic",
+  "energyPerCarbon": 30,
+  "acidPerCarbon": 0,
+  "foodPriority": [],
+  "digestsFilm": false,
+  "prey": [
+    { "id": "A01", "requires": "any" }, { "id": "A02", "requires": "any" }, { "id": "A03", "requires": "any" },
+    { "id": "A04", "requires": "any" }, { "id": "A05", "requires": "any" }, { "id": "F01", "requires": "any" },
+    { "id": "F02", "requires": "any" }, { "id": "F04", "requires": "any" }
+  ],
+  "hostIds": [],
+  "drainRate": 0,
+  "tolerances": { "ph": [6, 8], "warmth": [0.25, 0.65], "salinity": [0, 0.2], "moisture": [0.2, 1] },
+  "nativeAbilities": ["PREDATION", "DORMANCY"],
+  "lociActive": [true, true, true, true, true, true, true, true],
+  "frameSize": 48,
+  "headings": 4,
+  "assetId": "p08_waterbear",
+  "guide": {
+    "summary": "A big, slow grazer that eats algae and fungus threads and can rest when food or water runs out.",
+    "biology": "Real water bears are tiny eight-legged animals that graze on algae and can curl up and rest when their home dries out.",
+    "rules": "Lives in water, gel or sediment with moisture of at least 0.2. Moves 0.35 cells per second and notices food up to 3 cells away. Catches algae (Sunbead, Glasswheel, Shadeleaf, Turnleaf, Raftball) or one fungus segment at a time (Threadlace, Cordweaver, Sporeveil) on contact, stores a meal of up to twice its own body, and waits 5 seconds before the next catch. After 20 seconds without food, or 10 seconds where it is far too dry, it can rest if it has at least 15 energy: it spends 10 energy to prepare, then uses only 0.01 energy per second. It wakes after food and moisture have been back for 10 seconds, spending 5 energy.",
+    "example": "Turn on drying in a dish with Waterbears and Sunbeads, then wet the ground again later and watch the resting Waterbears wake up."
+  },
+  "phase": 5
+}

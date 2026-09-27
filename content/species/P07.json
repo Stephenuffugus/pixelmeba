@@ -1,0 +1,42 @@
+{
+  "id": "P07",
+  "name": "Dartfin",
+  "category": "consumer",
+  "transportClass": "small",
+  "b0": 2,
+  "intakeRate": 0.55,
+  "maintenanceRate": 1,
+  "minDivisionAge": 40,
+  "maxAge": 900,
+  "speed": 3,
+  "sensingRadius": 5,
+  "attackCooldown": 2,
+  "habitats": ["water"],
+  "attachment": null,
+  "metabolism": "aerobic",
+  "energyPerCarbon": 30,
+  "acidPerCarbon": 0,
+  "foodPriority": [],
+  "digestsFilm": false,
+  "prey": [
+    { "id": "B01", "requires": "any" }, { "id": "B03", "requires": "any" }, { "id": "B04", "requires": "any" },
+    { "id": "B05", "requires": "any" }, { "id": "B06", "requires": "any" }, { "id": "B07", "requires": "any" },
+    { "id": "B08", "requires": "any" }, { "id": "B09", "requires": "any" }, { "id": "B10", "requires": "any" },
+    { "id": "B11", "requires": "any" }, { "id": "B12", "requires": "any" }
+  ],
+  "hostIds": [],
+  "drainRate": 0,
+  "tolerances": { "ph": [6, 8], "warmth": [0.35, 0.65], "salinity": [0, 0.2], "moisture": [1, 1] },
+  "nativeAbilities": ["PREDATION"],
+  "lociActive": [true, true, true, true, true, true, true, false],
+  "frameSize": 32,
+  "headings": 4,
+  "assetId": "p07_dartfin",
+  "guide": {
+    "summary": "A tiny, very fast hunter that darts after bacteria but burns through its energy quickly.",
+    "biology": "Some real single-celled swimmers whip a long tail to dash through the water and snap up bacteria.",
+    "rules": "Lives in water. Moves 3 cells per second and notices prey up to 5 cells away. Catches one prey on contact, stores it as a meal of up to twice its own body, and waits 2 seconds before the next catch. Stops hunting when well fed. Eats Sprinter, Dusk, Recycler, Crossfeeder, Crumbsmith, Oilwick, Brothmaker, Lantern, Brinecoil, Sourbud and Sleeper, attached or not; never Velvet or Rampart. Uses 1.0 energy per second just to stay alive, plus the cost of all that swimming. Small enough to pass through a small gate. Prey for Needlejaw.",
+    "example": "Put a small gate between a Dartfin group and a Sprinter patch and watch whether the Dartfins slip through to hunt."
+  },
+  "phase": 5
+}

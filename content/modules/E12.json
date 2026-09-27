@@ -1,0 +1,30 @@
+{
+  "id": "E12",
+  "name": "Colony adhesion",
+  "eligibleAncestors": ["B01", "B04", "B06", "B09", "B10", "B11"],
+  "nativeEquivalents": [],
+  "excludes": ["E13"],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": {
+    "linkDistance": 0.5,
+    "linkSeconds": 5,
+    "minEnergy": 20,
+    "linkCost": 2,
+    "maxLinks": 2,
+    "maxComponent": 8,
+    "perLinkUpkeep": 0.01,
+    "severNoIntakeSeconds": 10,
+    "severEnergy": 15,
+    "severDistance": 0.75,
+    "lockoutSeconds": 10
+  },
+  "visualLayer": "adhesion_link",
+  "guide": {
+    "summary": "Lets microbes of the same kind hold on to each other and form small chains.",
+    "biology": "Some real bacteria stick together when they meet or after they divide, forming chains and clumps.",
+    "rules": "Costs 0.02 energy per second while carried. Two free, active carriers of the same kind that stay within 0.5 cells for 5 seconds, both with at least 20 energy, may link for 2 energy each. Each has at most 2 links and a colony at most 8 members. Linked members stop swimming and pay 0.01 energy per second per link. Links share nothing unless both ends also carry Exchange junction. A link breaks after 10 seconds without food, below 15 energy, on resting, capture, division, sampling or death, when a gate is placed between them, or when pulled more than 0.75 cells apart; then it cannot relink for 10 seconds. Newborns start unlinked. Cannot be combined with Settler.",
+    "example": "Release a crowd of linking Sprinters and watch small chains form, then break apart as food runs out."
+  },
+  "phase": 3
+}

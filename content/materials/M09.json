@@ -1,0 +1,17 @@
+{
+  "id": "M09",
+  "name": "Enzyme breaker",
+  "kind": "activity",
+  "target": "breaker",
+  "doses": [0.1, 0.5, 1],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "Weakens every enzyme nearby.",
+    "biology": "Some substances get in the way of enzymes and slow the changes they speed up.",
+    "rules": "Adds breaker activity that diffuses normally and loses 1 % per second. In each cell every enzyme's effective activity becomes activity / (1 + breaker), so breaker 1.0 halves starch, oil and protein conversion there. It does not remove the enzymes. No additional modeled reaction.",
+    "example": "Add breaker around a Crumbsmith starch patch and watch the sugar haze fade."
+  },
+  "iconId": "enzyme_breaker",
+  "phase": 3
+}

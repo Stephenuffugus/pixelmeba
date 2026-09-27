@@ -1,0 +1,35 @@
+{
+  "id": "E03",
+  "name": "Resting stage",
+  "eligibleAncestors": [
+    "B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10", "B11", "B13", "Y01",
+    "Y02"
+  ],
+  "nativeEquivalents": ["B12", "F04", "P08"],
+  "excludes": [],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": {
+    "prepareSeconds": 5,
+    "prepareCost": 10,
+    "restMaintenance": 0.01,
+    "damageFactor": 0.1,
+    "wakeSeconds": 5,
+    "wakeCost": 5,
+    "wakeMinEnergy": 5,
+    "lockoutSeconds": 30,
+    "noIntakeSeconds": 20,
+    "entryMinEnergy": 15,
+    "drySuitability": 0.2,
+    "drySeconds": 10,
+    "wakeConditionSeconds": 10
+  },
+  "visualLayer": "resting_seam",
+  "guide": {
+    "summary": "Lets a microbe curl up and wait out hard times, then wake again when food comes back.",
+    "biology": "Many real microbes can slow almost to a stop when food or water runs out and start again when conditions improve.",
+    "rules": "Costs 0.02 energy per second while active. It starts preparing after 20 seconds with no usable food (changed by the dormancy locus) or 10 seconds far too dry, if it has at least 15 energy. Preparing takes 5 seconds and costs 10 energy. Resting replaces all upkeep with 0.01 energy per second and takes one tenth of environmental and inhibitor damage; it grants no immunity, still starves at 0 energy and can still be eaten. It wakes after 10 seconds of suitable conditions and food with at least 5 energy; waking takes 5 seconds and costs 5 energy, then it cannot rest again for 30 seconds. Sleeper, Sporeveil and Waterbear rest natively and cannot gain it.",
+    "example": "Give half your Sprinters a resting stage, let the sugar run out, then add sugar again and count which group comes back."
+  },
+  "phase": 2
+}

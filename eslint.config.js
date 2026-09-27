@@ -42,6 +42,7 @@ export default tseslint.config(
       'store/**',
       'docs/**',
       'dev-dist/**',
+      'tmp/**',
     ],
   },
   js.configs.recommended,

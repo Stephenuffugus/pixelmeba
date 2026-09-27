@@ -412,7 +412,7 @@ its region; previewed and recorded; never silently.
 | (66,48) | 4 | 0.25 detritus C + 0.025 bound N | Recycler niche |
 - Founders (distinct cells; nearest by distance, then y, then x; IDs in this order; loci 50;
   no modules): 24 B01 within r 3 of (48,64); 12 B06 within r 2 of (66,64); 8 B04 within r 2 of
-  (66,48); 12 A01 within r 4 of (48,48). **No P01** (the guide invites adding two later).
+  (66,48); 12 A01 within r 5 of (48,48) (r 4 in the source; corrected, see DECISIONS D-0005). **No P01** (the guide invites adding two later).
 - Tuning targets (not forced): observable intake ≤ 15 s and first division ≤ 120 s on ≥ 5 of 6 dev seeds.
 
 ### 9.2 RESERVE_COMPARE_V1 ("Seeded traits demonstration"; Experiment C)

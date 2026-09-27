@@ -1,0 +1,17 @@
+{
+  "id": "GEL",
+  "name": "Gel",
+  "kind": "paint",
+  "target": "gel",
+  "doses": [0, 0, 0],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "Paints cells as soft gel where things spread slowly.",
+    "biology": "Jelly-like layers slow the spread of dissolved chemicals and give microbes something to cling to.",
+    "rules": "Turns covered cells into gel without removing any life, deposits or dissolved fields. Dissolved things spread a quarter as fast as in water (0.025 per tick). Gel is an attachment surface for Velvet, Rampart, Threadlace, Cordweaver and Sporeveil. Algae and most swimming consumers live only in water, so gel is unsuitable for them. No additional modeled reaction.",
+    "example": "Paint a gel island in the middle of the water and see which species settle on it."
+  },
+  "iconId": "paint_gel",
+  "phase": 2
+}

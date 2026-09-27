@@ -1,0 +1,17 @@
+{
+  "id": "SHADE",
+  "name": "Shade paint",
+  "kind": "paint",
+  "target": "shade",
+  "doses": [0.1, 0.1, 0.1],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "Dims the light in the cells you paint.",
+    "biology": "Shade cuts down the light that algae need to make their food.",
+    "rules": "Multiplies the light reaching covered cells by 0.1; erasing sets the factor back to 1.0. Painting the same cell again does not darken it further. Photosynthesis depends on local light. Shade adds no substance and moves nothing. No additional modeled reaction.",
+    "example": "Shade a strip across the water and watch Turnleafs switch from light to sugar feeding as they cross it."
+  },
+  "iconId": "paint_shade",
+  "phase": 2
+}

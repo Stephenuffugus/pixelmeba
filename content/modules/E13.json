@@ -1,0 +1,29 @@
+{
+  "id": "E13",
+  "name": "Settler",
+  "eligibleAncestors": ["B01", "B04", "B05", "B06", "B09", "B10", "B11", "P02", "P07"],
+  "nativeEquivalents": [],
+  "excludes": ["E04", "E12", "E14"],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": {
+    "juvenileIntakeFactor": 0.75,
+    "juvenileSpeedFactor": 1.2,
+    "juvenileMinSeconds": 10,
+    "minEnergy": 35,
+    "minBodyMultiple": 0.8,
+    "settleSeconds": 5,
+    "settleCost": 5,
+    "lockoutSeconds": 10,
+    "adultIntakeFactor": 1.15,
+    "adultUpkeep": 0.1
+  },
+  "visualLayer": "settler_foot",
+  "guide": {
+    "summary": "Gives a cell a young swimming stage and a grown-up stage that settles on a surface.",
+    "biology": "Many real organisms spend their early life swimming or drifting and later settle down in one place.",
+    "rules": "Costs 0.02 energy per second while carried. Juveniles take in food at 0.75 times the usual rate, move 1.20 times faster and cannot divide. After at least 10 seconds as a juvenile, with at least 35 energy and a body at least 0.80 times its starting size, it pays 5 energy and settles for 5 seconds beside the same usable surface; losing the surface cancels without a refund and it must wait 10 seconds to try again. Adults stay attached with speed 0, take in food at 1.15 times the usual rate, pay another 0.10 energy per second and divide normally. The kept daughter of a settled adult stays an adult; every other daughter starts as a juvenile. Resting lets go of the surface and it wakes as a juvenile. Cannot be combined with Surface anchor, Colony adhesion or Dispersing offspring, and cannot form partner bonds.",
+    "example": "Give Sprinters the settler life cycle in a dish with stones and watch where the adults gather."
+  },
+  "phase": 7
+}

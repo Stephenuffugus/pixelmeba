@@ -1,0 +1,22 @@
+{
+  "id": "WATER_GARDEN",
+  "name": "Water Garden",
+  "baseSubstrate": "water",
+  "baseLight": 0.8,
+  "warmth": 0.5,
+  "baseFields": { "oxygen": 0.8, "co2": 0.5, "nutrient": 0.1, "sugar": 0.02 },
+  "ops": [
+    { "op": "disk", "center": [42, 45], "radius": 9, "substrate": "stone" },
+    { "op": "disk", "center": [83, 82], "radius": 9, "substrate": "stone" }
+  ],
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "guide": {
+    "summary": "Clear water with two stone islands.",
+    "biology": "Open water mixes dissolved food and gases quickly.",
+    "rules": "All water with stone circles at (42,45) and (83,82), radius 9. Light 0.8, warmth 0.5, oxygen 0.8, carbon dioxide 0.5, nutrient 0.10 and sugar 0.02 in every water cell.",
+    "example": "A good place for swimmers, algae and surface colonies."
+  },
+  "phase": 1
+}

@@ -1,0 +1,17 @@
+{
+  "id": "M04",
+  "name": "Lipid enzyme",
+  "kind": "activity",
+  "target": "eOil",
+  "doses": [0.1, 0.5, 1],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "A helper chemical that turns oil into food others can eat.",
+    "biology": "Fat-cutting enzymes break oils into smaller pieces that microbes can absorb.",
+    "rules": "Adds lipid enzyme activity. It spreads at half the normal rate and loses 2 % per second. Each second it converts up to 0.10 times its activity of oil carbon in its cell, with any bound nutrient, into metabolite. Enzyme breaker divides its effective activity by (1 + breaker). It never converts living organisms. It is the same activity Oilwick releases. No additional modeled reaction.",
+    "example": "Add lipid enzyme to an oil patch near Crossfeeders and watch them gather."
+  },
+  "iconId": "enzyme_oil",
+  "phase": 3
+}

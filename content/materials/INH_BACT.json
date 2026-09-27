@@ -1,0 +1,17 @@
+{
+  "id": "INH_BACT",
+  "name": "Bacterial inhibitor",
+  "kind": "field",
+  "target": "inhBact",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "A pretend chemical that slows and harms only bacteria.",
+    "biology": "Some real substances harm certain kinds of microbes more than others; this made-up chemical stands in for that broad idea.",
+    "rules": "Adds an abstract inhibitor that dissolves, diffuses and loses 0.2 % of its amount each tick. It targets only the bacteria B01 to B13: Sprinter, Velvet, Dusk, Recycler, Crossfeeder, Crumbsmith, Oilwick, Brothmaker, Lantern, Brinecoil, Sourbud, Sleeper and Rampart. A target's exposure is the local amount, halved once in a cell with biofilm; its growth is multiplied by 1 / (1 + exposure) and it loses 8 times the exposure in health each second. Yeasts, fungi, algae, consumers, parasites and viruses are unaffected. No additional modeled reaction. This is an abstract game mechanic, not a claim about how any real product works.",
+    "example": "Add a small dose where Sprinters and Sunbeads mix and watch which group keeps growing."
+  },
+  "iconId": "chem_inh_bact",
+  "phase": 3
+}

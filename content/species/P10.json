@@ -1,0 +1,40 @@
+{
+  "id": "P10",
+  "name": "Needlejaw",
+  "category": "consumer",
+  "transportClass": "large",
+  "b0": 12,
+  "intakeRate": 1.2,
+  "maintenanceRate": 1.4,
+  "minDivisionAge": 100,
+  "maxAge": 1400,
+  "speed": 1.2,
+  "sensingRadius": 6,
+  "attackCooldown": 6,
+  "habitats": ["water"],
+  "attachment": null,
+  "metabolism": "aerobic",
+  "energyPerCarbon": 30,
+  "acidPerCarbon": 0,
+  "foodPriority": [],
+  "digestsFilm": false,
+  "prey": [
+    { "id": "P01", "requires": "any", "contactSeconds": 1 }, { "id": "P02", "requires": "any", "contactSeconds": 1 },
+    { "id": "P05", "requires": "any", "contactSeconds": 4 }, { "id": "P07", "requires": "any", "contactSeconds": 1 }
+  ],
+  "hostIds": [],
+  "drainRate": 0,
+  "tolerances": { "ph": [6, 8], "warmth": [0.35, 0.65], "salinity": [0, 0.2], "moisture": [1, 1] },
+  "nativeAbilities": ["PREDATION", "HANDLING"],
+  "lociActive": [true, true, true, true, true, true, true, false],
+  "frameSize": 48,
+  "headings": 4,
+  "assetId": "p10_needlejaw",
+  "guide": {
+    "summary": "A large top hunter that eats other hunters, but must keep hold of its prey before it can swallow it.",
+    "biology": "In real ponds, bigger predators hunt smaller hunters, so food chains can be several steps long.",
+    "rules": "Lives in water. Moves 1.2 cells per second and notices prey up to 6 cells away. Hunts Amoeba, Ciliate and Dartfin, which it must touch for 1 second without a break, and Shellglider, which takes 4 seconds. If contact breaks, the count starts over; prey wearing a mineral jacket take 1 to 4 seconds depending on how complete the jacket is. Stores a meal of up to twice its own body and waits 6 seconds after each catch. Uses 1.4 energy per second just to stay alive.",
+    "example": "Add one Needlejaw to a dish of Amoebas and Shellgliders and count which prey it catches more often."
+  },
+  "phase": 5
+}

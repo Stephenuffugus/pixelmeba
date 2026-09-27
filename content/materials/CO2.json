@@ -1,0 +1,17 @@
+{
+  "id": "CO2",
+  "name": "Carbon dioxide",
+  "kind": "field",
+  "target": "co2",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "The gas algae use with light to make their food.",
+    "biology": "Algae take carbon dioxide from the water and, using light, turn it into sugar and new body.",
+    "rules": "Adds dissolved carbon dioxide that diffuses. Photosynthesisers turn it into half body and half sugar, scaled by local light. Aerobic and anaerobic eaters release 0.30 carbon dioxide for each carbon they eat. With the lid open each cell drifts toward 0.5 by 0.02 of the difference every tick (ten times slower in sediment); with the lid closed there is no exchange. No additional modeled reaction.",
+    "example": "Close the lid over a crowd of Sunbeads and add carbon dioxide when their growth slows."
+  },
+  "iconId": "chem_co2",
+  "phase": 3
+}

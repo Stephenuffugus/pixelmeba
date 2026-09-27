@@ -1,0 +1,18 @@
+{
+  "id": "E07",
+  "name": "Light seeker",
+  "eligibleAncestors": ["A01", "A02", "A03", "A05"],
+  "nativeEquivalents": [],
+  "excludes": [],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": { "baseSpeed": 0.15, "lightSensing": 2, "moveCostFactor": 0.1, "brighterBy": 0.01 },
+  "visualLayer": "light_trail",
+  "guide": {
+    "summary": "Lets an alga swim slowly toward brighter light.",
+    "biology": "Many real algae swim toward light using a small whip-like tail and a light-sensing spot.",
+    "rules": "Costs 0.02 energy per second while carried. Gives a base speed of 0.15 cells per second and light sensing up to 2 cells, which the motility and sensing loci then adjust. It moves only when a nearby cell is at least 0.01 brighter; walls, barriers and habitat limits still apply. While swimming it pays 0.10 × (0.5 + g)² energy per second, where g is its motility investment from 0 to 1, instead of the usual cost per cell moved. If the module is lost it stays where it is.",
+    "example": "Give Sunbeads light seeking in a dish with one bright spot and watch whether they gather there."
+  },
+  "phase": 3
+}

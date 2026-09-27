@@ -1,0 +1,17 @@
+{
+  "id": "M03",
+  "name": "Starch enzyme",
+  "kind": "activity",
+  "target": "eStarch",
+  "doses": [0.1, 0.5, 1],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "A helper chemical that turns starch into sugar.",
+    "biology": "Enzymes speed up chemical changes; starch-cutting enzymes break starch into sugars that cells can absorb.",
+    "rules": "Adds starch enzyme activity. It spreads at half the normal rate and loses 2 % per second. Each second it converts up to 0.10 times its activity of starch carbon in its cell, with any bound nutrient, into sugar. Enzyme breaker divides its effective activity by (1 + breaker). It never converts living organisms. It is the same activity Crumbsmith and Cordweaver release. No additional modeled reaction.",
+    "example": "Add starch enzyme to a starch patch with only Sprinters nearby and watch them start to feed."
+  },
+  "iconId": "enzyme_starch",
+  "phase": 3
+}

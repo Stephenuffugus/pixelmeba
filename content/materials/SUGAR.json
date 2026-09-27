@@ -1,0 +1,17 @@
+{
+  "id": "SUGAR",
+  "name": "Sugar",
+  "kind": "field",
+  "target": "sugar",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "Dissolved food that spreads through water.",
+    "biology": "Simple sugars dissolve and drift; many microbes can use them directly.",
+    "rules": "Adds sugar carbon to each painted cell. It diffuses: fast in water, slowly in gel and very slowly in sediment. Carries no minerals, so eaters also need mineral nutrients to grow.",
+    "example": "A small sugar patch near Sprinters starts a feeding frenzy."
+  },
+  "iconId": "food_sugar",
+  "phase": 1
+}

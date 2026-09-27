@@ -1,0 +1,42 @@
+{
+  "id": "P06",
+  "name": "Bellstalk",
+  "category": "consumer",
+  "transportClass": "fixed",
+  "b0": 3,
+  "intakeRate": 0.45,
+  "maintenanceRate": 0.55,
+  "minDivisionAge": 50,
+  "maxAge": 1400,
+  "speed": 0,
+  "sensingRadius": 1,
+  "attackCooldown": 3,
+  "habitats": ["water"],
+  "attachment": { "surfaces": ["mesh", "bead", "stoneEdge"] },
+  "metabolism": "aerobic",
+  "energyPerCarbon": 30,
+  "acidPerCarbon": 0,
+  "foodPriority": [],
+  "digestsFilm": false,
+  "prey": [
+    { "id": "B01", "requires": "any" }, { "id": "B03", "requires": "any" }, { "id": "B04", "requires": "any" },
+    { "id": "B05", "requires": "any" }, { "id": "B06", "requires": "any" }, { "id": "B07", "requires": "any" },
+    { "id": "B08", "requires": "any" }, { "id": "B09", "requires": "any" }, { "id": "B10", "requires": "any" },
+    { "id": "B11", "requires": "any" }, { "id": "B12", "requires": "any" }
+  ],
+  "hostIds": [],
+  "drainRate": 0,
+  "tolerances": { "ph": [6, 8], "warmth": [0.35, 0.65], "salinity": [0, 0.2], "moisture": [1, 1] },
+  "nativeAbilities": ["PREDATION", "RADIUS_CAPTURE"],
+  "lociActive": [false, true, false, true, true, true, true, false],
+  "frameSize": 32,
+  "headings": 1,
+  "assetId": "p06_bellstalk",
+  "guide": {
+    "summary": "A bell on a stalk that stays in one place and grabs bacteria that drift close.",
+    "biology": "Some real ciliates live on a stalk fixed to a surface and use a ring of beating hairs around a bell-shaped mouth to draw food toward them.",
+    "rules": "Lives in water, attached to mesh, beads or stone edges, and does not swim. Catches one prey within 1 cell of itself without chasing it, stores it as a meal of up to twice its own body, and waits 3 seconds before the next catch. Stops hunting when well fed. Eats Sprinter, Dusk, Recycler, Crossfeeder, Crumbsmith, Oilwick, Brothmaker, Lantern, Brinecoil, Sourbud and Sleeper; never Velvet or Rampart. Nothing in the dish eats it.",
+    "example": "Line a stone edge with Bellstalks, add Sprinters to the open water, and watch how far from the edge the Sprinters stay common."
+  },
+  "phase": 5
+}

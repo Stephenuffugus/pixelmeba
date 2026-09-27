@@ -1,0 +1,26 @@
+{
+  "id": "E14",
+  "name": "Dispersing offspring",
+  "eligibleAncestors": ["B02", "F01", "F02"],
+  "nativeEquivalents": [],
+  "excludes": ["E13"],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": {
+    "disperseSpeed": 0.15,
+    "ancestralSeconds": 10,
+    "minSupportFood": 0.1,
+    "settleSeconds": 5,
+    "minEnergy": 10,
+    "settleCost": 5,
+    "strandedSeconds": 40
+  },
+  "visualLayer": "disperser_fringe",
+  "guide": {
+    "summary": "Lets an attached colony send its new offspring away to find a fresh place to settle.",
+    "biology": "Many real attached microbes and fungi release offspring that travel away before settling somewhere new.",
+    "rules": "Costs 0.02 energy per second while carried. When a carrier divides, a new daughter that keeps the module disperses at 0.15 cells per second through its usual habitat; a first-time gain stays settled. While dispersing it cannot feed, secrete, share or divide, and pays normal upkeep plus the usual cost per cell moved. For the first 10 seconds it moves as its kind always does, then it looks for a surface with at least 0.10 local food. Settling takes 5 seconds, needs at least 10 energy and costs 5 energy. After 40 seconds of dispersal in total it is stranded: it stops and cannot feed, but may still settle later. Velvet dispersers count as Small and fungal dispersers as Medium. Cannot be combined with Settler.",
+    "example": "Give Velvet dispersing offspring and see whether new colonies appear on distant stones."
+  },
+  "phase": 7
+}

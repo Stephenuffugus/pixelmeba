@@ -1,0 +1,17 @@
+{
+  "id": "M10",
+  "name": "Slow feeder pellet",
+  "kind": "object",
+  "target": "pellet",
+  "doses": [1, 1, 1],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "A food pellet that lets out sugar slowly for a long time.",
+    "biology": "Slow-release food dissolves bit by bit, giving a steady supply instead of one big feast.",
+    "rules": "Places one food object in a cell holding 10 sugar carbon and 1 bound nutrient. It releases 0.02 sugar carbon per second, with its share of nutrient, into its own cell, lasting about 500 seconds. The pellet never moves or spreads. An empty pellet leaves a fading stain that blocks nothing. A dish holds up to 128 food objects. No additional modeled reaction.",
+    "example": "Drop a pellet in the middle of a Sprinter colony and compare it with one big sugar dose."
+  },
+  "iconId": "object_pellet",
+  "phase": 3
+}

@@ -1,0 +1,27 @@
+{
+  "id": "E17",
+  "name": "Food cache",
+  "eligibleAncestors": ["P01", "P02", "P05", "P07", "P09"],
+  "nativeEquivalents": [],
+  "excludes": [],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": {
+    "minEnergy": 40,
+    "minMealMultiple": 1.5,
+    "depositRate": 0.02,
+    "keepMealMultiple": 1,
+    "creationCost": 2,
+    "energyPerCarbon": 0.1,
+    "capacity": 4,
+    "releaseRate": 0.02
+  },
+  "visualLayer": "cache_marker",
+  "guide": {
+    "summary": "Lets a well-fed grazer leave spare food in a small store that slowly feeds the area.",
+    "biology": "Some real animals store extra food in one place, and those stores feed other creatures as they break down.",
+    "rules": "Costs 0.02 energy per second while carried. When active with more than 40 energy and a meal larger than 1.50 times its starting body, it moves up to 0.02 × starting body per second from the meal into a cache in its cell, always keeping at least 1.00 times its starting body in the meal. Creating a cache costs 2 energy once, and each carbon stored costs 0.10 energy. A cell holds one cache of up to 4 carbon, shared by every carrier. From the next tick the cache releases up to 0.02 carbon per second as local detritus; empty caches disappear. Amoeba, Ciliate, Shellglider and Dartfin can use it only while also carrying Debris feeder; Wheelgrazer does not need it.",
+    "example": "Let cache-making Amoebas feast on a Sprinter bloom, then watch Recyclers gather around the caches they leave."
+  },
+  "phase": 7
+}

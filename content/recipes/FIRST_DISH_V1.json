@@ -1,0 +1,29 @@
+{
+  "id": "FIRST_DISH_V1",
+  "revision": 1,
+  "name": "Little Living Garden",
+  "habitatId": "WATER_GARDEN",
+  "seed": 104729,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": false,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": { "sugar": 0 },
+  "fieldPatches": [
+    { "center": [48, 64], "radius": 6, "substrate": "water", "add": { "sugar": 0.4 }, "label": "Sugar patch" },
+    { "center": [66, 64], "radius": 5, "substrate": "water", "add": { "starch": 0.6 }, "label": "Starch patch" },
+    { "center": [66, 48], "radius": 4, "substrate": "water", "add": { "detritus": 0.25, "detritusN": 0.025 }, "label": "Debris patch" }
+  ],
+  "founders": [
+    { "species": "B01", "count": 24, "center": [48, 64], "radius": 3 },
+    { "species": "B06", "count": 12, "center": [66, 64], "radius": 2 },
+    { "species": "B04", "count": 8, "center": [66, 48], "radius": 2 },
+    { "species": "A01", "count": 12, "center": [48, 48], "radius": 5 }
+  ],
+  "labels": [],
+  "question": "Who finds something to eat?",
+  "expectedObservationsText": "Sprinters eat the sugar patch and split; Crumbsmiths release enzyme onto the starch patch; Recyclers eat the debris patch; Sunbeads photosynthesise. None of this is guaranteed.",
+  "phase": 1
+}

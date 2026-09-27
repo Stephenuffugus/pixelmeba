@@ -1,0 +1,17 @@
+{
+  "id": "M06",
+  "name": "Lantern signal",
+  "kind": "activity",
+  "target": "sGlow",
+  "doses": [0.1, 0.5, 1],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "A signal chemical that makes Lanterns glow when there is enough of it.",
+    "biology": "Many bacteria release signal molecules and change their behaviour when they sense that many neighbours are nearby.",
+    "rules": "Adds signal activity that diffuses normally and loses 1 % per second. Lanterns, and cells with the Signal glow module, start glowing after sensing 0.30 or more for 5 seconds and stop after 5 seconds at 0.15 or less, or when their energy falls below 15. Glowing costs 0.30 energy per second, is only for show and adds no light. Signal quencher lowers the amount sensed. No additional modeled reaction.",
+    "example": "Add signal beside a small group of Lanterns and see whether they light up before they are crowded."
+  },
+  "iconId": "signal_glow",
+  "phase": 5
+}

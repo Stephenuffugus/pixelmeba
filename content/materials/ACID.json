@@ -1,0 +1,17 @@
+{
+  "id": "ACID",
+  "name": "Acidifier",
+  "kind": "field",
+  "target": "acid",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "Makes the water more sour, lowering its pH.",
+    "biology": "Acidity changes how comfortable water is for living things, and each kind of microbe does best in its own pH range.",
+    "rules": "Adds acid equivalents that dissolve and diffuse. Shown pH = 7 + (base - acid) / (1 + buffer), kept between 2 and 12. Each tick equal amounts of acid and base cancel out. Most bacteria prefer pH 6 to 8, yeasts and fungi 4.5 to 7, algae 6.5 to 8.5 and Sourbud 4.5 to 6.0; suitability fades to zero over 1.0 pH outside a species' range. Bubble and Sourbud release 0.20 and 0.40 acid for each carbon they eat. No additional modeled reaction.",
+    "example": "Add a little acidifier to one side of a mixed dish and see which species become stressed first."
+  },
+  "iconId": "chem_acid",
+  "phase": 3
+}

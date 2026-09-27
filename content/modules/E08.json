@@ -1,0 +1,18 @@
+{
+  "id": "E08",
+  "name": "Debris feeder",
+  "eligibleAncestors": ["P01", "P02", "P03", "P05", "P07"],
+  "nativeEquivalents": [],
+  "excludes": [],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": {},
+  "visualLayer": "debris_granule",
+  "guide": {
+    "summary": "Lets a hunter eat bits of dead material when it has no prey to digest.",
+    "biology": "Many real grazers eat scraps of dead material as well as living prey.",
+    "rules": "Costs 0.02 energy per second while carried and nothing extra. When it holds no meal it may eat local detritus up to its normal intake ceiling, using oxygen for 30 energy per carbon. A held meal always comes first, and a catch in the same tick cancels the detritus request. It moves toward whichever is better, prey or detritus. It adds a food, not new prey.",
+    "example": "Scatter organic debris in a dish with few Sprinters and see whether debris-feeding Amoebas last longer."
+  },
+  "phase": 3
+}

@@ -1,0 +1,18 @@
+{
+  "id": "E01",
+  "name": "Starch release",
+  "eligibleAncestors": ["B01", "B02", "B04", "B05", "Y01", "Y02"],
+  "nativeEquivalents": ["B06", "F02"],
+  "excludes": [],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": { "emitRate": 0.02, "minEnergy": 35, "emitCost": 0.4, "localCap": 1 },
+  "visualLayer": "starch_notch",
+  "guide": {
+    "summary": "Lets a microbe make starch enzyme, which turns starch into sugar that anyone nearby can eat.",
+    "biology": "Some real microbes release enzymes outside their bodies that break large food molecules into smaller pieces that cells can absorb.",
+    "rules": "Costs 0.02 energy per second while carried. When starch is in or beside its cell and it has more than 35 energy, it releases starch enzyme at 0.02 per second for another 0.40 energy per second, until the local enzyme reaches 1.0. It does not let the carrier eat starch; the sugar the enzyme makes is free for anyone nearby. No release while resting. Crumbsmith and Cordweaver make this enzyme natively and cannot gain it.",
+    "example": "Give a few Sprinters starch release, place them beside starch, and see whether the sugar they free feeds their neighbours as much as themselves."
+  },
+  "phase": 2
+}

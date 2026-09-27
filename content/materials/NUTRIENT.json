@@ -1,0 +1,17 @@
+{
+  "id": "NUTRIENT",
+  "name": "Mineral nutrients",
+  "kind": "field",
+  "target": "nutrient",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "Minerals needed to build new body. Not food by itself.",
+    "biology": "Cells need minerals as well as carbon and energy to grow.",
+    "rules": "Adds free nutrient that dissolves and diffuses. Every unit of new body needs nutrient, taken first from what is bound in eaten food and then from this free pool. Adding nutrient alone creates no growth.",
+    "example": "If a colony says growth is limited by minerals, add a little here and compare."
+  },
+  "iconId": "chem_nutrient",
+  "phase": 1
+}

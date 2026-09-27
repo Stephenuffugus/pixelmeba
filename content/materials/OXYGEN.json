@@ -1,0 +1,17 @@
+{
+  "id": "OXYGEN",
+  "name": "Oxygen",
+  "kind": "field",
+  "target": "oxygen",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "The gas that most eaters need to get energy from their food.",
+    "biology": "Many microbes use oxygen to release energy from food, while some low-oxygen specialists do better without it.",
+    "rules": "Adds dissolved oxygen that diffuses. Aerobic eaters use 0.30 oxygen for each carbon they eat, and low oxygen slows their feeding. Photosynthesis releases 0.50 oxygen per carbon fixed. With the lid open each cell drifts toward 0.8 oxygen by 0.02 of the difference every tick (ten times slower in sediment); with the lid closed there is no exchange. Dusk's suitability falls as oxygen rises and reaches zero at 0.40. No additional modeled reaction.",
+    "example": "Close the lid over a busy Sprinter colony, wait for oxygen to fall, then add some here and watch them recover."
+  },
+  "iconId": "chem_oxygen",
+  "phase": 3
+}

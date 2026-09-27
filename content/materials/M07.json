@@ -1,0 +1,17 @@
+{
+  "id": "M07",
+  "name": "Signal quencher",
+  "kind": "activity",
+  "target": "quencher",
+  "doses": [0.1, 0.5, 1],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "Muffles signals so cells sense less of them.",
+    "biology": "Some microbes interfere with their neighbours' signal molecules, making the message harder to hear.",
+    "rules": "Adds quencher activity that diffuses normally and loses 1 % per second. Sensed signal = signal / (1 + quencher); the signal itself is not removed. Quencher 1.0 halves what Lanterns sense. No additional modeled reaction.",
+    "example": "Quench one half of a glowing Lantern colony and watch that side go dark."
+  },
+  "iconId": "signal_quencher",
+  "phase": 5
+}

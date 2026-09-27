@@ -1,0 +1,18 @@
+{
+  "id": "E10",
+  "name": "Matrix builder",
+  "eligibleAncestors": ["B01", "B04", "B06", "B10", "B11", "Y01", "F02"],
+  "nativeEquivalents": [],
+  "excludes": [],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": { "minEnergy": 35, "minBodyMultiple": 1.2, "filmCap": 0.5, "rate": 0.02, "energyPerCarbon": 2 },
+  "visualLayer": "matrix_edge",
+  "guide": {
+    "summary": "Lets a microbe turn part of its body into a slimy film on the spot where it lives.",
+    "biology": "Many real microbes build slimy biofilms, shared layers that slow the movement of chemicals around them.",
+    "rules": "Costs 0.02 energy per second while carried. While active with more than 35 energy, a body above 1.2 times its starting size and local film below 0.50, it moves up to 0.02 body carbon per second into the film, never taking its body below 1.2 times its starting size or the film above 0.50, and pays 2 energy per carbon moved. Builders on one cell share the remaining film room. The film belongs to no one and works like any other film; the builder gets no extra protection and it grants no immunity.",
+    "example": "Give Sprinters matrix building near a patch of bacterial inhibitor and see whether the film slows its spread."
+  },
+  "phase": 3
+}

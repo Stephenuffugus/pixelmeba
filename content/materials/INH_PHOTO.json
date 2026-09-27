@@ -1,0 +1,17 @@
+{
+  "id": "INH_PHOTO",
+  "name": "Photosynthetic inhibitor",
+  "kind": "field",
+  "target": "inhPhoto",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "A pretend chemical that slows and harms only algae.",
+    "biology": "Some real substances harm light-using life more than other microbes; this made-up chemical stands in for that broad idea.",
+    "rules": "Adds an abstract inhibitor that dissolves, diffuses and loses 0.2 % of its amount each tick. It targets only the algae A01 Sunbead, A02 Glasswheel, A03 Shadeleaf, A04 Turnleaf and A05 Raftball. A target's exposure is the local amount, halved once in a cell with biofilm; its growth is multiplied by 1 / (1 + exposure) and it loses 8 times the exposure in health each second. Bacteria, yeasts, fungi, consumers, parasites and viruses are unaffected. No additional modeled reaction. This is an abstract game mechanic, not a claim about how any real product works.",
+    "example": "Dose a crowded Sunbead patch and compare the oxygen overlay before and after."
+  },
+  "iconId": "chem_inh_photo",
+  "phase": 3
+}

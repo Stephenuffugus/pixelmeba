@@ -1,0 +1,28 @@
+{
+  "id": "E02",
+  "name": "Signal glow",
+  "eligibleAncestors": ["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B10", "B11", "B12", "B13"],
+  "nativeEquivalents": ["B09"],
+  "excludes": [],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": {
+    "emitRate": 0.02,
+    "emitCost": 0.2,
+    "minEnergy": 35,
+    "onThreshold": 0.3,
+    "offThreshold": 0.15,
+    "dwellSeconds": 5,
+    "glowCost": 0.3,
+    "glowOffEnergy": 15,
+    "localCap": 1
+  },
+  "visualLayer": "glow_center",
+  "guide": {
+    "summary": "Lets a microbe send out a signal and glow when many signalling neighbours are close.",
+    "biology": "Some real bacteria release signal molecules and change what they do once enough neighbours are nearby; a few of them glow.",
+    "rules": "Costs 0.02 energy per second while carried. With more than 35 energy it releases signal at 0.02 per second for 0.20 energy per second, until the local signal reaches 1.0. Glow turns on after it senses 0.30 or more signal for 5 seconds in a row, and turns off after 5 seconds at 0.15 or less, or as soon as energy falls below 15. Glowing costs another 0.30 energy per second and gives no usable light. Lantern has this natively and cannot gain it.",
+    "example": "Crowd signal-glow Sprinters into a small patch and watch for the moment the group lights up."
+  },
+  "phase": 5
+}

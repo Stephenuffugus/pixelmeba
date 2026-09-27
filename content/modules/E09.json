@@ -1,0 +1,18 @@
+{
+  "id": "E09",
+  "name": "Protein release",
+  "eligibleAncestors": ["B04", "B05", "F01", "F02", "Y01", "Y02"],
+  "nativeEquivalents": ["B08"],
+  "excludes": [],
+  "requires": [],
+  "surchargePerSecond": 0.02,
+  "params": { "emitRate": 0.02, "minEnergy": 35, "emitCost": 0.4, "localCap": 1 },
+  "visualLayer": "protein_notches",
+  "guide": {
+    "summary": "Lets a microbe make protein enzyme, which turns protein into broth that others can eat.",
+    "biology": "Some real microbes release enzymes outside their bodies that break proteins into smaller pieces that other cells can use.",
+    "rules": "Costs 0.02 energy per second while carried. When protein is in or beside its cell and it has more than 35 energy, it releases protein enzyme at 0.02 per second for another 0.40 energy per second, until the local enzyme reaches 1.0. It makes broth but does not let the carrier eat broth (Creambud already can). No release while resting. Brothmaker has this natively and cannot gain it.",
+    "example": "Place protein beside Recyclers with protein release, add Creambuds, and see who ends up eating the broth."
+  },
+  "phase": 3
+}

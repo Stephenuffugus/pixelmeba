@@ -1,0 +1,17 @@
+{
+  "id": "M08",
+  "name": "Rivalry extract",
+  "kind": "activity",
+  "target": "rival",
+  "doses": [0.1, 0.5, 1],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "A pretend chemical that bothers only three kinds of bacteria.",
+    "biology": "Some microbes release substances that hold back competing neighbours; this made-up extract stands in for that broad idea.",
+    "rules": "Adds RIVAL activity that spreads at half the normal rate and loses 2 % per second. It targets only B01 Sprinter, B10 Brinecoil and B11 Sourbud, adding 0.25 times the local RIVAL to their inhibitor exposure, halved once in a cell with biofilm; growth is multiplied by 1 / (1 + exposure) and health falls by 8 times the exposure each second. Everything else is unaffected. It is the same field Rampart releases. No additional modeled reaction. This is an abstract game mechanic, not a claim about how any real product works.",
+    "example": "Add rivalry extract where Sprinters and Crumbsmiths share sugar and see how the balance shifts."
+  },
+  "iconId": "chem_rival",
+  "phase": 5
+}

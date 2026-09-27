@@ -1,0 +1,40 @@
+{
+  "id": "P09",
+  "name": "Wheelgrazer",
+  "category": "consumer",
+  "transportClass": "medium",
+  "b0": 8,
+  "intakeRate": 0.85,
+  "maintenanceRate": 0.85,
+  "minDivisionAge": 75,
+  "maxAge": 1500,
+  "speed": 0.8,
+  "sensingRadius": 4,
+  "attackCooldown": 4,
+  "habitats": ["water"],
+  "attachment": null,
+  "metabolism": "aerobic",
+  "energyPerCarbon": 30,
+  "acidPerCarbon": 0,
+  "foodPriority": ["detritus"],
+  "digestsFilm": false,
+  "prey": [
+    { "id": "A02", "requires": "any" }, { "id": "A03", "requires": "any" }, { "id": "A04", "requires": "any" },
+    { "id": "Y02", "requires": "any" }
+  ],
+  "hostIds": [],
+  "drainRate": 0,
+  "tolerances": { "ph": [6, 8], "warmth": [0.35, 0.65], "salinity": [0, 0.2], "moisture": [1, 1] },
+  "nativeAbilities": ["PREDATION", "DETRITUS_FALLBACK"],
+  "lociActive": [true, true, true, true, true, true, true, false],
+  "frameSize": 32,
+  "headings": 1,
+  "assetId": "p09_wheelgrazer",
+  "guide": {
+    "summary": "A round grazer that eats shelled and shade-loving algae and Creambud, and eats dead material when it has no meal.",
+    "biology": "Real rotifers beat a crown of tiny hairs to sweep food into their mouths, and many also eat bits of dead matter.",
+    "rules": "Lives in water. Moves 0.8 cells per second and notices prey up to 4 cells away. Catches Glasswheel, Shadeleaf, Turnleaf and Creambud on contact, stores a meal of up to twice its own body, and waits 4 seconds before the next catch. Stops hunting when well fed. While it holds no meal it eats local detritus instead, using oxygen; a catch always comes first.",
+    "example": "Put Wheelgrazers in a dish with detritus but no algae and see how long the dead material keeps them going."
+  },
+  "phase": 5
+}

@@ -1,0 +1,17 @@
+{
+  "id": "M02",
+  "name": "Silicate",
+  "kind": "field",
+  "target": "silicate",
+  "doses": [0.02, 0.1, 0.5],
+  "defaultDoseIndex": 1,
+  "companionNutrientPerCarbon": 0,
+  "guide": {
+    "summary": "A dissolved mineral that shelled cells need to build their shells.",
+    "biology": "Some algae and amoebae build hard, glassy shells from silica dissolved in the water.",
+    "rules": "Adds free silicate mineral that dissolves and diffuses. It is not food. Glasswheel and Shellglider bind 0.10 silicate for every unit of new body, so their growth slows when silicate runs short. Consumers with the Mineral jacket module also build their jackets from it. When shelled cells die or are eaten, their shells become shell grit, which slowly dissolves back into silicate. No additional modeled reaction.",
+    "example": "Give one Glasswheel patch silicate and another none, then compare how far each grows."
+  },
+  "iconId": "chem_silicate",
+  "phase": 5
+}
