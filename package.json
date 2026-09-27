@@ -24,7 +24,8 @@
     "store:assets": "tsx tools/store-assets.ts",
     "bug:export": "tsx tools/bug-export.ts",
     "android:sync": "tsx tools/android-sync.ts",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "art:preview": "tsx tools/art-preview.ts"
   },
   "dependencies": {
     "@capacitor/app": "8.1.1",
