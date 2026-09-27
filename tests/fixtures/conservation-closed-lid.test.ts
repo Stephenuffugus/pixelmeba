@@ -43,5 +43,5 @@ describe('G0 conservation, closed lid', () => {
       `conservation-closed-lid: worst relative error C ${worstC.toExponential(3)}, N ${worstN.toExponential(3)}; ` +
         `alive ${w.ents.count}; births ${w.events.totals.birth ?? 0}; deaths ${w.events.totals.death ?? 0}`,
     );
-  });
+  }, 600_000); // 10,000 full ticks: over two minutes on a loaded 2-CPU machine
 });

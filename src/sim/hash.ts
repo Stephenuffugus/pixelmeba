@@ -118,19 +118,86 @@ export async function sha256Hex(data: string | Uint8Array): Promise<string> {
 }
 
 /** Base64 of a typed array's bytes (little-endian as stored). */
-export function typedToBase64(arr: ArrayBufferView): string {
-  const u8 = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
-  let s = '';
-  const CHUNK = 0x8000;
-  for (let i = 0; i < u8.length; i += CHUNK) {
-    s += String.fromCharCode(...u8.subarray(i, i + CHUNK));
+const B64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const B64_ENC = new Uint8Array(64);
+const B64_DEC = new Int16Array(256).fill(-1);
+for (let i = 0; i < 64; i++) {
+  B64_ENC[i] = B64_ALPHABET.charCodeAt(i);
+  B64_DEC[B64_ALPHABET.charCodeAt(i)] = i;
+}
+const LATIN1 = new TextDecoder('latin1');
+
+/**
+ * Standard padded base64 (RFC 4648), byte-identical to btoa over the same bytes. Table-driven: the
+ * old String.fromCharCode + btoa path cost about 70 ms per MB, which made every save and undo
+ * snapshot take hundreds of milliseconds.
+ */
+export function bytesToBase64(u8: Uint8Array): string {
+  const n = u8.length;
+  const out = new Uint8Array(Math.ceil(n / 3) * 4);
+  let o = 0;
+  let i = 0;
+  for (; i + 2 < n; i += 3) {
+    const v = (u8[i]! << 16) | (u8[i + 1]! << 8) | u8[i + 2]!;
+    out[o++] = B64_ENC[v >>> 18]!;
+    out[o++] = B64_ENC[(v >>> 12) & 63]!;
+    out[o++] = B64_ENC[(v >>> 6) & 63]!;
+    out[o++] = B64_ENC[v & 63]!;
   }
-  return btoa(s);
+  const rest = n - i;
+  if (rest === 1) {
+    const v = u8[i]! << 16;
+    out[o++] = B64_ENC[v >>> 18]!;
+    out[o++] = B64_ENC[(v >>> 12) & 63]!;
+    out[o++] = 61;
+    out[o] = 61;
+  } else if (rest === 2) {
+    const v = (u8[i]! << 16) | (u8[i + 1]! << 8);
+    out[o++] = B64_ENC[v >>> 18]!;
+    out[o++] = B64_ENC[(v >>> 12) & 63]!;
+    out[o++] = B64_ENC[(v >>> 6) & 63]!;
+    out[o] = 61;
+  }
+  // Every byte is ASCII, so latin1 decoding is exact.
+  return LATIN1.decode(out);
 }
 
+export function typedToBase64(arr: ArrayBufferView): string {
+  return bytesToBase64(new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength));
+}
+
+const ASCII = new TextEncoder();
+
 export function base64ToBytes(b64: string): Uint8Array {
-  const s = atob(b64);
-  const out = new Uint8Array(s.length);
-  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+  const src = ASCII.encode(b64);
+  const len = src.length;
+  if (len % 4 !== 0 || len !== b64.length) throw new Error('invalid base64');
+  if (len === 0) return new Uint8Array(0);
+  const pad = src[len - 1] === 61 ? (src[len - 2] === 61 ? 2 : 1) : 0;
+  const out = new Uint8Array((len / 4) * 3 - pad);
+  let o = 0;
+  let bad = 0;
+  const full = pad > 0 ? len - 4 : len;
+  for (let i = 0; i < full; i += 4) {
+    const a = B64_DEC[src[i]!]!;
+    const b = B64_DEC[src[i + 1]!]!;
+    const c = B64_DEC[src[i + 2]!]!;
+    const d = B64_DEC[src[i + 3]!]!;
+    bad |= a | b | c | d;
+    const v = (a << 18) | (b << 12) | (c << 6) | d;
+    out[o++] = v >>> 16;
+    out[o++] = (v >>> 8) & 255;
+    out[o++] = v & 255;
+  }
+  if (pad > 0) {
+    const a = B64_DEC[src[full]!]!;
+    const b = B64_DEC[src[full + 1]!]!;
+    const c = pad === 2 ? 0 : B64_DEC[src[full + 2]!]!;
+    bad |= a | b | c;
+    const v = (a << 18) | (b << 12) | (c << 6);
+    out[o] = v >>> 16;
+    if (pad === 1) out[o + 1] = (v >>> 8) & 255;
+  }
+  if (bad < 0) throw new Error('invalid base64 character');
   return out;
 }

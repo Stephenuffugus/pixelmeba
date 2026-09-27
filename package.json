@@ -20,6 +20,7 @@
     "content:validate": "tsx tools/content-validate.ts",
     "sim:run": "tsx tools/sim-run.ts",
     "sim:tune": "tsx tools/sim-tune.ts",
+    "render:bench": "tsx tools/render-bench-run.ts",
     "art:build": "tsx tools/art-build.ts",
     "store:assets": "tsx tools/store-assets.ts",
     "bug:export": "tsx tools/bug-export.ts",

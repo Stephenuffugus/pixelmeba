@@ -9,3 +9,6 @@ export const IMPLEMENTED_NATIVE_ABILITIES: readonly NativeAbilityId[] = ['E_STAR
 
 /** Supplementary modules the simulation implements (checked the same way). */
 export const IMPLEMENTED_MODULES: readonly string[] = [];
+
+/** Whether stage 6 lets `digestsFilm` species eat biofilm as debris (SPEC §6; P3.3). */
+export const FILM_DIGESTION_IMPLEMENTED = false;

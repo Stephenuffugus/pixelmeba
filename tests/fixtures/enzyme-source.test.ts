@@ -12,6 +12,7 @@ import { stageConversion } from '../../src/sim/conversion';
 import { cellIndex, diskCells, inMask, maskCells } from '../../src/sim/grid';
 import { checkLedger } from '../../src/sim/ledger';
 import { R } from '../../src/sim/reasons';
+import { stateHash } from '../../src/sim/serialize';
 import { step, run } from '../../src/sim/tick';
 import type { World } from '../../src/sim/world';
 import { aliveOf, clearWater, place, setField } from '../helpers/world';
@@ -30,6 +31,19 @@ describe('G1 enzyme source (P1.1)', () => {
     expect(w.fields.starchN![CELL]).toBeCloseTo(0.1 * 0.99, 14);
     expect(w.fields.sugarN![CELL]).toBeCloseTo(0.001, 14);
     expect(checkLedger(w).ok).toBe(true);
+    // The observation-only catalysis record (renderer dust) marks exactly this cell, with the amount.
+    expect(w.catalysisCells[CELL]).toBeCloseTo(0.01, 6);
+    let marked = 0;
+    for (let i = 0; i < w.catalysisCells.length; i++) if (w.catalysisCells[i]! > 0) marked++;
+    expect(marked).toBe(1);
+    // It is not simulation state: clearing it changes nothing the hash sees.
+    const h = stateHash(w);
+    w.catalysisCells.fill(0);
+    expect(stateHash(w)).toBe(h);
+    // No enzyme activity next time ⇒ no dust left over from the previous tick.
+    setField(w, 'eStarch', CELL, 0);
+    stageConversion(w);
+    expect(w.catalysisCells[CELL]).toBe(0);
   });
 
   it('breaker divides effective activity: 1 unit of breaker halves conversion', () => {
@@ -65,6 +79,35 @@ describe('G1 enzyme source (P1.1)', () => {
     // Every secretion tick costs exactly 0.40 × dt.
     expect(w.ledger.energy.secretion / (ENZYME_EMIT_COST * DT)).toBeCloseTo(Math.round(w.ledger.energy.secretion / (ENZYME_EMIT_COST * DT)), 6);
     expect(checkLedger(w).ok).toBe(true);
+  });
+
+  it("the producer's own energy pays the secretion: 0.40 × dt on every emitting tick, never otherwise", () => {
+    const w = clearWater();
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) setField(w, 'starch', cellIndex(64 + dx, 64 + dy), 0.6);
+    const s = place(w, 'B06', 64.5, 64.5, { E: 60 });
+    const e = w.ledger.energy;
+    let emitting = 0;
+    let idle = 0;
+    for (let t = 0; t < 600 && w.ents.cols.alive[s] === 1; t++) {
+      const before = { E: w.ents.cols.E[s]!, m: e.maintenance, mv: e.movement, sec: e.secretion, earned: e.earned, other: e.other, div: e.division };
+      step(w);
+      if (w.ents.cols.alive[s] !== 1) break;
+      const dSec = e.secretion - before.sec;
+      // One organism in the dish: every ledger delta is its own.
+      const dE = w.ents.cols.E[s]! - before.E;
+      const expected = e.earned - before.earned - (e.maintenance - before.m) - (e.movement - before.mv) - dSec - (e.other - before.other) - (e.division - before.div);
+      expect(dE).toBeCloseTo(expected, 10);
+      if (w.ents.cols.secretionCode[s] === R.SECRETING) {
+        expect(dSec).toBeCloseTo(ENZYME_EMIT_COST * DT, 12);
+        emitting++;
+      } else {
+        expect(dSec).toBe(0);
+        idle++;
+      }
+    }
+    // Both branches were exercised: it emitted while E > 35, then stopped once E fell to the threshold.
+    expect(emitting).toBeGreaterThan(10);
+    expect(idle).toBeGreaterThan(0);
   });
 
   it('with no substrate nearby a Crumbsmith emits nothing and spends nothing on secretion', () => {

@@ -1,5 +1,7 @@
 /**
- * npx tsx tools/render-bench-run.ts [--quick]
+ * npx tsx tools/render-bench-run.ts [--quick] [--require-fps]
+ * Exits 1 when the bench fails or a behaviour gate (aggregation rule, reduced motion) fails; with
+ * --require-fps also when 60 fps is not reached at neighborhood zoom (needs a real GPU).
  *
  * Headless renderer bench (P1.5): starts the Vite dev server on :4176, opens
  * /tools/render-bench.html in Playwright Chromium with the same GPU flags as playwright.config.ts
@@ -123,6 +125,22 @@ async function main(): Promise<void> {
     runs,
   };
   console.log(JSON.stringify(out, null, 2));
+  const requireFps = process.argv.includes('--require-fps');
+  const failures: string[] = [];
+  for (const [name, run] of Object.entries(runs)) {
+    const r = (run as { result?: { ok?: boolean; gates?: Record<string, boolean> } }).result;
+    if (!r?.ok) {
+      failures.push(`${name}: bench did not complete`);
+      continue;
+    }
+    for (const [gate, pass] of Object.entries(r.gates ?? {})) {
+      if (!pass && (gate !== 'fps60AtNeighborhood' || requireFps)) failures.push(`${name}: ${gate}`);
+    }
+  }
+  if (failures.length > 0) {
+    console.error(`render bench FAILED: ${failures.join('; ')}`);
+    process.exitCode = 1;
+  }
 }
 
 main().catch((e: unknown) => {

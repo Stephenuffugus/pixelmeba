@@ -42,6 +42,8 @@ export function stageConversion(world: World): void {
   tally.starch = 0;
   tally.oil = 0;
   tally.protein = 0;
+  const seen = world.catalysisCells;
+  seen.fill(0);
   for (const r of RULES) {
     const act = world.fields[r.activity];
     const sub = world.fields[r.substrate];
@@ -67,6 +69,7 @@ export function stageConversion(world: World): void {
       if (prodN) prodN[i]! += nMoved;
       else if (nMoved > 0) world.fields.nutrient![i]! += nMoved; // product without companion: release N free
       total += converted;
+      seen[i]! += converted;
     }
     if (total > 0) {
       markField(world, r.product);

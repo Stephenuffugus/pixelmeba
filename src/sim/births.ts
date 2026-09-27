@@ -41,6 +41,24 @@ const NEIGHBORS: ReadonlyArray<readonly [number, number]> = [
   [0, 0],
 ];
 
+/** The division thresholds for an organism's current profile (the same numbers the gates use). */
+export interface DivisionNeeds {
+  readonly biomass: number;
+  readonly energy: number;
+  readonly health: number;
+  readonly age: number;
+}
+
+export function divisionNeeds(world: World, i: number): DivisionNeeds {
+  const prof = profileOf(world, i);
+  return {
+    biomass: DIVISION_BIOMASS_MULTIPLE * prof.b0,
+    energy: Math.max(DIVISION_MIN_ENERGY, prof.divisionCost),
+    health: DIVISION_MIN_HEALTH,
+    age: prof.minDivisionAge,
+  };
+}
+
 /** First failing division gate, or R.NONE when the organism may divide. */
 export function divisionBlocker(world: World, i: number): number {
   const c = world.ents.cols;

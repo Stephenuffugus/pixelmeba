@@ -29,6 +29,8 @@ const C = {
   oil: [0xe8, 0xc5, 0x4a],
   protein: [0xd9, 0x9b, 0xa6],
   sugarHaze: [0xf3, 0xc9, 0x5c],
+  // Catalysis dust: the Crumbsmith's deep ochre (palette crumbDeep), where enzyme is converting starch.
+  catalysis: [0x9e, 0x72, 0x29],
 } as const;
 
 type RGB = readonly [number, number, number];
@@ -38,7 +40,7 @@ export function cosmetic(i: number, salt: number): number {
   h ^= h >>> 16;
   h = Math.imul(h, 0x7feb352d) >>> 0;
   h ^= h >>> 15;
-  return h / 4294967296;
+  return (h >>> 0) / 4294967296; // unsigned: the XOR above yields a signed 32-bit value
 }
 
 function put(img: ImageData, px: number, py: number, rgb: RGB, a = 255): void {
@@ -156,7 +158,8 @@ function paintDepositCell(img: ImageData, bands: Uint8Array, i: number, hasSugar
   const oil = bands[2 * CELL_COUNT + i]!;
   const prot = bands[3 * CELL_COUNT + i]!;
   const sugar = hasSugar ? bands[4 * CELL_COUNT + i]! : 0;
-  if ((starch | det | oil | prot | sugar) === 0) return;
+  const cat = bands.length >= 6 * CELL_COUNT ? bands[5 * CELL_COUNT + i]! : 0;
+  if ((starch | det | oil | prot | sugar | cat) === 0) return;
   const cx = (i % GRID_W) * S;
   const cy = Math.floor(i / GRID_W) * S;
   for (let y = 0; y < S; y++) {
@@ -168,6 +171,8 @@ function paintDepositCell(img: ImageData, bands: Uint8Array, i: number, hasSugar
       else if (oil > 0 && cosmetic(i * 16 + k, 17) < (oil / 255) * 0.35) put(img, cx + x, cy + y, C.oil, 200);
       else if (prot > 0 && cosmetic(i * 16 + k, 19) < (prot / 255) * 0.35) put(img, cx + x, cy + y, C.protein);
       else if (sugar > 8) put(img, cx + x, cy + y, C.sugarHaze, Math.min(120, 20 + Math.round(sugar * 0.45)));
+      // Catalysis dust over everything: bright specks, denser where more starch was converted.
+      if (cat > 0 && cosmetic(i * 16 + k, 23) < 0.02 + (cat / 255) * 0.08) put(img, cx + x, cy + y, C.catalysis);
     }
   }
 }

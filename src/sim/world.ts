@@ -101,6 +101,11 @@ export interface World {
   readonly branches: BranchBook;
   /** Carbon converted by each enzyme this tick (observation). */
   readonly conversionTally: { starch: number; oil: number; protein: number };
+  /**
+   * Carbon converted by enzymes in each cell during the last stage 3 (observation only: never read by
+   * the simulation, not hashed, not saved; drives the renderer's catalysis dust, UX §7).
+   */
+  readonly catalysisCells: Float32Array;
   /** Cumulative carbon converted by each enzyme (observation, saved). */
   readonly conversionTotals: { starch: number; oil: number; protein: number };
 }
@@ -159,6 +164,7 @@ export function createEmptyWorld(opts: {
     capacityHitThisTick: false,
     branches: createBranchBook(),
     conversionTally: { starch: 0, oil: 0, protein: 0 },
+    catalysisCells: new Float32Array(CELL_COUNT),
     conversionTotals: { starch: 0, oil: 0, protein: 0 },
   };
 }

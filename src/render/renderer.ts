@@ -478,10 +478,11 @@ export class DishRenderer {
     }
     this.world.scale.set(cam.zoom);
     this.world.position.set(cam.viewW / 2 - cam.cx * cam.zoom, cam.viewH / 2 - cam.cy * cam.zoom);
-    const wide = cam.zoom < 5;
+    // ARCH §9: below sprite scale 1 the aggregation layer replaces individual sprites.
+    const wide = cam.aggregated();
     this.aggSprite.visible = wide;
-    this.particles.visible = !wide || cam.zoom >= 3.5;
-    this.particles.alpha = wide ? Math.max(0, (cam.zoom - 3.5) / 1.5) : 1;
+    this.particles.visible = !wide;
+    this.particles.alpha = 1;
     if (!s) return;
     if (wide && this.aggDirty) this.paintAggregation(s);
 

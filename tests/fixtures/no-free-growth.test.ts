@@ -1,7 +1,6 @@
 /**
  * G0 fixture: no free growth (zero compatible food/CO2 or zero required nutrient ⇒ no new biomass;
- * energy and health decline as specified). The G0 fair-shared-food fixture now lives with the G1
- * finite-feeding fixture in finite-feeding.test.ts.
+ * energy and health decline as specified). The G0 fair-shared-food fixture is fair-shared-food.test.ts.
  */
 import { describe, expect, it } from 'vitest';
 import { DT, MOVE_COST_PER_CELL, STARVATION_DAMAGE } from '../../src/sim/constants';

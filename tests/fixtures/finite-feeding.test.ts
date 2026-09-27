@@ -9,25 +9,21 @@
  *    exactly −(free nutrient taken) + (surplus bound nutrient released from digested meals);
  *  - no organism exceeds its intake budget q × suitability × dt (halved over soft capacity);
  *  - no pool, body or meal is ever negative, and the ledger closes.
- * Also here (moved from the G0 file): fair shared food — identical organisms sharing a cell receive
- * equal proportional allocations, and insertion order never decides the winner.
+ * The G0 fair-shared-food fixture (equal shares, insertion order irrelevant) is fair-shared-food.test.ts.
  */
 import { describe, expect, it } from 'vitest';
 import { CELL_COUNT, DT } from '../../src/sim/constants';
 import { FLAG } from '../../src/sim/entities';
 import { FIELD_IDS } from '../../src/sim/fields';
 import { cellIndex, maskCells } from '../../src/sim/grid';
-import { stageIntake } from '../../src/sim/intake';
 import { checkLedger } from '../../src/sim/ledger';
-import { stageSenseAndMove } from '../../src/sim/movement';
 import { profileOf } from '../../src/sim/profiles';
 import { R } from '../../src/sim/reasons';
-import { entityCell, rebuildIndex } from '../../src/sim/spatial';
+import { entityCell } from '../../src/sim/spatial';
 import { step } from '../../src/sim/tick';
 import type { World } from '../../src/sim/world';
 import { clearWater, fillField, place, setField } from '../helpers/world';
 
-const CELL = cellIndex(64, 64);
 
 /** 3 × 3 sugar patch around (64,64); optionally scarce free nutrient over the whole dish. */
 function crowdedPatch(sugarPerCell: number, dishNutrient: number | null): World {
@@ -186,38 +182,5 @@ describe('G1 finite feeding', () => {
       `finite-feeding (nutrient-limited): ${a.ticks} ticks, carbon taken ${a.totalTaken.toFixed(6)}, nutrient-limited organism-ticks ${a.nutrientLimited}, ` +
         `max budget use ${a.maxBudgetUse.toFixed(4)}`,
     );
-  });
-});
-
-describe('G0 fair shared food', () => {
-  function allocationWith(order: number[]): number[] {
-    const w = clearWater();
-    setField(w, 'sugar', CELL, 0.004);
-    const slots: number[] = [];
-    // Eight identical organisms (the soft capacity) so their requests exceed the scarce pool and
-    // proportional scaling engages; the insertion order is permuted between runs.
-    const xs = [64.1, 64.2, 64.3, 64.4, 64.5, 64.6, 64.7, 64.8];
-    for (const k of order) slots[k] = place(w, 'B01', xs[k]!, 64.5);
-    stageSenseAndMove(w);
-    for (const s of slots) {
-      w.ents.cols.x[s] = 64.5;
-      w.ents.cols.y[s] = 64.5;
-      w.ents.cols.suitability[s] = 1;
-    }
-    rebuildIndex(w);
-    stageIntake(w);
-    return slots.map((s) => w.ents.cols.B[s]! - 1);
-  }
-
-  it('equal allocations within numeric tolerance, independent of insertion order', () => {
-    const a = allocationWith([0, 1, 2, 3, 4, 5, 6, 7]);
-    const b = allocationWith([7, 4, 2, 0, 6, 3, 1, 5]);
-    for (const gain of [...a, ...b]) {
-      expect(gain).toBeGreaterThan(0);
-      expect(gain).toBeCloseTo(a[0]!, 12);
-    }
-    // Requests (8 × 0.018 × avail(0.004) ≈ 0.0055) exceed the 0.004 pool, so it is shared out
-    // completely: total biomass gained = 0.5 × 0.004.
-    expect(a.reduce((x, y) => x + y, 0)).toBeCloseTo(0.002, 12);
   });
 });

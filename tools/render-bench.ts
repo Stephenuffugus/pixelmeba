@@ -798,8 +798,16 @@ async function main(): Promise<void> {
   feed.stop();
   const cpuOnly = await cpu();
 
+  // Gate rows (BUILD_DIRECTIVE P1.5). fps is reported, not enforced here: it depends on the GPU.
+  const gates = {
+    aggregationRule: sweep.every((z) => z.aggregationVisible === z.spritePixelScale < 1 && z.particlesVisible === !z.aggregationVisible),
+    wholeDishAggregates: wholeDish.spritePixelScale >= 1 || wholeDish.aggregationVisible,
+    reducedMotion: reducedMotion.pass,
+    fps60AtNeighborhood: neighborhood.fpsMean >= 58,
+  };
   publish({
     ok: true,
+    gates,
     env,
     gpu,
     canvas,

@@ -9,7 +9,7 @@ reduced-motion flag removes pulses/trails."*
 | Criterion | Result here | Status |
 |---|---|---|
 | 60 fps, 6,000 sprites, neighborhood zoom | **Not reached.** 1.8–3.1 fps at 1440×900 and 4.4–9.9 fps at 360×800 under SwiftShader, software WebGL on a shared 2-CPU Codespace with no GPU. | **Open.** Needs a GPU device measurement (P3.12). |
-| Aggregation at whole-dish zoom | Phone 360×800 (fit = 2.9 px/cell): aggregation on (about 4,500 cells painted), sprites hidden. Desktop 1440×900 (fit = 7.26 px/cell): aggregation **off**, sprites drawn. | **Met on phone sizes only.** See §4 for a ruling the lead needs to make. |
+| Aggregation at whole-dish zoom | After the lead's ruling (D-0016, §4): aggregation replaces sprites exactly when the snapped sprite scale is below 1 (under 6 px/cell). Phone 360×800 whole dish (2.9 px/cell): aggregation on, sprites hidden. Desktop 1440×900 whole dish (7.26 px/cell): sprites at scale 1, which ARCH §9 allows. | **Met** per ARCH §9 (`gates.aggregationRule` true on all three viewports). |
 | Reduced motion removes pulses/trails | Split flashes and placement rings: 0 spawned (control run: 4–7). Animated frames: 0 of about 3,100–6,000 sprites off their `reducedMotionFrame` (control run: 2,400–4,800). Trails are not implemented yet, because no Phase 1 species has one. | **Met.** Passed in all 3 viewports in every run. |
 
 The honest answer to the fps criterion: **this environment cannot show 60 fps.** A bare WebGL2 clear
@@ -117,24 +117,26 @@ batch texture count would speed up SwiftShader but might cost draw calls on real
 
 ## 4. Aggregation and reduced motion
 
-**Zoom sweep.** The renderer's rule is `wide = zoom < 5`: aggregation shows below 5 px/cell, and
-sprites fade from 5 down to 3.5 px/cell, then hide.
+**Zoom sweep (phone 360×800; the measurements above were taken before the ruling).** The original
+renderer rule was `wide = zoom < 5`, with sprites fading between 3.5 and 5 px/cell and drawn at raw
+fractional scales below 6 px/cell. The desktop viewport cannot zoom out below 6.53 px/cell
+(0.9 × fit), so it never reached aggregation at all.
 
-| px/cell | 2.61 (min) | 3 | 3.5 | 4 | 4.5 | 5 | 6 | 7 | 8 |
+**Lead ruling (DECISIONS D-0016), now implemented.** ARCH §9 is followed literally: sprite scale is
+`pxPerCell / 8` snapped to the nearest of {0.5, 1, 2, 3, 4}, and below 1 sprites are hidden and the
+aggregation layer is drawn. The switch is therefore at 6 px/cell, sprites are only ever drawn at
+whole-number scales, and there is no fade band. A quick rerun (`npm run render:bench -- --quick`):
+
+| px/cell (phone sweep) | 2.61 (min) | 3 | 3.5 | 4 | 4.5 | 5 | 6 | 7 | 8 |
 |---|---|---|---|---|---|---|---|---|---|
-| aggregation layer | on | on | on | on | on | off | off | off | off |
-| sprites | hidden | hidden | alpha 0 | 0.33 | 0.67 | 1 | 1 | 1 | 1 |
+| snapped sprite scale | 0.5 | 0.5 | 0.5 | 0.5 | 0.5 | 0.5 | 1 | 1 | 1 |
+| aggregation layer | on | on | on | on | on | on | off | off | off |
+| sprites | hidden | hidden | hidden | hidden | hidden | hidden | scale 1 | scale 1 | scale 1 |
 
-The "whole dish" preset fits the dish: zoom = min(viewW, viewH) / 124. That gives 2.9 px/cell on a
-phone in portrait or landscape (aggregation on) but **7.26 px/cell at 1440×900**. On desktop, and
-on any viewport whose short side is at least 620 px, whole-dish view therefore draws individual sprites.
-ARCH §9 says sprites hide and aggregation draws *"below 1 (whole dish)"* on the scale
-`pxPerCell / 8`. BUILD_DIRECTIVE P1.5 says *"aggregation below neighborhood zoom"*, which is below
-8 px/cell. Changing the threshold is a behaviour change, and this task was limited to performance,
-so it was **not** changed. **Ruling needed from the lead or owner:** whether to move the threshold to
-8 px/cell (or to 6, where the snapped sprite scale drops below 1). The bench will show the effect.
-Related: `Camera.spritePixelScale()` returns raw values below 0.75 rather than the snapped {0.5, …}
-set in ARCH §9.
+On desktop (1440×900) the whole-dish preset is 7.26 px/cell, so it shows sprites at scale 1 rather
+than aggregation; every requested zoom from 2 to 6 is clamped to 6.53. The runner now exits
+non-zero when the aggregation rule or reduced motion fails (`gates` in the JSON); fps is reported
+and enforced only with `--require-fps`.
 
 **Reduced motion** (`setOptions({reducedMotion: true})`): birth split flashes and placement rings
 are not spawned. Every organism shows its animation's `reducedMotionFrame`. Death dissolves show a
@@ -168,10 +170,9 @@ All fixes produce the same output; only the work behind them changed. Public API
 4. **Off-screen culling.** Sprites more than half the largest frame outside the viewport are not
    submitted. This does not change what appears on screen. At 360×800 neighborhood zoom, 3,151 are
    submitted instead of 6,013.
-5. **Hidden particle layer.** When the particle layer is invisible or has alpha 0 (whole dish on a
-   phone), the per-sprite work is skipped, as Pixi itself does. Ghosts still expire. They are no
-   longer pushed into a stale list with `addParticle`, which previously grew for as long as the dish
-   stayed zoomed out.
+5. **Hidden particle layer.** When the particle layer is hidden (whole dish on a phone), the
+   per-sprite work is skipped. Ghosts still expire. (The previous code rebuilt the particle list every
+   frame, so nothing accumulated; the saving is the per-sprite work, not a leak.)
 6. **Aggregation painted lazily.** It is painted only while visible, at most once per snapshot, still
    at ≤ 10 Hz (ARCH §13). Buffers and `ImageData` are reused instead of allocating about 290 KB per
    snapshot.

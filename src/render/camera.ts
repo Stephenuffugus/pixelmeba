@@ -87,11 +87,32 @@ export class Camera {
     this.cy = Math.min(DISH_CENTER + slack, Math.max(DISH_CENTER - slack, this.cy));
   }
 
-  /** Sprite scale snapped to crisp values (ARCH §9): 16 px frame = 2 cells at scale 1. */
+  /**
+   * Sprite scale (ARCH §9): pxPerCell / 8 snapped to the nearest of {0.5, 1, 2, 3, 4}; a 16 px frame
+   * covers 2 cells at scale 1. Below 1 individual sprites are hidden and the aggregation layer is drawn
+   * instead, so sprites are only ever drawn at whole-number scales (DECISIONS D-0016).
+   */
   spritePixelScale(): number {
-    const raw = (this.zoom * 2) / 16;
-    if (raw < 0.75) return raw;
+    const raw = this.zoom / 8;
+    if (raw < 0.75) return 0.5;
     if (raw < 1.5) return 1;
-    return Math.round(raw);
+    return Math.min(4, Math.round(raw));
+  }
+
+  /** Whether the aggregation layer replaces individual sprites at the current zoom. */
+  aggregated(): boolean {
+    return this.spritePixelScale() < 1;
+  }
+
+  /**
+   * Move the view vertically so world point (x, y) appears at screen height `targetSy`, e.g. above a
+   * bottom sheet that covers part of the viewport (UX §4.1). Zoom is unchanged; the usual pan limits
+   * apply, so the point may stop short of the target near the dish edge.
+   */
+  revealAt(x: number, y: number, targetSy: number, targetSx = this.viewW / 2): void {
+    this.cx = x - (targetSx - this.viewW / 2) / this.zoom;
+    this.cy = y - (targetSy - this.viewH / 2) / this.zoom;
+    this.followEntityId = null;
+    this.clampCenter();
   }
 }
