@@ -50,7 +50,7 @@ export default tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        projectService: { allowDefaultProject: ['*.js'] },
+        projectService: { allowDefaultProject: ['*.js', 'tools/*.mjs'] },
         tsconfigRootDir: import.meta.dirname,
       },
       globals: { ...globals.browser, ...globals.node },

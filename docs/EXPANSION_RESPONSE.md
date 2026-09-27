@@ -4,7 +4,7 @@ Update at every gate (`g0` … `v1.3.0`). Replace placeholders with real, pasted
 **implemented**, **tested**, and **proposed/deferred**. Never claim a pass that did not run in
 this session. Keep older gate evidence in `docs/reports/` and link it.
 
-Last updated: 2026‑09‑27 · Gate: **G0 (foundation)** · Commit: see `git log` (tag `g0`)
+Last updated: 2026‑09‑27 · Gate: **G1 (first playable)** · Commit: see `git log` (tag `g1`; G0 evidence kept below)
 
 ---
 
@@ -27,8 +27,16 @@ Last updated: 2026‑09‑27 · Gate: **G0 (foundation)** · Commit: see `git lo
 ## 2. Implemented scope
 | Phase | Status | Species enabled | Modules enabled | Systems enabled | Missing / known limitations |
 |-------|--------|-----------------|-----------------|-----------------|-----------------------------|
-| 0 | **Implemented, gate passed** | B01 B04 B06 A01 P01 (data); all 38 species authored and validated | none | core, enzymes (fields only) | Stage 3 (enzymes) and stage 5 (predation) are no‑ops until P1.1; mutation draws until P1.2; so B06 cannot yet convert starch and P01 cannot yet hunt. |
-| 1–7 | Not started | | | | |
+| 0 | **Implemented, gate passed** (`g0`) | B01 B04 B06 A01 P01 (data); all 38 species authored and validated | none | core, enzymes | — |
+| 1 | **Implemented, gate passed** (`g1`) | B01 B04 B06 A01 P01 | none (draws recorded, registry empty until P2.1) | core, enzymes | 60 fps not measurable here (software WebGL); device measurement P3.12. Overlay picker arrives with the Lab Observe tray (P2.7). Android install on a device not verified (no device). |
+| 2–7 | Not started | | | | |
+
+Phase 1 in the browser: Home, Play shelf, New Dish, the Garden in Explore view (Add Life, Feed,
+Look, undo that rewinds time), inspector with Summary/Why/Details and four shortcut questions,
+cell inspector, family rings, event feed, History charts (small multiples) and table, ten save
+slots plus autosave, `.pixelmeba` export/import with full validation, duplicate, Settings (text
+size to 200 %, reduced motion), worker-owned simulation with protocol versioning and rollback on
+error, PixiJS renderer with whole-dish aggregation and catalysis dust.
 
 Content catalog authored now (all phases, validated, not enabled): 38 species, 17 modules,
 32 materials. Every value was written against CONTENT_TABLES and then independently checked field
@@ -37,16 +45,46 @@ reasoning (B09 headings stay 4).
 
 ## 3. Resolved specification
 - Canonical docs: BUILD_DIRECTIVE, PIXELMEBA_IMPLEMENTATION_SPEC, CONTENT_TABLES, ARCHITECTURE,
-  UX_SPEC, CONFLICT_REGISTER (R01–R40 applied where relevant to Phase 0).
-- Decisions this gate (docs/DECISIONS.md): D‑0001 decision cadence, D‑0002 birth placement order,
-  D‑0003 sensing rounding, D‑0004 death‑cause attribution window, **D‑0005 FIRST_DISH_V1 Sunbead
-  radius 4 → 5** (the documented center (48,48) lies inside the Water Garden stone disk, leaving
-  10 cells for 12 founders; radius 5 is the smallest fix and selects the same nearest cells as any
-  radius ≥ 4.5), D‑0006 attached species list water as habitat (surface check lands in P3.3),
-  D‑0007 Siltworm habitat/water crossing, D‑0008 film halves total inhibitor exposure once.
+  UX_SPEC, CONFLICT_REGISTER (R01–R40 applied where relevant).
+- G0 decisions: D‑0001 … D‑0010 (see DECISIONS.md; D‑0005 FIRST_DISH_V1 Sunbead radius 4 → 5).
+- G1 decisions:
+  - D‑0011 sugar shown as a faint haze in Explore; D‑0012 determinism-review follow-ups;
+  - D‑0013 saves in IndexedDB from the worker (atomic transaction, predecessor kept) on web and
+    Android;
+  - D‑0014 charts as small multiples in one validated ink (species hues fail CVD checks);
+  - D‑0015 FIRST_DISH_V1 kept (targets met; candidates measured, none clearly better);
+  - D‑0016 aggregation exactly when the snapped sprite scale is below 1;
+  - D‑0017 sheets scroll inside; the inspector keeps its organism in view and can collapse;
+  - D‑0018 the worker stamps seq/targetTick; protocolVersion on every packet.
 - Remaining conflicts: none open.
 
-## 4. Correctness evidence (G0)
+## 4. Correctness evidence (G1)
+```
+npm run check            → typecheck ok · lint ok · 29 test files, 205 tests passed (3 m 52 s)
+npm run content:validate → content ok · contentHash d795100f…920 · atlas complete for 5 enabled species (189 frames)
+npm run art:build --check → atlas up to date · 189 frames · 512×256 · 0da0be41a127 (deterministic)
+npx playwright test      → 39 passed (9.6 m): garden 7, inspector 2, place‑and‑undo 3, save‑reload 2 (incl. Continue after a manual save) × phone 360×800, phone 800×360, desktop 1440×900
+npm run sim:tune         → D06 targets met 6/6; all six 600 s endpoint hashes identical to docs/reports/tune-g1.md after this gate's changes
+```
+| G1 gate row | File | Result |
+|---|---|---|
+| deterministic‑state | tests/fixtures/deterministic-state.test.ts | pass — a FIRST_DISH_V1 session through the real worker host at 4× with 4 placements and 3 Feed doses (hash `3a41cdf2db34863e` at tick 320) equals: a 1× host replay, headless replays in 1‑ and 4‑tick steps, paused‑edit replay, a host save → new dish → continue, and a save file taken with 3 commands still queued. Moving one dose by one tick changes the hash. |
+| blocked‑division‑proposal | tests/fixtures/blocked-division-proposal.test.ts | pass — all 11 proposal columns and both candidate genomes identical on ticks 0–58 while blocked; no division energy charged, no birth ids spent; commits once at tick 59; a save/reload at tick 29 gives the same commit and the same hash every tick (`e30634c9b8c33f54`). |
+| finite‑feeding | tests/fixtures/finite-feeding.test.ts | pass — 44 competitors incl. 2 Amoebae audited every tick: per‑cell carbon taken ≤ pool, pools fall by exactly what was taken, no budget exceeded, nothing negative, ledger closes (pools emptied by ≥ 2 eaters 52 times; 904 nutrient‑limited organism‑ticks). |
+| enzyme‑source | tests/fixtures/enzyme-source.test.ts | pass — conversion 0.10 × activity × dt, conserves C and N; no substrate ⇒ no conversion and no cost; the producer's own energy drops by 0.40 × dt on every emitting tick; EXP_A‑like run: bootstrap 2.90 C and enzyme‑derived 6.77 C reported separately and balance. |
+| inherited‑variation | tests/fixtures/inherited-variation.test.ts | pass — parentage and deltas stored; Fixed ⇒ none; same outcomes at 1× and 4×; recorded draws reproduce. |
+| predation | tests/fixtures/predation.test.ts | pass — one contact one kill one meal; cooldown; 2 × B0 meal cap with overflow to detritus; contested prey resolved once. |
+| photosynthesis | tests/fixtures/photosynthesis.test.ts | pass — light 0 ⇒ no intake; closed lid: biomass, sugar and O2 are fixed fractions of CO2 taken up, ledger closes; half light ⇒ half intake. |
+| e2e garden, place‑and‑undo, save‑reload (+ inspector) | tests/e2e/*.spec.ts | pass — 39/39 on three layouts, including 200 % text with axe (no serious violations), reduced motion, pinch never paints, one gesture one dose, undo restores the pre‑gesture hash, save → reload → same moment |
+| Opening loop review | docs/reports/opening-loop-g1.md | done — every step performed in the built app at 1440×900 and 360×800 with screenshots; five problems found and fixed (Continue after a manual save, missing catalysis dust, biased deposit noise, "0.0000" trace values, inspector covering the selection). |
+
+Also new at G1: worker protocol tests (stale snapshots, command order, version stamping and
+mismatch rejection, rollback of a failing request or tick to the exact last valid hash),
+persistence tests (interrupted write keeps the predecessor, malformed or tampered imports change
+nothing, export → import hash equality, slot exhaustion), history compaction, reason copy for every
+code, atlas completeness, renderer deposit repaint equality.
+
+## 4b. Correctness evidence (G0, kept)
 ```
 npm run check            → typecheck ok · lint ok · 93 tests passed (10 files)
 npm run content:validate → content ok · contentHash d795100f…920 · species 38 (enabled 5) · materials 32 · modules 17
@@ -56,30 +94,53 @@ npm run content:validate → content ok · contentHash d795100f…920 · species
 | Neutral founders | tests/fixtures/neutral-founders.test.ts | pass — all 38 species' neutral profiles equal CT §1.2/§1.3 (parsed from the doc itself); inactive loci create no movement or sensing; active loci move in the documented direction with their costs |
 | Conservation, closed lid | tests/fixtures/conservation-closed-lid.test.ts | pass — 10,000 ticks with B01 B04 B06 A01 P01: worst relative error **C 6.36e‑15, N 1.10e‑13** (limit 1e‑5); 466 births, 318 deaths; no exchange, no inputs after start; inactive fields verified zero |
 | Determinism | tests/fixtures/determinism.test.ts | pass — two fresh runs identical at 6 checkpoints; chunked stepping with interleaved hashing/serialization equals straight stepping; save at 3000 → JSON → reload → 6000 equals uninterrupted (**endpoint 525193f459460549**, 756 alive); different seed diverges |
-| No free growth | tests/fixtures/no-free-growth-and-fairness.test.ts, tests/sim/feeding.test.ts | pass — no food, no nutrient, no light, no CO2 ⇒ no biomass; energy falls by maintenance + movement exactly, then health −4/s at E = 0; division never creates material |
-| Fair shared food | same file | pass — eight identical Sprinters on a scarce pool get equal shares in two insertion orders; the pool is shared out exactly |
+| No free growth | tests/fixtures/no-free-growth.test.ts (was no-free-growth-and-fairness), tests/sim/feeding.test.ts | pass — no food, no nutrient, no light, no CO2 ⇒ no biomass; energy falls by maintenance + movement exactly, then health −4/s at E = 0; division never creates material |
+| Fair shared food | tests/fixtures/fair-shared-food.test.ts (split out at G1) | pass — eight identical Sprinters on a scarce pool get equal shares in two insertion orders; the pool is shared out exactly |
 | Content validation | tests/content/validator.test.ts | pass — shipped content valid; broken packs fail naming file and field (negative/non‑finite, reversed range, unknown prey/habitat, duplicate id, file/id mismatch, unimplemented ability, recipe outside manifest, native‑equivalent eligibility) |
 
 Headless runner: `npm run sim:run -- --recipe FIRST_DISH_V1 --seed 104729 --ticks 6000 --perf`
 → endpoint `576350939f1d34b2`, ledger relErr C 1.1e‑14 N 1.0e‑13, 710 alive at 600 s.
 
 ## 5. Experience evidence
-Not applicable at G0 (no playable). First observation from the headless run (FIRST_DISH_V1,
-seed 104729, no interventions): first intake at tick 0; first division at 29.3 s (Sunbead),
-Sprinter 36.5 s, Recycler 56.7 s, Crumbsmith 188.6 s. At 600 s: 210 Sprinter, 488 Sunbead,
-12 Crumbsmith; Recyclers died out (their debris patch is small and 16 cells from the starch
-patch, beyond their 2‑cell sensing). Crumbsmith cannot yet unlock starch (P1.1). Tuning is P1.12.
+Opening loop (docs/reports/opening-loop-g1.md), FIRST_DISH_V1 seed 104729, headless Chromium:
+- Food → growth: 56 → 77 alive by 50 s; Sunbeads split first (29 s), Sprinters from 35 s.
+- Starch → sugar: catalysis dust on the starch patch; a Crumbsmith's "What does it eat?" explains
+  the enzyme and reports its measured intake; "Why did it stop?" lists every division blocker with
+  its value ("Body 1.23 of 2.00 needed. Energy 31 of 60 needed.").
+- Intervene and inspect: Feed adds sugar to 32 cells; 15 s later a generation‑1 Sprinter there is
+  eating (0.015 C in the last second).
+- Inherited differences appear in History ("2 Sunbead offspring inherited different traits.").
+- Save → reload → Continue returns to the same moment, paused; Duplicate makes an independent copy.
+
+Seed report (docs/reports/tune-g1.md): D06 targets met on 6/6 development seeds (first intake at
+tick 0, first division 29.3 s). Crumbsmiths stall after about 60 s (energy below the 35 emit
+threshold); Recyclers empty their patch by about 120 s and die out on 3/6 seeds by 600 s. Recipe
+candidates were measured and none adopted (D‑0015).
 
 ## 6. Design handoff
-Not started (P1.4).
+- Art is code: palette‑indexed pixel matrices in `art/src/`, compiled by `npm run art:build` to
+  `public/atlas/organisms.png` + `manifest.json` (189 frames, hash 0da0be41a127, deterministic).
+- `tools/asset-preview.html` (Vite dev server) shows every species × animation × heading,
+  a grayscale toggle and a dense group of 60; `npm run art:preview` renders the same to a PNG.
+- Sprites follow UX §6–§7: B01/B04/B06 16×16 with 4 headings; A01 16×16 one heading; P01 32×32.
+- Charts use one validated ink (#256E9E) as small multiples (D‑0014).
+- Not yet: launcher icon, splash, store art (Phase 4), sound (Phase 4).
 
 ## 7. Performance and saves
 - Headless tick cost, FIRST_DISH_V1, 6000 ticks, up to 710 agents: p50 1.28 ms, p95 2.61 ms,
   p99 4.62 ms. Stage breakdown per tick: environment 0.59 ms, sense/move 0.42 ms, intake 0.26 ms,
-  maintenance 0.12 ms, births 0.05 ms. (Environment was 1.3 ms before the row‑major kernel and
-  active‑field tracking.) Target‑population (6,000 agents) measurement is P3.12.
-- Save skeleton: full world serializes to JSON (typed arrays base64) and reloads to an identical
-  state hash. Storage adapters, slots and import validation are P1.9.
+  maintenance 0.12 ms, births 0.05 ms. Target‑population (6,000 agents) measurement is P3.12.
+- Renderer (docs/reports/render-perf-g1.md): 6,000 sprites at neighborhood zoom. **60 fps was not
+  reached in this environment**: 3.1–3.3 fps at 1440×900 and about 10 fps at 360×800 under
+  SwiftShader software WebGL on a shared 2‑CPU machine, where an empty WebGL page runs at 60 fps
+  and one full‑screen textured quad alone drops to about 23 fps. The renderer's own JavaScript
+  costs about 1.1–1.6 ms per frame plus 3.5–4.6 ms per snapshot (10 per second) under load. A GPU
+  device measurement is required (P3.12). Aggregation and reduced‑motion rules are checked by the
+  bench on every run.
+- Saves: serialize 18 ms and deserialize 26 ms at 718 organisms (was 230 ms before table‑driven
+  base64). IndexedDB single‑transaction commit with the predecessor retained; gzip on disk.
+  Autosave every 30 s of real time while running, on backgrounding, on leaving the page and on a
+  manual save. Rollback checkpoint every 30 simulated seconds.
 - Android spike (P1.11): Capacitor 8.5.2 project `com.lucidwinds.pixelmeba`, minSdk 24,
   compileSdk and targetSdk 36 (Play requires API 36 from 2026‑08‑31). With JDK 21 and a
   command‑line SDK, `assembleDebug` built a 6.0 MB debug APK and `bundleRelease` built a 4.3 MB
@@ -90,10 +151,12 @@ Not started (P1.4).
   `docs/ANDROID_SETUP.md`.
 
 ## 8. Changes and next gate
-- Tuning revisions: none yet.
-- Next gate G1: P1.1 enzymes + predation, P1.2 quantitative evolution, P1.3 worker, P1.4 art,
-  P1.5 renderer, P1.6 UI shell, P1.7 inspector, P1.8 tools/undo, P1.9 persistence, P1.10 history,
-  P1.11 Android spike, P1.12 seed report.
+- Tuning revisions: none (FIRST_DISH_V1 kept, D‑0015).
+- Next gate G2: P2.1 module framework (E01, E03, E05), P2.2 founder modes and presets, P2.3 branch
+  discovery and lineage, P2.4 comparison engine, P2.5 experiments, P2.6 What if?, P2.7 Lab view,
+  P2.8 regional graphs, checkpoint ring and journal, P2.9 second tuning report.
+- Environment limits (documented, not blocking): no GPU (frame rates are software‑rendered lower
+  bounds), no Android device or emulator (install/launch unverified).
 - **Owner decisions required** (none block current work):
   1. Play Store: price ($0.99 assumed), countries, Families program opt‑in, content rating answers.
   2. Privacy policy hosting URL.
