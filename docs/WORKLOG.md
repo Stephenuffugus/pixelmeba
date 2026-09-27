@@ -20,8 +20,8 @@ with the next task).
 - [x] (bd77414, tag g0) G0 gate: neutral‑founders · conservation‑closed‑lid · determinism · no‑free‑growth · fair‑shared‑food · content‑validation → tag `g0`, EXPANSION_RESPONSE §1, §4
 
 ## Phase 1 — First Playable
-- [ ] P1.1 Five organisms complete (B01, B04, B06 + E_STARCH stage 3, A01 photosynthesis, P01 predation)
-- [ ] P1.2 Quantitative evolution (8 loci, mutation draws, feeding policy, genealogy, branch candidate records, presets in manifest)
+- [x] (9990347) P1.1 Five organisms complete (B01, B04, B06 + E_STARCH stage 3, A01 photosynthesis, P01 predation)
+- [x] (9990347) P1.2 Quantitative evolution (8 loci, mutation draws, feeding policy, genealogy, branch candidate records, presets in manifest)
 - [ ] P1.3 Worker and protocol (speeds, accumulator, effective speed, snapshots ≤ 10/s, error pause)
 - [ ] P1.4 Art pipeline + core sprites + world tiles + effects + SVG icons + asset previewer
 - [ ] P1.5 Renderer (PixiJS: layers, zoom presets, aggregation, overlays, selection, follow)
