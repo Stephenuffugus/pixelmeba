@@ -90,27 +90,84 @@ export function paintDish(img: ImageData, substrate: Uint8Array, structure: Uint
 
 /** Deposit glyphs from the four 0–255 bands: starch grains, detritus flecks, oil sheen, protein motes. */
 export function paintDeposits(img: ImageData, bands: Uint8Array): void {
-  const S = DISH_PX_PER_CELL;
   img.data.fill(0);
+  const hasSugar = bands.length >= 5 * CELL_COUNT;
+  for (let i = 0; i < CELL_COUNT; i++) paintDepositCell(img, bands, i, hasSugar);
+}
+
+/** Pixel rectangle of the deposit texture touched by an incremental repaint (empty when w = 0). */
+export interface DirtyRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Incremental form of paintDeposits: repaints only the cells whose bands differ from `prev`
+ * (clearing each such 4×4 block first, then drawing it exactly as paintDeposits would), and
+ * copies the new bands into `prev`. The resulting pixels are byte-identical to a full paint.
+ * Returns the touched pixel rectangle so callers can skip or narrow the canvas/texture update.
+ */
+export function repaintDepositCells(img: ImageData, bands: Uint8Array, prev: Uint8Array, out: DirtyRect): DirtyRect {
+  const S = DISH_PX_PER_CELL;
+  const hasSugar = bands.length >= 5 * CELL_COUNT;
+  const nb = Math.min(bands.length, prev.length) / CELL_COUNT;
+  let x0 = GRID_W;
+  let y0 = GRID_W;
+  let x1 = -1;
+  let y1 = -1;
   for (let i = 0; i < CELL_COUNT; i++) {
-    const starch = bands[i]!;
-    const det = bands[CELL_COUNT + i]!;
-    const oil = bands[2 * CELL_COUNT + i]!;
-    const prot = bands[3 * CELL_COUNT + i]!;
-    const sugar = bands.length >= 5 * CELL_COUNT ? bands[4 * CELL_COUNT + i]! : 0;
-    if ((starch | det | oil | prot | sugar) === 0) continue;
-    const cx = (i % GRID_W) * S;
-    const cy = Math.floor(i / GRID_W) * S;
-    for (let y = 0; y < S; y++) {
-      for (let x = 0; x < S; x++) {
-        const k = y * S + x;
-        const r = cosmetic(i * 16 + k, 13);
-        if (starch > 0 && r < (starch / 255) * 0.55) put(img, cx + x, cy + y, (x + y) % 3 === 0 ? C.starchEdge : C.starch);
-        else if (det > 0 && r > 1 - (det / 255) * 0.5) put(img, cx + x, cy + y, r > 0.98 ? C.detritusLight : C.detritus);
-        else if (oil > 0 && cosmetic(i * 16 + k, 17) < (oil / 255) * 0.35) put(img, cx + x, cy + y, C.oil, 200);
-        else if (prot > 0 && cosmetic(i * 16 + k, 19) < (prot / 255) * 0.35) put(img, cx + x, cy + y, C.protein);
-        else if (sugar > 8) put(img, cx + x, cy + y, C.sugarHaze, Math.min(120, 20 + Math.round(sugar * 0.45)));
+    let same = true;
+    for (let b = 0; b < nb; b++) {
+      const o = b * CELL_COUNT + i;
+      if (bands[o] !== prev[o]) {
+        same = false;
+        prev[o] = bands[o]!;
       }
+    }
+    if (same) continue;
+    const gx = i % GRID_W;
+    const gy = (i - gx) / GRID_W;
+    const cx = gx * S;
+    const cy = gy * S;
+    for (let y = 0; y < S; y++) img.data.fill(0, ((cy + y) * img.width + cx) * 4, ((cy + y) * img.width + cx + S) * 4);
+    paintDepositCell(img, bands, i, hasSugar);
+    if (gx < x0) x0 = gx;
+    if (gx > x1) x1 = gx;
+    if (gy < y0) y0 = gy;
+    if (gy > y1) y1 = gy;
+  }
+  if (x1 < 0) {
+    out.x = out.y = out.w = out.h = 0;
+  } else {
+    out.x = x0 * S;
+    out.y = y0 * S;
+    out.w = (x1 - x0 + 1) * S;
+    out.h = (y1 - y0 + 1) * S;
+  }
+  return out;
+}
+
+function paintDepositCell(img: ImageData, bands: Uint8Array, i: number, hasSugar: boolean): void {
+  const S = DISH_PX_PER_CELL;
+  const starch = bands[i]!;
+  const det = bands[CELL_COUNT + i]!;
+  const oil = bands[2 * CELL_COUNT + i]!;
+  const prot = bands[3 * CELL_COUNT + i]!;
+  const sugar = hasSugar ? bands[4 * CELL_COUNT + i]! : 0;
+  if ((starch | det | oil | prot | sugar) === 0) return;
+  const cx = (i % GRID_W) * S;
+  const cy = Math.floor(i / GRID_W) * S;
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const k = y * S + x;
+      const r = cosmetic(i * 16 + k, 13);
+      if (starch > 0 && r < (starch / 255) * 0.55) put(img, cx + x, cy + y, (x + y) % 3 === 0 ? C.starchEdge : C.starch);
+      else if (det > 0 && r > 1 - (det / 255) * 0.5) put(img, cx + x, cy + y, r > 0.98 ? C.detritusLight : C.detritus);
+      else if (oil > 0 && cosmetic(i * 16 + k, 17) < (oil / 255) * 0.35) put(img, cx + x, cy + y, C.oil, 200);
+      else if (prot > 0 && cosmetic(i * 16 + k, 19) < (prot / 255) * 0.35) put(img, cx + x, cy + y, C.protein);
+      else if (sugar > 8) put(img, cx + x, cy + y, C.sugarHaze, Math.min(120, 20 + Math.round(sugar * 0.45)));
     }
   }
 }

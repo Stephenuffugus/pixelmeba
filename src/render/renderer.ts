@@ -24,7 +24,7 @@ import {
   type VisualEvent,
 } from '@worker/protocol';
 import { Camera, ZOOM_CLOSE, ZOOM_NEIGHBORHOOD } from './camera';
-import { DISH_PX_PER_CELL, DISH_TEX, paintAggregation, paintDeposits, paintDish, paintOverlay } from './layers';
+import { DISH_PX_PER_CELL, DISH_TEX, paintAggregation, paintDeposits, paintDish, paintOverlay, repaintDepositCells, type DirtyRect } from './layers';
 import { speciesRgb } from './speciesColors';
 
 const FLAG_MOVING = 1 << 6;
@@ -38,9 +38,37 @@ export interface AtlasManifestLike {
 
 interface Ghost {
   particle: Particle;
-  asset: string;
-  heading: number;
+  death: AnimTex;
+  /** Row into death.tex (0 for single-heading sprites). */
+  row: number;
   start: number;
+}
+
+/** One animation's frame textures, resolved once from the atlas manifest (no per-frame string keys). */
+interface AnimTex {
+  readonly frames: number;
+  readonly durationMs: number;
+  readonly reducedMotionFrame: number;
+  /** [heading row][frame index]; a single row for single-heading sprites. Missing frames are undefined. */
+  readonly tex: readonly (readonly (Texture | undefined)[])[];
+}
+
+/** Per species index: the animations the renderer can pick from. */
+interface SpeciesDraw {
+  readonly headings: number;
+  readonly size: number;
+  readonly stress: AnimTex | null;
+  readonly feed: AnimTex | null;
+  readonly move: AnimTex | null;
+  readonly idle: AnimTex | null;
+  readonly death: AnimTex | null;
+}
+
+const HEADING_CHARS = 'eswn';
+
+/** Heading row as frameKey resolved it: 'eswn'[h] for 4-heading sprites, else (or if unknown) 'e'. */
+function headingRow(headings: number, h: number): number {
+  return headings === 4 && (h === 1 || h === 2 || h === 3) ? h : 0;
 }
 
 interface Effect {
@@ -90,15 +118,43 @@ export class DishRenderer {
   private manifest!: AtlasManifestLike;
   private speciesAssets: readonly string[] = [];
   private speciesIds: readonly string[] = [];
+  /** Per species index: resolved animation textures (rebuilt when species or atlas change). */
+  private draws: (SpeciesDraw | null)[] = [];
+  private speciesColors: [number, number, number][] = [];
+  /** Largest sprite frame in the atlas (px), for the off-screen cull margin. */
+  private maxFrameSize = 16;
   private structure: Uint8Array | null = null;
 
   private cur: SnapshotMsg | null = null;
   private curAt = 0;
   private interval = 100;
-  private prevPos: Record<number, [number, number]> = {};
-  private curPos: Record<number, [number, number]> = {};
+  // Interpolation endpoints by index into the current snapshot, resolved once per snapshot by
+  // entityId (the previous snapshot's position, or the current one for newcomers).
+  private curX = new Float32Array(0);
+  private curY = new Float32Array(0);
+  private prevX = new Float32Array(0);
+  private prevY = new Float32Array(0);
+  private spareX = new Float32Array(0);
+  private spareY = new Float32Array(0);
+  /** entityId → index in the current snapshot (and a spare map reused for the next one). */
+  private curIndex = new Map<number, number>();
+  private spareIndex = new Map<number, number>();
   private pool: Particle[] = [];
+  /** Last tint written to each pool particle (the tint setter converts colours; skip repeats). */
+  private poolTint = new Int32Array(0);
   private ghosts: Ghost[] = [];
+  // Reused paint buffers (no per-snapshot allocation).
+  private depositCtx: CanvasRenderingContext2D | null = null;
+  private depositImg: ImageData | null = null;
+  private depositPrev: Uint8Array | null = null;
+  private readonly depositDirty: DirtyRect = { x: 0, y: 0, w: 0, h: 0 };
+  private overlayImg: ImageData | null = null;
+  private aggImg: ImageData | null = null;
+  private aggDominant = new Int16Array(CELL_COUNT);
+  private aggDensity = new Uint16Array(CELL_COUNT);
+  private aggPerCell = new Uint16Array(0);
+  /** Aggregation is painted lazily, only while it is visible (wide zoom), at most once per snapshot. */
+  private aggDirty = false;
   private fx: Effect[] = [];
   private selectedBirthId: number | null = null;
   private selectedCell: number | null = null;
@@ -139,7 +195,9 @@ export class DishRenderer {
     atlas.source.scaleMode = 'nearest';
     for (const f of manifest.frames) {
       this.frames[f.key] = new Texture({ source: atlas.source, frame: new Rectangle(f.x, f.y, f.w, f.h) });
+      this.maxFrameSize = Math.max(this.maxFrameSize, f.w, f.h);
     }
+    this.rebuildDraws();
     const mk = (w: number, h: number) => {
       const c = document.createElement('canvas');
       c.width = w;
@@ -189,6 +247,38 @@ export class DishRenderer {
   setSpecies(ids: readonly string[], assets: readonly string[]): void {
     this.speciesIds = ids;
     this.speciesAssets = assets;
+    this.speciesColors = ids.map((id) => speciesRgb(id));
+    this.rebuildDraws();
+    this.aggDirty = this.cur !== null;
+  }
+
+  /** Resolve every species' animation frames to textures once, instead of per sprite per frame. */
+  private rebuildDraws(): void {
+    if (!this.manifest) return;
+    const anim = (asset: string, name: string, headings: number): AnimTex | null => {
+      const a = this.manifest.sprites[asset]?.animations[name];
+      if (!a) return null;
+      const rows: (Texture | undefined)[][] = [];
+      for (let h = 0; h < (headings === 4 ? 4 : 1); h++) {
+        const row: (Texture | undefined)[] = [];
+        for (let i = 0; i < a.frames; i++) row.push(this.frames[`${asset}/${name}/${HEADING_CHARS[h]}/${i}`]);
+        rows.push(row);
+      }
+      return { frames: a.frames, durationMs: a.durationMs, reducedMotionFrame: a.reducedMotionFrame, tex: rows };
+    };
+    this.draws = this.speciesAssets.map((asset) => {
+      const meta = asset ? this.manifest.sprites[asset] : undefined;
+      if (!meta) return null;
+      return {
+        headings: meta.headings,
+        size: meta.size,
+        stress: anim(asset, 'stress', meta.headings),
+        feed: anim(asset, 'feed', meta.headings),
+        move: anim(asset, 'move', meta.headings),
+        idle: anim(asset, 'idle', meta.headings),
+        death: anim(asset, 'death', meta.headings),
+      };
+    });
   }
 
   setOptions(o: Partial<RendererOptions>): void {
@@ -233,43 +323,94 @@ export class DishRenderer {
   applySnapshot(s: SnapshotMsg, now = performance.now()): void {
     if (this.destroyed) return;
     if (s.geometry) this.applyGeometry(s);
-    // Deposits (every snapshot; cheap relative to rendering).
+    // Deposits: repaint only the cells whose bands changed (byte-identical to a full repaint) and
+    // touch the canvas/texture only when something did.
     {
-      const ctx = this.depositCanvas.getContext('2d')!;
-      const img = ctx.createImageData(DISH_TEX, DISH_TEX);
-      paintDeposits(img, s.deposits);
-      ctx.putImageData(img, 0, 0);
-      this.depositTex.source.update();
+      const ctx = (this.depositCtx ??= this.depositCanvas.getContext('2d')!);
+      const img = (this.depositImg ??= ctx.createImageData(DISH_TEX, DISH_TEX));
+      let r: DirtyRect;
+      if (!this.depositPrev || this.depositPrev.length !== s.deposits.length) {
+        paintDeposits(img, s.deposits);
+        this.depositPrev = s.deposits.slice();
+        r = this.depositDirty;
+        r.x = 0;
+        r.y = 0;
+        r.w = DISH_TEX;
+        r.h = DISH_TEX;
+      } else r = repaintDepositCells(img, s.deposits, this.depositPrev, this.depositDirty);
+      if (r.w > 0) {
+        ctx.putImageData(img, 0, 0, r.x, r.y, r.w, r.h);
+        this.depositTex.source.update();
+      }
       this.depositVersion++;
     }
     if (s.overlay) {
       const ctx = this.overlayCanvas.getContext('2d')!;
-      const img = ctx.createImageData(GRID_W, GRID_W);
+      const img = (this.overlayImg ??= ctx.createImageData(GRID_W, GRID_W));
       paintOverlay(img, s.overlay.data, this.structure, s.overlay.id, s.overlay.max);
       ctx.putImageData(img, 0, 0);
       this.overlayTex.source.update();
       this.overlaySprite.visible = true;
     } else this.overlaySprite.visible = false;
 
-    // Positions for interpolation, keyed by entityId.
-    this.prevPos = this.curPos;
-    this.curPos = {};
-    for (let k = 0; k < s.count; k++) {
-      const o = k * ENT_STRIDE;
-      this.curPos[s.ids[k * ID_STRIDE + 1]!] = [s.ents[o + E_X]!, s.ents[o + E_Y]!];
+    // Interpolation endpoints, keyed by entityId against the previous snapshot.
+    const n = s.count;
+    const lastX = this.curX;
+    const lastY = this.curY;
+    const lastIndex = this.curIndex;
+    if (this.spareX.length < n) {
+      const cap = Math.max(64, Math.ceil(n * 1.25));
+      this.spareX = new Float32Array(cap);
+      this.spareY = new Float32Array(cap);
     }
+    if (this.prevX.length < n) {
+      const cap = Math.max(64, Math.ceil(n * 1.25));
+      this.prevX = new Float32Array(cap);
+      this.prevY = new Float32Array(cap);
+    }
+    const nx = this.spareX;
+    const ny = this.spareY;
+    const px = this.prevX;
+    const py = this.prevY;
+    const index = this.spareIndex;
+    index.clear();
+    for (let k = 0; k < n; k++) {
+      const o = k * ENT_STRIDE;
+      const entityId = s.ids[k * ID_STRIDE + 1]!;
+      const x = s.ents[o + E_X]!;
+      const y = s.ents[o + E_Y]!;
+      nx[k] = x;
+      ny[k] = y;
+      const j = lastIndex.get(entityId);
+      if (j === undefined) {
+        px[k] = x;
+        py[k] = y;
+      } else {
+        px[k] = lastX[j]!;
+        py[k] = lastY[j]!;
+      }
+      index.set(entityId, k);
+    }
+    this.spareX = lastX;
+    this.spareY = lastY;
+    this.spareIndex = lastIndex;
+    this.curX = nx;
+    this.curY = ny;
+    this.curIndex = index;
     if (this.cur) this.interval = Math.min(400, Math.max(40, now - this.curAt));
     this.curAt = now;
     this.handleEvents(s.events, now);
     this.cur = s;
-    this.paintAggregation(s);
+    this.aggDirty = true;
   }
 
   private paintAggregation(s: SnapshotMsg): void {
-    const dominant = new Int16Array(CELL_COUNT).fill(-1);
-    const density = new Uint16Array(CELL_COUNT);
-    const perCell = new Uint16Array(CELL_COUNT * Math.max(1, this.speciesIds.length));
+    this.aggDirty = false;
     const nSp = Math.max(1, this.speciesIds.length);
+    const dominant = this.aggDominant.fill(-1);
+    const density = this.aggDensity.fill(0);
+    if (this.aggPerCell.length !== CELL_COUNT * nSp) this.aggPerCell = new Uint16Array(CELL_COUNT * nSp);
+    const perCell = this.aggPerCell.fill(0);
     for (let k = 0; k < s.count; k++) {
       const o = k * ENT_STRIDE;
       const cell = Math.floor(s.ents[o + E_Y]!) * GRID_W + Math.floor(s.ents[o + E_X]!);
@@ -281,33 +422,33 @@ export class DishRenderer {
       if (d < 0 || v > perCell[cell * nSp + d]!) dominant[cell] = sp;
     }
     const ctx = this.aggCanvas.getContext('2d')!;
-    const img = ctx.createImageData(GRID_W, GRID_W);
-    paintAggregation(img, dominant, density, this.speciesIds.map((id) => speciesRgb(id)));
+    const img = (this.aggImg ??= ctx.createImageData(GRID_W, GRID_W));
+    paintAggregation(img, dominant, density, this.speciesColors);
     ctx.putImageData(img, 0, 0);
     this.aggTex.source.update();
   }
 
   private handleEvents(events: readonly VisualEvent[], now: number): void {
-    if (!this.cur || this.opts.reducedMotion) {
-      // Deaths still leave a static dissolve frame even in reduced motion (handled via ghosts).
-    }
+    // Deaths still leave a dissolve (a static frame in reduced motion); births flash only with motion.
     const prev = this.cur;
+    let byBirth: Map<number, number> | null = null;
     for (const ev of events) {
       const cx = (ev.cell % GRID_W) + 0.5;
       const cy = Math.floor(ev.cell / GRID_W) + 0.5;
       if (ev.type === 'birth' && !this.opts.reducedMotion) this.spawnEffect('split', cx, cy, 0.9, 380, now);
       if (ev.type === 'death' && prev) {
-        // Find the organism's last position in the previous snapshot by birthId.
-        for (let k = 0; k < prev.count; k++) {
-          if (prev.ids[k * ID_STRIDE] !== ev.birthId) continue;
-          const o = k * ENT_STRIDE;
-          const asset = this.speciesAssets[prev.ents[o + E_SPECIES]!];
-          if (!asset) break;
-          const p = new Particle({ texture: Texture.EMPTY, x: prev.ents[o + E_X]!, y: prev.ents[o + E_Y]!, anchorX: 0.5, anchorY: 0.5 });
-          this.ghosts.push({ particle: p, asset, heading: prev.ents[o + E_HEADING]!, start: now });
-          this.particles.addParticle(p);
-          break;
+        // The organism's last position in the previous snapshot, by birthId (first match).
+        if (!byBirth) {
+          byBirth = new Map<number, number>();
+          for (let k = prev.count - 1; k >= 0; k--) byBirth.set(prev.ids[k * ID_STRIDE]!, k);
         }
+        const k = byBirth.get(ev.birthId);
+        if (k === undefined) continue;
+        const o = k * ENT_STRIDE;
+        const d = this.draws[prev.ents[o + E_SPECIES]!];
+        if (!d?.death) continue;
+        const p = new Particle({ texture: Texture.EMPTY, x: prev.ents[o + E_X]!, y: prev.ents[o + E_Y]!, anchorX: 0.5, anchorY: 0.5 });
+        this.ghosts.push({ particle: p, death: d.death, row: headingRow(d.headings, prev.ents[o + E_HEADING]!), start: now });
       }
     }
   }
@@ -325,18 +466,6 @@ export class DishRenderer {
     this.fx.push({ g, start: now, duration, kind, x, y, radius });
   }
 
-  private frameKey(asset: string, anim: string, heading: number, index: number): string {
-    return `${asset}/${anim}/${'eswn'[heading] ?? 'e'}/${index}`;
-  }
-
-  private pickAnim(asset: string, flags: number, cue: number): string {
-    const anims = this.manifest.sprites[asset]?.animations ?? {};
-    if (cue & CUE_STRESSED && anims.stress) return 'stress';
-    if (cue & CUE_FEEDING && anims.feed && !(flags & FLAG_MOVING)) return 'feed';
-    if (anims.move) return 'move';
-    return 'idle';
-  }
-
   private frame(): void {
     if (this.destroyed) return;
     const now = performance.now();
@@ -344,8 +473,8 @@ export class DishRenderer {
     const s = this.cur;
     // Follow target, if any.
     if (s && cam.followEntityId !== null) {
-      const p = this.curPos[cam.followEntityId];
-      if (p) cam.follow(p[0], p[1]);
+      const k = this.curIndex.get(cam.followEntityId);
+      if (k !== undefined) cam.follow(this.curX[k]!, this.curY[k]!);
     }
     this.world.scale.set(cam.zoom);
     this.world.position.set(cam.viewW / 2 - cam.cx * cam.zoom, cam.viewH / 2 - cam.cy * cam.zoom);
@@ -354,68 +483,97 @@ export class DishRenderer {
     this.particles.visible = !wide || cam.zoom >= 3.5;
     this.particles.alpha = wide ? Math.max(0, (cam.zoom - 3.5) / 1.5) : 1;
     if (!s) return;
+    if (wide && this.aggDirty) this.paintAggregation(s);
 
     const alpha = Math.min(1, (now - this.curAt) / this.interval);
     const pxScale = cam.spritePixelScale();
-    const needed = s.count;
-    while (this.pool.length < needed) {
-      const p = new Particle({ texture: Texture.EMPTY, anchorX: 0.5, anchorY: 0.5 });
-      this.pool.push(p);
-    }
-    // Rebuild the particle list: live organisms, then ghosts.
+    const scale = pxScale / cam.zoom;
+    const reduced = this.opts.reducedMotion;
+    // Pixi skips an invisible or fully transparent container; so do we (ghosts still expire).
+    const draw = this.particles.visible && this.particles.alpha > 0;
     const list = this.particles.particleChildren;
-    list.length = 0;
-    for (let k = 0; k < needed; k++) {
-      const o = k * ENT_STRIDE;
-      const entityId = s.ids[k * ID_STRIDE + 1]!;
-      const sp = s.ents[o + E_SPECIES]!;
-      const asset = this.speciesAssets[sp];
-      if (!asset) continue;
-      const meta = this.manifest.sprites[asset];
-      if (!meta) continue;
-      const cur = this.curPos[entityId]!;
-      const prev = this.prevPos[entityId] ?? cur;
-      const x = prev[0] + (cur[0] - prev[0]) * alpha;
-      const y = prev[1] + (cur[1] - prev[1]) * alpha;
-      const flags = s.ents[o + E_FLAGS]!;
-      const cue = s.ents[o + E_CUE]!;
-      const anim = this.pickAnim(asset, flags, cue);
-      const a = meta.animations[anim]!;
-      const heading = meta.headings === 4 ? s.ents[o + E_HEADING]! : 0;
-      const phase = (entityId * 97) % 1000;
-      const idx = this.opts.reducedMotion ? a.reducedMotionFrame : Math.floor((now + phase) / a.durationMs) % a.frames;
-      const tex = this.frames[this.frameKey(asset, anim, heading, idx)];
-      const p = this.pool[k]!;
-      if (tex) p.texture = tex;
-      p.x = x;
-      p.y = y;
-      const scale = pxScale / cam.zoom;
-      p.scaleX = scale;
-      p.scaleY = scale;
-      // Newborns fade in over their first snapshot; feeders glow very slightly brighter.
-      const born = cue & CUE_JUST_BORN ? 0.75 + 0.25 * alpha : 1;
-      p.alpha = born;
-      p.tint = cue & CUE_FEEDING ? 0xffffff : 0xf0f0f0;
-      list.push(p);
+    let n = 0;
+    if (draw) {
+      const needed = s.count;
+      while (this.pool.length < needed) {
+        const p = new Particle({ texture: Texture.EMPTY, anchorX: 0.5, anchorY: 0.5 });
+        this.pool.push(p);
+      }
+      if (this.poolTint.length < this.pool.length) {
+        const t = new Int32Array(this.pool.length).fill(-1);
+        t.set(this.poolTint);
+        this.poolTint = t;
+      }
+      // Off-screen organisms are not submitted (a sprite never reaches past half its frame).
+      const margin = (this.maxFrameSize * scale) / 2 + 0.5;
+      const halfW = cam.viewW / (2 * cam.zoom) + margin;
+      const halfH = cam.viewH / (2 * cam.zoom) + margin;
+      const minX = cam.cx - halfW;
+      const maxX = cam.cx + halfW;
+      const minY = cam.cy - halfH;
+      const maxY = cam.cy + halfH;
+      const ents = s.ents;
+      const ids = s.ids;
+      const curX = this.curX;
+      const curY = this.curY;
+      const prevX = this.prevX;
+      const prevY = this.prevY;
+      // Rebuild the particle list: live organisms, then ghosts.
+      for (let k = 0; k < needed; k++) {
+        const o = k * ENT_STRIDE;
+        const d = this.draws[ents[o + E_SPECIES]!];
+        if (!d) continue;
+        const x0 = prevX[k]!;
+        const y0 = prevY[k]!;
+        const x = x0 + (curX[k]! - x0) * alpha;
+        const y = y0 + (curY[k]! - y0) * alpha;
+        if (x < minX || x > maxX || y < minY || y > maxY) continue;
+        const flags = ents[o + E_FLAGS]!;
+        const cue = ents[o + E_CUE]!;
+        const a = cue & CUE_STRESSED && d.stress ? d.stress : cue & CUE_FEEDING && d.feed && !(flags & FLAG_MOVING) ? d.feed : (d.move ?? d.idle);
+        if (!a) continue;
+        const entityId = ids[k * ID_STRIDE + 1]!;
+        const phase = (entityId * 97) % 1000;
+        const idx = reduced ? a.reducedMotionFrame : Math.floor((now + phase) / a.durationMs) % a.frames;
+        const tex = a.tex[headingRow(d.headings, ents[o + E_HEADING]!)]![idx];
+        const p = this.pool[k]!;
+        if (tex) p.texture = tex;
+        p.x = x;
+        p.y = y;
+        p.scaleX = scale;
+        p.scaleY = scale;
+        // Newborns fade in over their first snapshot; feeders glow very slightly brighter.
+        const born = cue & CUE_JUST_BORN ? 0.75 + 0.25 * alpha : 1;
+        if (p.alpha !== born) p.alpha = born;
+        const tint = cue & CUE_FEEDING ? 0xffffff : 0xf0f0f0;
+        if (this.poolTint[k] !== tint) {
+          p.tint = tint;
+          this.poolTint[k] = tint;
+        }
+        list[n++] = p;
+      }
     }
     // Death dissolves (3–4 frames), then removed.
-    this.ghosts = this.ghosts.filter((gh) => {
-      const meta = this.manifest.sprites[gh.asset];
-      const a = meta?.animations.death;
-      if (!meta || !a) return false;
+    let live = 0;
+    for (const gh of this.ghosts) {
+      const a = gh.death;
       const t = now - gh.start;
-      const idx = this.opts.reducedMotion ? a.reducedMotionFrame : Math.floor(t / a.durationMs);
-      const total = this.opts.reducedMotion ? 600 : a.frames * a.durationMs;
-      if (t > total) return false;
-      const tex = this.frames[this.frameKey(gh.asset, 'death', meta.headings === 4 ? gh.heading : 0, Math.min(a.frames - 1, idx))];
+      const total = reduced ? 600 : a.frames * a.durationMs;
+      if (t > total) continue;
+      this.ghosts[live++] = gh;
+      if (!draw) continue;
+      const idx = reduced ? a.reducedMotionFrame : Math.floor(t / a.durationMs);
+      const tex = a.tex[gh.row]![Math.min(a.frames - 1, idx)];
       if (tex) gh.particle.texture = tex;
-      const sc = pxScale / cam.zoom;
-      gh.particle.scaleX = sc;
-      gh.particle.scaleY = sc;
-      list.push(gh.particle);
-      return true;
-    });
-    this.particles.update();
+      gh.particle.scaleX = scale;
+      gh.particle.scaleY = scale;
+      list[n++] = gh.particle;
+    }
+    this.ghosts.length = live;
+    if (draw) {
+      list.length = n;
+      this.particles.update();
+    }
 
     // Effects.
     this.fx = this.fx.filter((e) => {
@@ -441,11 +599,8 @@ export class DishRenderer {
     if (this.selectedBirthId !== null) {
       for (let k = 0; k < s.count; k++) {
         if (s.ids[k * ID_STRIDE] !== this.selectedBirthId) continue;
-        const entityId = s.ids[k * ID_STRIDE + 1]!;
-        const cur = this.curPos[entityId]!;
-        const prev = this.prevPos[entityId] ?? cur;
-        const x = prev[0] + (cur[0] - prev[0]) * alpha;
-        const y = prev[1] + (cur[1] - prev[1]) * alpha;
+        const x = this.prevX[k]! + (this.curX[k]! - this.prevX[k]!) * alpha;
+        const y = this.prevY[k]! + (this.curY[k]! - this.prevY[k]!) * alpha;
         const asset = this.speciesAssets[s.ents[k * ENT_STRIDE + E_SPECIES]!];
         const size = (asset ? this.manifest.sprites[asset]?.size : 16) ?? 16;
         const r = (size / 16) * 1.05;
@@ -480,7 +635,8 @@ export class DishRenderer {
 
   /** Current interpolated position of an entity (for follow / find). */
   positionOf(entityId: number): [number, number] | null {
-    return this.curPos[entityId] ?? null;
+    const k = this.curIndex.get(entityId);
+    return k === undefined ? null : [this.curX[k]!, this.curY[k]!];
   }
 
   destroy(): void {
