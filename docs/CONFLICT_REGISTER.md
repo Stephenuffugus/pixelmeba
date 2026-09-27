@@ -1,0 +1,53 @@
+# Conflict Register — rulings where the source documents disagreed or were silent
+
+Each ruling names the sources, the tension, the adopted rule, and why. The adopted rule is
+already written into the canonical docs; this file exists so nobody re‑derives it. Add new
+rulings made during implementation to `DECISIONS.md`, not here.
+
+Precedence used throughout (from D06 §2 and D05 §1): **D05 explicit amendments (A01–A09) →
+D04 corrections (C01–C08) → D03 → D02 → D01**, with **D06** controlling production order,
+**D07** equipment, **D08** presentation, **D09** replay/release, **D10** tooling. Where a later
+document changes a production decision, it wins for production only, not for mechanics.
+
+| # | Topic | Sources in tension | Ruling | Reason |
+|---|-------|--------------------|--------|--------|
+| R01 | Product name and IDs | D01 "Pixel Petri"; D02+ "Pixelmeba"; owner has a separate game called Pixel Petri | Product is **Pixelmeba**. Package `com.lucidwinds.pixelmeba`. Save namespace `pixelmeba`. No reuse of any Pixel Petri identifiers or assets. | Owner statement; D02 §1 explicit. |
+| R02 | Save file extension | D01/D02 `.petri` ("retain for compatibility") | **`.pixelmeba`**. MIME `application/vnd.pixelmeba+json`. | There are no earlier builds to be compatible with, and `.petri` risks file‑association collision with the owner's other game. |
+| R03 | Simulation versions (Classic v1 / Expanded v2 / Evolution v3) | D01, D02, D03 each define a ruleset and migration paths between them | **One ruleset, `simulationVersion 3`**, with per‑world manifest flags for enabled species, modules and systems. No Classic/Expanded worlds are ever created. Versioning still records `evolutionRulesVersion`, `moduleRegistryVersion`, `phenotypeMappingVersion`, `contentVersion`, `contentHash`. Old saves keep their recorded versions; migration is by copy. | Greenfield build. Three update orders and two migration paths would triple the surface with zero user benefit. Flags give the same "Fixed Traits / Classic feel" as settings. |
+| R04 | Canonical update order | D01 nine steps; D02 ten stages; D04/D05 add work per stage | **D02's ten stages** with D04 §9 and D05 §17 additions. See SPEC §3. | D04/D05 both assume the ten‑stage order. |
+| R05 | First‑slice roster | D01 M1: B01/B03/B04/A01/P01/V01; D06 PROD01: B01/B04/B06/A01/P01 | **D06 roster.** | D06 is the production plan and explicitly supersedes. B06 needs E_STARCH in Phase 1; accepted. |
+| R06 | Milestones | D01 M1–M5; D06 G0–G5; D07 LL1–LL6; D08 W1–W6; D09 R1–R5 | Unified Phases 0–7 in `BUILD_DIRECTIVE.md`. G0–G3 map to Phases 0–3; G4 (D05) becomes Phase 7; G5 release readiness folds into Phase 4 as `v1.0.0-rc1`. | Single ordered plan for a single agent. |
+| R07 | Team response document | D01 BUILD_RESPONSE.md; D06 PROD04 EXPANSION_RESPONSE.md | **`docs/EXPANSION_RESPONSE.md`**, one file, eight sections (D06 §22). | D06 supersedes. |
+| R08 | Onboarding | D01 five‑step tutorial; D06 first ten minutes; D08 Explore default with D06 guide optional | **D08 W02**: Explore is the default first session; D06's guided sequence is optional "guided play"; D01's tutorial is dropped. | Latest experience brief; D06 explicitly allows. |
+| R09 | Home screen | D01 New Dish/Continue/Experiments/Field Guide; D08 Continue/Play with Lab/Notebook secondary | **D08/D09**: Continue, Play primary; Lab (New Dish, Load, Import), Notebook, Field Guide, Settings, About secondary. | Accessibility brief; New Dish remains fully available under Lab. |
+| R10 | Feeding selection | D01 single priority food; D03 weighted vector; D04 C01 explicit `ordered`/`weighted` policy | **D04 C01** for all worlds. | Correction supersedes. |
+| R11 | Movement energy cost | D01 0.20/cell; D03 "per‑second cost × factor²"; D05 A06 | **0.20 × cells moved × motilityFactor**, where motilityFactor = 0.5 + g. E07 uses its own per‑second cost instead, never both. | D05 A06 is explicit and works out to factor² per second, matching D03's intent. |
+| R12 | Sensing locus range | D03 clamp 1–6; D04 C07 | **D04 C07**: locus active only where the native value maps to itself at 50; publish exceptions in content. | Neutral‑founder equivalence. |
+| R13 | Branch thresholds | D03 §9 (0.08 mean); D04 C03 | **D04**: ≥ 0.10 one locus, or ≥ 0.03 mean, or module set differs, or policy differs / ≥ 0.15 weight; plus 5 descendants / 3 generations. D05 A09 adds developmental criteria in Phase 7. | Correction supersedes. |
+| R14 | Mutation vs placement order | D03 placement then mutation; D05 A01 immutable proposal first | **D05 A01 from Phase 0.** | D06 §5 requires it from G1; simpler to have from the start. |
+| R15 | Native ability loss | D03 "cannot be lost"; D05 A02 whitelist | D03 rule until Phase 7; **D05 whitelist** when developmental mutation is enabled. | Dependency order. |
+| R16 | Body shape | D03 cosmetic; D05 A03 functional size/form | Cosmetic until Phase 7; **D05** thereafter for the eligible set. | Dependency order. |
+| R17 | E12 links share resources? | D04 "no"; D05 A04 "only with E15 on both ends" | **D05 A04.** | Amendment supersedes. |
+| R18 | Sampling semantics | D01 immediate move; D07 LABA04 paused transaction for Living Lab worlds | **D07 transaction semantics for all worlds from the moment Sample exists (Phase 3).** | Strictly safer; one ruleset (R03). |
+| R19 | Light formula | D02 baseline×cycle×shade×canopy; D07 LABA02 adds lamps before shading | **D07** formula from Phase 6; identical to D02 when no lamps exist. | Superset. |
+| R20 | Energy cap | D01 0–100; D04 E05 +40; D05 100×s | Native cap **100 × s** (s = 1 until Phase 7) **+ 40 with E05**. Excess dissipates with a ledger event. | Composition of the three. |
+| R21 | Random state persistence | D03 "save complete random‑stream state or counter positions" | **Stateless hashing** of (worldSeed, streamId, keys) for all sim randomness; nothing to save but the seed. Cosmetic RNG is separate and unsaved. | Satisfies the intent (no redraw on reload) with less state and fewer bugs. |
+| R22 | Demo vs paid | D09 recommends paid core + free demo | **Single paid Android app at $0.99.** Web build in the arcade is full by default; a `DEMO_MODE` build flag implements D09's demo scope if the owner wants a public demo. | Owner's stated model; flag costs little. |
+| R23 | Tutorial rescue | D01/D06/D08 all forbid | No rescue, ever. Restated in CLAUDE.md. | Consistent. |
+| R24 | Art production | D01/D10 assume human artists with Aseprite/Piskel | **Code‑authored pixel matrices compiled to atlases** (ARCH §10). Same frame counts, sizes, padding and manifest as D01. Human artists can later replace sources through the same manifest. | The implementing agent is the artist. Deterministic, diffable, reviewable. |
+| R25 | Audio production | D01/D10 assume recorded assets edited in Audacity | **Web Audio synthesis** from patch definitions; cue IDs stable so recorded assets can be swapped in later. Narration via SpeechSynthesis, off by default. | Same reason as R24; D08 says voice never gates play. |
+| R26 | UI framework | D01 "HTML/CSS"; D10 "keep toolchain small" | **Preact + signals** (≈ 4 KB). Semantic HTML remains the output. | Snapshot‑driven panels at 10 Hz need a real diffing layer; hand‑rolled DOM updating is the bigger risk. Not a "second engine". |
+| R27 | Persistence adapters | D01 IndexedDB + "tested durable adapter for Android"; D10 "don't assume small‑settings storage" | Web: IndexedDB. Android: **Capacitor Filesystem** (Directory.Data) with temp‑write‑verify‑rename. Capacitor Preferences only for UI settings. | Durable, inspectable, atomic. |
+| R28 | Transport classes for D01 organisms | D02 lists classes only for its own consumers | P01 Medium, P02 Medium, P03 Medium, P04 Large, X01 Small (free), Y01/A01 Medium, F01 Fixed while attached, B02 Fixed while attached, free bacteria Small. A05 Medium. | Consistent with D02's category descriptions. |
+| R29 | Colors for organisms D01 did not specify | D01 gives five hues only | Full palette assigned in UX §6.1 with silhouette/pattern rules. | Someone had to. Reviewable in the asset previewer. |
+| R30 | Undo depth | D01 one level; D04 checkpoint ring | Both: one‑level gesture undo **and** optional automatic checkpoint ring (10 × 60 s), plus named snapshots. | Complementary. |
+| R31 | Habitat paint in Phase 2 | D01 has three presets in M3 | Habitat *paint* (water/gel/sediment/shade) is available in Lab from Phase 2 because it is a field edit; presets (Gel Colony, Sediment Edge) and full compatibility tables arrive in Phase 3. | Lab view needs the Habitat category; cheap to enable early. |
+| R32 | Developmental draw rate before Phase 7 | D06 §10 "1 % when G4 enabled" | 0 % and absent from the ruleset until Phase 7 flips the flag; the stream still exists so keys are stable. | Determinism across versions. |
+| R33 | E11 timing | D04 Priority 3 places E11 with E09/E10 | **E11 moves to Phase 5** with P10 Needlejaw (its only meaningful counterpart) and silicate. | Without silicate and P10, E11 is untestable. |
+| R34 | "Region" charts before D02 §20 probes | D03 Milestone C regional graphs; D02 §20 six masks | Phase 2 uses whole‑dish + fixed quadrants; Phase 4 adds six player masks. | Dependency order. |
+| R35 | Owner review checkpoints | D01/D06 require showing the owner the playable before proceeding | Convert to **asynchronous review packets**: tag the build, write the response section, continue. Owner decisions listed, never blocked on. | Unattended build. |
+| R36 | Comparison baseline for D6 Experiment B | D06 "snapshot at exactly 120 s" | Recipe schedule records a scheduled snapshot command at tick 1200; the experiment realizes A/B from it. | Deterministic realization. |
+| R37 | Amoeba prey in Phase 1 | D01 P01 eats B01–B05, Y01, A01; D02 adds B06–B13… | Prey list is data; Phase 1 enables B01, B04, B06, A01 as prey. | Straightforward. |
+| R38 | Photosynthesis "intake" units | D01 says photosynthesis "consumes CO2 instead of food" and converts 0.50 to biomass, 0.50 to sugar | CO2 carbon is the intake budget subject to Q, suitability, light and CO2 availability factor amount/(amount+0.10). | Same formula family as food. |
+| R39 | Nutrient requirement per carbon | D01 "requires 0.05 total nutrient" per ordinary conversion | Interpreted as **0.05 N per carbon consumed**, credited from bound N in the consumed pool first, then free pool; stored as organism N. Consistent with N ≈ 0.10 B. | Ratio consistency. |
+| R40 | Store price/rating/audience | Docs defer to owner | $0.99 (owner). Content rating expected Everyone; **not** enrolled in Designed‑for‑Families unless the owner opts in (listed as owner decision). | Families program adds obligations; leave to owner. |

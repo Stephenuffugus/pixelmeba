@@ -1,0 +1,42 @@
+# dependencies / build
+node_modules/
+dist/
+dist-ssr/
+.vite/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# generated art & store assets are committed (deterministic from art/src), but not caches
+art/.cache/
+
+# android
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/release/
+*.keystore
+*.jks
+keystore.properties
+
+# environment / secrets
+.env
+.env.*
+!.env.example
+
+# editor / os
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# original design zip (source docs are in docs/source)
+*.zip
+
+# scratch
+tmp/
+scratch/
