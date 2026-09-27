@@ -20,6 +20,7 @@ import { FLAG } from './entities';
 import { cellIndex, inBounds, inMask } from './grid';
 import { recordBirth, recordDivisionEnd } from './lineage';
 import { canOccupy, initialDecisionTimer } from './movement';
+import { onDaughter, onParentEnds } from './branches';
 import { proposeDaughters } from './mutation';
 import { profileOf } from './profiles';
 import { R } from './reasons';
@@ -123,6 +124,14 @@ export function stageBirths(world: World): void {
       c.propG0[i] = p.genomes[0];
       c.propG1[i] = p.genomes[1];
       c.propTick[i] = world.tick;
+      c.propFlags0[i] = p.draws[0].flags;
+      c.propFlags1[i] = p.draws[1].flags;
+      c.propLocus0[i] = p.draws[0].locus;
+      c.propLocus1[i] = p.draws[1].locus;
+      c.propDelta0[i] = p.draws[0].delta;
+      c.propDelta1[i] = p.draws[1].delta;
+      c.propModule0[i] = p.draws[0].module;
+      c.propModule1[i] = p.draws[1].module;
     }
 
     const sp = world.species[c.species[i]!]!;
@@ -157,7 +166,13 @@ function commitDivision(world: World, i: number, slot: number, targetCell: numbe
   const sp = world.species[c.species[i]!]!;
   const load = world.derived.cellLoad;
   const parentBirth = c.birthId[i]!;
-  const parentGen = world.lineage.generation[parentBirth] ?? 0;
+  const parentInfo = { refGenome: c.refGenome[i]!, branchId: c.branchId[i]!, candRoot: c.candRoot[i]!, generation: c.generation[i]! };
+  const parentGenomeIdx = c.genome[i]!;
+  const mut = [
+    { flags: c.propFlags0[i]!, locus: c.propLocus0[i]!, delta: c.propDelta0[i]!, module: c.propModule0[i]! },
+    { flags: c.propFlags1[i]!, locus: c.propLocus1[i]!, delta: c.propDelta1[i]!, module: c.propModule1[i]! },
+  ] as const;
+  onParentEnds(world, i);
 
   // Charge the actual cost, then split every owned pool equally.
   const cost = prof.divisionCost;
@@ -229,12 +244,44 @@ function commitDivision(world: World, i: number, slot: number, targetCell: numbe
   c.birthId[i] = b0;
   c.birthId[slot] = b1;
   const spIdx = c.species[i]!;
-  recordBirth(world.lineage, b0, { parent: parentBirth, genome: g0, tick, generation: parentGen + 1, species: spIdx, entityId: c.entityId[i]!, origin: 0 });
-  recordBirth(world.lineage, b1, { parent: parentBirth, genome: g1, tick, generation: parentGen + 1, species: spIdx, entityId: c.entityId[slot], origin: 0 });
+  const gen = parentInfo.generation + 1;
+  const births = [
+    { slot: i, birthId: b0, genome: g0, m: mut[0] },
+    { slot, birthId: b1, genome: g1, m: mut[1] },
+  ];
+  for (const d of births) {
+    recordBirth(world.lineage, d.birthId, {
+      parent: parentBirth,
+      genome: d.genome,
+      tick,
+      generation: gen,
+      species: spIdx,
+      entityId: c.entityId[d.slot]!,
+      origin: 0,
+      mutFlags: d.m.flags,
+      mutLocus: d.m.locus,
+      mutDelta: d.m.delta,
+      mutModule: d.m.module,
+    });
+    onDaughter(world, d.slot, parentInfo);
+    if (d.genome !== parentGenomeIdx) {
+      emit(world.events, world.counters, {
+        tick,
+        type: 'mutation',
+        species: spIdx,
+        birthId: d.birthId,
+        cell: parentCell,
+        detail: { parent: parentBirth, flags: d.m.flags, locus: d.m.locus, delta: d.m.delta, module: d.m.module },
+      });
+      milestone(world.events, 'firstMutation', tick);
+    }
+  }
+  for (const col of ['propFlags0', 'propFlags1', 'propDelta0', 'propDelta1'] as const) c[col][i] = 0;
+  for (const col of ['propLocus0', 'propLocus1', 'propModule0', 'propModule1'] as const) c[col][i] = -1;
   c.decisionTimer[i] = initialDecisionTimer(world, b0);
   c.decisionTimer[slot] = initialDecisionTimer(world, b1);
 
-  const parentGenome = world.lineage.genome[parentBirth] ?? g0;
+  const parentGenome = parentGenomeIdx;
   emit(world.events, world.counters, {
     tick,
     type: 'birth',

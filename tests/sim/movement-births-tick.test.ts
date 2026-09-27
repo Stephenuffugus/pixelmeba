@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { field } from '../../src/sim/lineage';
 import { applyNow, queueCommand } from '../../src/sim/commands';
 import { cellIndex, ST_STONE } from '../../src/sim/grid';
 import { stageSenseAndMove, traceFraction } from '../../src/sim/movement';
@@ -84,8 +85,8 @@ describe('stage 9 births with immutable proposals (P0.6)', () => {
     // Both daughters have new birth identities whose parent is the pre-division individual.
     for (const d of daughters) {
       expect(c.birthId[d]).not.toBe(birthBefore);
-      expect(w.lineage.parent[c.birthId[d]!]).toBe(birthBefore);
-      expect(w.lineage.parent[c.birthId[d]!]).not.toBe(c.birthId[d]);
+      expect(field(w.lineage, 'parent', c.birthId[d]!)).toBe(birthBefore);
+      expect(field(w.lineage, 'parent', c.birthId[d]!)).not.toBe(c.birthId[d]);
     }
     // The retained daughter keeps the entityId.
     expect(c.entityId[d0] === c.entityId[s] || c.entityId[d1] === c.entityId[s]).toBe(true);
@@ -128,7 +129,7 @@ describe('stage 9 births with immutable proposals (P0.6)', () => {
     const bornBefore = w2.events.totals.birth ?? 0;
     run(w2, 1);
     expect(w2.events.totals.birth).toBe(bornBefore + 1);
-    const kids = aliveOf(w2, 'B01').filter((k) => w2.lineage.parent[w2.ents.cols.birthId[k]!] === parentBirth);
+    const kids = aliveOf(w2, 'B01').filter((k) => field(w2.lineage, 'parent', w2.ents.cols.birthId[k]!) === parentBirth);
     expect(kids).toHaveLength(2);
     for (const k of kids) expect([p0, p1]).toContain(w2.ents.cols.genome[k]);
   });

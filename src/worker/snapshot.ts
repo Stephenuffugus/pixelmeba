@@ -9,6 +9,7 @@ import type { SimEvent } from '@sim/events';
 import { FIELD_IDS, type FieldId } from '@sim/fields';
 import { STRUCTURE_NAMES, SUBSTRATE_NAMES } from '@sim/grid';
 import { hungryPredator } from '@sim/movement';
+import { childrenOf, field as lineageField } from '@sim/lineage';
 import { profileOf } from '@sim/profiles';
 import { R } from '@sim/reasons';
 import { entityCell, forEachInCell } from '@sim/spatial';
@@ -150,8 +151,8 @@ function inspectEntity(world: World, slot: number): EntityInspect {
   const g = world.genomes.get(c.genome[slot]!);
   const cell = entityCell(c.x[slot]!, c.y[slot]!);
   const birthId = c.birthId[slot]!;
-  const parent = world.lineage.parent[birthId] ?? 0;
-  const parentGenome = parent > 0 ? world.lineage.genome[parent] : undefined;
+  const parent = lineageField(world.lineage, 'parent', birthId) ?? 0;
+  const parentGenome = parent > 0 ? lineageField(world.lineage, 'genome', parent) : undefined;
   const suit = suitabilityAt(world, sp, prof, cell);
   let predation: EntityInspect['predation'] = null;
   if (sp.isPredator) {
@@ -173,9 +174,9 @@ function inspectEntity(world: World, slot: number): EntityInspect {
     y: c.y[slot]!,
     cell,
     age: c.age[slot]!,
-    generation: world.lineage.generation[birthId] ?? 0,
+    generation: c.generation[slot]!,
     parentBirthId: parent,
-    origin: world.lineage.origin[birthId] ?? 0,
+    origin: lineageField(world.lineage, 'origin', birthId) ?? 0,
     B: c.B[slot]!,
     B0: prof.b0,
     N: c.N[slot]!,
@@ -256,16 +257,14 @@ export function buildInspector(world: World, sel: Selection): InspectorPayload {
   const slot = findSlotByBirth(world, sel.birthId);
   if (slot >= 0) return { kind: 'entity', entity: inspectEntity(world, slot) };
   const L = world.lineage;
-  const children: number[] = [];
-  // Children of a divided organism: scan recent births (bounded by lineage length).
-  for (let b = L.parent.length - 1; b > sel.birthId && children.length < 2; b--) if (L.parent[b] === sel.birthId) children.unshift(b);
+  const children = childrenOf(L, sel.birthId);
   return {
     kind: 'gone',
     gone: {
       birthId: sel.birthId,
-      deathTick: L.deathTick[sel.birthId] ?? -1,
-      cause: L.deathCause[sel.birthId] ?? 0,
-      divided: (L.deathCause[sel.birthId] ?? 0) === -1,
+      deathTick: lineageField(L, 'deathTick', sel.birthId) ?? -1,
+      cause: lineageField(L, 'deathCause', sel.birthId) ?? 0,
+      divided: (lineageField(L, 'deathCause', sel.birthId) ?? 0) === -1,
       children,
     },
   };

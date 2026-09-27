@@ -15,6 +15,7 @@ import { canOccupy, initialDecisionTimer } from './movement';
 import { founderGenome } from './founders';
 import { markField } from './transport';
 import { rebuildIndex } from './spatial';
+import { initFounder } from './branches';
 import { detFloat, detPermutation, STREAMS } from './rng';
 import type { World, WorldSettings } from './world';
 import { speciesIndex } from './world';
@@ -249,6 +250,7 @@ export function introduceOrganism(
     c.boundMineral[slot] = mineral;
   }
   recordInput(world, `introduce:${source}`, b0, INITIAL_NUTRIENT_RATIO * b0, mineral);
+  initFounder(world, slot);
   recordBirth(world.lineage, birthId, {
     parent: 0,
     genome,

@@ -31,6 +31,7 @@ import type { World } from './world';
 import { AGENT_CAP } from './constants';
 import { milestone } from './events';
 import { markField } from './transport';
+import { subtractPool } from './ledger';
 
 const K = 6; // max requests per organism
 const ROUTE_NONE = 0;
@@ -372,20 +373,4 @@ const fracOCell = new Float64Array(CELL_COUNT);
 const fracStamp = new Uint32Array(CELL_COUNT);
 let stamp = 0;
 
-/**
- * Subtract a consumed amount from a conserved pool. Allocation guarantees Σ takes ≤ pool, so any
- * negative result is floating-point roundoff: it is zeroed and logged in the ledger's roundoff.
- * Anything beyond roundoff is a bug and stops the tick (SPEC §3.4: never hide a negative pool).
- */
-export function subtractPool(world: World, arr: Float64Array, i: number, amount: number, material: 'c' | 'n' | 'm'): void {
-  const v = arr[i]! - amount;
-  if (v >= 0) {
-    arr[i] = v;
-    return;
-  }
-  if (v < -1e-9 * Math.max(1, amount)) {
-    throw new Error(`negative pool after subtracting ${amount} (would be ${v}) — allocation defect`);
-  }
-  world.ledger.roundoff[material] += -v;
-  arr[i] = 0;
-}
+

@@ -15,6 +15,7 @@ import type { EventLog } from './events';
 import type { History } from './history';
 import type { Ledger } from './ledger';
 import type { Lineage } from './lineage';
+import type { BranchBook } from './branches';
 import { rebuildIndex } from './spatial';
 import { updateDerived } from './transport';
 import { createEmptyWorld, SCHEMA_VERSION, type World, type WorldContent, type WorldSettings } from './world';
@@ -83,6 +84,8 @@ export interface WorldState {
   readonly events: EventLog;
   readonly history: History;
   readonly capacityLimitedTicks: number;
+  readonly conversionTotals?: { starch: number; oil: number; protein: number };
+  readonly branches?: BranchBook;
 }
 
 function sliceTo<T extends ArrayBufferView & { subarray(a: number, b: number): T; length: number }>(arr: T, n: number): T {
@@ -131,6 +134,8 @@ export function serializeWorld(world: World): WorldState {
     events: clone(world.events),
     history: clone(world.history),
     capacityLimitedTicks: world.capacityLimitedTicks,
+    conversionTotals: { ...world.conversionTotals },
+    branches: clone(world.branches),
   };
 }
 
@@ -169,6 +174,8 @@ export function deserializeWorld(state: WorldState): World {
   Object.assign(world.history, JSON.parse(JSON.stringify(state.history)));
   world.capacityLimitedTicks = state.capacityLimitedTicks;
   world.capacityHitThisTick = false;
+  if (state.conversionTotals) Object.assign(world.conversionTotals, state.conversionTotals);
+  if (state.branches) Object.assign(world.branches, JSON.parse(JSON.stringify(state.branches)));
   updateDerived(world);
   rebuildIndex(world);
   return world;
@@ -195,7 +202,8 @@ export function stateHash(world: World): string {
   h.number(world.genomes.size);
   for (const g of world.genomes.list) h.string(genomeKey(g));
   const L = world.lineage;
-  for (const arr of [L.parent, L.genome, L.birthTick, L.generation, L.species, L.entityId, L.deathTick, L.deathCause, L.origin]) {
+  h.number(L.base);
+  for (const arr of [L.parent, L.genome, L.birthTick, L.generation, L.species, L.entityId, L.deathTick, L.deathCause, L.origin, L.mutFlags, L.mutLocus, L.mutDelta, L.mutModule]) {
     h.number(arr.length);
     for (const v of arr) h.number(v);
   }
@@ -206,5 +214,6 @@ export function stateHash(world: World): string {
   h.number(led.exchangeC);
   h.string(canonicalJson(world.commands.pending.map((p) => ({ id: p.commandId, seq: p.seq, t: p.targetTick, p: p.payload }))));
   h.number(world.commands.nextSeq);
+  h.string(canonicalJson(world.branches));
   return h.hex();
 }

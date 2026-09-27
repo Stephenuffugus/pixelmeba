@@ -72,6 +72,21 @@ export const ENTITY_COLUMNS = [
   ['propG0', 'i32'],
   ['propG1', 'i32'],
   ['propTick', 'f64'],
+  ['secretionCode', 'u16'],
+  // Genealogy essentials for living organisms (history in lineage.ts may be compacted)
+  ['generation', 'u32'],
+  ['branchId', 'i32'],
+  ['candRoot', 'u32'],
+  ['refGenome', 'i32'],
+  // Mutation descriptors saved with the birth proposal (see mutation.ts MUT_*)
+  ['propFlags0', 'u8'],
+  ['propFlags1', 'u8'],
+  ['propLocus0', 'i32'],
+  ['propLocus1', 'i32'],
+  ['propDelta0', 'i32'],
+  ['propDelta1', 'i32'],
+  ['propModule0', 'i32'],
+  ['propModule1', 'i32'],
 ] as const satisfies ReadonlyArray<readonly [string, ColType]>;
 
 export type ColumnName = (typeof ENTITY_COLUMNS)[number][0];
@@ -93,7 +108,7 @@ export type EntityColumns = { [N in ColumnName]: ArrayFor<ColumnTypeOf<N>> };
 /** Columns whose empty value is -1 rather than 0. */
 const NEG_ONE_DEFAULT: ReadonlySet<ColumnName> = (() => {
   // eslint-disable-next-line no-restricted-syntax -- lookup only, never iterated
-  return new Set<ColumnName>(['genome', 'preySlot', 'hostSlot', 'parasiteSlot', 'propG0', 'propG1']);
+  return new Set<ColumnName>(['genome', 'preySlot', 'hostSlot', 'parasiteSlot', 'propG0', 'propG1', 'branchId', 'refGenome', 'propLocus0', 'propLocus1', 'propModule0', 'propModule1']);
 })();
 
 function makeArray(t: ColType, n: number): ArrayFor<ColType> {

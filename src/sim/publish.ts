@@ -6,8 +6,10 @@ import { TICKS_PER_SECOND } from './constants';
 import { maskCells } from './grid';
 import { pushSample } from './history';
 import type { World } from './world';
+import { compactLineage } from './lineage';
 
 export function stagePublish(world: World): void {
+  compactLineage(world.lineage);
   if (world.capacityHitThisTick) {
     world.capacityLimitedTicks++;
     world.history.pendingCapacity = true;

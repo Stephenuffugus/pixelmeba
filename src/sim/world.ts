@@ -18,6 +18,7 @@ import { createLineage, type Lineage } from './lineage';
 import { createEventLog, type EventLog } from './events';
 import { createHistory, type History } from './history';
 import type { Command } from './commands';
+import { createBranchBook, type BranchBook } from './branches';
 
 export const SCHEMA_VERSION = 1;
 
@@ -96,6 +97,12 @@ export interface World {
   capacityLimitedTicks: number;
   /** Set by stages 1 and 9 when the cap blocked something this tick; folded in at stage 10. */
   capacityHitThisTick: boolean;
+  /** Branch discovery records (observation only). */
+  readonly branches: BranchBook;
+  /** Carbon converted by each enzyme this tick (observation). */
+  readonly conversionTally: { starch: number; oil: number; protein: number };
+  /** Cumulative carbon converted by each enzyme (observation, saved). */
+  readonly conversionTotals: { starch: number; oil: number; protein: number };
 }
 
 export function speciesIndex(world: World, id: string): number {
@@ -150,5 +157,8 @@ export function createEmptyWorld(opts: {
     history: createHistory(species.length),
     capacityLimitedTicks: 0,
     capacityHitThisTick: false,
+    branches: createBranchBook(),
+    conversionTally: { starch: 0, oil: 0, protein: 0 },
+    conversionTotals: { starch: 0, oil: 0, protein: 0 },
   };
 }

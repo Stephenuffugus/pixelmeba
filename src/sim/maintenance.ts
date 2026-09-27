@@ -14,6 +14,7 @@ import {
 } from './constants';
 import { emit } from './events';
 import { recordDeath } from './lineage';
+import { onDeath } from './branches';
 import { profileOf } from './profiles';
 import { R } from './reasons';
 import { entityCell } from './spatial';
@@ -128,6 +129,7 @@ export function killEntity(world: World, i: number, cause: number): void {
     detail,
   });
   recordDeath(world.lineage, c.birthId[i]!, world.tick, cause);
+  onDeath(world, i);
   const sp = c.species[i]!;
   world.history.pendingDeaths[sp] = (world.history.pendingDeaths[sp] ?? 0) + 1;
   world.ents.free(i);
