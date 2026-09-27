@@ -14,6 +14,7 @@ import { recordBirth } from './lineage';
 import { canOccupy, initialDecisionTimer } from './movement';
 import { founderGenome } from './founders';
 import { markField } from './transport';
+import { rebuildIndex } from './spatial';
 import { detFloat, detPermutation, STREAMS } from './rng';
 import type { World, WorldSettings } from './world';
 import { speciesIndex } from './world';
@@ -53,6 +54,10 @@ export function stageCommands(world: World): void {
   const rest: Command[] = [];
   for (const cmd of world.commands.pending) (cmd.targetTick <= world.tick ? due : rest).push(cmd);
   world.commands.pending = rest;
+  if (due.length === 0) return;
+  // Capacity checks read cell load: rebuild it from live state so a reloaded world and an
+  // uninterrupted one see exactly the same values.
+  rebuildIndex(world);
   for (const cmd of due) applyCommand(world, cmd);
 }
 
@@ -195,7 +200,7 @@ function inoculate(world: World, cmd: Command, p: Extract<CommandPayload, { kind
     }
     if (!placed) break;
   }
-  if (capacityHit) world.capacityLimitedTicks++;
+  if (capacityHit) world.capacityHitThisTick = true;
   return { accepted, rejected: p.count - accepted, ...(capacityHit ? { note: 'capacity' } : {}) };
 }
 

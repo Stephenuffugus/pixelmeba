@@ -77,3 +77,36 @@ Decision: film halves the organism's combined effective exposure (all targeting 
 Reason: CT §3.4 and SPEC §4.3 are the more specific statements; D02 §5 confirms "Biofilm halves the combined exposure once".
 Affects: src/sim/suitability.ts; content/materials/INH_*.json, M08.json.
 Owner review: no
+
+## D-0009 · 2026-09-27 · G0 · Adversarial review of the Phase 0 core
+Context: six subsystem reviewers compared src/sim with the SPEC before tagging g0; skeptics tried to refute each finding.
+Decision: fixed every confirmed defect, each pinned by tests/sim/review-regressions.test.ts:
+- cell load was read stale by stage 1 (inoculation) and stage 9 (crowding/placement): it counted organisms killed in stage 7 and differed after save/reload → rebuilt from live state at the start of stage 1 (when commands are due) and stage 9;
+- nutrient/oxygen limiting fractions were read from pools already changed by earlier commits in the same loop (slot-order dependence; photosynthetic O2 and surplus N funded others in the same pass) → fractions are computed per cell from the stage snapshot before any commit;
+- weighted feeding redistributed the availability shortfall, cancelling avail(P) → weights renormalize over present foods and availability still applies;
+- feeding cue, intake timestamp and first-intake milestone fired when nothing was consumed → guarded by Cs > 0;
+- conserved pools were clamped with Math.max(0, …) → subtractPool() zeroes only roundoff dust, logs it in ledger.roundoff (included in the expected total) and throws on anything larger;
+- the parent's own cell double-counted its biomass in placement → own-cell load is unchanged by a split;
+- capacity bookkeeping counted per event and missed inoculations → one per-tick flag folded in at stage 10;
+- FLAG.capacityBlocked stayed set when a later gate blocked → cleared each birth pass;
+- predator targeting read positions already moved this stage → start-of-stage position snapshot;
+- equal-score wander tolerance was 1e-12 → 1e-9 per SPEC §6.4;
+- stress onset accumulated across interrupted episodes → requires 3 continuous seconds;
+- unpaid energy was subtracted from maintenance only → ledger records what was actually paid, maintenance first.
+Reason: conservation, determinism and truthful cues are non-negotiable.
+Affects: src/sim/{intake,births,commands,movement,maintenance,publish,ledger,world,serialize}.ts; tests.
+Owner review: no
+
+## D-0010 · 2026-09-27 · G0 · Companion nutrient diffusion (review finding rejected)
+Context: a reviewer proposed moving companion nutrient only with the net carbon flux at the donor's N/C ratio.
+Decision: keep diffusing companion fields with the same per-edge coefficients as their carbon. Gross flow a→b carries k·C_a·(N_a/C_a) = k·N_a and b→a carries k·N_b, so the net nutrient flux k(N_a − N_b) is exactly "moving in the same fraction as its carbon" at each cell's own ratio. The net-flux variant would stop nutrient mixing between cells of equal carbon, which is not how dissolved material spreads.
+Reason: both conserve exactly; this one matches D02 A1 and physical intuition. Pinned by the conservation fixtures.
+Affects: none (documentation).
+Owner review: no
+
+## D-0011 · 2026-09-27 · P1.5 · Dissolved sugar is shown as a faint haze by default
+Context: UX §6.5 shows dissolved sugar only through the overlay. In playtesting screenshots the Garden's sugar patch was invisible, so a player could not see the food they placed with Feed.
+Decision: the deposit layer draws a faint warm haze where sugar exceeds a small band, scaled by the real amount (sent in the snapshot's fifth deposit band). It adds no information that is not in the simulation.
+Reason: "understandable before deep"; Explore must show where food is.
+Affects: src/worker/snapshot.ts, src/render/layers.ts.
+Owner review: no

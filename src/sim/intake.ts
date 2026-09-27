@@ -165,26 +165,15 @@ export function stageIntake(world: World): void {
         c.limitCode[i] = anyPresent ? R.FOOD_EXCLUDED_BY_PREFERENCE : R.FOOD_NONE_COMPATIBLE;
         continue;
       }
-      // First pass by weight, then redistribute the unrequested share once (D03 §5).
-      let requested = 0;
-      const first = FIRST_SCRATCH;
-      for (let k = 0; k < foods.length; k++) {
-        first[k] = 0;
-        const f = world.fields[foods[k]!];
-        if (!f) continue;
-        const P = f[cell]!;
-        if (P <= 0 || (w[k] ?? 0) <= 0) continue;
-        first[k] = Math.min(P, budget * w[k]! * availability(P));
-        requested += first[k]!;
-      }
-      const unrequested = Math.max(0, budget - requested);
+      // Weights are renormalized over the foods present here: the share of absent foods is
+      // redistributed once, proportionally (D03 §5). Availability still scales each request.
       for (let k = 0; k < foods.length; k++) {
         const f = world.fields[foods[k]!];
         if (!f) continue;
         const P = f[cell]!;
-        if (P <= 0 || (w[k] ?? 0) <= 0) continue;
-        const r = Math.min(P, first[k]! + (unrequested * w[k]!) / W);
-        addRequest(i, FIELD_INDEX[foods[k]!], r, cell);
+        const wk = w[k] ?? 0;
+        if (P <= 0 || wk <= 0) continue;
+        addRequest(i, FIELD_INDEX[foods[k]!], Math.min(P, budget * (wk / W) * availability(P)), cell);
       }
     }
   }
@@ -233,9 +222,20 @@ export function stageIntake(world: World): void {
     demandO2[cell]! += oNeed;
   }
 
-  // ------------------------------------------------------- 3 + 4. limit and commit
+  // ------------------------------------------- 3. limiting fractions from the stage snapshot
   const nutrient = world.fields.nutrient!;
   const oxygen = world.fields.oxygen!;
+  stamp++;
+  for (let i = 0; i < e.highWater; i++) {
+    if (route[i] === ROUTE_NONE) continue;
+    const cell = entCell[i]!;
+    if (fracStamp[cell] === stamp) continue;
+    fracStamp[cell] = stamp;
+    fracNCell[cell] = demandN[cell]! > 0 ? Math.min(1, nutrient[cell]! / demandN[cell]!) : 1;
+    fracOCell[cell] = demandO2[cell]! > 0 ? Math.min(1, oxygen[cell]! / demandO2[cell]!) : 1;
+  }
+
+  // ----------------------------------------------------------------------------- 4. commit
   const co2 = world.fields.co2!;
   const metabolite = world.fields.metabolite!;
   const sugar = world.fields.sugar!;
@@ -254,8 +254,8 @@ export function stageIntake(world: World): void {
     }
     const nN = needN[i]!;
     const nO = needO2[i]!;
-    const fracN = nN > 0 ? Math.min(1, nutrient[cell]! / demandN[cell]!) : 1;
-    const fracO = nO > 0 ? Math.min(1, oxygen[cell]! / demandO2[cell]!) : 1;
+    const fracN = nN > 0 ? fracNCell[cell]! : 1;
+    const fracO = nO > 0 ? fracOCell[cell]! : 1;
     const L = Math.min(fracN, fracO);
     const Cs = C * L;
     if (Cs > 0) anyConsumed = true;
@@ -264,27 +264,24 @@ export function stageIntake(world: World): void {
     if (route[i] === ROUTE_MEAL) {
       const mealBefore = c.mealC[i]!;
       const nUsed = mealBefore > 0 ? (Cs * c.mealN[i]!) / mealBefore : 0;
-      c.mealC[i] = Math.max(0, mealBefore - Cs);
-      c.mealN[i] = Math.max(0, c.mealN[i]! - nUsed);
+      subtractPool(world, c.mealC, i, Cs, 'c');
+      subtractPool(world, c.mealN, i, nUsed, 'n');
     }
     const n = reqCount[i]!;
     for (let k = 0; k < n; k++) {
       const o = i * K + k;
       const id = FIELD_IDS[reqField[o]!]!;
       const take = reqAlloc[o]! * L;
-      const pool = world.fields[id]!;
-      pool[cell] = Math.max(0, pool[cell]! - take);
+      subtractPool(world, world.fields[id]!, cell, take, FIELD_DEFS[id].material === 'carbon' ? 'c' : 'n');
       const comp = FIELD_DEFS[id].companion;
-      if (comp) {
-        const cf = world.fields[comp]!;
-        cf[cell] = Math.max(0, cf[cell]! - take * reqRatio[o]!);
-      }
+      if (comp) subtractPool(world, world.fields[comp]!, cell, take * reqRatio[o]!, 'n');
     }
     const boundUsed = boundN[i]! * L;
     const freeUsed = nN * L;
     const gainN = NUTRIENT_PER_CARBON * Cs;
     const surplusN = Math.max(0, boundUsed - gainN);
-    nutrient[cell] = Math.max(0, nutrient[cell]! - freeUsed + surplusN);
+    subtractPool(world, nutrient, cell, freeUsed, 'n');
+    nutrient[cell]! += surplusN;
     c.N[i]! += gainN;
 
     let energyGain: number;
@@ -308,10 +305,12 @@ export function stageIntake(world: World): void {
       c.E[i] = prof.energyCap;
     } else c.E[i] = E;
 
-    c.lastIntakeTick[i] = world.tick;
-    c.intakeAccum[i]! += Cs;
-    c.flags[i] = c.flags[i]! | FLAG.feeding;
-    milestone(world.events, 'firstIntake', world.tick);
+    if (Cs > 0) {
+      c.lastIntakeTick[i] = world.tick;
+      c.intakeAccum[i]! += Cs;
+      c.flags[i] = c.flags[i]! | FLAG.feeding;
+      milestone(world.events, 'firstIntake', world.tick);
+    }
 
     // Leading constraint for the inspector: smallest supplied fraction wins.
     const budget = budgetArr[i]!;
@@ -368,4 +367,25 @@ export function stageIntake(world: World): void {
   }
 }
 
-const FIRST_SCRATCH = new Float64Array(16);
+const fracNCell = new Float64Array(CELL_COUNT);
+const fracOCell = new Float64Array(CELL_COUNT);
+const fracStamp = new Uint32Array(CELL_COUNT);
+let stamp = 0;
+
+/**
+ * Subtract a consumed amount from a conserved pool. Allocation guarantees Σ takes ≤ pool, so any
+ * negative result is floating-point roundoff: it is zeroed and logged in the ledger's roundoff.
+ * Anything beyond roundoff is a bug and stops the tick (SPEC §3.4: never hide a negative pool).
+ */
+export function subtractPool(world: World, arr: Float64Array, i: number, amount: number, material: 'c' | 'n' | 'm'): void {
+  const v = arr[i]! - amount;
+  if (v >= 0) {
+    arr[i] = v;
+    return;
+  }
+  if (v < -1e-9 * Math.max(1, amount)) {
+    throw new Error(`negative pool after subtracting ${amount} (would be ${v}) — allocation defect`);
+  }
+  world.ledger.roundoff[material] += -v;
+  arr[i] = 0;
+}

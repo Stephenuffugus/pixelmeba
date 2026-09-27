@@ -91,18 +91,22 @@ describe('stage 9 births with immutable proposals (P0.6)', () => {
     expect(c.entityId[d0] === c.entityId[s] || c.entityId[d1] === c.entityId[s]).toBe(true);
   });
 
-  it('a blocked birth keeps the same proposal, charges nothing, and commits once space opens (also across save/reload)', () => {
+  function crowdedParent() {
+    // Own cell over capacity: parent (load 2) + six residents (1 each) + one small resident (0.4) = 8.4.
     const w = clearWater();
-    // Surround the parent with stone so no daughter placement exists, and fill its own cell to capacity.
-    const cx = 64;
-    const cy = 64;
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (dx || dy) w.grid.structure[cellIndex(cx + dx, cy + dy)] = ST_STONE;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (dx || dy) w.grid.structure[cellIndex(64 + dx, 64 + dy)] = ST_STONE;
     w.grid.geometryVersion++;
     const s = place(w, 'B01', 64.5, 64.5, { B: 2, N: 0.2, E: 90, H: 100, age: 20 });
     for (let k = 0; k < 6; k++) place(w, 'B01', 64.2 + k * 0.1, 64.3, { E: 5 });
+    const small = place(w, 'B01', 64.8, 64.7, { B: 0.4, N: 0.04, E: 5 });
+    return { w, s, small };
+  }
+
+  it('a blocked birth keeps the same proposal, charges nothing, and commits once space opens (also across save/reload)', () => {
+    const { w, s, small } = crowdedParent();
     run(w, 1);
     const c = w.ents.cols;
-    expect(c.divBlockCode[s]).toBe(R.DIV_BLOCK_PLACEMENT);
+    expect(c.divBlockCode[s]).toBe(R.DIV_BLOCK_CROWDING);
     const p0 = c.propG0[s];
     const p1 = c.propG1[s];
     const Eblocked = c.E[s]!;
@@ -117,23 +121,20 @@ describe('stage 9 births with immutable proposals (P0.6)', () => {
     const w2 = deserializeWorld(serializeWorld(w));
     expect(stateHash(w2)).toBe(stateHash(w));
     expect(w2.ents.cols.propG0[s]).toBe(p0);
-    // Open one neighbor: the saved proposal commits unchanged.
-    w2.grid.structure[cellIndex(65, 64)] = 0;
-    w2.grid.geometryVersion++;
+    // The small resident dies in stage 7; stage 9 sees load 8 and the saved proposal commits.
+    w2.ents.cols.H[small] = 0.0001;
+    w2.ents.cols.E[small] = 0;
+    const parentBirth = c.birthId[s]!;
     const bornBefore = w2.events.totals.birth ?? 0;
     run(w2, 1);
     expect(w2.events.totals.birth).toBe(bornBefore + 1);
-    const kids = aliveOf(w2, 'B01').filter((k) => w2.lineage.parent[w2.ents.cols.birthId[k]!] === c.birthId[s]);
+    const kids = aliveOf(w2, 'B01').filter((k) => w2.lineage.parent[w2.ents.cols.birthId[k]!] === parentBirth);
     expect(kids).toHaveLength(2);
     for (const k of kids) expect([p0, p1]).toContain(w2.ents.cols.genome[k]);
   });
 
   it('a parent that dies while blocked discards its proposal without a birth', () => {
-    const w = clearWater();
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (dx || dy) w.grid.structure[cellIndex(64 + dx, 64 + dy)] = ST_STONE;
-    w.grid.geometryVersion++;
-    const s = place(w, 'B01', 64.5, 64.5, { B: 2, N: 0.2, E: 90, H: 100, age: 20 });
-    for (let k = 0; k < 6; k++) place(w, 'B01', 64.2 + k * 0.1, 64.3, { E: 5 });
+    const { w, s } = crowdedParent();
     run(w, 1);
     expect(w.ents.cols.propG0[s]).toBeGreaterThanOrEqual(0);
     w.ents.cols.H[s] = 0.0001;

@@ -94,6 +94,8 @@ export interface World {
   readonly history: History;
   /** Ticks during which the agent cap blocked a birth or inoculation. */
   capacityLimitedTicks: number;
+  /** Set by stages 1 and 9 when the cap blocked something this tick; folded in at stage 10. */
+  capacityHitThisTick: boolean;
 }
 
 export function speciesIndex(world: World, id: string): number {
@@ -147,5 +149,6 @@ export function createEmptyWorld(opts: {
     events: createEventLog(),
     history: createHistory(species.length),
     capacityLimitedTicks: 0,
+    capacityHitThisTick: false,
   };
 }

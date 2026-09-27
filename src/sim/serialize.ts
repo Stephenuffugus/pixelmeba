@@ -168,6 +168,7 @@ export function deserializeWorld(state: WorldState): World {
   Object.assign(world.events, JSON.parse(JSON.stringify(state.events)));
   Object.assign(world.history, JSON.parse(JSON.stringify(state.history)));
   world.capacityLimitedTicks = state.capacityLimitedTicks;
+  world.capacityHitThisTick = false;
   updateDerived(world);
   rebuildIndex(world);
   return world;

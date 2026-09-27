@@ -153,10 +153,11 @@ export interface LedgerCheck {
 
 export function expectedTotals(world: World): MaterialTotals {
   const L = world.ledger;
+  // Logged roundoff (negative dust zeroed at subtraction) is part of the explained total.
   return {
-    c: L.initial.c + L.inputs.c - L.exports.c + L.exchangeC,
-    n: L.initial.n + L.inputs.n - L.exports.n,
-    m: L.initial.m + L.inputs.m - L.exports.m,
+    c: L.initial.c + L.inputs.c - L.exports.c + L.exchangeC + L.roundoff.c,
+    n: L.initial.n + L.inputs.n - L.exports.n + L.roundoff.n,
+    m: L.initial.m + L.inputs.m - L.exports.m + L.roundoff.m,
   };
 }
 

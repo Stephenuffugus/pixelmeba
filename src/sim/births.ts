@@ -24,7 +24,7 @@ import { proposeDaughters } from './mutation';
 import { profileOf } from './profiles';
 import { R } from './reasons';
 import { detFloat, STREAMS } from './rng';
-import { entityCell } from './spatial';
+import { entityCell, rebuildIndex } from './spatial';
 import type { World } from './world';
 
 /** Neighbor order used after crowding (DECISIONS D-0002): E, S, W, N, NE, SE, SW, NW, own cell. */
@@ -84,7 +84,9 @@ function findPlacement(world: World, i: number, daughterLoad: number): number {
     const cell = cellIndex(x, y);
     if (!canOccupy(world, sp, cell)) continue;
     const l = load[cell]!;
-    if (l + daughterLoad > CELL_SOFT_CAPACITY) continue;
+    // The parent's own cell keeps the same load after a split (its biomass is only divided).
+    const after = dx === 0 && dy === 0 ? l : l + daughterLoad;
+    if (after > CELL_SOFT_CAPACITY) continue;
     if (l < bestLoad) {
       best = cell;
       bestLoad = l;
@@ -94,6 +96,8 @@ function findPlacement(world: World, i: number, daughterLoad: number): number {
 }
 
 export function stageBirths(world: World): void {
+  // Crowding and placement must see this tick's deaths and growth: rebuild from live state.
+  rebuildIndex(world);
   const e = world.ents;
   const c = e.cols;
   const load = world.derived.cellLoad;
@@ -101,6 +105,7 @@ export function stageBirths(world: World): void {
   let capacityHit = false;
   for (let i = 0; i < limit; i++) {
     if (c.alive[i] !== 1 || (c.flags[i]! & FLAG.justBorn) !== 0) continue;
+    c.flags[i] = c.flags[i]! & ~FLAG.capacityBlocked;
     const blocker = divisionBlocker(world, i);
     if (blocker !== R.NONE) {
       c.divBlockCode[i] = blocker;
@@ -112,7 +117,6 @@ export function stageBirths(world: World): void {
       capacityHit = true;
       continue;
     }
-    c.flags[i] = c.flags[i]! & ~FLAG.capacityBlocked;
 
     if (c.propG0[i]! < 0) {
       const p = proposeDaughters(world, i);
@@ -142,10 +146,7 @@ export function stageBirths(world: World): void {
     }
     commitDivision(world, i, slot, target);
   }
-  if (capacityHit) {
-    world.capacityLimitedTicks++;
-    world.history.pendingCapacity = true;
-  }
+  if (capacityHit) world.capacityHitThisTick = true;
   // Clear the just-born marker so daughters act from the next tick.
   for (let i = 0; i < e.highWater; i++) if (c.alive[i] === 1) c.flags[i] = c.flags[i]! & ~FLAG.justBorn;
 }

@@ -33,15 +33,15 @@ export function stageMaintenance(world: World): void {
     const prof = profileOf(world, i);
 
     // Energy costs.
+    // Charge maintenance first, then movement; record only what was actually paid.
     const maint = (prof.m + prof.upkeep) * DT;
     const move = MOVE_COST_PER_CELL * c.movedThisTick[i]! * prof.motilityFactor;
-    let E = c.E[i]! - maint - move;
-    EL.maintenance += maint;
-    EL.movement += move;
-    if (E < 0) {
-      EL.maintenance += E; // the unpaid part was never actually spent
-      E = 0;
-    }
+    const E0 = Math.max(0, c.E[i]!);
+    const paidMaint = Math.min(maint, E0);
+    const paidMove = Math.min(move, E0 - paidMaint);
+    EL.maintenance += paidMaint;
+    EL.movement += paidMove;
+    const E = E0 - paidMaint - paidMove;
     c.E[i] = E;
 
     // Aging and timers.

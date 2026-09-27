@@ -8,6 +8,11 @@ import { pushSample } from './history';
 import type { World } from './world';
 
 export function stagePublish(world: World): void {
+  if (world.capacityHitThisTick) {
+    world.capacityLimitedTicks++;
+    world.history.pendingCapacity = true;
+    world.capacityHitThisTick = false;
+  }
   const nextTick = world.tick + 1;
   if (nextTick % TICKS_PER_SECOND !== 0) return;
   const e = world.ents;

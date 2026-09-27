@@ -124,7 +124,7 @@ function acquirePrey(world: World, slot: number, sp: SpeciesRT, radius: number):
       forEachInCell(world, cellIndex(x, y), (s) => {
         if (s === slot || c.alive[s] !== 1) return;
         if (!preyAllowed(world, sp, s)) return;
-        const d = (c.x[s]! - px) ** 2 + (c.y[s]! - py) ** 2;
+        const d = (startX[s]! - px) ** 2 + (startY[s]! - py) ** 2;
         const b = c.birthId[s]!;
         if (d < bestD || (d === bestD && b < bestBirth)) {
           best = s;
@@ -155,7 +155,12 @@ function foodScore(world: World, sp: SpeciesRT, prof: Profile, cell: number, ene
   return best;
 }
 
+/** Scores within this tolerance are equal (SPEC §6.4: all equal within 1e-9 ⇒ wander). */
+const SCORE_EPS = 1e-9;
 const SCORE_SCRATCH = new Float64Array(13 * 13);
+/** Start-of-stage positions: targets and prey distances read these so slot order cannot matter. */
+const startX = new Float64Array(6000);
+const startY = new Float64Array(6000);
 const CELL_SCRATCH = new Int32Array(13 * 13);
 
 function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile): void {
@@ -193,16 +198,16 @@ function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile): void 
       if (score < minScore) minScore = score;
     }
   }
-  if (count === 0 || bestScore - minScore < 1e-12) {
+  if (count === 0 || bestScore - minScore < SCORE_EPS) {
     c.moveMode[slot] = MOVE_WANDER;
     return;
   }
-  for (let k = 0; k < count; k++) if (bestScore - scores[k]! < 1e-12) ties++;
+  for (let k = 0; k < count; k++) if (bestScore - scores[k]! < SCORE_EPS) ties++;
   let pick = 0;
   if (ties > 1) pick = det(world.seed, STREAMS.tiebreak, world.tick, c.birthId[slot]!) % ties;
   let chosen = own;
   for (let k = 0, seen = 0; k < count; k++) {
-    if (bestScore - scores[k]! < 1e-12) {
+    if (bestScore - scores[k]! < SCORE_EPS) {
       if (seen === pick) {
         chosen = cells[k]!;
         break;
@@ -261,6 +266,8 @@ export function stageSenseAndMove(world: World): void {
   rebuildIndex(world);
   const e = world.ents;
   const c = e.cols;
+  startX.set(c.x.subarray(0, e.highWater));
+  startY.set(c.y.subarray(0, e.highWater));
   for (let i = 0; i < e.highWater; i++) {
     if (c.alive[i] !== 1) continue;
     const sp = world.species[c.species[i]!]!;
@@ -271,15 +278,23 @@ export function stageSenseAndMove(world: World): void {
     const cell = entityCell(c.x[i]!, c.y[i]!);
     const suit = suitabilityAt(world, sp, prof, cell);
     c.suitability[i] = suit.value;
+    // Stressed shows after 3 continuous seconds below threshold and clears after 3 continuous
+    // seconds recovered (D01 §4).
+    const stressed = (c.flags[i]! & FLAG.stressed) !== 0;
     if (suit.value < STRESS_THRESHOLD) {
-      c.stressSeconds[i]! += DT;
       c.recoverSeconds[i] = 0;
-      if (c.stressSeconds[i]! >= STRESS_DISPLAY_SECONDS) c.flags[i] = c.flags[i]! | FLAG.stressed;
+      if (!stressed) {
+        c.stressSeconds[i]! += DT;
+        if (c.stressSeconds[i]! >= STRESS_DISPLAY_SECONDS - 1e-9) c.flags[i] = c.flags[i]! | FLAG.stressed;
+      }
     } else {
-      c.recoverSeconds[i]! += DT;
-      if (c.recoverSeconds[i]! >= STRESS_DISPLAY_SECONDS) {
-        c.flags[i] = c.flags[i]! & ~FLAG.stressed;
-        c.stressSeconds[i] = 0;
+      c.stressSeconds[i] = 0;
+      if (stressed) {
+        c.recoverSeconds[i]! += DT;
+        if (c.recoverSeconds[i]! >= STRESS_DISPLAY_SECONDS - 1e-9) {
+          c.flags[i] = c.flags[i]! & ~FLAG.stressed;
+          c.recoverSeconds[i] = 0;
+        }
       }
     }
 
@@ -308,7 +323,7 @@ export function stageSenseAndMove(world: World): void {
         c.flags[i] = c.flags[i]! | FLAG.hunting;
         c.moveMode[i] = MOVE_PURSUE;
         c.limitCode[i] = R.PRED_OUT_OF_CONTACT;
-        moveToward(world, i, sp, c.x[target]!, c.y[target]!, step, CONTACT_DISTANCE * 0.5);
+        moveToward(world, i, sp, startX[target]!, startY[target]!, step, CONTACT_DISTANCE * 0.5);
         c.decisionTimer[i] = c.decisionTimer[i] === 0 ? DECISION_INTERVAL_TICKS - 1 : c.decisionTimer[i]! - 1;
         continue;
       }
