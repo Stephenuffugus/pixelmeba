@@ -1,0 +1,67 @@
+export const meta = {
+  name: 'g2-wave-c',
+  description: 'Phase 2 wave C: founder modes and presets (P2.2), regional graphs + checkpoint ring + journal (P2.8), module marks in the atlas + lockout reason + tuning tool fix, each adversarially verified',
+  phases: [
+    { title: 'Build', detail: 'three builders' },
+    { title: 'Verify', detail: 'one adversarial verifier per builder' },
+  ],
+}
+
+const PRE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Phase 1 is tagged g1; Phase 2 waves A and B are committed on main (modules E01/E03/E05, comparison, What if?, experiments + Notebook, lineage/branches, Lab view). You build another part of Phase 2 (docs/BUILD_DIRECTIVE.md "Phase 2"). Canonical rules: docs/PIXELMEBA_IMPLEMENTATION_SPEC.md, docs/CONTENT_TABLES.md (every number), docs/ARCHITECTURE.md, docs/UX_SPEC.md, docs/CONFLICT_REGISTER.md; docs/DECISIONS.md holds rulings (read the titles). Contract (CLAUDE.md): determinism (randomness only via det(seed, stream, ...keys); add a NEW stream id if needed, never reuse one), conservation ledger, no hidden rescue, honest labels, content is validated JSON, the UI changes the world only through commands, saves are sacred (atomic, checksummed, predecessor kept, old saves keep their recorded ruleset; world schema changes need a version bump + migration by copy + an old-save test through loadSaveFile, see D-0019).
+
+The lead commits: do NOT run git add/commit/stash/checkout/reset/rm and do not delete files you did not create. Two other agents edit the same working tree right now. Edit ONLY the files your assignment lets you own. SHARED files: additive edits only, re-read immediately before each edit, never reformat/reorder/rename code you did not write. After changing content/ run "npx tsx tools/content-validate.ts --write".
+
+Browser tests only with your own port and build folder: E2E_PORT=<port> E2E_OUTDIR=tmp/dist-<key> npx playwright test <your specs> (all three projects), then stop only your port (lsof -t -i :<port> | xargs -r kill; never pkill -f). 2 CPUs shared: targeted vitest runs only. Before finishing: tsc --noEmit and eslint on your files clean; your tests pass; no serious axe violations on screens you touched; 48 px targets; 200 % text works. Proposed decisions in your report as "PROPOSED DECISION: …". Final message: plain report — files, what each test proves, commands + results, not done + why, bugs elsewhere, proposed decisions.`
+
+const TASKS = [
+  {
+    key: 'founders',
+    port: 4191,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P2.2 "Founder modes and mutation presets" end to end. Read SPEC §8.6, UX_SPEC §3.3 (mode labels) and the New Dish flow (UX §2/§3; src/ui/views/NewDish.tsx), CT §6–§7 and §12.8, and the existing src/sim/founders.ts and src/sim/mutation.ts (wave A extended Varied founders for E03's dormancy locus).
+You own: src/sim/founders.ts, src/sim/mutation.ts, src/ui/views/NewDish.tsx, src/ui/panels/Advanced*.tsx (new), src/ui/strings/modes.ts (new), tests/fixtures/registry-imports.test.ts (new), tests/sim/founders*.test.ts (new), tests/e2e/new-dish.spec.ts (new). SHARED (additive): src/sim/commands.ts (a timestamped preset-change command), src/sim/recipes.ts, src/worker/{protocol,host,client}.ts, src/persistence/saveFile.ts (export metadata), src/ui/{state.ts,app/App.tsx,views/DishScreen.tsx,views/SimplePage.tsx,styles.css}, src/ui/panels/{MoreSheet.tsx,Inspector.tsx}.
+Build: founder modes Identical (loci 50, no modules) / Varied (each active locus from 45–55 drawn from a seeded init stream) / Diverse (10 % of eligible founders get one legal module, labelled "present at creation" in the inspector and lineage); presets Standard / Accelerated / Fixed with an Advanced panel that shows the per-birth rates; changing the preset during play is a timestamped intervention in the command log (undoable like other commands; shows on the History timeline); faster playback never changes per-birth rates (prove it); the world label "Core prototype — quantitative evolution" wherever the world is described while the module registry is partial (manifest enables fewer modules than the full catalog); "Accelerated Evolution (game setting, not realism)" and "Fixed Traits" labels per UX §3.3; export metadata shows the enabled registry (module ids and registry version).
+Done when: tests/fixtures/registry-imports.test.ts: a save that references a module this build does not have fails import clearly (readable message, nothing built); changing the active registry (content) never mutates an existing save's candidates, genomes or recorded registry (load an old save under a changed registry and compare); founder-mode fixtures: Identical/Varied/Diverse distributions exactly as specified and deterministic per seed; preset change recorded with its tick and the per-birth rates identical at 1× and 4×; tests/e2e/new-dish.spec.ts: New Dish → Varied + Accelerated → labels visible → Advanced shows rates → change preset during play → History shows the intervention.`,
+  },
+  {
+    key: 'observe',
+    port: 4192,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P2.8 "Regional trait graphs, checkpoint ring, journal". Read SPEC §12.4–§12.5 (history, charts), the checkpoint-ring paragraph near SPEC line 772 ("Optional automatic checkpoint ring: 10 snapshots at …"), D4 §12 in docs/source, UX_SPEC §1 (Notebook: Journal), §5.4 (charts), docs/DECISIONS.md D-0014 (charts are small multiples in one validated ink #256E9E), and the existing src/sim/history.ts, src/ui/panels/HistorySheet.tsx, src/persistence/store.ts, src/ui/journal.ts (created in wave B for experiment stamps).
+You own: src/sim/history.ts, src/ui/panels/HistorySheet.tsx, src/ui/panels/Trait*.tsx / Region*.tsx (new), src/persistence/store.ts, src/persistence/checkpoints.ts (new), src/ui/journal.ts (extend; keep its existing API), src/ui/views/Notebook*.tsx (the Journal tab only), tests/sim/history*.test.ts, tests/persistence/checkpoints.test.ts (new), tests/ui/journal*.test.ts (new), tests/e2e/observe.spec.ts (new). SHARED (additive): src/sim/serialize.ts (only if history's saved shape changes — then follow D-0019: schema bump + migration + old-save test), src/worker/{protocol,host,client,sim.worker}.ts, src/ui/{state.ts,main.tsx,views/SimplePage.tsx (Settings toggle),styles.css}.
+Build: (1) Regional trait graphs: population and median/range of a SELECTED trait (locus) per region — regions here are whole dish plus the four quadrants (P4.8 adds real regions later) — as small multiples in the validated ink with crosshair tooltip, text summary and table view (D-0014, dataviz rules); the data must come from recorded history (choose a cadence that keeps memory bounded and document it; e.g. per-10-second samples of per-region, per-species, per-active-locus count/median/min/max, compacted like the rest of history), never from the renderer. (2) Automatic checkpoint ring (Settings toggle, off by default unless the SPEC says otherwise): 10 checkpoints at the SPEC's interval of simulated time, labelled "automatic", stored with the same atomic, checksummed, predecessor-safe path as slots, evicting only the oldest automatic checkpoint, never a named/pinned save, and respecting storage limits (if the store refuses, keep the older ones and say so); openable from Saved dishes. (3) Journal of observed relationships: the player records "I saw X coincide with Y" entries (time, dish, optional link to an experiment stamp or a comparison result card), shown in Notebook → Journal alongside experiment stamps; wording follows the honest-label rule ("coincided with").
+Done when: charts update from history (test: after N seconds the regional series and the table match an independent recomputation from world state at the sample ticks); ring respects storage limits and never evicts named saves (tests with MemoryBackend including a failing commit and a full store); journal entries persist and list; tests/e2e/observe.spec.ts: pick a trait → regional charts show → table view → turn on the ring → a checkpoint appears after the interval (run at 4×) → open it → add a journal entry and see it in the Notebook.`,
+  },
+  {
+    key: 'art-marks',
+    port: 4193,
+    prompt: `ASSIGNMENT: three follow-ups from wave A (D-0019), all small but exact.
+(1) Module marks through the art pipeline (ARCH §3 and §10.1): src/render/features.ts currently imports art/src/layers/modules.ts, the palette and the sprite helper and builds a texture at runtime; ARCH §3 limits src/render to snapshot types and the atlas manifest, and ARCH §10.1 lists the dormancy prepare/rest/wake and reserve four-band frames as atlas frames that tools/art-build.ts packs and checks. Pack the feature-layer frames (starch notch, reserve pocket bands 0–3, resting seam frames 0–2, all four headings) into the atlas build (either the organism atlas or a second atlas file with its own manifest section), make the renderer load them from the atlas like sprites (keep featureLayers() mapping and its tests), extend tools/art-build.ts --check and tools/content-validate.ts atlas completeness for them, and extend tools/asset-preview.html to show them. The output must stay deterministic (same hash twice). Remove the now-unused palette constant reserveRim if nothing uses it.
+(2) DORMANCY_LOCKOUT reason code (SPEC §12.2 lists it under States): set it for an E03 carrier during the post-wake lockout when rest would otherwise have been triggered (or as the organism's state reason — read SPEC §7.6/§12.2 and choose the reading most consistent with "everything the inspector says traces to a reason code"), with Explore/Lab copy per UX §5.2 style and a test; keep every existing reason test passing.
+(3) tools/sim-tune.ts counts secretion only for native producers; E01 carriers are left out. Count from the organism's profile producer rules so E01 carriers are included, with a test in tests/tools/sim-tune.test.ts.
+You own: art/src/**, public/atlas/** (via npm run art:build only), tools/art-build.ts, tools/art-preview.ts, tools/asset-preview.{html,ts}, tools/content-validate.ts, tools/sim-tune.ts, src/render/features.ts, src/render/renderer.ts (feature-layer texture loading only), src/sim/dormancy.ts, src/sim/reasons.ts (append the code only if missing; never renumber), src/ui/strings/reasons.ts, tests/sim/module-visuals.test.ts, tests/sim/dormancy.test.ts, tests/content/atlas.test.ts, tests/tools/sim-tune.test.ts, tests/ui/reasons.test.ts. Do not edit src/ui views/panels other than strings.
+Done when: npm run art:build twice gives the same hash and --check passes; content:validate checks the new frames (a missing mark frame fails with a precise message; test); the renderer draws marks from the atlas (no runtime texture building; grep proves src/render imports nothing from art/src); reason and dormancy tests pass including the new lockout case; sim-tune counts E01 secretion (test). Run npx vitest run for every test file you touched plus tests/render.`,
+  },
+]
+
+const VERIFY = (t, built) => `You are an adversarial verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). Do NOT edit any repository file and do NOT run git add/commit/stash/checkout/reset. Other agents may still be editing other files. Scratch scripts go in /tmp. 2 CPUs: targeted commands. Playwright: E2E_PORT=${t.port + 10} E2E_OUTDIR=tmp/dist-verify-${t.key}, then stop only that port.
+
+A builder was given this assignment:
+---
+${t.prompt}
+---
+The builder reported:
+---
+${typeof built === 'string' ? built : JSON.stringify(built)}
+---
+Try to REFUTE that it is done correctly, completely and honestly. Re-run key commands; read the diff (git status / git diff); check rules and numbers against the cited docs (quote lines); look for vacuous tests, weaker proxies, determinism leaks, unledgered material moves, dishonest copy, accessibility failures, and edits outside ownership or non-additive edits to SHARED files. Return problems with file:line and a repro, most severe first, prefixed BLOCKER / MAJOR / MINOR; "VERIFIED OK — <evidence>" for parts that hold. ok=false if any BLOCKER or MAJOR.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+
+return await pipeline(
+  TASKS,
+  (t) => agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\n${t.prompt}`, { label: `build:${t.key}`, phase: 'Build' }),
+  (built, t) => agent(VERIFY(t, built), { label: `verify:${t.key}`, phase: 'Verify', schema: VERDICT }).then((v) => ({ key: t.key, built, verify: v })),
+)
