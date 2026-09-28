@@ -1,0 +1,71 @@
+export const meta = {
+  name: 'g2-wave-b-fix2',
+  description: 'Phase 2 wave B fix round 2: re-verifier findings and cross-file follow-ups (worker/UI and lab/lineage/content), each re-verified',
+  phases: [
+    { title: 'Fix', detail: 'two fixers with disjoint files' },
+    { title: 'Verify', detail: 'one adversarial re-verifier per fixer' },
+  ],
+}
+
+const R = 'docs/reports/reviews/g2-wave-b'
+
+const PRE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Phase 2 wave B and a first fix round are in the working tree (wave B committed at d085a65; the first fix round is uncommitted or committed just now — read git log -3 and git status). A re-verifier reviewed the first fix round; you fix what it found plus the follow-ups the first-round fixers could not do because the files were not theirs. Findings and reports: ${R}/*-verify.md (wave B verifier), ${R}/fix1-*-build.md (first-round fixer reports) and ${R}/fix1-*-verify.md (re-verifier findings). Canonical rules: docs/PIXELMEBA_IMPLEMENTATION_SPEC.md, docs/CONTENT_TABLES.md, docs/ARCHITECTURE.md, docs/UX_SPEC.md, docs/CONFLICT_REGISTER.md, docs/DECISIONS.md (D-0024…D-0027 describe wave B). Contract (CLAUDE.md): determinism (randomness only via det(); never Math.random/Date/Map-Set-object-key iteration in src/sim), conservation ledger, no hidden rescue, honest labels (everything shown traces to a measured value; "coincided with" until a mechanism supports "because"), content is validated JSON, the UI changes the world only through commands, saves are sacred (world schema change ⇒ version bump + migration by copy + old-save test, D-0019).
+
+The lead commits: do NOT run git add/commit/stash/checkout/reset/rm and do not delete files you did not create. One other fixer edits the same working tree right now; edit ONLY the files your assignment lets you own; if something else must change, describe it in your report. After changing anything under content/ run "npx tsx tools/content-validate.ts --write".
+
+Browser tests only with your own port and build folder: E2E_PORT=<port> E2E_OUTDIR=tmp/dist-<key> npx playwright test <specs> --project=phone-portrait --project=desktop --project=phone-landscape, then stop only your port (lsof -t -i :<port> | xargs -r kill; never pkill -f). 2 CPUs shared: targeted vitest files only.
+
+For EVERY numbered item: fix it with a test that fails on the old behaviour and passes now (for behavioural items), or explain precisely why not. Keep all existing tests passing (change a test only where the item changes specified behaviour, and say so). Before finishing: npx tsc -p tsconfig.json --noEmit and npx eslint <your files> clean; touched unit tests pass; the e2e specs of the areas you touched pass on all three projects; no serious/critical axe violations; targets ≥ 48 px, text ≥ 16 px. Put proposed decisions in the report as "PROPOSED DECISION: …". Final message: a plain report — per item FIXED (how, which test) / NOT FIXED (why); files changed; commands with results.`
+
+const TASKS = [
+  {
+    key: 'worker-ui',
+    port: 4183,
+    prompt: `You own: src/worker/{protocol,host,client}.ts, src/ui/state.ts, src/persistence/store.ts, src/ui/views/Saves.tsx, src/ui/views/DishScreen.tsx, src/ui/panels/Inspector.tsx, src/ui/panels/LabTrayContent.tsx, src/ui/panels/WhatIf*.tsx, src/ui/strings/{whatif,experiments}.ts, src/ui/views/{Notebook,Experiment*}.tsx, tests/worker/**, tests/experiments/**, tests/sim/view-switch.test.ts, tests/persistence/**, tests/e2e/{whatif,experiments,saves*,lab-tools}.spec.ts.
+Items:
+1. MAJOR (fix1-lab-verify): the Lab must offer structure tools from the WORLD's manifest. Add readonly structureIds?: readonly string[] to DishInfo and structureIds: w.content.manifest.enabledStructures ?? [] in DishHost.info(); LabTrayContent uses it and drops the contentHash-equality fallback (keep a safe fallback only for a missing field). Update tests/sim/view-switch.test.ts: a dish whose contentHash differs from this build but whose manifest lists BEAD/STONE/WALL gets the tools; an old save without enabledStructures gets none.
+2. MAJOR (fix1-experiments-verify): a refused command (accepted 0) must not arm Undo (keep the previous undo point untouched), and Undo during an experiment observation must end that observation with a truthful reason (the observer cannot rewind). Worker test reproducing the verifier's refused-command + Undo false-stamp sequence (EXP_103).
+3. MAJOR (fix1-experiments-verify): apply and review tmp/p25-item7-reopen-notice.patch (reopen notice: experimentEnded reason 'closed' when an experiment dish is reopened from a save; stamp toast uses stampToastText so paired stamps do not say the dish keeps running); make sure its test passes.
+4. After a single-arm card's measured gate has held while a player step is still missing, a player change must not discard the held stamp nor claim it "stopped observing before its gate": keep the stamp (values from the gate moment) waiting for the step. Test with the verifier's EXP_103 gate-then-feed repro.
+5. The 'inspector identifies food use' step must be noted only while the inspector is actually open on that organism (clear the worker's selection when the inspector sheet closes, or note the step from the view event); test.
+6. In the dish view, when a single-arm card's gate has held and a step is still missing, show one small, dismissible notice naming the missing step(s) (UX tone; ≥ 16 px; axe clean).
+7. What if? follow-ups: (a) declare registryLabel on WhatIfAnswer in protocol.ts and compute the world label in ONE helper used by both host.ts call sites; drop WhatIfAnswerView. (b) the preview's amount ramp uses one fixed scale across all choices of a source (equal amounts ⇒ equal fills; e.g. the largest amount over that source's catalog), keeping ≥ 3:1 contrast. (c) the old-save fallback that treats a save without recorded overrides as the authored recipe must also check the start was not empty (e.g. the recorded initial ledger / founder count equals the recipe's). (d) client.onError wording by what really happened: a failed create names the failed start; a failed async save/export says the save/export failed and does not claim a pause; only a real simulation error that paused the dish says "paused". (e) meta.variant reaches the slot index (SlotSummary) and the Saved dishes list shows the idea (e.g. "What if? · R-G3 rev 1") without loading the world.`,
+  },
+  {
+    key: 'lab-lineage',
+    port: 4182,
+    prompt: `You own: src/sim/{grid,structures,branches,lineage,specimens,serialize}.ts, src/ui/panels/{LabTray,Lineage,Discovery}*.tsx (not LabTrayContent.tsx), src/ui/strings/{lab,lineage}.ts, src/ui/panels/CompareText.tsx, src/ui/panels/HistorySheet.tsx and src/sim/history.ts (only for item 7), content/materials/**, content/experiments/**, content/recipes/**, tests/sim/{lab-commands,lineage-*}.test.ts, tests/fixtures/branch-evidence.test.ts, tests/ui/discovery*.test.ts, tests/content/**, tests/e2e/{lab-tools,lineage}.spec.ts (read-only unless needed).
+Items:
+1. Honest habitat text (fix1-lab-verify MINOR): the Lab Habitat tray's "Changes" line now shows content rules text that names organisms/devices not in this build and claims "Algae and most swimming consumers live only in water", which is false for this dish. Rewrite WATER/GEL/SEDIMENT (and NUTRIENT: "Nutrient alone is not food: it adds no carbon or energy.") rules text so it is true for every phase and names no specific organism, and have the tray add a computed line "Lives here in this dish: …" from the WORLD's enabled species habitats (species content), so specifics come from data. Test the computed line for the Garden (Sprinter, Recycler, Crumbsmith on gel/sediment; Amoeba water only — verify against content before asserting).
+2. Crafted-stroke stall (fix1-lab-verify MINOR): cap the total sampled path length of a habitat edit in invalidHabitatEdit (refuse whole beyond a bound that no finger stroke reaches — measure a long real scribble to choose it and state it) so the verifier's 20,000-point alternating stroke is refused quickly; test with a time bound.
+3. Names from content (fix1-lab-verify MINOR): CompareText and the refusal note use the content name (e.g. "Impermeable wall"), never internal ids; test.
+4. Hash coverage (fix1-lineage-verify MINOR): the state hash must cover every input that can change hashed state — specimen generation must not come from unhashed lineage.kept/keep. Either derive it from hashed data or include keep/kept in stateHash (serialize.ts) — choose, justify, and add the verifier's repro as a test (two worlds equal in hash stay equal after the same saveSpecimen).
+5. Surcharge line (fix1-lineage-verify MINOR): module "Game rule:" lines quote the surcharge the profile actually charges (after inherited multipliers) — test with E05 + feeding locus 60.
+6. DiscoveryPacer (fix1-lineage-verify MINOR): pending discoveries are dropped only after a card is really shown; a failed/empty fetch or a dish change keeps them (or discards them only for the old dish) and does not start the 60 s gap; test.
+7. Debris total (fix1-experiments-verify MINOR): EXP_103, CLEANING_CREW_V1 and the DEBRIS material tell players to open the resource history to see the debris total, but History does not chart debris. Make it true: if src/sim/history.ts already records a debris total, add it to the History sheet's small multiples (one validated ink, D-0014); otherwise change the text to point at something that exists (e.g. the debris overlay). Test whichever you choose.`,
+  },
+]
+
+const VERIFY = (t, built) => `You are an adversarial re-verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). Do NOT edit any repository file and do NOT run git add/commit/stash/checkout/reset. Another agent may still be editing other files. Scratch scripts go in /tmp. 2 CPUs: targeted commands. Playwright: E2E_PORT=${t.port + 10} E2E_OUTDIR=tmp/dist-verify-${t.key}, then stop only that port.
+
+A fixer was given this assignment:
+---
+${t.prompt}
+---
+The fixer reported:
+---
+${typeof built === 'string' ? built : JSON.stringify(built)}
+---
+For EACH numbered item try to REFUTE that it is fixed: reproduce the original finding against the current tree (repros are in ${R}/fix1-*-verify.md), read the diff, check the new test would fail on the old behaviour, and check nothing regressed (re-run the touched unit tests and the relevant e2e spec on phone-portrait and desktop). Also check determinism, conservation, honest labels, accessibility and ownership. Return problems with file:line and a repro, most severe first, prefixed BLOCKER / MAJOR / MINOR; "VERIFIED OK — <item> — <evidence>" for items that hold. ok=false if any BLOCKER or MAJOR.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+
+return await pipeline(
+  TASKS,
+  (t) => agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\n${t.prompt}`, { label: `fix2:${t.key}`, phase: 'Fix' }),
+  (built, t) => agent(VERIFY(t, built), { label: `reverify2:${t.key}`, phase: 'Verify', schema: VERDICT }).then((v) => ({ key: t.key, built, verify: v })),
+)
