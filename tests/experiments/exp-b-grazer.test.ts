@@ -7,6 +7,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { ExperimentResult } from '../../src/sim/experiments';
 import { expectConserved, expectReplayIdentical, expectEqualArms, expectGateReached, runCard } from './helpers';
+import { expectWaveANumbers } from './golden';
 
 let r: ExperimentResult;
 beforeAll(() => {
@@ -55,5 +56,11 @@ describe('Experiment B — What changes when a grazer arrives (FIRST_DISH_V1 r1,
       expect(typeof r.B!.reported[id]).toBe('number');
     }
     expect(r.A.reported['preyBiomass.P01']).toBeGreaterThan(r.A.reported['biomass.B01']!); // Sunbeads, Recyclers and Crumbsmiths are prey too
+  });
+});
+
+describe('one paired-run measurement model (SPEC §13.4)', () => {
+  it('reproduces every number wave A recorded for this card: gate, stamp, measurements, ledger, timeline', () => {
+    expectWaveANumbers(r);
   });
 });

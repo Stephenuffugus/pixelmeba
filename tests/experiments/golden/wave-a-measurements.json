@@ -1,0 +1,3454 @@
+{
+ "about": "Wave A measurement numbers (commit 2761cbd/ba5158c, before the paired-run measurement was unified), recorded by running runExperiment for the six Phase 2 cards and runPairedComparison for three comparisons with the pre-unification code. State hashes and the content hash are left out: hashes cover the content hash and other in-flight systems; tests/experiments/*.test.ts prove replay identity separately.",
+ "cards": {
+  "EXP_101": {
+   "A": {
+    "ledger": {
+     "checks": 8,
+     "everyCheckOk": true,
+     "ok": true,
+     "relErr": {
+      "c": 7.745643914966621e-15,
+      "m": 0,
+      "n": 9.783140338060941e-14
+     }
+    },
+    "measurements": {
+     "alive.A01": 0,
+     "alive.B01": 55,
+     "alive.B04": 0,
+     "alive.B06": 0,
+     "alive.P01": 0,
+     "aliveTotal": 55,
+     "biomass.A01": 0,
+     "biomass.B01": 110.78011380870828,
+     "biomass.B04": 0,
+     "biomass.B06": 0,
+     "biomass.P01": 0,
+     "biomassRatio.A01": 0,
+     "biomassRatio.B01": 3.692670460290276,
+     "biomassRatio.B04": 0,
+     "biomassRatio.B06": 0,
+     "biomassRatio.P01": 0,
+     "biomassStart.A01": 0,
+     "biomassStart.B01": 30,
+     "biomassStart.B04": 0,
+     "biomassStart.B06": 0,
+     "biomassStart.P01": 0,
+     "biomassTotal": 110.78011380870828,
+     "births.A01": 0,
+     "births.B01": 27,
+     "births.B04": 0,
+     "births.B06": 0,
+     "births.P01": 0,
+     "capturedCarbon.A01": 0,
+     "capturedCarbon.B01": 0,
+     "capturedCarbon.B04": 0,
+     "capturedCarbon.B06": 0,
+     "capturedCarbon.P01": 0,
+     "captures.A01": 0,
+     "captures.B01": 0,
+     "captures.B04": 0,
+     "captures.B06": 0,
+     "captures.P01": 0,
+     "consumed.sugar": 166.68397876858953,
+     "converted.oil": 0,
+     "converted.protein": 0,
+     "converted.starch": 0,
+     "deaths.A01": 0,
+     "deaths.B01": 2,
+     "deaths.B01.DEATH_STARVATION": 2,
+     "deaths.B04": 0,
+     "deaths.B06": 0,
+     "deaths.P01": 0,
+     "extinctAt.A01": -1,
+     "extinctAt.B01": -1,
+     "extinctAt.B04": -1,
+     "extinctAt.B06": -1,
+     "extinctAt.P01": -1,
+     "field.broth": 0,
+     "field.brothN": 0,
+     "field.co2": 5400.132742467077,
+     "field.detritus": 2.5618755755884077,
+     "field.detritusN": 0.2561875575588405,
+     "field.metabolite": 33.336795753718555,
+     "field.nutrient": 1134.4658010615722,
+     "field.oil": 0,
+     "field.oilN": 0,
+     "field.oxygen": 8637.267257532978,
+     "field.protein": 0,
+     "field.proteinN": 0,
+     "field.starch": 0,
+     "field.starchN": 0,
+     "field.sugar": 206.77602123140622,
+     "field.sugarN": 0,
+     "inputCarbon": 157.5,
+     "intake.A01": 0,
+     "intake.B01": 166.68397876859348,
+     "intake.B04": 0,
+     "intake.B06": 0,
+     "intake.P01": 0,
+     "interventionAccepted": 0,
+     "interventionRejected": 0,
+     "meanEnergy.A01": 0,
+     "meanEnergy.B01": 27.29122732280811,
+     "meanEnergy.B04": 0,
+     "meanEnergy.B06": 0,
+     "meanEnergy.P01": 0,
+     "oxygenMean": 0.7640894601497681,
+     "preyBiomass.A01": 0,
+     "preyBiomass.B01": 0,
+     "preyBiomass.B04": 0,
+     "preyBiomass.B06": 0,
+     "preyBiomass.P01": 110.78011380870828,
+     "runSeconds": 180,
+     "seconds": 180,
+     "speciesAlive": 1
+    },
+    "reported": {
+     "alive.B01": 55,
+     "biomass.B01": 110.78011380870828,
+     "biomassRatio.B01": 3.692670460290276,
+     "biomassStart.B01": 30,
+     "births.B01": 27,
+     "consumed.sugar": 166.68397876858953,
+     "deaths.B01": 2,
+     "field.sugar": 206.77602123140622,
+     "intake.B01": 166.68397876859348
+    },
+    "timelineSha256": "5345c782336c01dde90aca0701f4cf8d5b6b729c2da2b84a4e50f7117b4bf527",
+    "unattributedDeaths": 0,
+    "worldId": "EXP_101-single"
+   },
+   "B": null,
+   "endTick": 1800,
+   "gate": {
+    "clauses": [
+     {
+      "actual": 1.251531440868829,
+      "arm": "A",
+      "label": "Sprinter biomass grew by 25 %",
+      "measure": "biomassRatio.B01",
+      "op": "gte",
+      "pass": true,
+      "value": 1.25
+     },
+     {
+      "actual": 15.091886452129737,
+      "arm": "A",
+      "label": "Sprinters took in food",
+      "measure": "intake.B01",
+      "op": "gt",
+      "pass": true,
+      "value": 0
+     }
+    ],
+    "reached": true,
+    "reachedAtSecond": 7
+   },
+   "interventions": [],
+   "label": "this run",
+   "stamp": {
+    "contentVersion": 1,
+    "experimentId": "EXP_101",
+    "journalStamp": "Followed a group along a food trail",
+    "reachedAtSecond": 7,
+    "recipeId": "FOOD_TRAIL_V1",
+    "recipeRevision": 1,
+    "seed": 101,
+    "values": {
+     "A:biomassRatio.B01": 1.251531440868829,
+     "A:intake.B01": 15.091886452129737
+    },
+    "worldKeepsRunning": true
+   },
+   "startTick": 0
+  },
+  "EXP_102": {
+   "A": {
+    "ledger": {
+     "checks": 8,
+     "everyCheckOk": true,
+     "ok": true,
+     "relErr": {
+      "c": 1.7915427807081883e-15,
+      "m": 0,
+      "n": 1.0311824471270287e-13
+     }
+    },
+    "measurements": {
+     "alive.A01": 367,
+     "alive.B01": 0,
+     "alive.B04": 0,
+     "alive.B06": 0,
+     "alive.P01": 0,
+     "aliveTotal": 367,
+     "biomass.A01": 799.3967404110848,
+     "biomass.B01": 0,
+     "biomass.B04": 0,
+     "biomass.B06": 0,
+     "biomass.P01": 0,
+     "biomassRatio.A01": 17.76437200913522,
+     "biomassRatio.B01": 0,
+     "biomassRatio.B04": 0,
+     "biomassRatio.B06": 0,
+     "biomassRatio.P01": 0,
+     "biomassStart.A01": 45,
+     "biomassStart.B01": 0,
+     "biomassStart.B04": 0,
+     "biomassStart.B06": 0,
+     "biomassStart.P01": 0,
+     "biomassTotal": 799.3967404110848,
+     "births.A01": 337,
+     "births.B01": 0,
+     "births.B04": 0,
+     "births.B06": 0,
+     "births.P01": 0,
+     "capturedCarbon.A01": 0,
+     "capturedCarbon.B01": 0,
+     "capturedCarbon.B04": 0,
+     "capturedCarbon.B06": 0,
+     "capturedCarbon.P01": 0,
+     "captures.A01": 0,
+     "captures.B01": 0,
+     "captures.B04": 0,
+     "captures.B06": 0,
+     "captures.P01": 0,
+     "converted.oil": 0,
+     "converted.protein": 0,
+     "converted.starch": 0,
+     "deaths.A01": 0,
+     "deaths.B01": 0,
+     "deaths.B04": 0,
+     "deaths.B06": 0,
+     "deaths.P01": 0,
+     "extinctAt.A01": -1,
+     "extinctAt.B01": -1,
+     "extinctAt.B04": -1,
+     "extinctAt.B06": -1,
+     "extinctAt.P01": -1,
+     "field.broth": 0,
+     "field.brothN": 0,
+     "field.co2": 5337.487251541336,
+     "field.detritus": 0,
+     "field.detritusN": 0,
+     "field.metabolite": 0,
+     "field.nutrient": 1026.9603259588907,
+     "field.oil": 0,
+     "field.oilN": 0,
+     "field.oxygen": 8669.156374229424,
+     "field.protein": 0,
+     "field.proteinN": 0,
+     "field.starch": 0,
+     "field.starchN": 0,
+     "field.sugar": 970.3567404110862,
+     "field.sugarN": 0,
+     "inputCarbon": 0,
+     "intake.A01": 1508.7934808221712,
+     "intake.B01": 0,
+     "intake.B04": 0,
+     "intake.B06": 0,
+     "intake.P01": 0,
+     "interventionAccepted": 0,
+     "interventionRejected": 0,
+     "meanEnergy.A01": 63.8645118863598,
+     "meanEnergy.B01": 0,
+     "meanEnergy.B04": 0,
+     "meanEnergy.B06": 0,
+     "meanEnergy.P01": 0,
+     "oxygenMean": 0.7669105072743652,
+     "patchInput.0": 0,
+     "preyBiomass.A01": 0,
+     "preyBiomass.B01": 0,
+     "preyBiomass.B04": 0,
+     "preyBiomass.B06": 0,
+     "preyBiomass.P01": 799.3967404110848,
+     "runSeconds": 180,
+     "seconds": 180,
+     "speciesAlive": 1
+    },
+    "reported": {
+     "alive.A01": 367,
+     "biomass.A01": 799.3967404110848,
+     "births.A01": 337,
+     "deaths.A01": 0,
+     "field.co2": 5337.487251541336,
+     "intake.A01": 1508.7934808221712,
+     "oxygenMean": 0.7669105072743652
+    },
+    "timelineSha256": "1e8da02ba6ee44096b8d54e779cf909a8e4be0f79cf83d9346d839f90101131c",
+    "unattributedDeaths": 0,
+    "worldId": "EXP_102-A"
+   },
+   "B": {
+    "ledger": {
+     "checks": 8,
+     "everyCheckOk": true,
+     "ok": true,
+     "relErr": {
+      "c": 2.1800341048285947e-14,
+      "m": 0,
+      "n": 1.0352907437291284e-13
+     }
+    },
+    "measurements": {
+     "alive.A01": 30,
+     "alive.B01": 0,
+     "alive.B04": 0,
+     "alive.B06": 0,
+     "alive.P01": 0,
+     "aliveTotal": 30,
+     "biomass.A01": 73.58514124572791,
+     "biomass.B01": 0,
+     "biomass.B04": 0,
+     "biomass.B06": 0,
+     "biomass.P01": 0,
+     "biomassRatio.A01": 1.6352253610161758,
+     "biomassRatio.B01": 0,
+     "biomassRatio.B04": 0,
+     "biomassRatio.B06": 0,
+     "biomassRatio.P01": 0,
+     "biomassStart.A01": 45,
+     "biomassStart.B01": 0,
+     "biomassStart.B04": 0,
+     "biomassStart.B06": 0,
+     "biomassStart.P01": 0,
+     "biomassTotal": 73.58514124572791,
+     "births.A01": 0,
+     "births.B01": 0,
+     "births.B04": 0,
+     "births.B06": 0,
+     "births.P01": 0,
+     "capturedCarbon.A01": 0,
+     "capturedCarbon.B01": 0,
+     "capturedCarbon.B04": 0,
+     "capturedCarbon.B06": 0,
+     "capturedCarbon.P01": 0,
+     "captures.A01": 0,
+     "captures.B01": 0,
+     "captures.B04": 0,
+     "captures.B06": 0,
+     "captures.P01": 0,
+     "converted.oil": 0,
+     "converted.protein": 0,
+     "converted.starch": 0,
+     "deaths.A01": 0,
+     "deaths.B01": 0,
+     "deaths.B04": 0,
+     "deaths.B06": 0,
+     "deaths.P01": 0,
+     "extinctAt.A01": -1,
+     "extinctAt.B01": -1,
+     "extinctAt.B04": -1,
+     "extinctAt.B06": -1,
+     "extinctAt.P01": -1,
+     "field.broth": 0,
+     "field.brothN": 0,
+     "field.co2": 5397.4121425978365,
+     "field.detritus": 0,
+     "field.detritusN": 0,
+     "field.metabolite": 0,
+     "field.nutrient": 1099.541485875426,
+     "field.oil": 0,
+     "field.oilN": 0,
+     "field.oxygen": 8639.193928701256,
+     "field.protein": 0,
+     "field.proteinN": 0,
+     "field.starch": 0,
+     "field.starchN": 0,
+     "field.sugar": 244.54514124572688,
+     "field.sugarN": 0,
+     "inputCarbon": 0,
+     "intake.A01": 57.17028249145473,
+     "intake.B01": 0,
+     "intake.B04": 0,
+     "intake.B06": 0,
+     "intake.P01": 0,
+     "interventionAccepted": 0,
+     "interventionRejected": 0,
+     "meanEnergy.A01": 35.170282491457066,
+     "meanEnergy.B01": 0,
+     "meanEnergy.B04": 0,
+     "meanEnergy.B06": 0,
+     "meanEnergy.P01": 0,
+     "oxygenMean": 0.7642599016897784,
+     "patchInput.0": 0,
+     "preyBiomass.A01": 0,
+     "preyBiomass.B01": 0,
+     "preyBiomass.B04": 0,
+     "preyBiomass.B06": 0,
+     "preyBiomass.P01": 73.58514124572791,
+     "runSeconds": 180,
+     "seconds": 180,
+     "speciesAlive": 1
+    },
+    "reported": {
+     "alive.A01": 30,
+     "biomass.A01": 73.58514124572791,
+     "births.A01": 0,
+     "deaths.A01": 0,
+     "field.co2": 5397.4121425978365,
+     "intake.A01": 57.17028249145473,
+     "oxygenMean": 0.7642599016897784
+    },
+    "timelineSha256": "39271090c581ee2b42add0b116d0b0c4f8c4498b000bf6df51e5ad055beaf52d",
+    "unattributedDeaths": 0,
+    "worldId": "EXP_102-B"
+   },
+   "endTick": 1800,
+   "gate": {
+    "clauses": [
+     {
+      "actual": 180,
+      "arm": "A",
+      "label": "Both copies ran 180 s",
+      "measure": "runSeconds",
+      "op": "gte",
+      "pass": true,
+      "value": 180
+     },
+     {
+      "actual": 1451.6231983307164,
+      "arm": "absDiff",
+      "label": "The copies' photosynthetic totals differ",
+      "measure": "intake.A01",
+      "op": "gt",
+      "pass": true,
+      "value": 0
+     }
+    ],
+    "reached": true,
+    "reachedAtSecond": 180
+   },
+   "interventions": [],
+   "label": "this paired run",
+   "stamp": {
+    "contentVersion": 1,
+    "experimentId": "EXP_102",
+    "journalStamp": "Compared Sunbeads in light and shade",
+    "reachedAtSecond": 180,
+    "recipeId": "LIGHT_AND_LIFE_V1",
+    "recipeRevision": 1,
+    "seed": 102,
+    "values": {
+     "A:runSeconds": 180,
+     "absDiff:intake.A01": 1451.6231983307164
+    },
+    "worldKeepsRunning": true
+   },
+   "startTick": 0
+  },
+  "EXP_103": {
+   "A": {
+    "ledger": {
+     "checks": 8,
+     "everyCheckOk": true,
+     "ok": true,
+     "relErr": {
+      "c": 1.3727491981541962e-14,
+      "m": 0,
+      "n": 1.0908387646055193e-13
+     }
+    },
+    "measurements": {
+     "alive.A01": 0,
+     "alive.B01": 0,
+     "alive.B04": 8,
+     "alive.B06": 0,
+     "alive.P01": 0,
+     "aliveTotal": 8,
+     "biomass.A01": 0,
+     "biomass.B01": 0,
+     "biomass.B04": 13.666587230227588,
+     "biomass.B06": 0,
+     "biomass.P01": 0,
+     "biomassRatio.A01": 0,
+     "biomassRatio.B01": 0,
+     "biomassRatio.B04": 1.3666587230227587,
+     "biomassRatio.B06": 0,
+     "biomassRatio.P01": 0,
+     "biomassStart.A01": 0,
+     "biomassStart.B01": 0,
+     "biomassStart.B04": 10,
+     "biomassStart.B06": 0,
+     "biomassStart.P01": 0,
+     "biomassTotal": 13.666587230227588,
+     "births.A01": 0,
+     "births.B01": 0,
+     "births.B04": 0,
+     "births.B06": 0,
+     "births.P01": 0,
+     "capturedCarbon.A01": 0,
+     "capturedCarbon.B01": 0,
+     "capturedCarbon.B04": 0,
+     "capturedCarbon.B06": 0,
+     "capturedCarbon.P01": 0,
+     "captures.A01": 0,
+     "captures.B01": 0,
+     "captures.B04": 0,
+     "captures.B06": 0,
+     "captures.P01": 0,
+     "consumed.detritus": 12.296574983695997,
+     "converted.oil": 0,
+     "converted.protein": 0,
+     "converted.starch": 0,
+     "deaths.A01": 0,
+     "deaths.B01": 0,
+     "deaths.B04": 2,
+     "deaths.B04.DEATH_STARVATION": 2,
+     "deaths.B06": 0,
+     "deaths.P01": 0,
+     "extinctAt.A01": -1,
+     "extinctAt.B01": -1,
+     "extinctAt.B04": -1,
+     "extinctAt.B06": -1,
+     "extinctAt.P01": -1,
+     "field.broth": 0,
+     "field.brothN": 0,
+     "field.co2": 5399.278402984283,
+     "field.detritus": 0.18512527792436412,
+     "field.detritusN": 0.018512527792436406,
+     "field.metabolite": 2.4593149967392,
+     "field.nutrient": 1080.4148287491803,
+     "field.oil": 0,
+     "field.oilN": 0,
+     "field.oxygen": 8638.121597015732,
+     "field.protein": 0,
+     "field.proteinN": 0,
+     "field.starch": 0,
+     "field.starchN": 0,
+     "field.sugar": 215.96000000003667,
+     "field.sugarN": 0,
+     "inputCarbon": 0,
+     "intake.A01": 0,
+     "intake.B01": 0,
+     "intake.B04": 12.29657498369598,
+     "intake.B06": 0,
+     "intake.P01": 0,
+     "interventionAccepted": 0,
+     "interventionRejected": 0,
+     "meanEnergy.A01": 0,
+     "meanEnergy.B01": 0,
+     "meanEnergy.B04": 12.99504616969049,
+     "meanEnergy.B06": 0,
+     "meanEnergy.P01": 0,
+     "oxygenMean": 0.7641650386602735,
+     "patchInput.0": 10.000000000000002,
+     "preyBiomass.A01": 0,
+     "preyBiomass.B01": 0,
+     "preyBiomass.B04": 0,
+     "preyBiomass.B06": 0,
+     "preyBiomass.P01": 13.666587230227588,
+     "runSeconds": 180,
+     "seconds": 180,
+     "speciesAlive": 1
+    },
+    "reported": {
+     "alive.B04": 8,
+     "biomass.B04": 13.666587230227588,
+     "births.B04": 0,
+     "consumed.detritus": 12.296574983695997,
+     "deaths.B04": 2,
+     "field.detritus": 0.18512527792436412,
+     "intake.B04": 12.29657498369598
+    },
+    "timelineSha256": "97eaba3cd28f270f8785bfd053b105a314aa84c6ca353f512e8623754a445b74",
+    "unattributedDeaths": 0,
+    "worldId": "EXP_103-single"
+   },
+   "B": null,
+   "endTick": 1800,
+   "gate": {
+    "clauses": [
+     {
+      "actual": 2.1176527065067923,
+      "arm": "A",
+      "label": "2 debris carbon eaten",
+      "measure": "consumed.detritus",
+      "op": "gte",
+      "pass": true,
+      "value": 2
+     }
+    ],
+    "reached": true,
+    "reachedAtSecond": 12
+   },
+   "interventions": [],
+   "label": "this run",
+   "stamp": {
+    "contentVersion": 1,
+    "experimentId": "EXP_103",
+    "journalStamp": "Watched a cleaning crew eat debris",
+    "reachedAtSecond": 12,
+    "recipeId": "CLEANING_CREW_V1",
+    "recipeRevision": 1,
+    "seed": 103,
+    "values": {
+     "A:consumed.detritus": 2.1176527065067923
+    },
+    "worldKeepsRunning": true
+   },
+   "startTick": 0
+  },
+  "EXP_106": {
+   "A": {
+    "ledger": {
+     "checks": 8,
+     "everyCheckOk": true,
+     "ok": true,
+     "relErr": {
+      "c": 6.98437318752861e-15,
+      "m": 0,
+      "n": 9.93380135431495e-14
+     }
+    },
+    "measurements": {
+     "alive.A01": 0,
+     "alive.B01": 60,
+     "alive.B04": 0,
+     "alive.B06": 0,
+     "alive.P01": 0,
+     "aliveTotal": 60,
+     "biomass.A01": 0,
+     "biomass.B01": 110.09849618153832,
+     "biomass.B04": 0,
+     "biomass.B06": 0,
+     "biomass.P01": 0,
+     "biomassRatio.A01": 0,
+     "biomassRatio.B01": 1.1009849618153833,
+     "biomassRatio.B04": 0,
+     "biomassRatio.B06": 0,
+     "biomassRatio.P01": 0,
+     "biomassStart.A01": 0,
+     "biomassStart.B01": 100,
+     "biomassStart.B04": 0,
+     "biomassStart.B06": 0,
+     "biomassStart.P01": 0,
+     "biomassTotal": 110.09849618153832,
+     "births.A01": 0,
+     "births.B01": 0,
+     "births.B04": 0,
+     "births.B06": 0,
+     "births.P01": 0,
+     "capturedCarbon.A01": 0,
+     "capturedCarbon.B01": 0,
+     "capturedCarbon.B04": 0,
+     "capturedCarbon.B06": 0,
+     "capturedCarbon.P01": 0,
+     "captures.A01": 0,
+     "captures.B01": 0,
+     "captures.B04": 0,
+     "captures.B06": 0,
+     "captures.P01": 0,
+     "converted.oil": 0,
+     "converted.protein": 0,
+     "converted.starch": 0,
+     "deaths.A01": 0,
+     "deaths.B01": 40,
+     "deaths.B01.DEATH_STARVATION": 40,
+     "deaths.B04": 0,
+     "deaths.B06": 0,
+     "deaths.P01": 0,
+     "extinctAt.A01": -1,
+     "extinctAt.B01": -1,
+     "extinctAt.B04": -1,
+     "extinctAt.B06": -1,
+     "extinctAt.P01": -1,
+     "field.broth": 0,
+     "field.brothN": 0,
+     "field.co2": 5399.827832239828,
+     "field.detritus": 61.02348813556751,
+     "field.detritusN": 6.1023488135567545,
+     "field.metabolite": 28.448793726842403,
+     "field.nutrient": 1095.2878015682925,
+     "field.oil": 0,
+     "field.oilN": 0,
+     "field.oxygen": 8637.572167760169,
+     "field.protein": 0,
+     "field.proteinN": 0,
+     "field.starch": 0,
+     "field.starchN": 0,
+     "field.sugar": 130.21603136578864,
+     "field.sugarN": 0,
+     "inputCarbon": 0,
+     "intake.A01": 0,
+     "intake.B01": 142.2439686342118,
+     "intake.B04": 0,
+     "intake.B06": 0,
+     "intake.P01": 0,
+     "interventionAccepted": 0,
+     "interventionRejected": 0,
+     "meanEnergy.A01": 0,
+     "meanEnergy.B01": 3.216037824767217,
+     "meanEnergy.B04": 0,
+     "meanEnergy.B06": 0,
+     "meanEnergy.P01": 0,
+     "oxygenMean": 0.7641164338075167,
+     "patchInput.0": 56.5,
+     "preyBiomass.A01": 0,
+     "preyBiomass.B01": 0,
+     "preyBiomass.B04": 0,
+     "preyBiomass.B06": 0,
+     "preyBiomass.P01": 110.09849618153832,
+     "runSeconds": 180,
+     "seconds": 180,
+     "speciesAlive": 1
+    },
+    "reported": {
+     "alive.B01": 60,
+     "alive.P01": 0,
+     "biomass.B01": 110.09849618153832,
+     "births.B01": 0,
+     "capturedCarbon.P01": 0,
+     "captures.P01": 0,
+     "deaths.B01": 40,
+     "deaths.B01.DEATH_PREDATION": 0,
+     "field.sugar": 130.21603136578864,
+     "inputCarbon": 0,
+     "interventionAccepted": 0
+    },
+    "timelineSha256": "669e6f7496d8c962c1c4c8bd4afa7a48eb80354f6bc827c0f1d183d50ebce1a8",
+    "unattributedDeaths": 0,
+    "worldId": "EXP_106-A"
+   },
+   "B": {
+    "ledger": {
+     "checks": 8,
+     "everyCheckOk": true,
+     "ok": true,
+     "relErr": {
+      "c": 5.541105431579513e-15,
+      "m": 0,
+      "n": 1.044645745036997e-13
+     }
+    },
+    "measurements": {
+     "alive.A01": 0,
+     "alive.B01": 63,
+     "alive.B04": 0,
+     "alive.B06": 0,
+     "alive.P01": 2,
+     "aliveTotal": 65,
+     "biomass.A01": 0,
+     "biomass.B01": 117.98526198085062,
+     "biomass.B04": 0,
+     "biomass.B06": 0,
+     "biomass.P01": 12.887468138061953,
+     "biomassRatio.A01": 0,
+     "biomassRatio.B01": 1.1798526198085062,
+     "biomassRatio.B04": 0,
+     "biomassRatio.B06": 0,
+     "biomassRatio.P01": 0,
+     "biomassStart.A01": 0,
+     "biomassStart.B01": 100,
+     "biomassStart.B04": 0,
+     "biomassStart.B06": 0,
+     "biomassStart.P01": 0,
+     "biomassTotal": 130.87273011891259,
+     "births.A01": 0,
+     "births.B01": 0,
+     "births.B04": 0,
+     "births.B06": 0,
+     "births.P01": 0,
+     "capturedCarbon.A01": 0,
+     "capturedCarbon.B01": 0,
+     "capturedCarbon.B04": 0,
+     "capturedCarbon.B06": 0,
+     "capturedCarbon.P01": 20.189501088158373,
+     "captures.A01": 0,
+     "captures.B01": 0,
+     "captures.B04": 0,
+     "captures.B06": 0,
+     "captures.P01": 17,
+     "converted.oil": 0,
+     "converted.protein": 0,
+     "converted.starch": 0,
+     "deaths.A01": 0,
+     "deaths.B01": 37,
+     "deaths.B01.DEATH_PREDATION": 17,
+     "deaths.B01.DEATH_STARVATION": 20,
+     "deaths.B04": 0,
+     "deaths.B06": 0,
+     "deaths.P01": 3,
+     "deaths.P01.DEATH_STARVATION": 3,
+     "extinctAt.A01": -1,
+     "extinctAt.B01": -1,
+     "extinctAt.B04": -1,
+     "extinctAt.B06": -1,
+     "extinctAt.P01": -1,
+     "field.broth": 0,
+     "field.brothN": 0,
+     "field.co2": 5399.848148807069,
+     "field.detritus": 48.18657150271436,
+     "field.detritusN": 4.818657150271433,
+     "field.metabolite": 31.6995210839142,
+     "field.nutrient": 1096.4940698378343,
+     "field.oil": 0,
+     "field.oilN": 0,
+     "field.oxygen": 8637.551851192957,
+     "field.protein": 0,
+     "field.proteinN": 0,
+     "field.starch": 0,
+     "field.starchN": 0,
+     "field.sugar": 134.15189566858817,
+     "field.sugarN": 0,
+     "inputCarbon": 20,
+     "intake.A01": 0,
+     "intake.B01": 138.3081043314118,
+     "intake.B04": 0,
+     "intake.B06": 0,
+     "intake.P01": 20.189501088158288,
+     "interventionAccepted": 5,
+     "interventionRejected": 0,
+     "meanEnergy.A01": 0,
+     "meanEnergy.B01": 4.7939308556253515,
+     "meanEnergy.B04": 0,
+     "meanEnergy.B06": 0,
+     "meanEnergy.P01": 0,
+     "oxygenMean": 0.7641146365174236,
+     "patchInput.0": 56.5,
+     "preyBiomass.A01": 0,
+     "preyBiomass.B01": 0,
+     "preyBiomass.B04": 0,
+     "preyBiomass.B06": 0,
+     "preyBiomass.P01": 117.98526198085062,
+     "runSeconds": 180,
+     "seconds": 180,
+     "speciesAlive": 2
+    },
+    "reported": {
+     "alive.B01": 63,
+     "alive.P01": 2,
+     "biomass.B01": 117.98526198085062,
+     "births.B01": 0,
+     "capturedCarbon.P01": 20.189501088158373,
+     "captures.P01": 17,
+     "deaths.B01": 37,
+     "deaths.B01.DEATH_PREDATION": 17,
+     "field.sugar": 134.15189566858817,
+     "inputCarbon": 20,
+     "interventionAccepted": 5
+    },
+    "timelineSha256": "0ca98962637081143c65ec673550244b9639d439b23148986c7ecc1aa1fb845c",
+    "unattributedDeaths": 0,
+    "worldId": "EXP_106-B"
+   },
+   "endTick": 1800,
+   "gate": {
+    "clauses": [
+     {
+      "actual": 180,
+      "arm": "A",
+      "label": "Both copies ran 180 s",
+      "measure": "runSeconds",
+      "op": "gte",
+      "pass": true,
+      "value": 180
+     },
+     {
+      "actual": 5,
+      "arm": "B",
+      "label": "Five Amoebae arrived in copy B",
+      "measure": "interventionAccepted",
+      "op": "gte",
+      "pass": true,
+      "value": 5
+     },
+     {
+      "actual": 17,
+      "arm": "B",
+      "label": "The Amoebae caught prey (there is consumption to read)",
+      "measure": "captures.P01",
+      "op": "gte",
+      "pass": true,
+      "value": 1
+     }
+    ],
+    "reached": true,
+    "reachedAtSecond": 180
+   },
+   "interventions": [
+    {
+     "commandId": "experiment:EXP_106:1",
+     "payload": {
+      "count": 5,
+      "kind": "inoculate",
+      "radius": 6,
+      "speciesId": "P01",
+      "x": 50.5,
+      "y": 70.5
+     },
+     "result": {
+      "accepted": 5,
+      "rejected": 0
+     }
+    }
+   ],
+   "label": "this paired run",
+   "stamp": {
+    "contentVersion": 1,
+    "experimentId": "EXP_106",
+    "journalStamp": "Compared Sprinters with and without grazers",
+    "reachedAtSecond": 180,
+    "recipeId": "PREDATOR_BALANCE_V1",
+    "recipeRevision": 1,
+    "seed": 106,
+    "values": {
+     "A:runSeconds": 180,
+     "B:captures.P01": 17,
+     "B:interventionAccepted": 5
+    },
+    "worldKeepsRunning": true
+   },
+   "startTick": 0
+  },
+  "EXP_A": {
+   "A": {
+    "ledger": {
+     "checks": 8,
+     "everyCheckOk": true,
+     "ok": true,
+     "relErr": {
+      "c": 1.3285624067935467e-14,
+      "m": 0,
+      "n": 5.405047604650564e-14
+     }
+    },
+    "measurements": {
+     "alive.A01": 0,
+     "alive.B01": 0,
+     "alive.B04": 0,
+     "alive.B06": 0,
+     "alive.P01": 0,
+     "aliveTotal": 0,
+     "biomass.A01": 0,
+     "biomass.B01": 0,
+     "biomass.B04": 0,
+     "biomass.B06": 0,
+     "biomass.P01": 0,
+     "biomassRatio.A01": 0,
+     "biomassRatio.B01": 0,
+     "biomassRatio.B04": 0,
+     "biomassRatio.B06": 0,
+     "biomassRatio.P01": 0,
+     "biomassStart.A01": 0,
+     "biomassStart.B01": 0,
+     "biomassStart.B04": 0,
+     "biomassStart.B06": 12,
+     "biomassStart.P01": 0,
+     "biomassTotal": 0,
+     "births.A01": 0,
+     "births.B01": 0,
+     "births.B04": 0,
+     "births.B06": 0,
+     "births.P01": 0,
+     "capturedCarbon.A01": 0,
+     "capturedCarbon.B01": 0,
+     "capturedCarbon.B04": 0,
+     "capturedCarbon.B06": 0,
+     "capturedCarbon.P01": 0,
+     "captures.A01": 0,
+     "captures.B01": 0,
+     "captures.B04": 0,
+     "captures.B06": 0,
+     "captures.P01": 0,
+     "consumed.sugar": 7.881475007800601,
+     "converted.oil": 0,
+     "converted.protein": 0,
+     "converted.starch": 6.771143134886133,
+     "deaths.A01": 0,
+     "deaths.B01": 0,
+     "deaths.B04": 0,
+     "deaths.B06": 12,
+     "deaths.B06.DEATH_STARVATION": 12,
+     "deaths.P01": 0,
+     "extinctAt.A01": -1,
+     "extinctAt.B01": -1,
+     "extinctAt.B04": -1,
+     "extinctAt.B06": 153,
+     "extinctAt.P01": -1,
+     "field.broth": 0,
+     "field.brothN": 0,
+     "field.co2": 5652.000034021948,
+     "field.detritus": 15.940737503900326,
+     "field.detritusN": 1.5940737503900329,
+     "field.metabolite": 1.5762950015601205,
+     "field.nutrient": 1130.0059262496163,
+     "field.oil": 0,
+     "field.oilN": 0,
+     "field.oxygen": 9043.199965977701,
+     "field.protein": 0,
+     "field.proteinN": 0,
+     "field.starch": 10.628856865113873,
+     "field.starchN": 0,
+     "field.sugar": 1.7896681270854882,
+     "field.sugarN": 0,
+     "inputCarbon": 0,
+     "intake.A01": 0,
+     "intake.B01": 0,
+     "intake.B04": 0,
+     "intake.B06": 7.8814750078006535,
+     "intake.P01": 0,
+     "interventionAccepted": 0,
+     "interventionRejected": 0,
+     "meanEnergy.A01": 0,
+     "meanEnergy.B01": 0,
+     "meanEnergy.B04": 0,
+     "meanEnergy.B06": 0,
+     "meanEnergy.P01": 0,
+     "oxygenMean": 0.7999999969902425,
+     "patchInput.0": 2.9000000000000012,
+     "patchInput.1": 17.4,
+     "preyBiomass.A01": 0,
+     "preyBiomass.B01": 0,
+     "preyBiomass.B04": 0,
+     "preyBiomass.B06": 0,
+     "preyBiomass.P01": 0,
+     "runSeconds": 180,
+     "seconds": 180,
+     "speciesAlive": 0
+    },
+    "reported": {
+     "alive.B06": 0,
+     "births.B06": 0,
+     "consumed.sugar": 7.881475007800601,
+     "converted.starch": 6.771143134886133,
+     "deaths.B06": 12,
+     "extinctAt.B06": 153,
+     "field.starch": 10.628856865113873,
+     "field.sugar": 1.7896681270854882,
+     "intake.B06": 7.8814750078006535,
+     "patchInput.0": 2.9000000000000012
+    },
+    "timelineSha256": "032edf5522a5a60ab476de5aee9f6d459a628150fefd6cca8321928756f20d62",
+    "unattributedDeaths": 0,
+    "worldId": "EXP_A-A"
+   },
+   "B": {
+    "ledger": {
+     "checks": 8,
+     "everyCheckOk": true,
+     "ok": true,
+     "relErr": {
+      "c": 2.7287317213683225e-14,
+      "m": 0,
+      "n": 6.208772155527971e-14
+     }
+    },
+    "measurements": {
+     "alive.A01": 0,
+     "alive.B01": 0,
+     "alive.B04": 0,
+     "alive.B06": 0,
+     "alive.P01": 0,
+     "aliveTotal": 0,
+     "biomass.A01": 0,
+     "biomass.B01": 0,
+     "biomass.B04": 0,
+     "biomass.B06": 0,
+     "biomass.P01": 0,
+     "biomassRatio.A01": 0,
+     "biomassRatio.B01": 0,
+     "biomassRatio.B04": 0,
+     "biomassRatio.B06": 0,
+     "biomassRatio.P01": 0,
+     "biomassStart.A01": 0,
+     "biomassStart.B01": 0,
+     "biomassStart.B04": 0,
+     "biomassStart.B06": 12,
+     "biomassStart.P01": 0,
+     "biomassTotal": 0,
+     "births.A01": 0,
+     "births.B01": 0,
+     "births.B04": 0,
+     "births.B06": 0,
+     "births.P01": 0,
+     "capturedCarbon.A01": 0,
+     "capturedCarbon.B01": 0,
+     "capturedCarbon.B04": 0,
+     "capturedCarbon.B06": 0,
+     "capturedCarbon.P01": 0,
+     "captures.A01": 0,
+     "captures.B01": 0,
+     "captures.B04": 0,
+     "captures.B06": 0,
+     "captures.P01": 0,
+     "consumed.sugar": 2.4918436937748334,
+     "converted.oil": 0,
+     "converted.protein": 0,
+     "converted.starch": 0,
+     "deaths.A01": 0,
+     "deaths.B01": 0,
+     "deaths.B04": 0,
+     "deaths.B06": 12,
+     "deaths.B06.DEATH_STARVATION": 12,
+     "deaths.P01": 0,
+     "extinctAt.A01": -1,
+     "extinctAt.B01": -1,
+     "extinctAt.B04": -1,
+     "extinctAt.B06": 151,
+     "extinctAt.P01": -1,
+     "field.broth": 0,
+     "field.brothN": 0,
+     "field.co2": 5652.00000373682,
+     "field.detritus": 13.245921846887425,
+     "field.detritusN": 1.3245921846887423,
+     "field.metabolite": 0.4983687387549674,
+     "field.nutrient": 1130.2754078153084,
+     "field.oil": 0,
+     "field.oilN": 0,
+     "field.oxygen": 9043.199996262747,
+     "field.protein": 0,
+     "field.proteinN": 0,
+     "field.starch": 0,
+     "field.starchN": 0,
+     "field.sugar": 0.4081563062251579,
+     "field.sugarN": 0,
+     "inputCarbon": 0,
+     "intake.A01": 0,
+     "intake.B01": 0,
+     "intake.B04": 0,
+     "intake.B06": 2.4918436937748423,
+     "intake.P01": 0,
+     "interventionAccepted": 0,
+     "interventionRejected": 0,
+     "meanEnergy.A01": 0,
+     "meanEnergy.B01": 0,
+     "meanEnergy.B04": 0,
+     "meanEnergy.B06": 0,
+     "meanEnergy.P01": 0,
+     "oxygenMean": 0.7999999996693866,
+     "patchInput.0": 2.9000000000000012,
+     "preyBiomass.A01": 0,
+     "preyBiomass.B01": 0,
+     "preyBiomass.B04": 0,
+     "preyBiomass.B06": 0,
+     "preyBiomass.P01": 0,
+     "runSeconds": 180,
+     "seconds": 180,
+     "speciesAlive": 0
+    },
+    "reported": {
+     "alive.B06": 0,
+     "births.B06": 0,
+     "consumed.sugar": 2.4918436937748334,
+     "converted.starch": 0,
+     "deaths.B06": 12,
+     "extinctAt.B06": 151,
+     "field.starch": 0,
+     "field.sugar": 0.4081563062251579,
+     "intake.B06": 2.4918436937748423,
+     "patchInput.0": 2.9000000000000012
+    },
+    "timelineSha256": "c7eeb973f3e1dd3bcbfed31106f6f82836840cada0fea9454f11e8c5380f76b1",
+    "unattributedDeaths": 0,
+    "worldId": "EXP_A-B"
+   },
+   "endTick": 1800,
+   "gate": {
+    "clauses": [
+     {
+      "actual": 180,
+      "arm": "A",
+      "label": "Both copies ran 180 s",
+      "measure": "runSeconds",
+      "op": "gte",
+      "pass": true,
+      "value": 180
+     },
+     {
+      "actual": 6.771143134886133,
+      "arm": "A",
+      "label": "Sugar was made from starch in copy A",
+      "measure": "converted.starch",
+      "op": "gt",
+      "pass": true,
+      "value": 0
+     }
+    ],
+    "reached": true,
+    "reachedAtSecond": 180
+   },
+   "interventions": [],
+   "label": "this paired run",
+   "stamp": {
+    "contentVersion": 1,
+    "experimentId": "EXP_A",
+    "journalStamp": "Measured sugar made from starch",
+    "reachedAtSecond": 180,
+    "recipeId": "STARCH_UNLOCK_V1",
+    "recipeRevision": 1,
+    "seed": 104729,
+    "values": {
+     "A:converted.starch": 6.771143134886133,
+     "A:runSeconds": 180
+    },
+    "worldKeepsRunning": true
+   },
+   "startTick": 0
+  },
+  "EXP_B": {
+   "A": {
+    "ledger": {
+     "checks": 8,
+     "everyCheckOk": true,
+     "ok": true,
+     "relErr": {
+      "c": 1.5454819399664097e-14,
+      "m": 0,
+      "n": 1.0352040225747948e-13
+     }
+    },
+    "measurements": {
+     "alive.A01": 282,
+     "alive.B01": 129,
+     "alive.B04": 4,
+     "alive.B06": 12,
+     "alive.P01": 0,
+     "aliveTotal": 427,
+     "biomass.A01": 610.8298084607268,
+     "biomass.B01": 327.1618656627845,
+     "biomass.B04": 9.008480409014528,
+     "biomass.B06": 35.69842495068951,
+     "biomass.P01": 0,
+     "biomassRatio.A01": 3.3001255491275394,
+     "biomassRatio.B01": 2.859349156171677,
+     "biomassRatio.B04": 0.6377788394659945,
+     "biomassRatio.B06": 1.8157906367098002,
+     "biomassRatio.P01": 0,
+     "biomassStart.A01": 185.09290006321518,
+     "biomassStart.B01": 114.41829863856667,
+     "biomassStart.B04": 14.124771553344784,
+     "biomassStart.B06": 19.659989554398628,
+     "biomassStart.P01": 0,
+     "biomassTotal": 982.6985794832153,
+     "births.A01": 242,
+     "births.B01": 57,
+     "births.B04": 1,
+     "births.B06": 1,
+     "births.P01": 0,
+     "capturedCarbon.A01": 0,
+     "capturedCarbon.B01": 0,
+     "capturedCarbon.B04": 0,
+     "capturedCarbon.B06": 0,
+     "capturedCarbon.P01": 0,
+     "captures.A01": 0,
+     "captures.B01": 0,
+     "captures.B04": 0,
+     "captures.B06": 0,
+     "captures.P01": 0,
+     "converted.oil": 0,
+     "converted.protein": 0,
+     "converted.starch": 0.2995142565346729,
+     "deaths.A01": 38,
+     "deaths.A01.DEATH_STARVATION": 38,
+     "deaths.B01": 1,
+     "deaths.B01.DEATH_STARVATION": 1,
+     "deaths.B04": 6,
+     "deaths.B04.DEATH_STARVATION": 6,
+     "deaths.B06": 1,
+     "deaths.B06.DEATH_STARVATION": 1,
+     "deaths.P01": 0,
+     "extinctAt.A01": -1,
+     "extinctAt.B01": -1,
+     "extinctAt.B04": -1,
+     "extinctAt.B06": -1,
+     "extinctAt.P01": -1,
+     "field.broth": 0,
+     "field.brothN": 0,
+     "field.co2": 5372.514052906496,
+     "field.detritus": 68.71457718632269,
+     "field.detritusN": 6.871457718632271,
+     "field.metabolite": 136.45846237406974,
+     "field.nutrient": 982.0836843330469,
+     "field.oil": 0,
+     "field.oilN": 0,
+     "field.oxygen": 8649.301866428726,
+     "field.protein": 0,
+     "field.proteinN": 0,
+     "field.starch": 38.82141225409463,
+     "field.starchN": 0,
+     "field.sugar": 50.686301322922276,
+     "field.sugarN": 0,
+     "inputCarbon": 0,
+     "intake.A01": 979.8312260552983,
+     "intake.B01": 428.39829458651184,
+     "intake.B04": 8.741969249809788,
+     "intake.B06": 36.74592854140468,
+     "intake.P01": 0,
+     "interventionAccepted": 0,
+     "interventionRejected": 0,
+     "meanEnergy.A01": 47.67479263455584,
+     "meanEnergy.B01": 34.02156390836559,
+     "meanEnergy.B04": 19.14312262517124,
+     "meanEnergy.B06": 31.615041420114668,
+     "meanEnergy.P01": 0,
+     "oxygenMean": 0.7651540929254005,
+     "patchInput.0": 45.1999999999999,
+     "patchInput.1": 48.60000000000007,
+     "patchInput.2": 12.25,
+     "preyBiomass.A01": 0,
+     "preyBiomass.B01": 0,
+     "preyBiomass.B04": 0,
+     "preyBiomass.B06": 0,
+     "preyBiomass.P01": 982.6985794832153,
+     "runSeconds": 180,
+     "seconds": 300,
+     "speciesAlive": 4
+    },
+    "reported": {
+     "alive.P01": 0,
+     "biomass.A01": 610.8298084607268,
+     "biomass.B01": 327.1618656627845,
+     "biomass.B04": 9.008480409014528,
+     "biomass.B06": 35.69842495068951,
+     "births.A01": 242,
+     "births.B01": 57,
+     "births.B04": 1,
+     "births.B06": 1,
+     "capturedCarbon.P01": 0,
+     "captures.P01": 0,
+     "deaths.A01": 38,
+     "deaths.A01.DEATH_PREDATION": 0,
+     "deaths.B01": 1,
+     "deaths.B01.DEATH_PREDATION": 0,
+     "deaths.B01.DEATH_STARVATION": 1,
+     "deaths.B04": 6,
+     "deaths.B04.DEATH_PREDATION": 0,
+     "deaths.B06": 1,
+     "deaths.B06.DEATH_PREDATION": 0,
+     "field.sugar": 50.686301322922276,
+     "inputCarbon": 0,
+     "interventionAccepted": 0,
+     "preyBiomass.P01": 982.6985794832153
+    },
+    "timelineSha256": "fb09e425eb6070efe06ca7947b8d7640f85e41a5c49b4726fd42855a38a71ba0",
+    "unattributedDeaths": 0,
+    "worldId": "EXP_B-A"
+   },
+   "B": {
+    "ledger": {
+     "checks": 8,
+     "everyCheckOk": true,
+     "ok": true,
+     "relErr": {
+      "c": 1.1619834445126818e-14,
+      "m": 0,
+      "n": 1.0177245921816362e-13
+     }
+    },
+    "measurements": {
+     "alive.A01": 284,
+     "alive.B01": 128,
+     "alive.B04": 4,
+     "alive.B06": 12,
+     "alive.P01": 3,
+     "aliveTotal": 431,
+     "biomass.A01": 604.6428093717844,
+     "biomass.B01": 305.2426344458094,
+     "biomass.B04": 9.380502882376604,
+     "biomass.B06": 37.11028455507325,
+     "biomass.P01": 19.6710630075533,
+     "biomassRatio.A01": 3.266699096320169,
+     "biomassRatio.B01": 2.6677781270811702,
+     "biomassRatio.B04": 0.6641171396612977,
+     "biomassRatio.B06": 1.8876044899408595,
+     "biomassRatio.P01": 0,
+     "biomassStart.A01": 185.09290006321518,
+     "biomassStart.B01": 114.41829863856667,
+     "biomassStart.B04": 14.124771553344784,
+     "biomassStart.B06": 19.659989554398628,
+     "biomassStart.P01": 0,
+     "biomassTotal": 976.047294262597,
+     "births.A01": 248,
+     "births.B01": 67,
+     "births.B04": 1,
+     "births.B06": 0,
+     "births.P01": 1,
+     "capturedCarbon.A01": 0,
+     "capturedCarbon.B01": 0,
+     "capturedCarbon.B04": 0,
+     "capturedCarbon.B06": 0,
+     "capturedCarbon.P01": 23.342126015106434,
+     "captures.A01": 0,
+     "captures.B01": 0,
+     "captures.B04": 0,
+     "captures.B06": 0,
+     "captures.P01": 12,
+     "converted.oil": 0,
+     "converted.protein": 0,
+     "converted.starch": 0.2995142565346729,
+     "deaths.A01": 42,
+     "deaths.A01.DEATH_PREDATION": 6,
+     "deaths.A01.DEATH_STARVATION": 36,
+     "deaths.B01": 12,
+     "deaths.B01.DEATH_PREDATION": 6,
+     "deaths.B01.DEATH_STARVATION": 6,
+     "deaths.B04": 6,
+     "deaths.B04.DEATH_STARVATION": 6,
+     "deaths.B06": 0,
+     "deaths.P01": 0,
+     "extinctAt.A01": -1,
+     "extinctAt.B01": -1,
+     "extinctAt.B04": -1,
+     "extinctAt.B06": -1,
+     "extinctAt.P01": -1,
+     "field.broth": 0,
+     "field.brothN": 0,
+     "field.co2": 5372.37469781331,
+     "field.detritus": 72.17729794048911,
+     "field.detritusN": 7.217729794048909,
+     "field.metabolite": 141.15554947179956,
+     "field.nutrient": 983.2025407796942,
+     "field.oil": 0,
+     "field.oilN": 0,
+     "field.oxygen": 8649.125067520838,
+     "field.protein": 0,
+     "field.proteinN": 0,
+     "field.starch": 38.82141225409463,
+     "field.starchN": 0,
+     "field.sugar": 52.44879915429925,
+     "field.sugarN": 0,
+     "inputCarbon": 8,
+     "intake.A01": 982.1478771645492,
+     "intake.B01": 429.6394608498148,
+     "intake.B04": 9.489451000107389,
+     "intake.B06": 34.900590001349315,
+     "intake.P01": 23.342126015106324,
+     "interventionAccepted": 2,
+     "interventionRejected": 0,
+     "meanEnergy.A01": 46.0583972187713,
+     "meanEnergy.B01": 33.960729397378714,
+     "meanEnergy.B04": 24.723459725602343,
+     "meanEnergy.B06": 30.502672775366648,
+     "meanEnergy.P01": 87.37466666666684,
+     "oxygenMean": 0.7651384525407676,
+     "patchInput.0": 45.1999999999999,
+     "patchInput.1": 48.60000000000007,
+     "patchInput.2": 12.25,
+     "preyBiomass.A01": 0,
+     "preyBiomass.B01": 0,
+     "preyBiomass.B04": 0,
+     "preyBiomass.B06": 0,
+     "preyBiomass.P01": 956.3762312550436,
+     "runSeconds": 180,
+     "seconds": 300,
+     "speciesAlive": 5
+    },
+    "reported": {
+     "alive.P01": 3,
+     "biomass.A01": 604.6428093717844,
+     "biomass.B01": 305.2426344458094,
+     "biomass.B04": 9.380502882376604,
+     "biomass.B06": 37.11028455507325,
+     "births.A01": 248,
+     "births.B01": 67,
+     "births.B04": 1,
+     "births.B06": 0,
+     "capturedCarbon.P01": 23.342126015106434,
+     "captures.P01": 12,
+     "deaths.A01": 42,
+     "deaths.A01.DEATH_PREDATION": 6,
+     "deaths.B01": 12,
+     "deaths.B01.DEATH_PREDATION": 6,
+     "deaths.B01.DEATH_STARVATION": 6,
+     "deaths.B04": 6,
+     "deaths.B04.DEATH_PREDATION": 0,
+     "deaths.B06": 0,
+     "deaths.B06.DEATH_PREDATION": 0,
+     "field.sugar": 52.44879915429925,
+     "inputCarbon": 8,
+     "interventionAccepted": 2,
+     "preyBiomass.P01": 956.3762312550436
+    },
+    "timelineSha256": "1cbcd79b2943e092fd7a9e7144a604c7ba0caa97bec4a2eb0abed0b3ddd5cd07",
+    "unattributedDeaths": 0,
+    "worldId": "EXP_B-B"
+   },
+   "endTick": 3000,
+   "gate": {
+    "clauses": [
+     {
+      "actual": 180,
+      "arm": "A",
+      "label": "Both copies ran 180 s after the copy",
+      "measure": "runSeconds",
+      "op": "gte",
+      "pass": true,
+      "value": 180
+     },
+     {
+      "actual": 2,
+      "arm": "B",
+      "label": "Two Amoebae arrived in copy B",
+      "measure": "interventionAccepted",
+      "op": "gte",
+      "pass": true,
+      "value": 2
+     }
+    ],
+    "reached": true,
+    "reachedAtSecond": 300
+   },
+   "interventions": [
+    {
+     "commandId": "experiment:EXP_B:1",
+     "payload": {
+      "count": 1,
+      "kind": "inoculate",
+      "radius": 0,
+      "speciesId": "P01",
+      "x": 48.5,
+      "y": 64.5
+     },
+     "result": {
+      "accepted": 1,
+      "rejected": 0
+     }
+    },
+    {
+     "commandId": "experiment:EXP_B:2",
+     "payload": {
+      "count": 1,
+      "kind": "inoculate",
+      "radius": 0,
+      "speciesId": "P01",
+      "x": 48.5,
+      "y": 63.5
+     },
+     "result": {
+      "accepted": 1,
+      "rejected": 0
+     }
+    }
+   ],
+   "label": "this paired run",
+   "stamp": {
+    "contentVersion": 1,
+    "experimentId": "EXP_B",
+    "journalStamp": "Compared a garden with and without grazers",
+    "reachedAtSecond": 300,
+    "recipeId": "FIRST_DISH_V1",
+    "recipeRevision": 1,
+    "seed": 104729,
+    "values": {
+     "A:runSeconds": 180,
+     "B:interventionAccepted": 2
+    },
+    "worldKeepsRunning": true
+   },
+   "startTick": 1200
+  }
+ },
+ "comparisons": {
+  "feed": {
+   "a": {
+    "alive": 102,
+    "biomass": 166.46773616778577,
+    "births": 46,
+    "capacityIntervals": [],
+    "capacityLimitedTicks": 0,
+    "carbonAdded": 0,
+    "deaths": 0,
+    "deathsByCause": [],
+    "deathsUnattributed": 0,
+    "modules": [],
+    "oxygenMean": 0.7646198028355803,
+    "shannon": 1.1989440960250588,
+    "species": [
+     {
+      "biomass": 77.74426251694265,
+      "births": 30,
+      "count": 42,
+      "deaths": 0,
+      "id": "A01",
+      "idx": 0,
+      "name": "Sunbead"
+     },
+     {
+      "biomass": 59.36936999954771,
+      "births": 15,
+      "count": 39,
+      "deaths": 0,
+      "id": "B01",
+      "idx": 1,
+      "name": "Sprinter"
+     },
+     {
+      "biomass": 13.513223913737134,
+      "births": 1,
+      "count": 9,
+      "deaths": 0,
+      "id": "B04",
+      "idx": 2,
+      "name": "Recycler"
+     },
+     {
+      "biomass": 15.840879737558293,
+      "births": 0,
+      "count": 12,
+      "deaths": 0,
+      "id": "B06",
+      "idx": 3,
+      "name": "Crumbsmith"
+     },
+     {
+      "biomass": 0,
+      "births": 0,
+      "count": 0,
+      "deaths": 0,
+      "id": "P01",
+      "idx": 4,
+      "name": "Amoeba"
+     }
+    ],
+    "speciesAlive": 4,
+    "tick": 657,
+    "traits": [
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 48,
+      "n": 42,
+      "species": 0
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 45,
+      "n": 42,
+      "species": 0
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 55,
+      "median": 50,
+      "min": 50,
+      "n": 42,
+      "species": 0
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 42,
+      "species": 0
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 52,
+      "median": 50,
+      "min": 50,
+      "n": 42,
+      "species": 0
+     },
+     {
+      "locus": 0,
+      "locusName": "Motility investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 39,
+      "species": 1
+     },
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 45,
+      "n": 39,
+      "species": 1
+     },
+     {
+      "locus": 2,
+      "locusName": "Sensing investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 39,
+      "species": 1
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 45,
+      "n": 39,
+      "species": 1
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 55,
+      "median": 50,
+      "min": 48,
+      "n": 39,
+      "species": 1
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 39,
+      "species": 1
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 48,
+      "n": 39,
+      "species": 1
+     },
+     {
+      "locus": 0,
+      "locusName": "Motility investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 2,
+      "locusName": "Sensing investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 0,
+      "locusName": "Motility investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 2,
+      "locusName": "Sensing investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     }
+    ]
+   },
+   "b": {
+    "alive": 105,
+    "biomass": 169.50238827616764,
+    "births": 49,
+    "capacityIntervals": [],
+    "capacityLimitedTicks": 0,
+    "carbonAdded": 14.5,
+    "deaths": 0,
+    "deathsByCause": [],
+    "deathsUnattributed": 0,
+    "modules": [],
+    "oxygenMean": 0.7646218462187815,
+    "shannon": 1.1912750101272207,
+    "species": [
+     {
+      "biomass": 77.58948606944948,
+      "births": 29,
+      "count": 41,
+      "deaths": 0,
+      "id": "A01",
+      "idx": 0,
+      "name": "Sunbead"
+     },
+     {
+      "biomass": 62.431424889501855,
+      "births": 19,
+      "count": 43,
+      "deaths": 0,
+      "id": "B01",
+      "idx": 1,
+      "name": "Sprinter"
+     },
+     {
+      "biomass": 13.513223925083421,
+      "births": 1,
+      "count": 9,
+      "deaths": 0,
+      "id": "B04",
+      "idx": 2,
+      "name": "Recycler"
+     },
+     {
+      "biomass": 15.968253392132889,
+      "births": 0,
+      "count": 12,
+      "deaths": 0,
+      "id": "B06",
+      "idx": 3,
+      "name": "Crumbsmith"
+     },
+     {
+      "biomass": 0,
+      "births": 0,
+      "count": 0,
+      "deaths": 0,
+      "id": "P01",
+      "idx": 4,
+      "name": "Amoeba"
+     }
+    ],
+    "speciesAlive": 4,
+    "tick": 657,
+    "traits": [
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 48,
+      "n": 41,
+      "species": 0
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 45,
+      "n": 41,
+      "species": 0
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 55,
+      "median": 50,
+      "min": 50,
+      "n": 41,
+      "species": 0
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 41,
+      "species": 0
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 52,
+      "median": 50,
+      "min": 50,
+      "n": 41,
+      "species": 0
+     },
+     {
+      "locus": 0,
+      "locusName": "Motility investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 43,
+      "species": 1
+     },
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 45,
+      "n": 43,
+      "species": 1
+     },
+     {
+      "locus": 2,
+      "locusName": "Sensing investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 43,
+      "species": 1
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 45,
+      "n": 43,
+      "species": 1
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 55,
+      "median": 50,
+      "min": 48,
+      "n": 43,
+      "species": 1
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 43,
+      "species": 1
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 52,
+      "median": 50,
+      "min": 50,
+      "n": 43,
+      "species": 1
+     },
+     {
+      "locus": 0,
+      "locusName": "Motility investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 2,
+      "locusName": "Sensing investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 0,
+      "locusName": "Motility investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 2,
+      "locusName": "Sensing investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     }
+    ]
+   },
+   "baselineTick": 57,
+   "horizonTicks": 600,
+   "interventions": [
+    {
+     "commandId": "feed-b",
+     "payload": {
+      "dose": 0.5,
+      "kind": "deposit",
+      "materialId": "SUGAR",
+      "points": [
+       [
+        40.5,
+        64.5
+       ]
+      ],
+      "radius": 3
+     },
+     "result": {
+      "accepted": 29,
+      "rejected": 0
+     }
+    }
+   ],
+   "label": "this paired run",
+   "rows": [
+    {
+     "a": 102,
+     "b": 105,
+     "diff": 3,
+     "key": "alive"
+    },
+    {
+     "a": 166.46773616778577,
+     "b": 169.50238827616764,
+     "diff": 3.034652108381863,
+     "key": "biomass"
+    },
+    {
+     "a": 4,
+     "b": 4,
+     "diff": 0,
+     "key": "speciesAlive"
+    },
+    {
+     "a": 1.1989440960250588,
+     "b": 1.1912750101272207,
+     "diff": -0.007669085897838102,
+     "key": "shannon"
+    },
+    {
+     "a": 0.7646198028355803,
+     "b": 0.7646218462187815,
+     "diff": 0.000002043383201200122,
+     "key": "oxygenMean"
+    },
+    {
+     "a": 46,
+     "b": 49,
+     "diff": 3,
+     "key": "births"
+    },
+    {
+     "a": 0,
+     "b": 0,
+     "diff": 0,
+     "key": "deaths"
+    },
+    {
+     "a": 0,
+     "b": 0,
+     "diff": 0,
+     "key": "capacitySeconds"
+    },
+    {
+     "a": 0,
+     "b": 14.5,
+     "diff": 14.5,
+     "key": "carbonAdded"
+    },
+    {
+     "a": 42,
+     "b": 41,
+     "diff": -1,
+     "key": "speciesCount",
+     "species": 0
+    },
+    {
+     "a": 77.74426251694265,
+     "b": 77.58948606944948,
+     "diff": -0.15477644749317676,
+     "key": "speciesBiomass",
+     "species": 0
+    },
+    {
+     "a": 39,
+     "b": 43,
+     "diff": 4,
+     "key": "speciesCount",
+     "species": 1
+    },
+    {
+     "a": 59.36936999954771,
+     "b": 62.431424889501855,
+     "diff": 3.0620548899541475,
+     "key": "speciesBiomass",
+     "species": 1
+    },
+    {
+     "a": 9,
+     "b": 9,
+     "diff": 0,
+     "key": "speciesCount",
+     "species": 2
+    },
+    {
+     "a": 13.513223913737134,
+     "b": 13.513223925083421,
+     "diff": 1.1346287465130445e-8,
+     "key": "speciesBiomass",
+     "species": 2
+    },
+    {
+     "a": 12,
+     "b": 12,
+     "diff": 0,
+     "key": "speciesCount",
+     "species": 3
+    },
+    {
+     "a": 15.840879737558293,
+     "b": 15.968253392132889,
+     "diff": 0.12737365457459582,
+     "key": "speciesBiomass",
+     "species": 3
+    }
+   ],
+   "stoppedEarly": false,
+   "ticks": 600
+  },
+  "hunters": {
+   "a": {
+    "alive": 80,
+    "biomass": 146.3860038962483,
+    "births": 24,
+    "capacityIntervals": [],
+    "capacityLimitedTicks": 0,
+    "carbonAdded": 0,
+    "deaths": 0,
+    "deathsByCause": [],
+    "deathsUnattributed": 0,
+    "modules": [],
+    "oxygenMean": 0.7644910052076866,
+    "shannon": 1.2532219462493546,
+    "species": [
+     {
+      "biomass": 65.28387140389445,
+      "births": 12,
+      "count": 24,
+      "deaths": 0,
+      "id": "A01",
+      "idx": 0,
+      "name": "Sunbead"
+     },
+     {
+      "biomass": 52.618801936044825,
+      "births": 11,
+      "count": 35,
+      "deaths": 0,
+      "id": "B01",
+      "idx": 1,
+      "name": "Sprinter"
+     },
+     {
+      "biomass": 13.10745003764627,
+      "births": 1,
+      "count": 9,
+      "deaths": 0,
+      "id": "B04",
+      "idx": 2,
+      "name": "Recycler"
+     },
+     {
+      "biomass": 15.375880518662779,
+      "births": 0,
+      "count": 12,
+      "deaths": 0,
+      "id": "B06",
+      "idx": 3,
+      "name": "Crumbsmith"
+     },
+     {
+      "biomass": 0,
+      "births": 0,
+      "count": 0,
+      "deaths": 0,
+      "id": "P01",
+      "idx": 4,
+      "name": "Amoeba"
+     }
+    ],
+    "speciesAlive": 4,
+    "tick": 570,
+    "traits": [
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 48,
+      "n": 24,
+      "species": 0
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 45,
+      "n": 24,
+      "species": 0
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 24,
+      "species": 0
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 24,
+      "species": 0
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 24,
+      "species": 0
+     },
+     {
+      "locus": 0,
+      "locusName": "Motility investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 35,
+      "species": 1
+     },
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 45,
+      "n": 35,
+      "species": 1
+     },
+     {
+      "locus": 2,
+      "locusName": "Sensing investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 35,
+      "species": 1
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 45,
+      "n": 35,
+      "species": 1
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 55,
+      "median": 50,
+      "min": 50,
+      "n": 35,
+      "species": 1
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 35,
+      "species": 1
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 48,
+      "n": 35,
+      "species": 1
+     },
+     {
+      "locus": 0,
+      "locusName": "Motility investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 2,
+      "locusName": "Sensing investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 0,
+      "locusName": "Motility investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 2,
+      "locusName": "Sensing investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     }
+    ]
+   },
+   "b": {
+    "alive": 73,
+    "biomass": 156.21048873621444,
+    "births": 22,
+    "capacityIntervals": [],
+    "capacityLimitedTicks": 0,
+    "carbonAdded": 20,
+    "deaths": 10,
+    "deathsByCause": [
+     {
+      "cause": 69,
+      "count": 10,
+      "name": "DEATH_PREDATION"
+     }
+    ],
+    "deathsUnattributed": 0,
+    "modules": [],
+    "oxygenMean": 0.7644705096339975,
+    "shannon": 1.4681204075816292,
+    "species": [
+     {
+      "biomass": 65.289043397319,
+      "births": 12,
+      "count": 24,
+      "deaths": 0,
+      "id": "A01",
+      "idx": 0,
+      "name": "Sunbead"
+     },
+     {
+      "biomass": 34.43477713110657,
+      "births": 9,
+      "count": 23,
+      "deaths": 10,
+      "id": "B01",
+      "idx": 1,
+      "name": "Sprinter"
+     },
+     {
+      "biomass": 13.10745003764627,
+      "births": 1,
+      "count": 9,
+      "deaths": 0,
+      "id": "B04",
+      "idx": 2,
+      "name": "Recycler"
+     },
+     {
+      "biomass": 15.47712874862729,
+      "births": 0,
+      "count": 12,
+      "deaths": 0,
+      "id": "B06",
+      "idx": 3,
+      "name": "Crumbsmith"
+     },
+     {
+      "biomass": 27.90208942151532,
+      "births": 0,
+      "count": 5,
+      "deaths": 0,
+      "id": "P01",
+      "idx": 4,
+      "name": "Amoeba"
+     }
+    ],
+    "speciesAlive": 5,
+    "tick": 570,
+    "traits": [
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 48,
+      "n": 24,
+      "species": 0
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 45,
+      "n": 24,
+      "species": 0
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 24,
+      "species": 0
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 24,
+      "species": 0
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 24,
+      "species": 0
+     },
+     {
+      "locus": 0,
+      "locusName": "Motility investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 23,
+      "species": 1
+     },
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 45,
+      "n": 23,
+      "species": 1
+     },
+     {
+      "locus": 2,
+      "locusName": "Sensing investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 23,
+      "species": 1
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 23,
+      "species": 1
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 50,
+      "median": 50,
+      "min": 48,
+      "n": 23,
+      "species": 1
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 23,
+      "species": 1
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 23,
+      "species": 1
+     },
+     {
+      "locus": 0,
+      "locusName": "Motility investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 2,
+      "locusName": "Sensing investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 9,
+      "species": 2
+     },
+     {
+      "locus": 0,
+      "locusName": "Motility investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 2,
+      "locusName": "Sensing investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 0,
+      "locusName": "Motility investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 5,
+      "species": 4
+     },
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 5,
+      "species": 4
+     },
+     {
+      "locus": 2,
+      "locusName": "Sensing investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 5,
+      "species": 4
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 5,
+      "species": 4
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 5,
+      "species": 4
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 5,
+      "species": 4
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 5,
+      "species": 4
+     }
+    ]
+   },
+   "baselineTick": 120,
+   "horizonTicks": 450,
+   "interventions": [
+    {
+     "commandId": "add-hunters",
+     "payload": {
+      "count": 5,
+      "kind": "inoculate",
+      "radius": 3,
+      "speciesId": "P01",
+      "x": 48.5,
+      "y": 64.5
+     },
+     "result": {
+      "accepted": 5,
+      "rejected": 0
+     }
+    }
+   ],
+   "label": "this paired run",
+   "rows": [
+    {
+     "a": 80,
+     "b": 73,
+     "diff": -7,
+     "key": "alive"
+    },
+    {
+     "a": 146.3860038962483,
+     "b": 156.21048873621444,
+     "diff": 9.824484839966146,
+     "key": "biomass"
+    },
+    {
+     "a": 4,
+     "b": 5,
+     "diff": 1,
+     "key": "speciesAlive"
+    },
+    {
+     "a": 1.2532219462493546,
+     "b": 1.4681204075816292,
+     "diff": 0.21489846133227464,
+     "key": "shannon"
+    },
+    {
+     "a": 0.7644910052076866,
+     "b": 0.7644705096339975,
+     "diff": -0.000020495573689105484,
+     "key": "oxygenMean"
+    },
+    {
+     "a": 24,
+     "b": 22,
+     "diff": -2,
+     "key": "births"
+    },
+    {
+     "a": 0,
+     "b": 10,
+     "diff": 10,
+     "key": "deaths"
+    },
+    {
+     "a": 0,
+     "b": 0,
+     "diff": 0,
+     "key": "capacitySeconds"
+    },
+    {
+     "a": 0,
+     "b": 20,
+     "diff": 20,
+     "key": "carbonAdded"
+    },
+    {
+     "a": 24,
+     "b": 24,
+     "diff": 0,
+     "key": "speciesCount",
+     "species": 0
+    },
+    {
+     "a": 65.28387140389445,
+     "b": 65.289043397319,
+     "diff": 0.005171993424553989,
+     "key": "speciesBiomass",
+     "species": 0
+    },
+    {
+     "a": 35,
+     "b": 23,
+     "diff": -12,
+     "key": "speciesCount",
+     "species": 1
+    },
+    {
+     "a": 52.618801936044825,
+     "b": 34.43477713110657,
+     "diff": -18.184024804938254,
+     "key": "speciesBiomass",
+     "species": 1
+    },
+    {
+     "a": 9,
+     "b": 9,
+     "diff": 0,
+     "key": "speciesCount",
+     "species": 2
+    },
+    {
+     "a": 13.10745003764627,
+     "b": 13.10745003764627,
+     "diff": 0,
+     "key": "speciesBiomass",
+     "species": 2
+    },
+    {
+     "a": 12,
+     "b": 12,
+     "diff": 0,
+     "key": "speciesCount",
+     "species": 3
+    },
+    {
+     "a": 15.375880518662779,
+     "b": 15.47712874862729,
+     "diff": 0.10124822996451144,
+     "key": "speciesBiomass",
+     "species": 3
+    },
+    {
+     "a": 0,
+     "b": 5,
+     "diff": 5,
+     "key": "speciesCount",
+     "species": 4
+    },
+    {
+     "a": 0,
+     "b": 27.90208942151532,
+     "diff": 27.90208942151532,
+     "key": "speciesBiomass",
+     "species": 4
+    }
+   ],
+   "stoppedEarly": false,
+   "ticks": 450
+  },
+  "starch": {
+   "a": {
+    "alive": 12,
+    "biomass": 14.17785453992522,
+    "births": 0,
+    "capacityIntervals": [],
+    "capacityLimitedTicks": 0,
+    "carbonAdded": 0,
+    "deaths": 0,
+    "deathsByCause": [],
+    "deathsUnattributed": 0,
+    "modules": [],
+    "oxygenMean": 0.7999842686246215,
+    "shannon": 0,
+    "species": [
+     {
+      "biomass": 0,
+      "births": 0,
+      "count": 0,
+      "deaths": 0,
+      "id": "A01",
+      "idx": 0,
+      "name": "Sunbead"
+     },
+     {
+      "biomass": 0,
+      "births": 0,
+      "count": 0,
+      "deaths": 0,
+      "id": "B01",
+      "idx": 1,
+      "name": "Sprinter"
+     },
+     {
+      "biomass": 0,
+      "births": 0,
+      "count": 0,
+      "deaths": 0,
+      "id": "B04",
+      "idx": 2,
+      "name": "Recycler"
+     },
+     {
+      "biomass": 14.17785453992522,
+      "births": 0,
+      "count": 12,
+      "deaths": 0,
+      "id": "B06",
+      "idx": 3,
+      "name": "Crumbsmith"
+     },
+     {
+      "biomass": 0,
+      "births": 0,
+      "count": 0,
+      "deaths": 0,
+      "id": "P01",
+      "idx": 4,
+      "name": "Amoeba"
+     }
+    ],
+    "speciesAlive": 1,
+    "tick": 300,
+    "traits": [
+     {
+      "locus": 0,
+      "locusName": "Motility investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 2,
+      "locusName": "Sensing investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     }
+    ]
+   },
+   "b": {
+    "alive": 12,
+    "biomass": 14.284029490812035,
+    "births": 0,
+    "capacityIntervals": [],
+    "capacityLimitedTicks": 0,
+    "carbonAdded": 6.5,
+    "deaths": 0,
+    "deathsByCause": [],
+    "deathsUnattributed": 0,
+    "modules": [],
+    "oxygenMean": 0.7999823305158527,
+    "shannon": 0,
+    "species": [
+     {
+      "biomass": 0,
+      "births": 0,
+      "count": 0,
+      "deaths": 0,
+      "id": "A01",
+      "idx": 0,
+      "name": "Sunbead"
+     },
+     {
+      "biomass": 0,
+      "births": 0,
+      "count": 0,
+      "deaths": 0,
+      "id": "B01",
+      "idx": 1,
+      "name": "Sprinter"
+     },
+     {
+      "biomass": 0,
+      "births": 0,
+      "count": 0,
+      "deaths": 0,
+      "id": "B04",
+      "idx": 2,
+      "name": "Recycler"
+     },
+     {
+      "biomass": 14.284029490812035,
+      "births": 0,
+      "count": 12,
+      "deaths": 0,
+      "id": "B06",
+      "idx": 3,
+      "name": "Crumbsmith"
+     },
+     {
+      "biomass": 0,
+      "births": 0,
+      "count": 0,
+      "deaths": 0,
+      "id": "P01",
+      "idx": 4,
+      "name": "Amoeba"
+     }
+    ],
+    "speciesAlive": 1,
+    "tick": 300,
+    "traits": [
+     {
+      "locus": 0,
+      "locusName": "Motility investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 1,
+      "locusName": "Feeding investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 2,
+      "locusName": "Sensing investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 3,
+      "locusName": "Division investment",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 4,
+      "locusName": "Preferred pH shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 5,
+      "locusName": "Preferred salinity shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     },
+     {
+      "locus": 6,
+      "locusName": "Preferred warmth shift",
+      "max": 50,
+      "median": 50,
+      "min": 50,
+      "n": 12,
+      "species": 3
+     }
+    ]
+   },
+   "baselineTick": 0,
+   "horizonTicks": 300,
+   "interventions": [
+    {
+     "commandId": "starch-b",
+     "payload": {
+      "dose": 0.5,
+      "kind": "deposit",
+      "materialId": "STARCH",
+      "points": [
+       [
+        60.5,
+        64.5
+       ]
+      ],
+      "radius": 2
+     },
+     "result": {
+      "accepted": 13,
+      "rejected": 0
+     }
+    }
+   ],
+   "label": "this paired run",
+   "rows": [
+    {
+     "a": 12,
+     "b": 12,
+     "diff": 0,
+     "key": "alive"
+    },
+    {
+     "a": 14.17785453992522,
+     "b": 14.284029490812035,
+     "diff": 0.10617495088681572,
+     "key": "biomass"
+    },
+    {
+     "a": 1,
+     "b": 1,
+     "diff": 0,
+     "key": "speciesAlive"
+    },
+    {
+     "a": 0,
+     "b": 0,
+     "diff": 0,
+     "key": "shannon"
+    },
+    {
+     "a": 0.7999842686246215,
+     "b": 0.7999823305158527,
+     "diff": -0.0000019381087688064014,
+     "key": "oxygenMean"
+    },
+    {
+     "a": 0,
+     "b": 0,
+     "diff": 0,
+     "key": "births"
+    },
+    {
+     "a": 0,
+     "b": 0,
+     "diff": 0,
+     "key": "deaths"
+    },
+    {
+     "a": 0,
+     "b": 0,
+     "diff": 0,
+     "key": "capacitySeconds"
+    },
+    {
+     "a": 0,
+     "b": 6.5,
+     "diff": 6.5,
+     "key": "carbonAdded"
+    },
+    {
+     "a": 12,
+     "b": 12,
+     "diff": 0,
+     "key": "speciesCount",
+     "species": 3
+    },
+    {
+     "a": 14.17785453992522,
+     "b": 14.284029490812035,
+     "diff": 0.10617495088681572,
+     "key": "speciesBiomass",
+     "species": 3
+    }
+   ],
+   "stoppedEarly": false,
+   "ticks": 300
+  }
+ }
+}

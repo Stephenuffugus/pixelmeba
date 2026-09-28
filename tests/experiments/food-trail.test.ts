@@ -6,6 +6,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { ExperimentResult } from '../../src/sim/experiments';
 import { expectConserved, expectReplayIdentical, expectGateReached, runCard } from './helpers';
+import { expectWaveANumbers } from './golden';
 
 let r: ExperimentResult;
 beforeAll(() => {
@@ -31,5 +32,11 @@ describe('Food trail (FOOD_TRAIL_V1 r1, seed 101)', () => {
     expect(m['intake.B01']).toBeGreaterThan(0);
     expect(m['consumed.sugar']).toBeCloseTo(m['intake.B01']!, 9);
     expect(r.A.measurements.inputCarbon).toBeCloseTo(157.5, 9); // the two tick-0 strokes: 315 cells × 0.50 C
+  });
+});
+
+describe('one paired-run measurement model (SPEC §13.4)', () => {
+  it('reproduces every number wave A recorded for this card: gate, stamp, measurements, ledger, timeline', () => {
+    expectWaveANumbers(r);
   });
 });

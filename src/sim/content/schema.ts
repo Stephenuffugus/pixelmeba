@@ -264,6 +264,8 @@ export type ExperimentCommand = z.infer<typeof ExperimentCommandSchema>;
 export const ExperimentChangeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('none') }).strict(),
   z.object({ kind: z.literal('omitPatch'), patchIndex: int.min(0) }).strict(),
+  /** B is realized without these recipe scheduled commands (indexes into recipe.scheduledCommands; P2.5 Experiment C). */
+  z.object({ kind: z.literal('omitScheduled'), indexes: z.array(int.min(0)).min(1) }).strict(),
   z.object({ kind: z.literal('shade'), factor: z.literal(0.1) }).strict(),
   z.object({ kind: z.literal('commands'), atSecond: nonneg, commands: z.array(ExperimentCommandSchema).min(1) }).strict(),
 ]);

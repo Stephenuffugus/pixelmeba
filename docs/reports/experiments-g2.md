@@ -1,8 +1,11 @@
 # Experiments framework and first cards (P2.5)
 
-Task BUILD_DIRECTIVE P2.5 (SPEC §13.2; CONTENT_TABLES §10.1–10.2; D06 §8; D01 §15). This wave covers
-the simulation/content framework and the headless fixtures. The card UI, the journal stamp display
-and the in-app flow come next wave. Experiment C (RESERVE_COMPARE_V1, needs E05) is not in this wave.
+Task BUILD_DIRECTIVE P2.5 (SPEC §13.2; CONTENT_TABLES §10.1–10.2; D06 §8; D01 §15). Wave A built
+the simulation/content framework, six cards and their headless fixtures (the sections below up to
+"Not done / follow‑ups"). Wave B (the last section, **Wave B: one paired‑run model, Experiment C, cards
+in the app**) merged the two measurement observers into one paired‑run model, added Experiment C
+(RESERVE_COMPARE_V1, a Seeded traits demonstration) and put the seven cards, their runs and the journal
+stamp in the app. Wave A's numbers below are unchanged by wave B; a test proves it.
 
 - Content hash `ec279b0636c4761a75a307f9e92e5bc774ec26fe0efb0e126cbca530e1803732` (content version 1,
   simulation version 3, build phase 2).
@@ -318,3 +321,285 @@ End hashes (seed per card, 16‑hex `stateHash`):
   CLEANING_CREW_V1 take 1.1 s under tsx and 3.8 s inside vitest. The fixtures were trimmed to
   one run per card plus an arm replay for this reason. `tests/experiments` took 150 s and, with
   `tests/content`, 383 s under heavier shared load.
+
+---
+
+# Wave B: one paired‑run model, Experiment C, cards in the app
+
+- Content hash `86bd7cde1dc471ef886c8481530da0770c0c9a1cf7fefbd1cd32dd760719fe49` after adding
+  RESERVE_COMPARE_V1 and EXP_C (content version 1, simulation version 3, build phase 2; recipes 7,
+  experiments 7). Another agent's in‑flight content edits can move the hash; the fixtures read it
+  from the manifest.
+- Numbers come from `runExperiment` and `DishHost` in this session: `npx tsx` scratch probes and the
+  vitest fixtures, on the shared 2‑CPU machine (1‑min load 5–10 during this wave). Times are not
+  performance measurements.
+
+## 1. One paired‑run measurement model
+
+Wave A had two observers: `experiments.ts` (named measurement ids, stage‑hook intake, pools,
+captures, extinction) and `worker/comparison.ts` (births, deaths, deaths by cause, capacity‑limited
+intervals, the comparison panel's summary). SPEC §13.4 describes one comparison model, so both now
+use **`src/sim/pairedRun.ts`**:
+
+- `ArmObserver`: one read‑only observer with every accumulator both sides had, plus founder groups
+  and the reserve peak (below). It never draws randomness and never writes to a world.
+- `PairedRun` / `stepObserved`: A one tick, then B one tick, each with its observer's stage hook.
+  The comparison engine and paired cards step through this same class; single‑arm cards step one
+  arm the same way.
+- Two read‑outs of the same observer: `measureArm` (the named grammar, for cards and gates) and
+  `measureSummary` (the comparison panel: counts, biomass, Shannon H, oxygen, deaths by cause,
+  trait distributions, module frequencies, capacity intervals, carbon added).
+- `comparison.ts` and `experiments.ts` re‑export what their callers used, so no caller changed
+  except the host's paired‑card wiring.
+
+**Proof of no behaviour change.**
+
+1. Before touching the code, a scratch script recorded every number wave A produces: the six cards
+   through `runExperiment` (gate, stamp, every catalog measurement, reported measurements, ledger,
+   unattributed deaths, a SHA‑256 of each timeline, start and end state hashes) and three
+   comparisons through `runPairedComparison` (FIRST_DISH_V1 +5 Amoebae at 120 ticks for 450 ticks;
+   FIRST_DISH_V1 + a Feed at 57 ticks for 600 ticks; STARCH_UNLOCK_V1 + a starch deposit for 300
+   ticks) — on a clean `git archive HEAD` copy.
+2. The same script ran on that clean copy with **only** the refactored files copied in
+   (`pairedRun.ts`, `experiments.ts`, `comparison.ts`, the additive schema line): **2,771 of 2,771
+   recorded values identical, state hashes included; 164 new keys, all new measurement families in
+   the catalogs.** A same‑process benchmark showed no measurable cost (EXP_106 8.3–9.1 s unified vs
+   9.1–9.3 s before; EXP_102 6.4–6.8 s vs 6.4–7.0 s).
+3. The recording (hashes and content hash left out, because they cover the content hash and other
+   agents' in‑flight systems) is `tests/experiments/golden/wave-a-measurements.json`. Each card
+   fixture now ends with `expectWaveANumbers(r)` and `tests/sim/comparison.test.ts` checks the three
+   comparisons with `expectWaveAComparison`: every recorded number must be identical (`===`), and
+   the only extra keys allowed are the new measurement families.
+4. The existing comparison tests (equal ticks under any wall clock, baseline preserved, deleting a
+   comparison keeps saves) and `tests/worker/compare-client.test.ts` pass unchanged.
+
+## 2. Experiment C — Why variation can matter (a Seeded traits demonstration)
+
+**Recipe `RESERVE_COMPARE_V1`** (CT §9.2, D06 §11), exactly: clear water (Water Garden without
+stones), §9.1 environment with background sugar 0, lid open, Fixed Traits, Identical founders, seed
+104729. 24 B01 in the distinct cells nearest (64,64) within r 3; founder ordinals 1, 3, 5 … carry E05
+(`moduleAssignment: alternate-odd`, lineage origin 2 = "present at creation"), 2, 4, 6 … none; all at
+50 E, same body and neutral loci; E05 raises the cap to 140 and changes nothing else. One meal: 0.50
+sugar C per water cell within r 6 (113 cells, 56.5 C logged as `recipe:patch0:First meal`). The
+stable‑food schedule is five recipe scheduled deposits (0.50 per cell at (64.5,64.5) r 6, at 60,
+120, 180, 240 and 300 s); a fixture checks each covers exactly the 113 meal cells. Labels
+`["Seeded traits demonstration", "Experiment C"]`.
+
+**Card `EXP_C`**, paired, 600 s:
+
+- **Arms** (D06 §8: "a control with stable food and an intervention with a finite initial food
+  pulse"): A = the recipe as written (stable food); B = the finite pulse, realized with the new change
+  kind **`omitScheduled {indexes: [0,1,2,3,4]}`** — B is the same recipe and seed without those
+  scheduled commands. A fixture proves the arms have identical entities, fields, ledger and lineage
+  and differ only in the pending queue.
+- **Measurements** (CT §9.2 "energy distributions, food consumed, births, deaths by cause, live
+  descendants per founder group, extinction times"): `founders`, `descendants`, `groupEnergy`,
+  `groupExtinctAt` for `B01.E05` and `B01.none`; `reservePeak.B01`, `meanEnergy.B01`, `intake.B01`,
+  `consumed.sugar`, `field.sugar`, `inputCarbon`, `births.B01`, `deaths.B01`,
+  `deaths.B01.DEATH_STARVATION`, `alive.B01`, `extinctAt.B01`.
+- **New measurement families** (grammar in `pairedRun.ts`). A *founder group* is the organisms alive
+  when the run starts, grouped by species and supplementary module set; every birth joins its parent's
+  group (lineage parent link); an organism introduced during the run joins none.
+  `descendants.SP.GROUP` counts living members (a founder that has not divided counts as its own
+  line). A fixture checks it against an independent walk of lineage parent links to each living
+  organism's generation‑0 ancestor after 90 s (with births). `reserveHeld.SP` is the energy living SP
+  hold above the normal 100 E cap (only a reserve chamber allows any); `reservePeak.SP` its largest
+  value at the end of any tick (checked with a labelled test state: one carrier set to 130 E).
+- **Gate** (a proposed decision): both copies ran 600 s **and** in copy B a reserve chamber held
+  energy above the normal cap (`B reservePeak.B01 > 0`). D06 §11 states the card's question as
+  "whether storing surplus changes outcomes when food stops"; a chamber that never holds surplus
+  cannot answer it, and D06 names that exact outcome a tuning finding. The gate does not ask for a
+  winner.
+
+### Result on V1 (seed 104729): the gate is not reached — measured limiting factor
+
+| | A (stable food) | B (first meal only) |
+|---|---|---|
+| Gate clauses | runSeconds 600 ✓ | reservePeak.B01 **0** ✗ |
+| Sugar added during the run (`inputCarbon`) | 282.50 C (5 × 0.5 × 113) | 0 |
+| Sugar eaten (`consumed.sugar` = `intake.B01`) | 320.01 C | 52.04 C |
+| Sugar left | 18.99 C | 4.46 C |
+| Births / deaths (all starvation) | 52 / 76 | 10 / 34 |
+| Most energy held above the normal cap | 0 | 0 |
+| Founder family with a Reserve chamber: died out at | 473 s | 216 s |
+| Founder family with no extra ability: died out at | 488 s | 230 s |
+| Living descendants at 600 s (E05 / none) | 0 / 0 | 0 / 0 |
+
+Every ledger check passed in both copies (22 per arm; worst relative error C 3.0e‑13, N 6.7e‑14,
+mineral exact); no death lacked a cause; both copies replay identically from scratch and copy A is
+the untouched recipe.
+
+**Limiting factor: no Sprinter ever holds more energy than the normal cap, so the chamber's extra
+room is never used.**
+
+1. Mean energy peaks at 80.6 E at the 30 s sample (both copies are identical until 60 s); the
+   highest single organism measured in a 30 s‑step probe was 87.1 E, below the 100 E cap.
+   `reservePeak.B01` is 0 at the end of every tick in both copies.
+2. The leading intake limit of every living Sprinter at every sample from 30 s is
+   `FOOD_ACCESS_LOW` (fixture‑checked). The meal spreads by diffusion faster than 24 Sprinters eat
+   it: 18.2 of 56.5 C are left at 30 s, but at low concentration per cell.
+3. Energy goes to division before it can pile up: the first divisions come at 30–60 s (24 → 30
+   alive at 60 s) and division halves energy between daughters.
+4. From 150 s the division gate is increasingly `DIV_BLOCK_ENERGY`; everyone starves: copy B is
+   extinct at 230 s, copy A (whose last meal is at 300 s) at 488 s.
+
+In this paired run the family with a reserve chamber died out 15 s (A) and 14 s (B) before the family
+without one. That **coincided with** the chamber's recorded running cost (0.02 E/s surcharge + 0.03
+E/s upkeep) while its extra room held nothing; no measurement here attributes deaths to it.
+
+No mechanic, constant or recipe number was changed. Per SPEC §13.2 the card is not release‑ready
+until a new recipe revision reaches its gate; D06 §11 says to "adjust a new version's food pulse or
+duration before changing the module's mechanics".
+
+### Content‑only candidates for RESERVE_COMPARE_V2 (measured in memory; no content changed)
+
+Each candidate changes one recipe number (CT §11) in a would‑be RESERVE_COMPARE_V2, with every
+other value, the card and the gate unchanged. "Meal dose" is the one number used by the first meal and
+the five stable meals ("the same meal again"). All runs are 600 s, and every ledger check passed.
+
+Seed 104729, one candidate at a time:
+
+| Candidate (V2) | Gate | Most energy held above the cap (A = B, identical before 60 s) | Families died out in A (E05 / none) | Families died out in B (E05 / none) | Births A / B | Food eaten A / B |
+|---|---|---|---|---|---|---|
+| V1 as is (dose 0.50, r 6) | not reached | 0 | 473 / 488 s | 216 / 230 s | 52 / 10 | 320.0 / 52.0 C |
+| meal r 3 (same dose) | not reached | 0 | 457 / 501 s | 141 / 150 s | 3 / 0 | 65.2 / 13.7 C |
+| dose 1.0 per cell | reached | 1.1 E | 462 / 459 s | 181 / 205 s | 124 / 24 | 658.1 / 104.7 C |
+| dose 2.0 per cell | reached | 29.2 E | 460 / 473 s | 213 / 232 s | 321 / 66 | 1336.4 / 213.9 C |
+| dose 4.0 per cell | reached | 63.6 E | 454 / 476 s | 241 / 258 s | 725 / 124 | 2691.6 / 434.8 C |
+
+Dose 2.0 on the six CT §11 development seeds:
+
+- **The gate is reached on 6 / 6 seeds**; the most energy held above the cap is 26.6–29.6 E.
+- Both families still die out in both copies on every seed (B at 207–233 s, A at 445–479 s).
+- In copy B the reserve‑chamber family died out first on 5 / 6 seeds (8–19 s earlier) and at the same
+  second on 1 (seed 196613).
+- In copy A it died out first on 5 / 6 seeds; on seed 262147 it died out 1 s later.
+
+**Proposal (owner decision): no revision is applied.**
+
+- The smallest one‑number revision that reaches the gate on every seed is dose 2.0
+  (RESERVE_COMPARE_V2).
+- It makes the chamber hold surplus, so the card can ask its question. The answer measured on this
+  content is that in this paired run the family with a chamber did not outlast the family without
+  one.
+- That is an honest, explainable outcome, which D06 allows ("without promising the reserve carrier
+  will win").
+- A longer famine alone (duration) cannot help while nothing is stored. Dose 1.0 reaches the gate
+  with only 1.1 E stored, too close to the threshold to rely on.
+
+## 3. Cards in the app
+
+**Worker** (`src/worker/host.ts`, protocol and client, additive):
+
+- `experimentCatalog` returns every shipped card as recorded content (`experimentCardView`:
+  question, recipe, intervention, tradeoff, measurements, stopping point, confounds, gate, change,
+  patches, schedule, founders, names).
+- `experimentStart {cardId, newDishId, compare}` realizes the card with **the same
+  `realizeExperimentArms` as the headless runner**. Nothing the UI sends can set a seed, recipe or
+  change.
+- A single‑arm card opens as a new paused dish whose steps carry the card's observer and `GateWatch`.
+- A paired card also opens its paired run through the comparison engine: the new dish holds the
+  card's start (A's start state; for EXP_B the recipe run to 120 s), A and B are the card's arms, and
+  the card's change is on B before the player sees it (commands listed as interventions).
+- The card's change is B's only change: other commands on B and Clear change are refused. The run's
+  horizon is the card's stopping point whatever the UI asks.
+- After every pair (or single‑arm tick) the same `GateWatch` as the headless runner evaluates the gate
+  at whole seconds; on reaching it the worker posts `experimentStamp` (the stamp plus the card's
+  measurements at that moment) and the run goes on. `compareState.experiment` carries the gate
+  clauses as measured so far, the stamp and the card's measurements at the end.
+- A player command on a single‑arm card's dish (a lineage note excepted) ends that card's
+  observation (`experimentEnded`): the measurements would no longer describe the card. The dish goes
+  on; nothing is stamped.
+
+`tests/experiments/app-flow.test.ts` drives the real host: Experiment A in the app gives **the same
+stamp, gate and card measurements (`toEqual`) and the same end hashes as `runExperiment`**; EXP_B's
+arms and interventions equal the headless ones; the Cleaning crew stamp equals the headless stamp and
+the dish, still running past the gate, equals the untouched recipe; a change ends a single‑arm
+observation; refusals create nothing.
+
+**UI** (Home → Notebook):
+
+- **Notebook** (`Notebook.tsx`): tabs Journal · Experiments. Arrow keys, Home and End move between
+  tabs. The other UX §1 tabs arrive in later phases.
+- **Experiments** lists the seven cards: title, question, paired or one dish, stopping point, recipe
+  labels ("Seeded traits demonstration" on Experiment C), and "Stamped in Journal" once stamped.
+- **Card detail** (`ExperimentCard.tsx`) shows question, recipe, suggested intervention (with what A
+  and B each get), predicted tradeoff, measurements in words, stopping point, confounds, observation
+  gate and completion; **Start this experiment** keeps the current dish in Continue (autosave; a
+  failed write starts nothing) and opens the new paused dish.
+- **Paired run** (`ExperimentRun.tsx`, route `experimentRun`): phone A/B toggle with synced cameras,
+  large screens side by side (the comparison layout). Setup shows both copies in words, what was
+  already applied to B, the tradeoff, measurements, gate and confounds, and the prediction note. Run
+  reads "Accept the schedule and run both for 10 min" for Experiment C. Running shows the pace
+  buttons and the gate clauses with their measured values (✓ / ○ and words, not colour).
+- **Results** show "Results · this paired run", the gate outcome (reached at m:ss with the stamp
+  text, or not reached with the clause values), the card's measurements A / B / B − A, whole‑dish
+  measures, the prediction and a conclusion picker; the conclusion is written onto the stamp.
+- **Journal** (`src/ui/journal.ts`, localStorage `pixelmeba.journal`, newest first, at most 200;
+  session‑only when storage is unavailable) lists each stamp: stamp text, card, "this paired run" /
+  "this run", dish time reached, wall‑clock time, labels, the gate clauses with values, the
+  prediction, the conclusion, and the card's measurements labelled when recorded.
+- **Single‑arm cards** open the dish with a prompt; the stamp arrives as a toast and in the Journal.
+- Text on these screens is at least 16 px; controls are at least 48 px; the layout reflows at 200 %
+  text (e2e‑checked).
+
+## 4. Tests and commands (wave B, this session)
+
+What each test proves:
+
+- `tests/experiments/{food-trail,light-and-life,cleaning-crew,predator-balance,exp-a-starch,exp-b-grazer}.test.ts`:
+  wave A's checks as before, plus `expectWaveANumbers` (every recorded wave A number is identical
+  under the unified model).
+- `tests/sim/comparison.test.ts`: wave A's engine checks, plus the three recorded comparisons
+  identical.
+- `tests/experiments/exp-c-reserve.test.ts`:
+  - RESERVE_COMPARE_V1 realizes CT §9.2 exactly: placement, alternating E05, origin "present at
+    creation", 50 E, cap 140 vs 100, 113 meal cells, and five scheduled meals on exactly those cells;
+  - the arms differ only in the pending queue;
+  - every view carries "Seeded traits demonstration" and no ranking words;
+  - founder groups equal an independent lineage walk;
+  - reserveHeld and reservePeak read correctly;
+  - the 600 s card conserves and replays; the gate is not reached, and the limiting factor is
+    asserted (peak 0 in both copies, FOOD_ACCESS_LOW, mean E below the cap, both families starve).
+- `tests/experiments/framework.test.ts`: the seven cards; honest‑label words (adds adapted/immune);
+  `omitScheduled` and founder‑group validation name file and field; the grammar for the new families.
+- `tests/experiments/app-flow.test.ts`: the in‑app flow equals the headless runner (see §3).
+- `tests/experiments/journal-and-words.test.ts`:
+  - the journal store is newest first, holds at most 200, survives a reload, records the conclusion,
+    and works session‑only without storage;
+  - every card's measurements, gate and change are worded without raw ids.
+- `tests/e2e/experiments.spec.ts` covers the P2.5 done‑when path: Home → Notebook → Experiments →
+  Experiment A card → Start → paired run with "without the “Starch” deposit" on B → Fast → "Results ·
+  this paired run", gate reached at 3:00 → Journal shows the stamp (after a reload too). It also checks:
+  - axe (no serious or critical violations) on the list, card, setup, results and Journal;
+  - no text below 16 px and no sideways overflow;
+  - 48 px targets and 200 % text on Experiment C's card and setup (schedule shown, "Accept the schedule
+    and run both for 10 min").
+
+Commands (this session):
+
+- `npx tsx tools/content-validate.ts --write`: `content ok`, recipes 7, experiments 7.
+- `npx tsc -p tsconfig.json --noEmit`: clean.
+- `npx eslint` on every file changed or created: clean.
+- `npx vitest run` on the seven card fixtures: 7 files, 38 tests passed (430 s).
+- `npx vitest run` on `tests/sim/comparison.test.ts`, `tests/worker/{compare-client,host-requests,host,protocol,whatif}.test.ts`,
+  `tests/fixtures/deterministic-state.test.ts`, `tests/ui/family.test.ts`,
+  `tests/experiments/{app-flow,journal-and-words,framework}.test.ts`: 11 files, 85 tests passed.
+- `npx vitest run tests/content tests/recipes`: 3 files, 45 tests passed.
+- `E2E_PORT=4184 E2E_OUTDIR=tmp/dist-experiments npx playwright test tests/e2e/experiments.spec.ts
+  tests/e2e/compare.spec.ts --project=phone-portrait --project=desktop --project=phone-landscape`:
+  12 passed (8.5 min). The comparison flow is unchanged under the shared model and the host's
+  experiment wiring.
+- Scratch probes via `npx tsx` (not committed): the wave A recording before and after the refactor,
+  the same‑process benchmark, the EXP_C timeline, and the V2 candidates (one seed each, then dose 2.0
+  on six seeds).
+
+## 5. Not done / follow‑ups (wave B)
+
+- EXP_C does not reach its gate on V1. Choosing a V2 revision is an owner decision (above).
+- The in‑app observation of a single‑arm card is worker state. Saving and reloading that dish does
+  not resume the gate, and neither does an experiment dish opened from Continue.
+- `completion.playerSteps` ("inspect food use", "open resource history", "view prey history") is
+  not yet checked in the app. The stamp records the measured gate only.
+- The inspector does not yet say "present at creation" for Experiment C's seeded founders (lineage
+  origin 2). The lineage strings already do.

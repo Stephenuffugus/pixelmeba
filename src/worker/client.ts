@@ -4,6 +4,10 @@
  */
 import type { CommandPayload, CommandResult } from '@sim/commands';
 import type { CompareSpeed, ComparisonState } from './comparison';
+import type { LineageAnswer } from '@sim/lineage';
+import type { LineageView } from './protocol';
+import type { WhatIfAnswer, WhatIfKeep, WhatIfKept, WhatIfPick, WhatIfRefusalCode } from './protocol';
+import type { ExperimentCardView } from '@sim/experiments';
 import { PROTOCOL_VERSION, stamp, type DishInfo, type DishSource, type Envelope, type FamilyAnswer, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 
 export class WorkerRequestError extends Error {
@@ -23,6 +27,9 @@ export interface WorkerLike {
   terminate?(): void;
 }
 
+/** Unsolicited experiment packets (P2.5). */
+export type ExperimentNotice = Extract<FromWorker, { type: 'experimentStamp' | 'experimentEnded' }>;
+
 export class SimClient {
   private nextRequest = 1;
   private readonly pending: Record<number, Pending> = {};
@@ -30,6 +37,7 @@ export class SimClient {
   private readonly snapshotListeners: ((s: SnapshotMsg) => void)[] = [];
   private readonly errorListeners: ((e: { dishId: string; message: string }) => void)[] = [];
   private readonly compareListeners: ((s: ComparisonState) => void)[] = [];
+  private readonly experimentListeners: ((m: ExperimentNotice) => void)[] = [];
 
   constructor(private readonly worker: WorkerLike) {
     worker.onmessage = (ev) => this.receive(ev.data);
@@ -58,6 +66,15 @@ export class SimClient {
     return () => {
       const i = this.compareListeners.indexOf(fn);
       if (i >= 0) this.compareListeners.splice(i, 1);
+    };
+  }
+
+  /** Experiment notices (P2.5): a card's gate was reached (journal stamp), or its observation ended. */
+  onExperiment(fn: (m: ExperimentNotice) => void): () => void {
+    this.experimentListeners.push(fn);
+    return () => {
+      const i = this.experimentListeners.indexOf(fn);
+      if (i >= 0) this.experimentListeners.splice(i, 1);
     };
   }
 
@@ -92,6 +109,11 @@ export class SimClient {
         this.pending[msg.requestId]?.reject(new WorkerRequestError(msg.message, msg.kind));
         delete this.pending[msg.requestId];
       }
+      return;
+    }
+    if (msg.type === 'experimentStamp' || msg.type === 'experimentEnded') {
+      // Unsolicited experiment notices (P2.5): a gate reached, or a single-arm observation ended.
+      for (const fn of this.experimentListeners) fn(msg);
       return;
     }
     if (msg.type === 'compareState') for (const fn of this.compareListeners) fn(msg.state);
@@ -198,6 +220,17 @@ export class SimClient {
     return msg.family;
   }
 
+  /** Lineage panel data (P2.3): branches, variation, specimens, and one branch's detail; read-only. */
+  async lineage(dishId: string, branch: number | null, birthId: number | null = null): Promise<LineageAnswer> {
+    const msg = await this.request<Extract<FromWorker, { type: 'lineage' }>>((requestId) => ({ type: 'lineage', requestId, dishId, branch, birthId }));
+    return msg.lineage;
+  }
+
+  /** Ask snapshots of this dish to carry trait-band / lineage-highlight marks (null = off). */
+  lineageView(dishId: string, view: LineageView | null): void {
+    this.send({ type: 'lineageView', dishId, view });
+  }
+
   /** Start a comparison from a dish: baseline captured once, A and B realized paused (SPEC §13.4). */
   async compareStart(sourceDishId: string, ids: { compareId: string; aDishId: string; bDishId: string }): Promise<ComparisonState> {
     const msg = await this.request<Extract<FromWorker, { type: 'compareState' }>>((requestId) => ({ type: 'compareStart', requestId, sourceDishId, ...ids }));
@@ -226,6 +259,50 @@ export class SimClient {
   /** Discard a comparison's two worlds and baseline; the source dish and saves are never touched. */
   async compareDelete(compareId: string): Promise<void> {
     await this.request((requestId) => ({ type: 'compareDelete', requestId, compareId }));
+  }
+
+  /**
+   * What if? (P2.6): the ideas for a source recipe (or for the recipe `aboutDishId` came from), with
+   * previews and how that dish would be kept. Rejects with WorkerRequestError(kind = refusal code).
+   */
+  async whatIf(sourceId: string | null, aboutDishId: string | null): Promise<WhatIfAnswer> {
+    const msg = await this.request<Extract<FromWorker, { type: 'whatIf' | 'whatIfRefused' }>>((requestId) => ({ type: 'whatIf', requestId, sourceId, aboutDishId }));
+    if (msg.type === 'whatIfRefused') throw new WorkerRequestError(msg.message, msg.code);
+    return msg.answer;
+  }
+
+  /**
+   * Start a What if? dish (paused, new world id) after keeping `fromDishId` as `keep` says. A refusal
+   * (all slots used, a changed variant, …) resolves with ok false and a readable message; nothing changed.
+   */
+  async whatIfStart(args: {
+    readonly newDishId: string;
+    readonly fromDishId: string | null;
+    readonly pick: WhatIfPick;
+    readonly keep: WhatIfKeep;
+  }): Promise<{ readonly ok: true; readonly info: DishInfo; readonly kept: WhatIfKept } | { readonly ok: false; readonly code: WhatIfRefusalCode; readonly message: string }> {
+    const msg = await this.request<Extract<FromWorker, { type: 'whatIfStarted' | 'whatIfRefused' }>>((requestId) => ({ type: 'whatIfStart', requestId, ...args }));
+    if (msg.type === 'whatIfRefused') return { ok: false, code: msg.code, message: msg.message };
+    return { ok: true, info: msg.info, kept: msg.kept };
+  }
+
+  /** The experiment cards this build ships (P2.5), as the Notebook shows them. */
+  async experimentCatalog(): Promise<readonly ExperimentCardView[]> {
+    const msg = await this.request<Extract<FromWorker, { type: 'experimentCatalog' }>>((requestId) => ({ type: 'experimentCatalog', requestId }));
+    return msg.cards;
+  }
+
+  /**
+   * Start a card as a new paused dish (P2.5). A paired card also opens its paired run (comparison ids
+   * required) with the card's change on B. The card's recipe and seed are used as recorded.
+   */
+  async experimentStart(
+    cardId: string,
+    newDishId: string,
+    compare: { readonly compareId: string; readonly aDishId: string; readonly bDishId: string } | null,
+  ): Promise<{ readonly info: DishInfo; readonly compare: ComparisonState | null }> {
+    const msg = await this.request<Extract<FromWorker, { type: 'experimentStarted' }>>((requestId) => ({ type: 'experimentStart', requestId, cardId, newDishId, compare }));
+    return { info: msg.info, compare: msg.compare };
   }
 
   setSpeed(dishId: string, speed: Speed): void {

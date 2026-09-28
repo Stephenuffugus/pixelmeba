@@ -18,6 +18,7 @@ import { PAIRED_RUN_LABEL, runPairedComparison, shannonIndex, type CompareSpeed,
 import { DishHost } from '../../src/worker/host';
 import type { FromWorker, ToWorker } from '../../src/worker/protocol';
 import { registry } from '../helpers/world';
+import { expectWaveAComparison } from '../experiments/golden';
 
 const REG = registry();
 const GARDEN = { kind: 'recipe', recipeId: 'FIRST_DISH_V1' } as const;
@@ -399,4 +400,23 @@ describe('comparison engine (P2.4)', () => {
     expect(shannonIndex([5, 5, 5, 5])).toBeCloseTo(Math.log(4), 12);
     expect(shannonIndex([9, 1])).toBeLessThan(shannonIndex([5, 5]));
   });
+});
+
+describe('one paired-run measurement model (SPEC §13.4): the comparison engine and experiment cards share it', () => {
+  it('reproduces every number wave A recorded for three comparisons (hunters, feed, starch)', () => {
+    const hunters = realizeRecipe(REG, 'FIRST_DISH_V1', { worldId: 'cmp-results' });
+    run(hunters, 120);
+    expectWaveAComparison(
+      'hunters',
+      runPairedComparison(serializeWorld(hunters), [{ commandId: 'add-hunters', payload: { kind: 'inoculate', speciesId: 'P01', x: 48.5, y: 64.5, radius: 3, count: 5 } }], 450).results,
+    );
+    const feed = realizeRecipe(REG, 'FIRST_DISH_V1', { worldId: 'cmp-feed' });
+    run(feed, 57);
+    expectWaveAComparison('feed', runPairedComparison(serializeWorld(feed), [{ commandId: 'feed-b', payload: { kind: 'deposit', materialId: 'SUGAR', points: [[40.5, 64.5]], radius: 3, dose: 0.5 } }], 600).results);
+    const starch = realizeRecipe(REG, 'STARCH_UNLOCK_V1', { worldId: 'cmp-starch' });
+    expectWaveAComparison(
+      'starch',
+      runPairedComparison(serializeWorld(starch), [{ commandId: 'starch-b', payload: { kind: 'deposit', materialId: 'STARCH', points: [[60.5, 64.5]], radius: 2, dose: 0.5 } }], 300).results,
+    );
+  }, 60_000);
 });

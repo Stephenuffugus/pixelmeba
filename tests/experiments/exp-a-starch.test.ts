@@ -9,6 +9,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { ExperimentResult } from '../../src/sim/experiments';
 import { ENZYME_EMIT_MIN_ENERGY } from '../../src/sim/constants';
 import { expectConserved, expectReplayIdentical, expectEqualArms, expectGateReached, runCard, speciesAt } from './helpers';
+import { expectWaveANumbers } from './golden';
 
 let r: ExperimentResult;
 beforeAll(() => {
@@ -76,5 +77,11 @@ describe('Experiment A — What unlocks starch (STARCH_UNLOCK_V1 r1, seed 104729
     expect(a30.secretion).toEqual({ SECRETING: 1 });
     // The starch copy fed more, but not enough to cover maintenance.
     expect(r.A.measurements['intake.B06']).toBeGreaterThan(2 * r.B!.measurements['intake.B06']!);
+  });
+});
+
+describe('one paired-run measurement model (SPEC §13.4)', () => {
+  it('reproduces every number wave A recorded for this card: gate, stamp, measurements, ledger, timeline', () => {
+    expectWaveANumbers(r);
   });
 });

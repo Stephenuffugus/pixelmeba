@@ -7,6 +7,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { ExperimentResult } from '../../src/sim/experiments';
 import { expectConserved, expectReplayIdentical, expectEqualArms, expectGateReached, runCard } from './helpers';
+import { expectWaveANumbers } from './golden';
 
 let r: ExperimentResult;
 beforeAll(() => {
@@ -38,5 +39,11 @@ describe('Predator balance (PREDATOR_BALANCE_V1 r1, seed 106, 180 s)', () => {
     expect(A.inputCarbon).toBe(0);
     expect(B.inputCarbon).toBeCloseTo(20, 12); // five Amoebae × b0 4
     expect(B['capturedCarbon.P01']).toBeGreaterThan(0);
+  });
+});
+
+describe('one paired-run measurement model (SPEC §13.4)', () => {
+  it('reproduces every number wave A recorded for this card: gate, stamp, measurements, ledger, timeline', () => {
+    expectWaveANumbers(r);
   });
 });

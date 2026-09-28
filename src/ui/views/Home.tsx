@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import type { SlotSummary } from '@worker/protocol';
 import { IconGuide, IconLab, IconNotebook, IconPlay, IconSave, IconSettings } from '../icons';
 import { dishInfo, getClient, loadSlot, route } from '../state';
+import { journalUnseen } from '../journal';
 
 export function Home() {
   const hasDish = dishInfo.value !== null;
@@ -50,8 +51,9 @@ export function Home() {
           <button class="btn" onClick={() => (route.value = { name: 'newDish' })} data-testid="home-new">
             <IconLab /> New dish
           </button>
-          <button class="btn" disabled title="Arrives with favorites and story cards">
+          <button class="btn" onClick={() => (route.value = { name: 'notebook', tab: 'experiments' })} data-testid="home-notebook">
             <IconNotebook /> Notebook
+            {journalUnseen.value > 0 ? <span class="nb-dot">{journalUnseen.value} new</span> : null}
           </button>
           <button class="btn" onClick={() => (route.value = { name: 'saves' })}>
             <IconSave /> Saved dishes

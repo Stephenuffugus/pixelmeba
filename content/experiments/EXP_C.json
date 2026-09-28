@@ -1,0 +1,45 @@
+{
+  "id": "EXP_C",
+  "seed": 104729,
+  "title": "Why variation can matter",
+  "question": "When the food stops, does a reserve chamber change which founders leave living descendants?",
+  "recipeId": "RESERVE_COMPARE_V1",
+  "intervention": "Seeded traits demonstration. Both copies start the same: 24 Sprinters on one sugar meal; every other founder was given a reserve chamber when the dish was made. Copy A keeps stable food: the same meal is added again at 60, 120, 180, 240 and 300 seconds. Copy B gets the first meal only. Run both for 600 seconds and count each founder group's living descendants.",
+  "predictedTradeoff": "A reserve chamber gives room for 40 more energy but costs 0.02 energy per second as a carried ability plus 0.03 upkeep, and gives no energy by itself. It can only help a Sprinter that has eaten more than it could otherwise hold. Either group may leave more descendants, or neither.",
+  "measurements": [
+    "founders.B01.E05",
+    "founders.B01.none",
+    "descendants.B01.E05",
+    "descendants.B01.none",
+    "groupExtinctAt.B01.E05",
+    "groupExtinctAt.B01.none",
+    "groupEnergy.B01.E05",
+    "groupEnergy.B01.none",
+    "reservePeak.B01",
+    "meanEnergy.B01",
+    "intake.B01",
+    "consumed.sugar",
+    "field.sugar",
+    "inputCarbon",
+    "births.B01",
+    "deaths.B01",
+    "deaths.B01.DEATH_STARVATION",
+    "alive.B01",
+    "extinctAt.B01"
+  ],
+  "stoppingSeconds": 600,
+  "confounds": "The reserve chambers were given to alternate founders when the dish was made (present at creation): this is starting variation, not a discovery and not a mutation. Traits are fixed, so no new variation arises during the run. Founders sit at slightly different distances from the centre of the meal. The later meals in copy A are logged as external inputs. Once the copies differ, later encounters differ too: this is one paired run, not proof of a general effect.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "runSeconds", "arm": "A", "op": "gte", "value": 600, "label": "Both copies ran 600 s"},
+        {"measure": "reservePeak.B01", "arm": "B", "op": "gt", "value": 0, "label": "In the single-meal copy, a reserve chamber held energy above the normal cap"}
+      ]
+    }
+  },
+  "paired": true,
+  "change": {"kind": "omitScheduled", "indexes": [0, 1, 2, 3, 4]},
+  "completion": {"journalStamp": "Compared founder groups with and without a reserve chamber", "playerSteps": ["viewComparison"]},
+  "phase": 2
+}

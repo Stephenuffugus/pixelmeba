@@ -9,6 +9,10 @@ import type { CompareSpeed, ComparisonState } from '@worker/comparison';
 import type { DishInfo, FamilyAnswer, InspectorPayload, OverlayId, Selection, SnapshotMsg, Speed } from '@worker/protocol';
 import type { DishRenderer } from '@render/renderer';
 import { clearFeed, pushFeed } from './feed';
+import type { ExperimentCardView } from '@sim/experiments';
+import type { ExperimentNotice } from '@worker/client';
+import { addJournalEntry, journalUnseen, updateJournalEntry, type JournalMeasure } from './journal';
+import { clauseText, formatDiff, formatMeasure, measureLabel } from './strings/experiments';
 
 export type Route =
   | { readonly name: 'home' }
@@ -20,7 +24,13 @@ export type Route =
   | { readonly name: 'saves' }
   | { readonly name: 'newDish' }
   /** Paired comparison of two copies of the current dish (SPEC §13.4, UX §5.6). */
-  | { readonly name: 'compare' };
+  | { readonly name: 'compare' }
+  /** Notebook (UX §1): Journal · Experiments (P2.5; the other tabs arrive in later phases). */
+  | { readonly name: 'notebook'; readonly tab: 'journal' | 'experiments' }
+  /** One experiment card in full, with Start (SPEC §13.2). */
+  | { readonly name: 'experiment'; readonly cardId: string }
+  /** A paired experiment card's run (the comparison engine with the card's change on B). */
+  | { readonly name: 'experimentRun' };
 
 export type Tool =
   | { readonly kind: 'look' }
@@ -43,6 +53,8 @@ export interface Settings {
   readonly showPrompts: boolean;
   /** Text size as a multiple of the device's default (UX §2 Settings "text size"; §4.1 up to 200 %). */
   readonly textScale: number;
+  /** Pause the dish when a discovery card opens (UX §2 Settings "pause on discoveries"; P2.3). Off unless chosen. */
+  readonly pauseOnDiscoveries?: boolean;
 }
 
 /** Text sizes offered in Settings (UX §4.1 acceptance runs at 100 % and 200 %). */
@@ -55,7 +67,7 @@ export const selection = signal<Selection | null>(null);
 export const inspector = signal<InspectorPayload | null>(null);
 export const candidates = signal<{ x: number; y: number; items: { birthId: number; species: number }[] } | null>(null);
 export const tool = signal<Tool>({ kind: 'look' });
-export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | 'save' | 'history'>('none');
+export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | 'save' | 'history' | 'lineage'>('none');
 export const overlay = signal<OverlayId | null>(null);
 export const overlayMax = signal<number>(0);
 export const toast = signal<string | null>(null);
@@ -142,6 +154,7 @@ export function getClient(): SimClient {
     client.onSnapshot(onSnapshot);
     client.onError((e) => showToast(`Something went wrong and the dish was paused: ${e.message}`));
     client.onCompare(onCompareState);
+    client.onExperiment(onExperimentNotice);
   }
   return client;
 }
@@ -310,6 +323,20 @@ export async function duplicateCurrent(): Promise<void> {
   c.activate(copy.dishId);
   enterDish(copy, null);
   showToast('Duplicated. You are now in the copy; the original is unchanged.', 3500);
+}
+
+/** A fresh dish id for a dish the UI asks the worker to create (UI bookkeeping, never simulation state). */
+export function freshDishId(): string {
+  return newDishId();
+}
+
+/**
+ * What if? (P2.6): open a dish the worker has just started (paused) in place of the previous one,
+ * which the worker already kept through the save flow; the previous dish is then let go.
+ */
+export function enterStartedDish(info: DishInfo, previousDishId: string | null): void {
+  if (previousDishId && previousDishId !== info.dishId) getClient().dispose(previousDishId);
+  enterDish(info, null);
 }
 
 export async function startCustom(opts: {
@@ -752,4 +779,182 @@ export function saveCompareCard(change: string): boolean {
     showToast("Couldn't save the result card on this device.", 3500);
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Experiment cards (P2.5; SPEC §13.2; UX §1 Notebook → Experiments). The worker realizes a card from
+// its recorded recipe and seed as a new paused dish; a paired card's run is a comparison whose one
+// change is the card's. When the card's observation gate is reached the worker posts a stamp, the
+// journal records it and the world keeps running. Nothing here can change a card's recipe or seed.
+
+export const experimentCards = signal<readonly ExperimentCardView[] | null>(null);
+export const experimentCardsError = signal<string | null>(null);
+/** The card started most recently in this session (its paired run, or its single dish). */
+export const activeExperiment = signal<{ readonly cardId: string; readonly dishId: string; readonly paired: boolean } | null>(null);
+/** The journal entry stamped by the open paired run (its conclusion is recorded there). */
+export const experimentStampEntry = signal<string | null>(null);
+
+export function experimentCard(id: string): ExperimentCardView | null {
+  return experimentCards.value?.find((c) => c.id === id) ?? null;
+}
+
+/** The cards this build ships, from the worker (loaded once). */
+export async function loadExperimentCards(): Promise<void> {
+  if (experimentCards.value) return;
+  try {
+    experimentCards.value = await getClient().experimentCatalog();
+    experimentCardsError.value = null;
+  } catch (e) {
+    experimentCardsError.value = (e as Error).message;
+  }
+}
+
+function stampMeasures(card: ExperimentCardView | null, measured: { readonly A: Readonly<Record<string, number>>; readonly B: Readonly<Record<string, number>> | null }): JournalMeasure[] {
+  const ids = card ? card.measurements : Object.keys(measured.A);
+  return ids
+    .filter((id) => measured.A[id] !== undefined)
+    .map((id) => {
+      const a = measured.A[id]!;
+      const b = measured.B ? (measured.B[id] ?? null) : null;
+      return {
+        id,
+        label: card ? measureLabel(card, id) : id,
+        a: formatMeasure(id, a),
+        b: b === null ? null : formatMeasure(id, b),
+        diff: b === null ? null : formatDiff(id, a, b),
+        rawA: a,
+        rawB: b,
+      };
+    });
+}
+
+function onExperimentNotice(m: ExperimentNotice): void {
+  const card = experimentCard(m.type === 'experimentEnded' ? m.cardId : m.stamp.stamp.experimentId);
+  if (m.type === 'experimentEnded') {
+    const title = card?.title ?? m.cardId;
+    showToast(
+      m.reason === 'changed'
+        ? `You changed the dish, so “${title}” stopped observing before its gate. The dish goes on as it is.`
+        : `The dish stopped with an error, so “${title}” stopped observing. Nothing was stamped.`,
+      5000,
+    );
+    return;
+  }
+  const s = m.stamp;
+  const cmp = compareState.value;
+  const prediction = cmp?.experiment?.cardId === s.stamp.experimentId ? comparePrediction.value.trim() : '';
+  const gate = card
+    ? card.gate.map((c) => ({ text: clauseText(card, c), value: formatMeasure(c.measure, s.stamp.values[`${c.arm}:${c.measure}`] ?? Number.NaN) }))
+    : Object.keys(s.stamp.values).map((k) => ({ text: k, value: String(s.stamp.values[k]) }));
+  const { entry, stored } = addJournalEntry({
+    kind: 'experimentStamp',
+    experimentId: s.stamp.experimentId,
+    title: s.title,
+    journalStamp: s.stamp.journalStamp,
+    label: s.label,
+    labels: s.labels,
+    recordedAt: new Date().toISOString(),
+    reachedAtSecond: s.stamp.reachedAtSecond,
+    seed: s.stamp.seed,
+    recipeId: s.stamp.recipeId,
+    recipeRevision: s.stamp.recipeRevision,
+    contentVersion: s.stamp.contentVersion,
+    contentHash: s.stamp.contentHash,
+    dishName: dishInfo.value?.name ?? s.title,
+    gate,
+    measures: stampMeasures(card, s.measured),
+    prediction,
+  });
+  journalUnseen.value += 1;
+  if (cmp?.experiment?.cardId === s.stamp.experimentId) experimentStampEntry.value = entry.id;
+  showToast(`Journal stamp: ${s.stamp.journalStamp}. The dish keeps running.${stored ? '' : ' (Kept for this session only: this device did not store it.)'}`, 4500);
+}
+
+/**
+ * Start a card as a new paused dish (SPEC §13.2). The current dish is kept in Continue first (a failed
+ * write starts nothing). A paired card opens its paired run with the card's change already on B and
+ * the prediction note shown; a single-arm card opens its dish, whose gate the worker watches.
+ */
+export async function startExperiment(cardId: string): Promise<void> {
+  const card = experimentCard(cardId);
+  if (!card || busy.value) return;
+  if (compareState.value) {
+    showToast('Close the open comparison first.', 3500);
+    return;
+  }
+  busy.value = true;
+  try {
+    const old = dishInfo.value;
+    if (old && !(await autosave())) {
+      showToast('Your current dish could not be kept in Continue, so the experiment was not started. Nothing changed.', 5000);
+      return;
+    }
+    const c = getClient();
+    const dishId = newDishId();
+    if (card.paired) {
+      const base = `${dishId}-xp`;
+      const ids = { compareId: base, aDishId: `${base}-A`, bDishId: `${base}-B` };
+      compareLastGeometry.A = compareLastGeometry.B = null;
+      compareLastSnapshot.A = compareLastSnapshot.B = null;
+      experimentStampEntry.value = null;
+      batch(() => {
+        // Set before the request so the arms' first snapshots are routed to the paired run.
+        compareState.value = { ...ids, sourceDishId: dishId, baselineTick: 0, status: 'setup', horizonTicks: null, ticksRun: 0, speed: 4, priorSpeed: 0, interventions: [], results: null, error: null };
+        comparePrediction.value = '';
+        compareHorizon.value = null;
+        compareConclusion.value = null;
+        compareNote.value = '';
+        compareCardSaved.value = false;
+        compareArmMeta.value = { A: null, B: null };
+        compareShown.value = 'B';
+        cameraLeader = 'B';
+      });
+      let started: Awaited<ReturnType<SimClient['experimentStart']>>;
+      try {
+        started = await c.experimentStart(cardId, dishId, ids);
+      } catch (e) {
+        compareState.value = null;
+        throw e;
+      }
+      if (old && old.dishId !== started.info.dishId) c.dispose(old.dishId);
+      enterDish(started.info, null);
+      batch(() => {
+        compareState.value = started.compare;
+        route.value = { name: 'experimentRun' };
+      });
+    } else {
+      const { info } = await c.experimentStart(cardId, dishId, null);
+      if (old && old.dishId !== info.dishId) c.dispose(old.dishId);
+      enterDish(info, `${card.title}: press play and watch. Your Journal gets a stamp when the observation is complete; the dish keeps running.`);
+    }
+    activeExperiment.value = { cardId, dishId, paired: card.paired };
+  } catch (e) {
+    showToast(`The experiment could not start: ${(e as Error).message}`, 5000);
+  } finally {
+    busy.value = false;
+  }
+}
+
+/** The player's conclusion for the open paired run; kept on its journal stamp when there is one. */
+export function setExperimentConclusion(conclusion: Conclusion): void {
+  compareConclusion.value = conclusion;
+  const id = experimentStampEntry.value;
+  if (id) updateJournalEntry(id, { conclusion });
+}
+
+/** Run both copies of a paired card for the card's own stopping point (the worker holds it to that). */
+export async function runExperimentPair(): Promise<void> {
+  const c = compareState.value;
+  if (!c || c.status !== 'setup' || !c.experiment) return;
+  try {
+    compareState.value = await getClient().compareRun(c.compareId, c.experiment.horizonTicks, 4);
+  } catch (e) {
+    showToast(`Couldn't run the experiment: ${(e as Error).message}`, 4000);
+  }
+}
+
+/** Close a paired card's run (its two copies are discarded) and go to the card's dish or the Journal. */
+export async function closeExperimentRun(to: 'dish' | 'journal'): Promise<void> {
+  await closeCompare();
+  if (to === 'journal') route.value = { name: 'notebook', tab: 'journal' };
 }

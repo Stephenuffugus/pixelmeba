@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { SlotSummary } from '@worker/protocol';
 import { IconClose, IconCopy, IconGuide, IconSave, IconUndo } from '../icons';
 import { IconCompare } from './CompareIcon';
+import { openWhatIf } from './WhatIfState';
+import { WHATIF_TEXT } from '../strings/whatif';
 import {
   dishInfo,
   duplicateCurrent,
@@ -43,6 +45,19 @@ export function MoreSheet() {
           >
             <IconCopy /> Duplicate dish
           </button>
+          {/* What if? (P2.6, UX §3.4): for a dish from a recipe with What if? ideas, or made from one. */}
+          {dishInfo.value?.whatIfSourceId ? (
+            <button
+              class="btn"
+              onClick={() => {
+                sheet.value = 'none';
+                openWhatIf('dish');
+              }}
+              data-testid="more-whatif"
+            >
+              {WHATIF_TEXT.moreItem}
+            </button>
+          ) : null}
           {/* UX §2.4: Compare lives in More (and in the Lab Tools tray from P2.7). */}
           <button
             class="btn"

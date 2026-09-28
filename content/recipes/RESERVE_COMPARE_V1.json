@@ -1,0 +1,39 @@
+{
+  "id": "RESERVE_COMPARE_V1",
+  "revision": 1,
+  "name": "Seeded traits demonstration",
+  "habitatId": "WATER_GARDEN",
+  "seed": 104729,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "mutationPreset": "fixed",
+  "founderMode": "identical",
+  "backgroundOverrides": {"sugar": 0},
+  "fieldPatches": [
+    {"center": [64, 64], "radius": 6, "substrate": "water", "add": {"sugar": 0.5}, "label": "First meal"}
+  ],
+  "founders": [
+    {
+      "species": "B01",
+      "count": 24,
+      "center": [64, 64],
+      "radius": 3,
+      "modules": ["E05"],
+      "moduleAssignment": "alternate-odd",
+      "label": "Odd founders carry a reserve chamber, present at creation; even founders carry none"
+    }
+  ],
+  "scheduledCommands": [
+    {"atSecond": 60, "kind": "deposit", "payload": {"kind": "deposit", "materialId": "SUGAR", "points": [[64.5, 64.5]], "radius": 6, "dose": 0.5}, "label": "Stable food 60 s"},
+    {"atSecond": 120, "kind": "deposit", "payload": {"kind": "deposit", "materialId": "SUGAR", "points": [[64.5, 64.5]], "radius": 6, "dose": 0.5}, "label": "Stable food 120 s"},
+    {"atSecond": 180, "kind": "deposit", "payload": {"kind": "deposit", "materialId": "SUGAR", "points": [[64.5, 64.5]], "radius": 6, "dose": 0.5}, "label": "Stable food 180 s"},
+    {"atSecond": 240, "kind": "deposit", "payload": {"kind": "deposit", "materialId": "SUGAR", "points": [[64.5, 64.5]], "radius": 6, "dose": 0.5}, "label": "Stable food 240 s"},
+    {"atSecond": 300, "kind": "deposit", "payload": {"kind": "deposit", "materialId": "SUGAR", "points": [[64.5, 64.5]], "radius": 6, "dose": 0.5}, "label": "Stable food 300 s"}
+  ],
+  "labels": ["Seeded traits demonstration", "Experiment C"],
+  "question": "Does storing surplus energy change who is left when food stops?",
+  "expectedObservationsText": "Seeded traits demonstration: the reserve chambers were given to alternate founders when the dish was made (present at creation); they are starting variation, not a discovery. 24 identical Sprinters share one sugar meal (0.50 per cell within r 6). In the stable copy the same meal is added again at 60, 120, 180, 240 and 300 s; in the single-meal copy it is not. A reserve chamber adds room for 40 more energy but costs 0.05 energy per second and gives no energy by itself. Either group may leave more descendants, or neither.",
+  "phase": 2
+}

@@ -29,7 +29,7 @@ import { mutate, rawPacks, registry, runTwiceIdentical } from './helpers';
 const errorsOf = (raw: ReturnType<typeof rawPacks>) => validateContent(raw).issues.filter((i) => i.severity === 'error');
 
 describe('experiment cards (SPEC §13.2; CT §10)', () => {
-  it('the six Phase 2 cards ship with the seeds, recipes and pairing CT §10 nominates', () => {
+  it('the seven Phase 2 cards ship with the seeds, recipes and pairing CT §10 nominates', () => {
     const cards = experimentCatalog(registry()).map((e) => [e.id, e.seed, e.recipeId, e.paired, e.change.kind, e.stoppingSeconds]);
     expect(cards).toEqual([
       ['EXP_101', 101, 'FOOD_TRAIL_V1', false, 'none', 180],
@@ -38,6 +38,7 @@ describe('experiment cards (SPEC §13.2; CT §10)', () => {
       ['EXP_106', 106, 'PREDATOR_BALANCE_V1', true, 'commands', 180],
       ['EXP_A', 104729, 'STARCH_UNLOCK_V1', true, 'omitPatch', 180],
       ['EXP_B', 104729, 'FIRST_DISH_V1', true, 'commands', 300],
+      ['EXP_C', 104729, 'RESERVE_COMPARE_V1', true, 'omitScheduled', 600],
     ]);
   });
 
@@ -54,8 +55,8 @@ describe('experiment cards (SPEC §13.2; CT §10)', () => {
       expect(e.completion.worldKeepsRunning).toBe(true);
       expect(e.seed).toBe(reg.recipes[e.recipeId]!.seed);
       expect(experimentProblems(e, reg.recipes[e.recipeId], { species: reg.species, materials: reg.materials, manifest: reg.manifest })).toEqual([]);
-      // Honest labels (CLAUDE.md): no card calls a lineage superior, advanced or perfect.
-      expect(JSON.stringify(e)).not.toMatch(/superior|advanced|perfect/i);
+      // Honest labels (CLAUDE.md): no card calls a lineage superior, advanced, perfect, adapted or immune.
+      expect(JSON.stringify(e)).not.toMatch(/superior|advanced|perfect|adapted|immune/i);
     }
   });
 });
@@ -70,6 +71,12 @@ describe('experiment validation names the file and field', () => {
     has(errs, 'experiments/EXP_101.json', 'measurements.9');
     has(errs, 'experiments/EXP_101.json', 'measurements.10');
     has(errs, 'experiments/EXP_101.json', 'measurements.11');
+  });
+
+  it('rejects founder-group measurements with a bad group, an unknown species or a module this build does not enable', () => {
+    const n = registry().experiments.EXP_C!.measurements.length;
+    const errs = errorsOf(mutate(raw, 'experiments', 'EXP_C.json', (d) => (d.measurements as string[]).push('descendants.B01.reserve', 'descendants.B99.none', 'founders.B01.E09', 'descendants.B01')));
+    for (let k = 0; k < 4; k++) has(errs, 'experiments/EXP_C.json', `measurements.${n + k}`);
   });
 
   it('rejects arm-B clauses on a single-arm card and unsupported gate types', () => {
@@ -95,6 +102,10 @@ describe('experiment validation names the file and field', () => {
       'experiments/EXP_B.json',
       'change.atSecond',
     );
+    // omitScheduled names existing, distinct scheduled commands of the recipe.
+    has(errorsOf(mutate(raw, 'experiments', 'EXP_C.json', (d) => (d.change = { kind: 'omitScheduled', indexes: [0, 5] }))), 'experiments/EXP_C.json', 'change.indexes.1');
+    has(errorsOf(mutate(raw, 'experiments', 'EXP_C.json', (d) => (d.change = { kind: 'omitScheduled', indexes: [2, 2] }))), 'experiments/EXP_C.json', 'change.indexes.1');
+    has(errorsOf(mutate(raw, 'experiments', 'EXP_C.json', (d) => (d.change = { kind: 'omitScheduled', indexes: [] }))), 'experiments/EXP_C.json', 'change.indexes');
     // Species outside this build's manifest cannot be introduced by a shipped card.
     has(
       errorsOf(mutate(raw, 'experiments', 'EXP_106.json', (d) => ((d.change as { commands: { speciesId: string }[] }).commands[0]!.speciesId = 'P02'))),
@@ -131,7 +142,11 @@ describe('measurement grammar and gate evaluation', () => {
     expect(parseMeasure('consumed.detritus')).toEqual({ kind: 'consumed', field: 'detritus' });
     expect(parseMeasure('converted.starch')).toEqual({ kind: 'converted', enzyme: 'starch' });
     expect(parseMeasure('patchInput.0')).toEqual({ kind: 'patchInput', index: 0 });
-    for (const bad of ['', 'biomass', 'biomass.b01', 'field.gold', 'consumed.nutrient', 'converted.sugar', 'patchInput.01', 'deaths.B01.NONE', 'alive.B01.x'])
+    expect(parseMeasure('descendants.B01.E05')).toEqual({ kind: 'group', stat: 'descendants', species: 'B01', group: 'E05' });
+    expect(parseMeasure('groupExtinctAt.B01.none')).toEqual({ kind: 'group', stat: 'groupExtinctAt', species: 'B01', group: 'none' });
+    expect(parseMeasure('founders.B04.E03+E05')).toEqual({ kind: 'group', stat: 'founders', species: 'B04', group: 'E03+E05' });
+    expect(parseMeasure('reservePeak.B01')).toEqual({ kind: 'species', stat: 'reservePeak', species: 'B01' });
+    for (const bad of ['', 'biomass', 'biomass.b01', 'field.gold', 'consumed.nutrient', 'converted.sugar', 'patchInput.01', 'deaths.B01.NONE', 'alive.B01.x', 'descendants.B01', 'descendants.B01.e05', 'founders.B01.E05+', 'groupEnergy.X1.none'])
       expect(typeof parseMeasure(bad), bad).toBe('string');
   });
 

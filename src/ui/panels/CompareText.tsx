@@ -38,6 +38,18 @@ export function describeChange(info: DishInfo, payload: CommandPayload, result: 
       return `Lid ${payload.lid}`;
     case 'setMutationPreset':
       return `Evolution setting: ${payload.preset}`;
+    // Lab habitat edits (P2.7).
+    case 'paintSubstrate':
+      return `${payload.substrate[0]!.toUpperCase()}${payload.substrate.slice(1)} painted on ${accepted} cell${accepted === 1 ? '' : 's'}`;
+    case 'paintShade':
+      return `${payload.erase ? 'Shade removed from' : 'Shade painted on'} ${accepted} cell${accepted === 1 ? '' : 's'}`;
+    case 'placeStructure':
+      return `${payload.structure === 'bead' ? 'Porous bead' : payload.structure === 'wall' ? 'Wall' : 'Stone'} placed on ${accepted} cell${accepted === 1 ? '' : 's'}`;
+    case 'eraseStructure':
+      return `Structure removed from ${accepted} cell${accepted === 1 ? '' : 's'}`;
+    // Branch notebook and specimens (P2.3).
+    case 'lineage':
+      return payload.op === 'spawnSpecimen' ? `${accepted} from specimen ${payload.specimen} added` : 'Family tree note';
   }
 }
 

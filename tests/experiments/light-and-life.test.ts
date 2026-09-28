@@ -6,6 +6,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { ExperimentResult } from '../../src/sim/experiments';
 import { expectConserved, expectReplayIdentical, expectEqualArms, expectGateReached, runCard } from './helpers';
+import { expectWaveANumbers } from './golden';
 
 let r: ExperimentResult;
 beforeAll(() => {
@@ -27,5 +28,11 @@ describe('Light and life (LIGHT_AND_LIFE_V1 r1, seed 102, 180 s)', () => {
     expectEqualArms(r);
     expectReplayIdentical(r);
     expect(r.A.startHash).not.toBe(r.B!.startHash); // the shade is part of B's state from tick 0
+  });
+});
+
+describe('one paired-run measurement model (SPEC §13.4)', () => {
+  it('reproduces every number wave A recorded for this card: gate, stamp, measurements, ledger, timeline', () => {
+    expectWaveANumbers(r);
   });
 });

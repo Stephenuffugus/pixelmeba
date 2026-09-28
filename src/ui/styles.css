@@ -1019,3 +1019,1140 @@ textarea {
   padding: 0.5rem 0.75rem;
   font-size: var(--fs-small);
 }
+
+/* ---------------------------------------------------------------- Lab view (P2.7, UX §4.4) */
+.view-toggle {
+  padding: 6px 12px;
+}
+@media (max-width: 480px) {
+  /* Phones: icon only; the button keeps its accessible name "Lab view". */
+  .view-toggle {
+    padding: 6px;
+  }
+  .view-toggle span {
+    display: none;
+  }
+}
+.dish-screen[data-view='lab'] > .bottombar:not(.lab-bar) {
+  display: none;
+}
+.lab-bar {
+  position: relative;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  font-size: 1rem;
+}
+.lab-cats {
+  display: grid;
+  /* Content-sized columns share the spare width, so the longest label ("Chemistry") never breaks. */
+  grid-template-columns: repeat(4, auto);
+  gap: 4px;
+}
+.lab-cat {
+  flex-direction: column;
+  gap: 2px;
+  min-height: 56px;
+  min-width: 0;
+  padding: 4px 2px;
+  font-size: 1rem;
+  line-height: 1.1;
+  text-align: center;
+}
+.lab-cat span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.lab-cat.holds-tool {
+  box-shadow: inset 0 -4px 0 var(--primary);
+}
+.lab-cat[aria-expanded='true'] {
+  background: var(--text);
+  color: var(--surface);
+  border-color: var(--text);
+}
+/* Larger text: categories become one scrolling row instead of breaking words. */
+html[data-text-scale='1.5'] .lab-cats,
+html[data-text-scale='2'] .lab-cats {
+  display: flex;
+  overflow-x: auto;
+}
+html[data-text-scale='1.5'] .lab-cat,
+html[data-text-scale='2'] .lab-cat {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+}
+html[data-text-scale='1.5'] .lab-cat span,
+html[data-text-scale='2'] .lab-cat span {
+  overflow-wrap: normal;
+}
+.lab-strip {
+  order: -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.lab-strip-tool {
+  flex: 1 1 5rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lab-strip-label {
+  color: var(--text-muted);
+}
+.lab-strip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.lab-strip .segmented .btn {
+  min-width: 48px;
+  padding: 6px;
+}
+.lab-hint,
+.lab-brush-info {
+  flex: 1 1 100%;
+  color: var(--text-muted);
+}
+.lab-brush-info {
+  color: var(--text);
+  font-weight: 600;
+}
+@media (orientation: portrait), (max-width: 699px) {
+  /* Phones: the strip keeps one height while a stroke is previewed (the canvas never resizes
+     mid-gesture); the footprint count shows on the dish instead (.lab-brush-chip). */
+  .lab-hint,
+  .lab-brush-info,
+  .lab-strip-label {
+    display: none;
+  }
+}
+.lab-brush-chip {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 16px);
+  background: rgba(245, 244, 239, 0.96);
+  color: var(--text);
+  border-radius: var(--radius-s);
+  padding: 6px 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  z-index: 4;
+}
+.lab-tray {
+  /* Portrait: a sheet inside the viewport, like the other panels (never over the top strip). */
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 70%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  background: var(--surface);
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: var(--shadow);
+  padding: 12px 16px 8px;
+  z-index: 6;
+}
+.lab-tray header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.lab-tray h2 {
+  font-size: var(--fs-h2);
+  margin: 0;
+  flex: 1;
+}
+.lab-sub {
+  color: var(--text-muted);
+  font-size: 1rem;
+  margin: 0.25rem 0 0.5rem;
+}
+.lab-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(9rem, 100%), 1fr));
+  gap: 6px;
+  margin: 0.5rem 0;
+}
+.lab-item {
+  justify-content: flex-start;
+  text-align: left;
+  font-size: 1rem;
+}
+.lab-thumb {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  image-rendering: pixelated;
+}
+.lab-swatch {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--text);
+  background: var(--surface-3);
+}
+/* Colour plus pattern per material (never colour alone). */
+.sw-sugar {
+  background: radial-gradient(circle at 35% 35%, #fff6d8 0 18%, transparent 20%), #f3c95c;
+}
+.sw-starch {
+  background: repeating-linear-gradient(45deg, #c9bd93 0 2px, #f4efdc 2px 5px);
+}
+.sw-debris {
+  background: radial-gradient(circle at 30% 60%, #a88b62 0 15%, transparent 17%), radial-gradient(circle at 65% 35%, #a88b62 0 12%, transparent 14%), #8a6d4b;
+}
+.sw-nutrient {
+  border-radius: 4px;
+  background: repeating-linear-gradient(0deg, #3d7a3a 0 2px, #96d278 2px 6px);
+}
+.lab-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0.5rem 0;
+}
+.lab-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.lab-use {
+  width: 100%;
+  margin: 0.25rem 0 0.5rem;
+}
+.lab-details h3 {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 1.1rem;
+}
+.lab-details dl {
+  margin: 0;
+}
+.lab-details dt {
+  font-weight: 700;
+  margin-top: 0.4rem;
+}
+.lab-details dd {
+  margin: 0;
+}
+.lab-actions {
+  display: grid;
+  gap: 6px;
+  margin-top: 0.75rem;
+}
+.lab-actions .btn {
+  justify-content: flex-start;
+  text-align: left;
+}
+.overlay-picker .btn[aria-checked='true'] {
+  background: var(--text);
+  color: var(--surface);
+  border-color: var(--text);
+}
+.overlay-opacity {
+  display: grid;
+  gap: 4px;
+  margin: 0.5rem 0;
+}
+.overlay-opacity input {
+  width: 100%;
+  min-height: 48px;
+  accent-color: var(--primary);
+}
+.overlay-legend {
+  display: grid;
+  gap: 2px;
+  font-size: 1rem;
+}
+.overlay-legend .ol-name {
+  font-weight: 700;
+}
+.overlay-legend .ol-scale {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.overlay-legend .ol-ramp {
+  flex: 1 1 auto;
+  min-width: 64px;
+  height: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--text-muted);
+}
+.overlay-legend .ol-unit {
+  color: var(--text-muted);
+}
+.overlay-legend.floating {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  width: min(15rem, calc(100% - 80px));
+  background: rgba(245, 244, 239, 0.96);
+  color: var(--text);
+  border-radius: var(--radius-s);
+  padding: 6px 10px;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  z-index: 3;
+}
+@media (orientation: landscape) and (min-width: 700px) {
+  /* Side panel: categories, then the tool strip, then the tray inline (it never covers the dish). */
+  .lab-strip {
+    order: 0;
+  }
+  .lab-cats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lab-cat {
+    flex-direction: row;
+    justify-content: flex-start;
+    min-height: var(--target);
+    gap: 8px;
+    padding: 4px 8px;
+  }
+  .lab-tray {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    box-shadow: none;
+    border-radius: 0;
+    border-top: 1px solid var(--line);
+    padding: 8px 0 0;
+    z-index: auto;
+  }
+  .lab-tray .sheet-scroll {
+    overflow: visible;
+  }
+  html[data-text-scale='1.5'] .lab-cats,
+  html[data-text-scale='2'] .lab-cats {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible;
+  }
+}
+
+/* ---------------------------------------------------------------- family tree (P2.3; UX §5.5) */
+.lineage-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.25rem;
+  margin: 0.5rem 0;
+}
+.lineage-control label {
+  font-weight: 600;
+}
+.lineage-control select {
+  min-height: var(--target);
+  width: 100%;
+  max-width: 100%;
+  padding: 0 0.75rem;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 1rem;
+}
+.lineage-hint {
+  color: var(--text-muted);
+  margin: 0.25rem 0;
+}
+.lineage-species h3,
+.lineage-specimens h3 {
+  font-size: 1.1rem;
+  margin: 0.75rem 0 0.25rem;
+}
+.lineage h4 {
+  font-size: 1rem;
+  margin: 0.75rem 0 0.25rem;
+}
+.lineage-tree {
+  list-style: none;
+  margin: 0.25rem 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.lineage-row {
+  width: 100%;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  text-align: left;
+}
+.lineage-row-name {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lineage-row-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  font-weight: 500;
+}
+.lineage-chip {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+.lineage-chip.established {
+  border: 2px solid #2c5a2a;
+  color: #2c5a2a;
+}
+.lineage-chip.extinct {
+  border: 2px dashed var(--text-muted);
+  color: var(--text-muted);
+}
+.lineage-chip.pinned {
+  border: 2px solid var(--primary);
+  color: #1f5f89;
+}
+.lineage-chip.variation {
+  border: 2px dotted var(--text-muted);
+}
+.lineage-variation {
+  margin: 0.3rem 0;
+}
+.lineage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+.lineage-title {
+  font-size: 1.15rem;
+  margin: 0.25rem 0;
+  overflow-wrap: anywhere;
+}
+.lineage-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.25rem 0;
+}
+.lineage-facts {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  gap: 0.25rem 0.75rem;
+  margin: 0.5rem 0;
+}
+.lineage-facts dt {
+  font-weight: 600;
+}
+.lineage-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.lineage-rename {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+}
+.lineage-rename-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.lineage-rename input {
+  flex: 1 1 10rem;
+  min-width: 0;
+  min-height: var(--target);
+  padding: 0 0.75rem;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 1rem;
+}
+.lineage-id {
+  font-weight: 600;
+}
+.lineage-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.lineage-compare table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.lineage-compare caption {
+  caption-side: top;
+  text-align: left;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+.lineage-compare th,
+.lineage-compare td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.3rem 0.4rem;
+  text-align: left;
+  vertical-align: top;
+}
+.lineage-family ul {
+  margin: 0.25rem 0 0 1.1rem;
+  padding: 0;
+}
+.lineage-family li {
+  margin: 0.25rem 0;
+  overflow-wrap: anywhere;
+}
+.lineage-specimen-list {
+  list-style: none;
+  margin: 0.4rem 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.lineage-specimen-list li {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0.5rem;
+}
+.lineage-specimen-list p {
+  margin: 0 0 0.35rem;
+  overflow-wrap: anywhere;
+}
+.lineage-check {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  min-height: var(--target);
+  margin: 0.5rem 0;
+}
+.lineage-check input {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+@media (max-width: 480px) {
+  .lineage-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lineage-facts dd {
+    margin-bottom: 0.35rem;
+  }
+}
+/* Trait overlay legend and follow status over the dish (words and counts, never colour alone). */
+.lineage-legend {
+  position: absolute;
+  left: 0.75rem;
+  top: 0.75rem;
+  /* Narrow enough to leave the middle of the dish (where Follow keeps its organism) uncovered. */
+  max-width: min(22rem, calc(100% - 72px - 0.75rem));
+  max-height: calc(100% - 1.5rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: rgba(245, 244, 239, 0.97);
+  border-radius: var(--radius-s);
+  box-shadow: var(--shadow);
+  z-index: 4;
+}
+.lineage-legend-scroll {
+  overflow: auto;
+  min-height: 0;
+  padding: 0.4rem 0.6rem;
+}
+.lineage-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin: 0.2rem 0;
+}
+.lineage-legend-text {
+  margin: 0.15rem 0;
+}
+.lineage-legend .btn {
+  padding: 6px 12px;
+}
+.lineage-bands {
+  list-style: none;
+  margin: 0.15rem 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.75rem;
+}
+.lineage-bands li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.lineage-swatch {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 4px;
+  border: 1px solid var(--text);
+}
+.lineage-swatch.dim {
+  background: #7a7a7a;
+}
+.lineage-ring-key {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
+  border-radius: 50%;
+  border: 2px solid #f5f4ef;
+  box-shadow: 0 0 0 2px var(--text);
+}
+/* Discovery card (UX §5.5): over the top of the dish; the body scrolls inside at large text. */
+.discovery-live {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 7;
+}
+.discovery-card {
+  pointer-events: auto;
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  top: 0.75rem;
+  max-height: calc(100% - 1.5rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  background: var(--surface);
+  border: 2px solid var(--primary);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 0.5rem 0.75rem;
+}
+.discovery-card header {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+.discovery-card h2 {
+  flex: 1;
+  margin: 0.5rem 0 0;
+  font-size: 1.15rem;
+  overflow-wrap: anywhere;
+}
+.discovery-body {
+  overflow: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.discovery-body p {
+  margin: 0.25rem 0;
+}
+.discovery-card .lineage-actions {
+  flex: none;
+  margin-bottom: 0;
+}
+@media (orientation: landscape) and (min-width: 700px) {
+  .discovery-card {
+    right: auto;
+    width: min(28rem, 60%);
+  }
+}
+
+/* ---------------------------------------------------------------- What if? (P2.6, UX §3.4) */
+.whatif-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  margin: 0.75rem 0 0;
+  color: var(--text-muted);
+}
+.whatif-link {
+  border-color: transparent;
+  background: transparent;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding-left: 0;
+  padding-right: 0.5rem;
+}
+.whatif-link:hover {
+  background: var(--surface-2);
+}
+/* A modal over the Play shelf or the dish: the sheet inside keeps the non-scrolling frame (D-0017). */
+.whatif-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(10, 20, 26, 0.55);
+}
+.whatif-modal .sheet {
+  max-height: 92%;
+  color: var(--text);
+}
+@media (orientation: landscape) and (min-width: 700px) {
+  /* Modal: nothing behind it needs to stay visible, so it uses the width (text wraps less at 200 %). */
+  .whatif-modal .sheet {
+    left: 0.75rem;
+    right: 0.75rem;
+    width: auto;
+    max-width: 720px;
+    margin: 0 auto;
+    max-height: none;
+  }
+}
+.whatif-sheet h2:focus,
+.whatif-full h3:focus {
+  outline: none;
+}
+.whatif-sheet .whatif-header {
+  flex: none;
+  align-items: center;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--line);
+}
+.whatif-text,
+.whatif-note,
+.whatif-sheet p,
+.whatif-sheet legend,
+.whatif-sheet dd,
+.whatif-sheet dt {
+  font-size: 1rem;
+}
+.whatif-sheet p {
+  margin: 0.5rem 0;
+}
+.whatif-note {
+  color: var(--text-muted);
+}
+.whatif-plan {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  padding: 0.6rem 0.75rem;
+  background: var(--surface-2);
+  border-radius: var(--radius-s);
+}
+.whatif-sheet h3 {
+  font-size: 1.1rem;
+  margin: 1rem 0 0.25rem;
+}
+.whatif-question {
+  font-weight: 600;
+}
+.whatif-choices {
+  border: 0;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.whatif-choices legend {
+  font-weight: 700;
+  padding: 0;
+  margin-bottom: 0.4rem;
+}
+.whatif-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: var(--target);
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  cursor: pointer;
+}
+.whatif-choice:hover {
+  background: var(--surface-2);
+}
+.whatif-choice.selected {
+  border: 2px solid var(--text);
+  padding: calc(0.6rem - 1px) calc(0.75rem - 1px);
+}
+.whatif-choice input {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  margin: 0;
+  accent-color: var(--primary);
+}
+.whatif-choice:focus-within {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.whatif-choice-text {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.whatif-choice-text span {
+  color: var(--text-muted);
+}
+.whatif-selected,
+.whatif-current,
+.whatif-full {
+  margin-top: 0.75rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--line);
+}
+.whatif-preview {
+  margin: 0.5rem 0;
+}
+.whatif-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  max-width: 22rem;
+}
+.whatif-panel {
+  margin: 0;
+  display: grid;
+  gap: 0.25rem;
+  text-align: center;
+  font-weight: 600;
+}
+.whatif-panel svg {
+  width: 100%;
+  aspect-ratio: 1;
+  display: block;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--rim, #2c3f49);
+}
+.whatif-legend {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+.whatif-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.whatif-swatch {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+.whatif-details {
+  margin: 0.5rem 0;
+}
+.whatif-details-body {
+  margin-top: 0.5rem;
+}
+.whatif-identity-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.whatif-identity {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  user-select: all;
+  -webkit-user-select: all;
+  overflow-wrap: anywhere;
+}
+.whatif-kv {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.25rem 0 0;
+}
+.whatif-kv div {
+  display: grid;
+  gap: 0.1rem;
+}
+.whatif-kv dt {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.whatif-kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
+.whatif-actions {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.whatif-actions .btn,
+.whatif-wide {
+  width: 100%;
+}
+.whatif-actions .whatif-note {
+  margin: -0.25rem 0 0.25rem;
+}
+
+/* ---------------------------------------------------------------- notebook and experiment cards (P2.5; UX §1, §5.6) */
+/* Text on these screens is at least 16 px (1rem at the default size) and scales with Settings text size. */
+.nb-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.nb-header h1 {
+  font-size: min(1.75rem, 10vw);
+  margin: 0;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.nb-back {
+  color: inherit;
+  flex: none;
+}
+.nb-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.nb-tabs .btn {
+  flex: 1 1 8rem;
+  font-size: 1rem;
+}
+.nb-dot {
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: var(--focus);
+  color: var(--text);
+}
+.nb-panel {
+  min-width: 0;
+}
+.nb-intro,
+.nb-empty {
+  color: #dfe8ea;
+  font-size: 1rem;
+  margin: 0 0 0.75rem;
+}
+.nb-cards,
+.nb-journal {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* One column that never grows past the screen: wide tables scroll inside their own region. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.nb-cards > li,
+.nb-journal > li,
+.nb-stamp,
+.nb-card {
+  min-width: 0;
+}
+.nb-card h2,
+.nb-stamp h2,
+.xp-card h2 {
+  font-size: 1.15rem;
+}
+.xp-card h2 {
+  margin: 1rem 0 0.25rem;
+}
+.xp-card h2:first-of-type {
+  margin-top: 0.25rem;
+}
+.nb-card p,
+.nb-stamp p,
+.xp-card p,
+.xp-card li,
+.xp-card dd {
+  font-size: 1rem;
+  color: var(--text);
+}
+.nb-question,
+.xp-question {
+  font-weight: 600;
+}
+.nb-open,
+.xp-start {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+.nb-stamp {
+  position: relative;
+  border-left: 6px solid var(--ok);
+}
+.nb-stamp-mark {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--ok);
+}
+.nb-stamp h2 {
+  padding-right: 2rem;
+}
+.nb-stamp .nb-stamp-meta {
+  color: var(--text-muted);
+}
+.xp-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.35rem 0;
+}
+.xp-badge {
+  font-size: 1rem;
+  line-height: 1.3;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+.xp-badge-stamp {
+  border: 2px solid var(--ok);
+  font-weight: 600;
+}
+.xp-arms {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.35rem 0.75rem;
+  margin: 0.25rem 0 0.5rem;
+  font-size: 1rem;
+}
+.xp-arms dt {
+  font-weight: 700;
+}
+.xp-arms dd {
+  margin: 0;
+}
+.xp-note {
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+.xp-list {
+  margin: 0.25rem 0 0.5rem;
+  padding-left: 1.25rem;
+  font-size: 1rem;
+}
+.xp-details {
+  margin: 0.5rem 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0.25rem 0.75rem;
+  font-size: 1rem;
+}
+.xp-details summary {
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 600;
+}
+.xp-gate {
+  list-style: none;
+  margin: 0.25rem 0 0.5rem;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 1rem;
+}
+.xp-gate li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+.xp-mark {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid var(--text-muted);
+  font-weight: 700;
+  line-height: 1;
+}
+.xp-gate li[data-pass='true'] .xp-mark {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.xp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+.xp-table caption {
+  text-align: left;
+  font-weight: 600;
+  padding: 0.25rem 0;
+}
+.xp-table th,
+.xp-table td {
+  padding: 0.35rem 0.45rem;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  vertical-align: top;
+}
+.xp-table th[scope='row'],
+.xp-table thead th:first-child {
+  text-align: left;
+  font-weight: 500;
+}
+.xp-table td {
+  white-space: nowrap;
+}
+.xp-page-title {
+  font-size: 1.25rem;
+  color: var(--text);
+}
+.xp-body,
+.xp-body p,
+.xp-body li {
+  font-size: 1rem;
+}
+.xp-body .compare-prediction figcaption,
+.nb-stamp .compare-prediction figcaption {
+  font-size: 1rem;
+}
+.xp-screen .topbar .time {
+  font-size: 1rem;
+}
+.xp-cv-label {
+  font-size: 1rem;
+}
+.xp-speeds {
+  display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+.xp-speeds .btn {
+  flex: 1 1 auto;
+}
+.xp-textarea {
+  font-size: 1rem;
+}
+.xp-stamped {
+  font-size: 1rem;
+}
+/* The chosen Notebook tab is marked by shape as well as colour (UX §9). */
+.nb-tabs .btn[aria-selected='true'] {
+  border-color: var(--surface);
+  box-shadow: inset 0 -5px 0 var(--focus);
+}

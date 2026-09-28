@@ -5,6 +5,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { ExperimentResult } from '../../src/sim/experiments';
 import { expectConserved, expectReplayIdentical, expectGateReached, runCard } from './helpers';
+import { expectWaveANumbers } from './golden';
 
 let r: ExperimentResult;
 beforeAll(() => {
@@ -26,5 +27,11 @@ describe('Cleaning crew (CLEANING_CREW_V1 r1, seed 103)', () => {
     const m = r.A.reported;
     expect(m['consumed.detritus']).toBeCloseTo(m['intake.B04']!, 9);
     expect(r.A.measurements['patchInput.0']).toBeCloseTo(10, 12);
+  });
+});
+
+describe('one paired-run measurement model (SPEC §13.4)', () => {
+  it('reproduces every number wave A recorded for this card: gate, stamp, measurements, ledger, timeline', () => {
+    expectWaveANumbers(r);
   });
 });

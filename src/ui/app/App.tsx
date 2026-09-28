@@ -6,6 +6,9 @@ import { SimplePage } from '../views/SimplePage';
 import { Saves } from '../views/Saves';
 import { NewDish } from '../views/NewDish';
 import { CompareScreen } from '../views/CompareScreen';
+import { Notebook } from '../views/Notebook';
+import { ExperimentCard } from '../views/ExperimentCard';
+import { ExperimentRun } from '../views/ExperimentRun';
 
 export function App() {
   const r = route.value;
@@ -26,6 +29,12 @@ export function App() {
       return <NewDish />;
     case 'compare':
       return <CompareScreen />;
+    case 'notebook':
+      return <Notebook />;
+    case 'experiment':
+      return <ExperimentCard />;
+    case 'experimentRun':
+      return <ExperimentRun />;
     case 'about':
       return (
         <SimplePage

@@ -12,16 +12,50 @@ import { realizeRecipe } from '@sim/recipes';
 import { deserializeWorld, serializeWorld, stateHash, type WorldState } from '@sim/serialize';
 import { step } from '@sim/tick';
 import type { World } from '@sim/world';
+import { allocatedFieldIds } from '@sim/fields';
 import { buildFamily, buildInspector, packDeposits, packEntities, packOverlay, visualEvents } from './snapshot';
+import { buildLineage, packLineageMarks } from '@sim/lineage';
+import type { LineageMarks, LineageView } from './protocol';
 import { stamp, type DishInfo, type DishSource, type Envelope, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 import { captureBaseline, PairedRun, realizeArm, type CompareSpeed, type CompareStatus, type ComparisonResults, type ComparisonState, type Intervention } from './comparison';
+import type { ComparisonExperiment } from './comparison';
+import { experimentCardView, experimentCatalog, GateWatch, realizeExperimentArms } from '@sim/experiments';
+import { PAIRED_RUN_LABEL, SINGLE_RUN_LABEL, stepObserved, type ArmObserver } from '@sim/pairedRun';
+import { TICKS_PER_SECOND } from '@sim/constants';
+import { isIntervention } from '@sim/specimens';
 import { buildSaveFile, loadSaveFile, SaveFileError } from '@persist/saveFile';
 import { AUTOSAVE_SLOT, type SaveStore, type SlotInfo } from '@persist/store';
+import { SaveStore as SaveStoreClass } from '@persist/store';
+import {
+  MAX_WHAT_IF_CHOICES,
+  nextVariantId,
+  realizeAgain,
+  realizeVariant,
+  variantChecksums,
+  variantPatchOutlines,
+  variantPreview,
+  variantRecordOf,
+  VariantError,
+  whatIfChoices,
+  type VariantRecord,
+} from '@sim/variants';
+import type { WhatIfAnswer, WhatIfChoice, WhatIfKeep, WhatIfKept, WhatIfPlan, WhatIfRefusalCode } from './protocol';
 
 export interface HostClock {
   now(): number;
   /** Wall-clock ISO timestamp for save metadata (never enters the simulation). */
   iso?(): string;
+}
+
+/** A readable What if? refusal (UX §3.4): nothing was started, saved or changed. */
+class WhatIfRefusal extends Error {
+  constructor(
+    readonly code: WhatIfRefusalCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'WhatIfRefusal';
+  }
 }
 
 function summary(s: SlotInfo): SlotSummary {
@@ -48,6 +82,29 @@ interface Dish {
   failed: boolean;
   /** Set on the two worlds of a comparison (SPEC §13.4); their time is driven only by the comparison. */
   arm: { readonly compareId: string; readonly role: 'A' | 'B' } | null;
+  /** Trait overlay / lineage highlight requested by the lineage panel (P2.3; render-only). */
+  lineageView?: LineageView | null;
+  /** A single-arm experiment card running on this dish (P2.5): its gate is watched while it runs. */
+  experiment?: SingleArmExperiment | null;
+}
+
+/** A single-arm experiment card's observation of its dish (worker state; never saved in the world). */
+interface SingleArmExperiment {
+  readonly watch: GateWatch;
+  readonly obs: ArmObserver;
+  readonly labels: readonly string[];
+  /** The dish was changed or failed: the card's observation stopped (the dish itself goes on). */
+  ended: boolean;
+}
+
+/** An experiment card's paired run (P2.5): the card's own arms, observers and gate. */
+interface LiveExperiment {
+  readonly watch: GateWatch;
+  readonly obsA: ArmObserver;
+  readonly obsB: ArmObserver;
+  readonly labels: readonly string[];
+  readonly horizonTicks: number;
+  measured: { readonly A: Readonly<Record<string, number>>; readonly B: Readonly<Record<string, number>> } | null;
 }
 
 /**
@@ -70,6 +127,8 @@ interface Comparison {
   run: PairedRun | null;
   results: ComparisonResults | null;
   error: string | null;
+  /** Set when this comparison is an experiment card's paired run (P2.5). */
+  experiment?: LiveExperiment;
 }
 
 const MAX_PUMP_MS = 30;
@@ -84,6 +143,8 @@ const MAX_COMPARE_PAIRS_PER_PUMP = 400;
 
 export class DishHost {
   private readonly dishes: Record<string, Dish> = {};
+  /** What if? (P2.6): the named slot each dish was opened from or last saved to ("the active slot"). */
+  private readonly ownSlots: Record<string, string> = {};
   private active: string | null = null;
   private comparison: Comparison | null = null;
   private lastPump: number;
@@ -122,6 +183,7 @@ export class DishHost {
           const savedAt = this.iso();
           const built = await buildSaveFile(d.world, { name, savedAt, recipeId: d.world.content.provenance.recipeId });
           const info = await this.store.save({ slotId, text: built.text, checksum: built.checksum, name, tick: d.world.tick, savedAt, recipeId: d.world.content.provenance.recipeId });
+          if (msg.type === 'saveSlot') this.ownSlots[d.id] = slotId;
           this.post({ type: 'slotSaved', requestId: msg.requestId, slot: summary(info) });
           return;
         }
@@ -139,6 +201,7 @@ export class DishHost {
           if (!res) throw new SaveFileError('That save could not be read, and no earlier copy was usable.', 'integrity');
           const { file, world } = await loadSaveFile(res.text);
           const dish = this.addDish(msg.newDishId, world, file.meta.name);
+          if (msg.slotId !== AUTOSAVE_SLOT) this.ownSlots[dish.id] = msg.slotId;
           this.post({ type: 'loaded', requestId: msg.requestId, info: this.info(dish), usedPredecessor: res.usedPredecessor });
           this.sendSnapshot(dish);
           return;
@@ -162,6 +225,10 @@ export class DishHost {
           this.sendSnapshot(dish);
           return;
         }
+        case 'whatIf':
+        case 'whatIfStart':
+          await this.handleWhatIf(msg);
+          return;
         default:
           this.handle(msg);
       }
@@ -272,7 +339,7 @@ export class DishHost {
         const d = this.need(msg.dishId);
         if (d.failed || d.arm) return;
         d.speed = 0;
-        step(d.world);
+        this.stepDish(d);
         this.sendSnapshot(d);
         return;
       }
@@ -285,6 +352,7 @@ export class DishHost {
         const before = msg.undoable ? serializeWorld(d.world) : null;
         const tick = d.world.tick;
         const cmd = applyNow(d.world, msg.commandId, msg.payload);
+        if (d.experiment && !d.experiment.ended && (msg.payload.kind !== 'lineage' || isIntervention(msg.payload))) this.endExperiment(d, 'changed');
         if (before) {
           d.undo = before;
           // The pre-command state doubles as the rollback checkpoint.
@@ -348,6 +416,7 @@ export class DishHost {
           lastGeometryVersion: -1,
           selection: null,
           arm: null,
+          experiment: null,
         };
         this.post({ type: 'ready', requestId: msg.requestId, info: this.info(this.dishes[msg.newDishId]!) });
         return;
@@ -370,12 +439,32 @@ export class DishHost {
         this.post({ type: 'family', requestId: msg.requestId, dishId: d.id, family: buildFamily(d.world, msg.birthId) });
         return;
       }
+      case 'lineage': {
+        // Read-only (P2.3): branch records, candidates, specimens and one branch's detail.
+        const d = this.need(msg.dishId);
+        this.post({ type: 'lineage', requestId: msg.requestId, dishId: d.id, lineage: buildLineage(d.world, { branch: msg.branch, birthId: msg.birthId }) });
+        return;
+      }
+      case 'lineageView': {
+        // Render-only marks on this dish's snapshots (P2.3); the world is never touched.
+        const d = this.need(msg.dishId);
+        d.lineageView = msg.view && (msg.view.locus !== null || msg.view.branch !== null) ? msg.view : null;
+        this.sendSnapshot(d);
+        return;
+      }
+      case 'experimentCatalog':
+        this.post({ type: 'experimentCatalog', requestId: msg.requestId, cards: experimentCatalog(this.registry).map((d) => experimentCardView(this.registry, d)) });
+        return;
+      case 'experimentStart':
+        this.experimentStart(msg);
+        return;
       case 'compareStart':
         this.compareStart(msg);
         return;
       case 'compareReset': {
         const c = this.needCompare(msg.compareId);
         if (c.status !== 'setup') throw new Error('The change on B can only be cleared before the run starts.');
+        if (c.experiment) throw new Error("This experiment's change is part of the card and cannot be cleared.");
         c.interventions = [];
         this.resetB(c);
         this.postCompare(c, msg.requestId);
@@ -386,8 +475,12 @@ export class DishHost {
         if (c.status !== 'setup') throw new Error('This comparison has already run.');
         const a = this.dishes[c.aDishId]!;
         const b = this.dishes[c.bDishId]!;
-        c.run = new PairedRun(c.baseline, a.world, b.world, msg.horizonTicks);
-        c.horizonTicks = msg.horizonTicks;
+        const x = c.experiment;
+        // An experiment card runs its own horizon (its stopping point) with the observers attached at its setup.
+        c.run = x
+          ? new PairedRun(c.baseline, a.world, b.world, x.horizonTicks, { obsA: x.obsA, obsB: x.obsB, inputBaseB: x.obsB.inputStart })
+          : new PairedRun(c.baseline, a.world, b.world, msg.horizonTicks);
+        c.horizonTicks = x ? x.horizonTicks : msg.horizonTicks;
         c.speed = msg.speed;
         c.acc = 0;
         c.lastSnapshot = -Infinity;
@@ -429,12 +522,142 @@ export class DishHost {
       case 'deleteSlot':
       case 'exportDish':
       case 'importDish':
+      case 'whatIf':
+      case 'whatIfStart':
         void this.handleAsync(msg);
         return;
       default:
         // An unknown request must fail once, not bounce between handle() and handleAsync() forever.
         throw new Error(`unknown request ${String((msg as { type?: unknown }).type)}`);
     }
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Experiment cards (P2.5; SPEC §13.2, UX §1 Notebook → Experiments). A card starts as a NEW paused
+  // dish realized from its recipe and seed exactly as the headless runner realizes it
+  // (realizeExperimentArms); a paired card opens its paired run through the comparison engine with
+  // the card's one change already on B. The same GateWatch as the headless runner watches the gate;
+  // reaching it posts the journal stamp and the world keeps running. Worker state only.
+
+  private experimentStart(msg: Extract<ToWorker, { type: 'experimentStart' }>): void {
+    const def = this.registry.experiments[msg.cardId];
+    if (!def || def.phase > this.registry.manifest.buildPhase) throw new Error(`There is no experiment "${msg.cardId}" in this version of Pixelmeba.`);
+    if (this.dishes[msg.newDishId]) throw new Error('That new dish id is already in use.');
+    const ids = msg.compare;
+    if (def.paired) {
+      if (!ids) throw new Error('A paired experiment needs comparison ids.');
+      if (this.comparison) throw new Error('A comparison is already open; finish or delete it first.');
+      const all = [msg.newDishId, ids.aDishId, ids.bDishId];
+      if (new Set(all).size !== 3 || all.some((id) => this.dishes[id])) throw new Error('comparison dish ids must be new and distinct');
+    }
+    const recipe = this.registry.recipes[def.recipeId]!;
+    const labels = [...recipe.labels];
+    // Labels such as "Seeded traits demonstration" travel with the dish name wherever it is shown.
+    const name = [def.title, ...labels.filter((l) => !/^Experiment\b/.test(l))].join(' · ');
+    const arms = realizeExperimentArms(this.registry, def, {
+      worldIds: ids ? { A: `${msg.newDishId}+${ids.compareId}:A`, B: `${msg.newDishId}+${ids.compareId}:B`, shared: msg.newDishId } : { A: msg.newDishId },
+    });
+    const watch = new GateWatch(def, recipe, this.registry.manifest);
+    if (!def.paired || !ids || !arms.B || !arms.obsB) {
+      const dish = this.addDish(msg.newDishId, arms.A, name);
+      dish.experiment = { watch, obs: arms.obsA, labels, ended: false };
+      this.post({ type: 'experimentStarted', requestId: msg.requestId, cardId: def.id, info: this.info(dish), compare: null });
+      this.sendSnapshot(dish);
+      return;
+    }
+    // Paired: the new dish holds the card's start (A's start state); A and B are the card's own arms.
+    const baseline: WorldState = { ...serializeWorld(arms.A), worldId: msg.newDishId };
+    const src = this.addDish(msg.newDishId, deserializeWorld(baseline), name);
+    const horizonTicks = Math.round(def.stoppingSeconds * TICKS_PER_SECOND) - arms.startTick;
+    const c: Comparison = {
+      id: ids.compareId,
+      sourceDishId: src.id,
+      aDishId: ids.aDishId,
+      bDishId: ids.bDishId,
+      baseline,
+      priorSpeed: 0,
+      status: 'setup',
+      horizonTicks,
+      speed: 4,
+      acc: 0,
+      lastSnapshot: -Infinity,
+      interventions: [...arms.interventions],
+      run: null,
+      results: null,
+      error: null,
+      experiment: { watch, obsA: arms.obsA, obsB: arms.obsB, labels, horizonTicks, measured: null },
+    };
+    this.comparison = c;
+    for (const [role, world] of [
+      ['A', arms.A],
+      ['B', arms.B],
+    ] as const) {
+      const id = role === 'A' ? c.aDishId : c.bDishId;
+      const dish = this.makeDish(id, world, `${name} (${role})`, serializeWorld(world));
+      dish.arm = { compareId: c.id, role };
+      this.dishes[id] = dish;
+    }
+    this.active = null;
+    this.post({ type: 'experimentStarted', requestId: msg.requestId, cardId: def.id, info: this.info(src), compare: this.compareState(c) });
+    this.sendSnapshot(this.dishes[c.aDishId]!);
+    this.sendSnapshot(this.dishes[c.bDishId]!);
+  }
+
+  /** The card's measurements in A and B now. */
+  private experimentMeasured(run: PairedRun, x: LiveExperiment): NonNullable<LiveExperiment['measured']> {
+    const m = x.watch.measured({ world: run.a, obs: x.obsA }, { world: run.b, obs: x.obsB });
+    return { A: m.A, B: m.B ?? {} };
+  }
+
+  /** After every pair of an experiment's paired run: watch the gate; reaching it posts the stamp (the run goes on). */
+  private experimentAfterPair(c: Comparison, run: PairedRun, x: LiveExperiment): void {
+    const stamp = x.watch.afterTick({ world: run.a, obs: x.obsA }, { world: run.b, obs: x.obsB });
+    if (!stamp) return;
+    x.measured = this.experimentMeasured(run, x);
+    this.post({ type: 'experimentStamp', dishId: c.sourceDishId, stamp: { stamp, title: x.watch.def.title, label: PAIRED_RUN_LABEL, labels: x.labels, measured: x.measured } });
+    this.postCompare(c);
+  }
+
+  private experimentView(c: Comparison, x: LiveExperiment): ComparisonExperiment {
+    const def = x.watch.def;
+    const a = this.dishes[c.aDishId];
+    const b = this.dishes[c.bDishId];
+    return {
+      cardId: def.id,
+      title: def.title,
+      labels: x.labels,
+      recipeId: x.watch.recipe.id,
+      recipeRevision: x.watch.recipe.revision,
+      seed: def.seed,
+      change: def.change,
+      horizonTicks: x.horizonTicks,
+      gate: a && b ? x.watch.status({ world: a.world, obs: x.obsA }, { world: b.world, obs: x.obsB }) : null,
+      stamp: x.watch.stamp,
+      measured: x.measured,
+    };
+  }
+
+  /** One tick of a free-running dish; a single-arm card's observer and gate ride along until the gate (read-only). */
+  private stepDish(d: Dish): void {
+    const x = d.experiment;
+    if (!x || x.ended || x.watch.reached) {
+      step(d.world);
+      return;
+    }
+    stepObserved(d.world, x.obs);
+    const stamp = x.watch.afterTick({ world: d.world, obs: x.obs }, null);
+    if (stamp) {
+      const measured = x.watch.measured({ world: d.world, obs: x.obs }, null);
+      this.post({ type: 'experimentStamp', dishId: d.id, stamp: { stamp, title: x.watch.def.title, label: SINGLE_RUN_LABEL, labels: x.labels, measured } });
+    }
+  }
+
+  /** A single-arm card's dish was changed or failed before its gate: the observation stops; the dish goes on. */
+  private endExperiment(d: Dish, reason: 'changed' | 'failed'): void {
+    const x = d.experiment;
+    if (!x || x.ended || x.watch.reached) return;
+    x.ended = true;
+    this.post({ type: 'experimentEnded', dishId: d.id, cardId: x.watch.def.id, reason });
   }
 
   private needCompare(compareId: string): Comparison {
@@ -521,6 +744,7 @@ export class DishHost {
     const refuse = (error: string) => this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: null, error });
     if (!c || !d.arm || c.id !== d.arm.compareId) return refuse('This comparison has ended.');
     if (d.arm.role === 'A') return refuse('A is the baseline and never receives changes; queue the change on B.');
+    if (c.experiment) return refuse("This experiment's one change is already on B; it takes no other change.");
     if (c.status !== 'setup') return refuse('Changes can only be queued on B before the run starts.');
     let result: Intervention['result'];
     try {
@@ -559,6 +783,7 @@ export class DishHost {
       interventions: c.interventions,
       results: c.results,
       error: c.error,
+      ...(c.experiment ? { experiment: this.experimentView(c, c.experiment) } : {}),
     };
   }
 
@@ -570,6 +795,7 @@ export class DishHost {
     c.status = 'complete';
     c.acc = 0;
     c.results = c.run!.results(c.interventions);
+    if (c.experiment) c.experiment.measured = this.experimentMeasured(c.run!, c.experiment);
     this.sendSnapshot(this.dishes[c.aDishId]!);
     this.sendSnapshot(this.dishes[c.bDishId]!);
   }
@@ -589,6 +815,7 @@ export class DishHost {
     while (c.acc >= 1 && !run.done) {
       try {
         run.stepPair();
+        if (c.experiment) this.experimentAfterPair(c, run, c.experiment);
       } catch (e) {
         c.status = 'failed';
         c.error = e instanceof Error ? e.message : String(e);
@@ -642,6 +869,167 @@ export class DishHost {
     return deserializeWorld(source.state);
   }
 
+  // -------------------------------------------------------------------------------------------
+  // What if? (P2.6; SPEC §13.3, UX §3.4, D09 §4–§5). Previews and catalog order are pure functions of
+  // content; realization builds a fresh world at tick 0 and never touches another world or its random
+  // streams. The previous dish is kept through the save flow before the new dish opens.
+
+  /** DishInfo fields: the variant record (provenance) and the recipe whose What if? ideas apply. */
+  private whatIfInfo(w: World): { variant: VariantRecord | null; whatIfSourceId: string | null } {
+    const record = variantRecordOf(w);
+    if (record) return { variant: record, whatIfSourceId: record.sourceId };
+    const p = w.content.provenance;
+    const ideas = p.createdFrom === 'recipe' && p.recipeId !== null && this.registry.recipes[p.recipeId] !== undefined && whatIfChoices(this.registry, p.recipeId).length > 0;
+    return { variant: null, whatIfSourceId: ideas ? p.recipeId : null };
+  }
+
+  /** Every What if? failure becomes a readable refusal: nothing was started, saved or changed. */
+  private async handleWhatIf(msg: Extract<ToWorker, { type: 'whatIf' | 'whatIfStart' }>): Promise<void> {
+    try {
+      if (msg.type === 'whatIf') this.post({ type: 'whatIf', requestId: msg.requestId, answer: await this.whatIfAnswer(msg.sourceId, msg.aboutDishId) });
+      else await this.whatIfStart(msg);
+    } catch (e) {
+      const code: WhatIfRefusalCode = e instanceof WhatIfRefusal ? e.code : e instanceof VariantError ? e.code : 'failed';
+      this.post({ type: 'whatIfRefused', requestId: msg.requestId, code, message: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  private async whatIfAnswer(sourceIdIn: string | null, dishId: string | null): Promise<WhatIfAnswer> {
+    const d = dishId !== null ? this.need(dishId) : null;
+    const record = d ? variantRecordOf(d.world) : null;
+    const sourceId = sourceIdIn ?? (d ? this.whatIfInfo(d.world).whatIfSourceId : null);
+    if (sourceId === null) throw new WhatIfRefusal('not-variant', 'This dish did not start from a recipe with What if? ideas.');
+    const source = this.registry.recipes[sourceId];
+    const choices: WhatIfChoice[] = [];
+    if (source) {
+      for (const v of whatIfChoices(this.registry, sourceId).slice(0, MAX_WHAT_IF_CHOICES)) {
+        const { oldCells, newCells } = variantPatchOutlines(this.registry, v.id);
+        choices.push({ preview: variantPreview(this.registry, v.id), oldCells, newCells, ...(await variantChecksums(this.registry, v.id)) });
+      }
+    }
+    const nextId = record && this.registry.variants[record.variantId] ? nextVariantId(this.registry, record.variantId) : null;
+    const next = nextId !== null ? this.registry.variants[nextId]! : null;
+    return {
+      sourceId,
+      sourceName: source?.name ?? sourceId,
+      sourceQuestion: source?.question ?? null,
+      choices,
+      layout: {
+        patches: (source?.fieldPatches ?? []).map((p, index) => ({ index, center: p.center, radius: p.radius, label: p.label ?? null })),
+        founders: (source?.founders ?? []).map((f) => ({ speciesId: f.species, name: this.registry.species[f.species]?.name ?? f.species, count: f.count, center: f.center, radius: f.radius })),
+      },
+      current: d && record ? { ...record, atStart: this.atRecordedStart(d) } : null,
+      next: next ? { id: next.id, title: next.title, question: next.question, previewDifference: next.previewDifference } : null,
+      plan: await this.keepPlan(d),
+    };
+  }
+
+  /** A What if? dish still exactly at its recorded start (tick 0, the recorded start hash): Again rebuilds it exactly. */
+  private atRecordedStart(d: Dish): boolean {
+    const record = variantRecordOf(d.world);
+    return record !== null && d.world.tick === 0 && stateHash(d.world) === record.initialStateHash;
+  }
+
+  /** How 'auto' would keep this dish (UX §3.4): its own slot, else the first free named slot. */
+  private async keepPlan(d: Dish | null): Promise<WhatIfPlan> {
+    if (!d) return { kind: 'none' };
+    if (this.atRecordedStart(d)) return { kind: 'unchanged', name: d.name };
+    if (!this.store) return { kind: 'unavailable', name: d.name };
+    const own = this.ownSlots[d.id];
+    if (own !== undefined) return { kind: 'slot', slotId: own, own: true, name: d.name };
+    const free = await this.store.freeSlot();
+    return free !== null ? { kind: 'slot', slotId: free, own: false, name: d.name } : { kind: 'full', name: d.name };
+  }
+
+  private async whatIfStart(msg: Extract<ToWorker, { type: 'whatIfStart' }>): Promise<void> {
+    if (this.dishes[msg.newDishId]) throw new WhatIfRefusal('in-use', 'That new dish id is already in use.');
+    const from = msg.fromDishId !== null ? this.need(msg.fromDishId) : null;
+    if (from?.arm) throw new WhatIfRefusal('not-variant', 'A comparison copy cannot start a What if? dish.');
+    // 1. Build the new world first (pure): a refusal here saves nothing and changes nothing.
+    const worldId = msg.newDishId;
+    let world: World;
+    if (msg.pick.kind === 'variant') {
+      world = await realizeVariant(this.registry, msg.pick.variantId, { worldId });
+    } else {
+      const record = from ? variantRecordOf(from.world) : null;
+      if (!record) throw new WhatIfRefusal('not-variant', 'This dish was not made from a What if? idea, so there is nothing to start again.');
+      if (msg.pick.kind === 'again') {
+        world = await realizeAgain(this.registry, record, { worldId });
+      } else {
+        const nextId = this.registry.variants[record.variantId] ? nextVariantId(this.registry, record.variantId) : null;
+        if (nextId === null) throw new WhatIfRefusal('unknown-variant', `There is no other idea for "${record.title}" in this version of Pixelmeba. Your dish is unchanged.`);
+        world = await realizeVariant(this.registry, nextId, { worldId });
+      }
+    }
+    // 2. Keep the current dish through the save flow; a refusal or failed write starts nothing.
+    const kept = await this.keepDish(from, msg.keep);
+    // 3. Open the new dish, paused, as a separate dish with its own world id.
+    const dish = this.addDish(msg.newDishId, world, variantRecordOf(world)!.title);
+    this.post({ type: 'whatIfStarted', requestId: msg.requestId, info: this.info(dish), kept });
+    this.sendSnapshot(dish);
+  }
+
+  /** Write one dish to a slot exactly as saveSlot/autosave do. */
+  private async writeSlot(d: Dish, slotId: string): Promise<SlotInfo> {
+    const savedAt = this.iso();
+    const recipeId = d.world.content.provenance.recipeId;
+    const built = await buildSaveFile(d.world, { name: d.name, savedAt, recipeId });
+    return this.store!.save({ slotId, text: built.text, checksum: built.checksum, name: d.name, tick: d.world.tick, savedAt, recipeId });
+  }
+
+  /**
+   * Keep the dish being left (UX §3.4, D09 §3): 'auto' saves it to its own slot or the first free one
+   * and refuses when all ten are used; 'replace' writes the slot the player chose; 'exported' writes
+   * no slot. The autosave (Continue) follows. The dish is paused first so every write holds one
+   * moment; on refusal or a failed write it resumes its prior speed and nothing else changes.
+   */
+  private async keepDish(d: Dish | null, keep: WhatIfKeep): Promise<WhatIfKept> {
+    if (!d) return { kind: 'none', slot: null, replaced: null, name: null, autosaved: false };
+    if (keep.kind === 'auto' && this.atRecordedStart(d)) return { kind: 'unchanged', slot: null, replaced: null, name: d.name, autosaved: false };
+    const priorSpeed = d.speed;
+    d.speed = 0;
+    d.acc = 0;
+    try {
+      let slot: SlotSummary | null = null;
+      let replaced: string | null = null;
+      if (keep.kind !== 'exported') {
+        if (!this.store) throw new WhatIfRefusal('save-unavailable', 'This device cannot save dishes, so the new dish was not started. Export your dish as a file first.');
+        const slots = await this.store.list();
+        let slotId: string | null;
+        if (keep.kind === 'replace') {
+          if (!SaveStoreClass.slotIds().includes(keep.slotId)) throw new WhatIfRefusal('failed', 'That save slot does not exist. Nothing was changed.');
+          slotId = keep.slotId;
+          const old = slots.find((s) => s.slotId === slotId);
+          replaced = old && this.ownSlots[d.id] !== slotId ? old.name : null;
+        } else {
+          slotId = this.ownSlots[d.id] ?? (await this.store.freeSlot());
+          if (slotId === null) {
+            throw new WhatIfRefusal('slots-full', `All ten save slots are used, so "${d.name}" has nowhere to go. Export it as a file or choose a save to replace. Nothing has changed.`);
+          }
+        }
+        try {
+          slot = summary(await this.writeSlot(d, slotId));
+        } catch (e) {
+          throw new WhatIfRefusal('save-failed', `"${d.name}" could not be saved, so the new dish was not started. Your saves are unchanged. (${e instanceof Error ? e.message : String(e)})`);
+        }
+        this.ownSlots[d.id] = slotId;
+      }
+      let autosaved = false;
+      if (this.store) {
+        try {
+          await this.writeSlot(d, AUTOSAVE_SLOT);
+          autosaved = true;
+        } catch {
+          // The dish is kept in its slot or file; Continue keeps opening the previous autosave.
+        }
+      }
+      return { kind: slot ? 'slot' : 'exported', slot, replaced, name: d.name, autosaved };
+    } catch (e) {
+      d.speed = priorSpeed;
+      throw e;
+    }
+  }
+
   private info(d: Dish): DishInfo {
     const w = d.world;
     const m = w.content.manifest;
@@ -661,6 +1049,13 @@ export class DishHost {
       recipeId: w.content.provenance.recipeId,
       contentHash: m.contentHash,
       manifestLabel: partial ? 'Core prototype — quantitative evolution' : 'Standard Evolution',
+      // Lab trays (P2.7): recorded content the item details quote (read-only).
+      speciesHabitats: w.species.map((s) => [...s.def.habitats]),
+      speciesAttachment: w.species.map((s) => (s.def.attachment ? [...s.def.attachment.surfaces] : null)),
+      speciesSummaries: w.species.map((s) => s.def.guide.summary),
+      materialSummaries: w.content.materials.map((mat) => mat.guide.summary),
+      fieldIds: allocatedFieldIds(w.fields),
+      ...this.whatIfInfo(w),
     };
   }
 
@@ -712,10 +1107,11 @@ export class DishHost {
         if (d.world.tick - d.checkpoint.tick >= CHECKPOINT_TICKS) this.checkpoint(d);
         const t0 = d.world.tick;
         try {
-          step(d.world);
+          this.stepDish(d);
         } catch (e) {
           d.speed = 0;
           d.failed = true;
+          if (d.experiment && !d.experiment.ended) this.endExperiment(d, 'failed');
           this.rollback(d, t0);
           this.post({ type: 'error', dishId: d.id, message: e instanceof Error ? e.message : String(e), lastValidTick: d.world.tick });
           break;
@@ -744,6 +1140,8 @@ export class DishHost {
     const deposits = packDeposits(w, null);
     const overlay = d.overlay ? packOverlay(w, d.overlay, null) : null;
     const events = visualEvents(w.events.ring, d.lastEventId);
+    const lv = d.lineageView;
+    const lineage: LineageMarks | null = lv ? { locus: lv.locus, branch: lv.branch, ...packLineageMarks(w, lv.locus, lv.branch) } : null;
     d.lastEventId = w.counters.nextEventId - 1;
     let geometry: SnapshotMsg['geometry'] = null;
     if (d.lastGeometryVersion !== w.grid.geometryVersion) {
@@ -773,9 +1171,12 @@ export class DishHost {
       capacityReached: w.ents.count >= w.ents.capacity,
       speciesCounts: packed.speciesCounts,
       undoAvailable: d.undo !== null,
+      branchCount: w.branches.branches.length,
+      ...(lineage ? { lineage } : {}),
     };
     const transfer: Transferable[] = [packed.ents.buffer, packed.ids.buffer, deposits.buffer];
     if (overlay) transfer.push(overlay.data.buffer);
+    if (lineage) transfer.push(lineage.marks.buffer as ArrayBuffer);
     if (geometry) transfer.push(geometry.substrate.buffer, geometry.structure.buffer, geometry.shade.buffer);
     this.post(msg, transfer);
   }

@@ -6,6 +6,9 @@ import type { CommandPayload, CommandResult } from '@sim/commands';
 import type { WorldState } from '@sim/serialize';
 import type { FieldId } from '@sim/fields';
 import type { CompareSpeed, ComparisonState } from './comparison';
+import type { LineageAnswer } from '@sim/lineage';
+import type { VariantErrorCode, VariantPreview, VariantRecord } from '@sim/variants';
+import type { ExperimentCardView, JournalStamp } from '@sim/experiments';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -61,6 +64,10 @@ export type ToWorker =
   | { readonly type: 'importDish'; readonly requestId: number; readonly text: string; readonly newDishId: string }
   /** Read-only family query for the inspector's "Where is its family?" shortcut (SPEC §12.1, UX §5.3). */
   | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly birthId: number }
+  /** Read-only lineage panel query (SPEC §8.5, UX §5.5): branches, variation, specimens, and detail for one branch or one organism's branch. */
+  | { readonly type: 'lineage'; readonly requestId: number; readonly dishId: string; readonly branch: number | null; readonly birthId: number | null }
+  /** Trait overlay and lineage highlight for this dish's snapshots (render-only; never touches the world). */
+  | { readonly type: 'lineageView'; readonly dishId: string; readonly view: LineageView | null }
   /**
    * Comparison (SPEC §13.4, P2.4): capture the source dish once as the baseline, realize arms A and B
    * (paused), pause the source. Optional interventions are applied to B only, as paused edits.
@@ -83,7 +90,42 @@ export type ToWorker =
   /** End the run now; both arms are at the same tick. */
   | { readonly type: 'compareStop'; readonly requestId: number; readonly compareId: string }
   /** Discard A, B and the stored baseline. Never touches the source dish or any save slot. */
-  | { readonly type: 'compareDelete'; readonly requestId: number; readonly compareId: string };
+  | { readonly type: 'compareDelete'; readonly requestId: number; readonly compareId: string }
+  /**
+   * What if? (P2.6, UX §3.4): the choices for a source recipe (or, with sourceId null, for the recipe
+   * `aboutDishId` came from), each with its preview, and how that dish would be kept if a new dish
+   * started. Read-only; never simulates. (Not named dishId: the dish is optional.)
+   */
+  | { readonly type: 'whatIf'; readonly requestId: number; readonly sourceId: string | null; readonly aboutDishId: string | null }
+  /**
+   * Start a What if? variant as a NEW paused dish with its own world id. The new world is built first
+   * (a refusal changes nothing); then `fromDishId` is kept through the save flow (`keep`); only then
+   * does the new dish open. Again / Another idea need `fromDishId` to be a variant dish.
+   */
+  | {
+      readonly type: 'whatIfStart';
+      readonly requestId: number;
+      readonly newDishId: string;
+      readonly fromDishId: string | null;
+      readonly pick: WhatIfPick;
+      readonly keep: WhatIfKeep;
+    }
+  /** Experiment cards (P2.5): the cards this build ships, as the Notebook shows them (recorded content; read-only). */
+  | { readonly type: 'experimentCatalog'; readonly requestId: number }
+  /**
+   * Start an experiment card as a NEW paused dish `newDishId`, realized from the card's recipe and seed
+   * (nothing the UI sends can change either). A paired card also opens its paired run through the
+   * comparison engine (`compare` ids) with the card's change already on B; a single-arm card's dish
+   * carries the card's observation gate while it runs.
+   */
+  | {
+      readonly type: 'experimentStart';
+      readonly requestId: number;
+      readonly cardId: string;
+      /** The new dish's id (not named dishId: a refused start must never touch an existing dish). */
+      readonly newDishId: string;
+      readonly compare: { readonly compareId: string; readonly aDishId: string; readonly bDishId: string } | null;
+    };
 
 export interface SlotSummary {
   readonly slotId: string;
@@ -145,6 +187,8 @@ export interface VisualEvent {
   readonly cell: number;
   readonly birthId: number;
   readonly cause?: number;
+  /** Branch id for branchEstablished / branchExtinct (P2.3). */
+  readonly branch?: number;
 }
 
 export interface DishInfo {
@@ -162,6 +206,18 @@ export interface DishInfo {
   readonly recipeId: string | null;
   readonly contentHash: string;
   readonly manifestLabel: string;
+  /** Lab trays (P2.7): each species' recorded habitats, attachment surfaces (null = free-living) and one-line summary, in speciesIds order. */
+  readonly speciesHabitats?: readonly (readonly string[])[];
+  readonly speciesAttachment?: readonly (readonly string[] | null)[];
+  readonly speciesSummaries?: readonly string[];
+  /** Lab trays (P2.7): each enabled material's one-line summary, in materials order. */
+  readonly materialSummaries?: readonly string[];
+  /** Fields allocated in this world (the overlays the Lab Observe tray can offer), canonical order. */
+  readonly fieldIds?: readonly string[];
+  /** What if? (P2.6): the variant record when this dish was made from a What if? idea (its provenance), else null. */
+  readonly variant?: VariantRecord | null;
+  /** What if? (P2.6): the recipe whose What if? ideas apply to this dish (its source recipe), or null when none do. */
+  readonly whatIfSourceId?: string | null;
 }
 
 export interface SnapshotMsg {
@@ -183,6 +239,29 @@ export interface SnapshotMsg {
   readonly capacityReached: boolean;
   readonly speciesCounts: readonly number[];
   readonly undoAvailable: boolean;
+  /** Named branches recorded in this dish so far (P2.3; ids 0…n-1, so new discoveries are ids ≥ the last count). */
+  readonly branchCount?: number;
+  /** Trait overlay bands and lineage highlight per entity, in `ents` order (P2.3); absent when off. */
+  readonly lineage?: LineageMarks | null;
+}
+
+/** What the lineage view asks the worker to mark: a locus to band, and/or a branch to highlight. */
+export interface LineageView {
+  readonly locus: number | null;
+  readonly branch: number | null;
+}
+
+/**
+ * Per-entity lineage marks (see @sim/lineage packLineageMarks): low 3 bits = trait band 0–4 of `locus`
+ * (7 = none or inactive), bit 3 = living member of `branch` or a branch descended from it.
+ */
+export interface LineageMarks {
+  readonly locus: number | null;
+  readonly branch: number | null;
+  readonly marks: Uint8Array;
+  readonly bandCounts: readonly number[];
+  readonly inactive: number;
+  readonly members: number;
 }
 
 /** Inspector data (SPEC §12.1). Built in the worker from authoritative state; no randomness. */
@@ -393,6 +472,118 @@ export type FromWorker =
   | { readonly type: 'loaded'; readonly requestId: number; readonly info: DishInfo; readonly usedPredecessor: boolean }
   | { readonly type: 'exported'; readonly requestId: number; readonly text: string; readonly filename: string }
   | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly family: FamilyAnswer }
+  | { readonly type: 'lineage'; readonly requestId: number; readonly dishId: string; readonly lineage: LineageAnswer }
   | { readonly type: 'done'; readonly requestId: number }
   /** Comparison status; unsolicited (no requestId) while running and when it completes. */
-  | { readonly type: 'compareState'; readonly requestId?: number; readonly state: ComparisonState };
+  | { readonly type: 'compareState'; readonly requestId?: number; readonly state: ComparisonState }
+  /** What if? choices, previews and the keep plan (P2.6). */
+  | { readonly type: 'whatIf'; readonly requestId: number; readonly answer: WhatIfAnswer }
+  /** A What if? dish was started (paused) after the previous dish was kept as `kept` says. */
+  | { readonly type: 'whatIfStarted'; readonly requestId: number; readonly info: DishInfo; readonly kept: WhatIfKept }
+  /**
+   * A What if? request was refused: `message` is readable as-is and nothing was started, saved or
+   * changed. An expected answer, not a failure of the dish (so it never raises the error toast).
+   */
+  | { readonly type: 'whatIfRefused'; readonly requestId: number; readonly code: WhatIfRefusalCode; readonly message: string }
+  /** The experiment cards this build ships (P2.5). */
+  | { readonly type: 'experimentCatalog'; readonly requestId: number; readonly cards: readonly ExperimentCardView[] }
+  /** A card started: its new paused dish, and for a paired card its comparison (setup, change on B). */
+  | { readonly type: 'experimentStarted'; readonly requestId: number; readonly cardId: string; readonly info: DishInfo; readonly compare: ComparisonState | null }
+  /** Unsolicited: a running card reached its observation gate; the world keeps running. */
+  | { readonly type: 'experimentStamp'; readonly dishId: string; readonly stamp: ExperimentStampMsg }
+  /** Unsolicited: a single-arm card's dish was changed by a command, so its observation ended without the gate. */
+  | { readonly type: 'experimentEnded'; readonly dishId: string; readonly cardId: string; readonly reason: 'changed' | 'failed' };
+
+/**
+ * A journal stamp as the worker reports it (P2.5): the card's stamp record (card, seed, recipe and
+ * content versions, the gate's measured values) plus the card's own measurements at that moment.
+ */
+export interface ExperimentStampMsg {
+  readonly stamp: JournalStamp;
+  readonly title: string;
+  readonly label: string;
+  /** Recipe labels (e.g. "Seeded traits demonstration"). */
+  readonly labels: readonly string[];
+  readonly measured: { readonly A: Readonly<Record<string, number>>; readonly B: Readonly<Record<string, number>> | null };
+}
+
+// ---------------------------------------------------------------------------------------------
+// What if? (P2.6; SPEC §13.3, UX §3.4, D09 §4–§5)
+
+/**
+ * Why a What if? request was refused: all ten slots used ('slots-full'), the keep write failed
+ * ('save-failed') or this device cannot save ('save-unavailable'); the dish is not a What if? dish or
+ * has no ideas ('not-variant'); the new dish id is taken ('in-use'); or the variant itself was refused
+ * (the codes of @sim/variants VariantError: 'unknown-variant', 'changed', 'invalid-patch', …).
+ */
+export type WhatIfRefusalCode = 'slots-full' | 'save-failed' | 'save-unavailable' | 'not-variant' | 'in-use' | 'failed' | VariantErrorCode;
+
+/** Which variant to start: a chosen one, the same one again, or the next in catalog order. */
+export type WhatIfPick =
+  | { readonly kind: 'variant'; readonly variantId: string }
+  /** Rebuild the variant `fromDishId` was made from (identical start, new world id). */
+  | { readonly kind: 'again' }
+  /** The next supported variant of the same source after the one `fromDishId` was made from. */
+  | { readonly kind: 'another' };
+
+/**
+ * How the current dish is kept before a new one opens. 'auto': its own named slot, else the first free
+ * one (refused with kind 'slots-full' when all ten are used). 'replace': a named slot the player chose
+ * deliberately. 'exported': the player exported it as a file, so no slot is written. Every choice
+ * also updates the autosave (Continue).
+ */
+export type WhatIfKeep = { readonly kind: 'auto' } | { readonly kind: 'replace'; readonly slotId: string } | { readonly kind: 'exported' };
+
+/** How the current dish would be kept on 'auto' (shown before Start). */
+export type WhatIfPlan =
+  /** No dish is open. */
+  | { readonly kind: 'none' }
+  /** A What if? dish still exactly at its recorded start: nothing to keep (it can be rebuilt exactly). */
+  | { readonly kind: 'unchanged'; readonly name: string }
+  /** Saved to this named slot (`own`: the slot it was opened from or last saved to). */
+  | { readonly kind: 'slot'; readonly slotId: string; readonly own: boolean; readonly name: string }
+  /** All ten named slots are used by other saves. */
+  | { readonly kind: 'full'; readonly name: string }
+  /** This device cannot save. */
+  | { readonly kind: 'unavailable'; readonly name: string };
+
+/** What happened to the previous dish when a What if? dish started. */
+export interface WhatIfKept {
+  readonly kind: 'none' | 'unchanged' | 'slot' | 'exported';
+  /** The named slot written ('slot'), with `replaced` naming the save it replaced, if any. */
+  readonly slot: SlotSummary | null;
+  readonly replaced: string | null;
+  readonly name: string | null;
+  /** The autosave (Continue) now holds the previous dish. False if that write failed (the rest stands). */
+  readonly autosaved: boolean;
+}
+
+/** One What if? choice: the pure preview plus its cells before/after and the record checksums. */
+export interface WhatIfChoice {
+  readonly preview: VariantPreview;
+  /** The changed patch's cells in the source and in the variant (row-major cell indices). */
+  readonly oldCells: readonly number[];
+  readonly newCells: readonly number[];
+  readonly sourceChecksum: string;
+  readonly variantChecksum: string;
+}
+
+/** The source recipe's layout, for drawing the small before/after preview (recorded values only). */
+export interface WhatIfLayout {
+  readonly patches: readonly { readonly index: number; readonly center: readonly [number, number]; readonly radius: number; readonly label: string | null }[];
+  readonly founders: readonly { readonly speciesId: string; readonly name: string; readonly count: number; readonly center: readonly [number, number]; readonly radius: number }[];
+}
+
+export interface WhatIfAnswer {
+  readonly sourceId: string;
+  readonly sourceName: string;
+  readonly sourceQuestion: string | null;
+  /** At most three, in catalog order (UX §3.4). */
+  readonly choices: readonly WhatIfChoice[];
+  readonly layout: WhatIfLayout;
+  /** The asked-about dish's variant record when it is a What if? dish; `atStart` = still exactly at its recorded start. */
+  readonly current: (VariantRecord & { readonly atStart: boolean }) | null;
+  /** "Another idea" for the current variant dish (catalog order), or null. */
+  readonly next: { readonly id: string; readonly title: string; readonly question: string; readonly previewDifference: string } | null;
+  readonly plan: WhatIfPlan;
+}

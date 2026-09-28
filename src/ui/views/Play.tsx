@@ -1,5 +1,8 @@
 import { IconBack, IconPlay } from '../icons';
 import { busy, route, startRecipe } from '../state';
+import { WhatIfHost } from '../panels/WhatIfSheet';
+import { openWhatIf } from '../panels/WhatIfState';
+import { WHATIF_TEXT } from '../strings/whatif';
 
 export function Play() {
   return (
@@ -28,8 +31,16 @@ export function Play() {
           <button class="btn primary" disabled={busy.value} onClick={() => void startRecipe('FIRST_DISH_V1', 'Little Living Garden')} data-testid="start-garden">
             <IconPlay /> Start
           </button>
+          {/* UX §2.2: a secondary What if? link under Garden opens the sheet (§3.4). */}
+          <p class="whatif-link-row">
+            <button class="btn whatif-link" onClick={() => openWhatIf('play')} data-testid="whatif-open">
+              {WHATIF_TEXT.link}
+            </button>
+            <span>{WHATIF_TEXT.linkHint}</span>
+          </p>
         </section>
       </div>
+      <WhatIfHost context="play" />
     </main>
   );
 }

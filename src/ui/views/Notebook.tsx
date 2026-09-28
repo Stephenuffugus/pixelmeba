@@ -1,0 +1,236 @@
+/**
+ * Notebook (UX §1, §2): Journal · Experiments. The Journal lists the stamps recorded when an
+ * experiment card's observation gate was reached (P2.8 adds observed relationships); Experiments lists
+ * the cards this build ships (SPEC §13.2). Opening the Notebook never pauses or changes a dish.
+ */
+import { useEffect, useRef } from 'preact/hooks';
+import type { ExperimentCardView } from '@sim/experiments';
+import { IconBack } from '../icons';
+import { journal, journalUnseen, type JournalEntry } from '../journal';
+import { CONCLUSIONS } from '../panels/CompareText';
+import { experimentCards, experimentCardsError, loadExperimentCards, route } from '../state';
+import { durationText, recordedText } from '../strings/experiments';
+import { clock } from '../panels/CompareText';
+
+type Tab = 'journal' | 'experiments';
+const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
+  { id: 'journal', label: 'Journal' },
+  { id: 'experiments', label: 'Experiments' },
+];
+
+export function Notebook() {
+  const r = route.value;
+  const tab: Tab = r.name === 'notebook' ? r.tab : 'experiments';
+  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ journal: null, experiments: null });
+
+  useEffect(() => {
+    void loadExperimentCards();
+  }, []);
+  useEffect(() => {
+    if (tab === 'journal') journalUnseen.value = 0;
+  }, [tab]);
+
+  const select = (t: Tab, focus = false) => {
+    route.value = { name: 'notebook', tab: t };
+    if (focus) tabRefs.current[t]?.focus();
+  };
+  const onKey = (e: KeyboardEvent) => {
+    const i = TABS.findIndex((t) => t.id === tab);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      select(TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length]!.id, true);
+    } else if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      select(TABS[e.key === 'Home' ? 0 : TABS.length - 1]!.id, true);
+    }
+  };
+
+  return (
+    <main class="page nb-page" aria-labelledby="nb-title" data-testid="notebook">
+      <div class="home-grid">
+        <header class="nb-header">
+          <button class="btn ghost nb-back" onClick={() => (route.value = { name: 'home' })} aria-label="Back to Home">
+            <IconBack />
+          </button>
+          <h1 id="nb-title">Notebook</h1>
+        </header>
+        <div class="nb-tabs" role="tablist" aria-label="Notebook sections" onKeyDown={onKey}>
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              ref={(el) => {
+                tabRefs.current[t.id] = el;
+              }}
+              class="btn"
+              role="tab"
+              id={`nb-tab-${t.id}`}
+              aria-selected={tab === t.id}
+              aria-controls="nb-panel"
+              tabIndex={tab === t.id ? 0 : -1}
+              onClick={() => select(t.id)}
+              data-testid={`notebook-tab-${t.id}`}
+            >
+              {t.label}
+              {t.id === 'journal' && journalUnseen.value > 0 ? <span class="nb-dot">{journalUnseen.value} new</span> : null}
+            </button>
+          ))}
+        </div>
+        <section id="nb-panel" role="tabpanel" aria-labelledby={`nb-tab-${tab}`} class="nb-panel">
+          {tab === 'journal' ? <JournalTab /> : <ExperimentsTab />}
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function stampedIds(): Set<string> {
+  return new Set(journal.value.map((e) => e.experimentId));
+}
+
+function ExperimentsTab() {
+  const cards = experimentCards.value;
+  if (!cards) {
+    return <p class="nb-empty">{experimentCardsError.value ? `The experiment cards could not be read: ${experimentCardsError.value}` : 'Reading the experiment cards…'}</p>;
+  }
+  const stamped = stampedIds();
+  return (
+    <>
+      <p class="nb-intro">
+        Each card asks one question, suggests one change and says what to measure. Starting a card makes a new paused dish from its recipe and seed; paired cards run two copies side by
+        side.
+      </p>
+      <ul class="nb-cards" aria-label="Experiment cards">
+        {cards.map((c) => (
+          <li key={c.id}>
+            <CardSummary card={c} stamped={stamped.has(c.id)} />
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function CardSummary({ card, stamped }: { card: ExperimentCardView; stamped: boolean }) {
+  const labels = card.labels.filter((l) => !/^Experiment\b/.test(l));
+  return (
+    <article class="card nb-card" aria-labelledby={`nb-card-${card.id}`}>
+      <h2 id={`nb-card-${card.id}`}>{card.title}</h2>
+      <p class="nb-question">{card.question}</p>
+      <p class="xp-badges">
+        <span class="xp-badge">{card.paired ? 'Paired run' : 'One dish'}</span>
+        <span class="xp-badge">{durationText(card.stoppingSeconds)}</span>
+        {labels.map((l) => (
+          <span key={l} class="xp-badge" data-testid="experiment-label">
+            {l}
+          </span>
+        ))}
+        {stamped ? <span class="xp-badge xp-badge-stamp">Stamped in Journal</span> : null}
+      </p>
+      <button class="btn primary nb-open" onClick={() => (route.value = { name: 'experiment', cardId: card.id })} data-testid={`experiment-card-${card.id}`}>
+        Open card
+      </button>
+    </article>
+  );
+}
+
+function conclusionText(id: string | undefined): string | null {
+  return CONCLUSIONS.find((k) => k.id === id)?.label ?? null;
+}
+
+function JournalTab() {
+  const list = journal.value;
+  if (list.length === 0) {
+    return (
+      <p class="nb-empty" data-testid="journal-empty">
+        No stamps yet. Start an experiment card: when its observation is complete, a stamp appears here with what was measured.
+      </p>
+    );
+  }
+  return (
+    <ul class="nb-journal" aria-label="Journal stamps">
+      {list.map((e) => (
+        <li key={e.id}>
+          <JournalStamp entry={e} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function JournalStamp({ entry: e }: { entry: JournalEntry }) {
+  const paired = e.measures.some((m) => m.b !== null);
+  const conclusion = conclusionText(e.conclusion);
+  return (
+    <article class="card nb-stamp" aria-labelledby={`nb-stamp-${e.id}`} data-testid={`journal-entry-${e.experimentId}`}>
+      <p class="nb-stamp-mark" aria-hidden="true">
+        ✓
+      </p>
+      <h2 id={`nb-stamp-${e.id}`}>{e.journalStamp}</h2>
+      <p class="nb-stamp-meta">
+        {e.title} · {e.label} · reached at {clock(e.reachedAtSecond * 10)} dish time · recorded {recordedText(e.recordedAt)}
+      </p>
+      {e.labels.filter((l) => !/^Experiment\b/.test(l)).length > 0 ? (
+        <p class="xp-badges">
+          {e.labels
+            .filter((l) => !/^Experiment\b/.test(l))
+            .map((l) => (
+              <span key={l} class="xp-badge">
+                {l}
+              </span>
+            ))}
+        </p>
+      ) : null}
+      <ul class="xp-gate">
+        {e.gate.map((g, i) => (
+          <li key={i} data-pass="true">
+            <span class="xp-mark" aria-hidden="true">
+              ✓
+            </span>
+            <span>
+              {g.text} — {g.value}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {e.prediction ? (
+        <figure class="compare-prediction">
+          <figcaption>Your prediction</figcaption>
+          <blockquote>{e.prediction}</blockquote>
+        </figure>
+      ) : null}
+      {conclusion ? (
+        <p>
+          <strong>Your conclusion:</strong> {conclusion}
+        </p>
+      ) : null}
+      <details class="xp-details">
+        <summary>Measured when the stamp was recorded</summary>
+        <div class="compare-table-wrap" tabIndex={0} role="region" aria-label="Measured values of this stamp">
+          <table class="xp-table">
+            <caption>
+              {e.title}, seed {e.seed}, recipe {e.recipeId} r{e.recipeRevision}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Measure</th>
+                <th scope="col">{paired ? 'A' : 'Value'}</th>
+                {paired ? <th scope="col">B</th> : null}
+                {paired ? <th scope="col">B − A</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {e.measures.map((m) => (
+                <tr key={m.id}>
+                  <th scope="row">{m.label}</th>
+                  <td>{m.a}</td>
+                  {paired ? <td>{m.b ?? '—'}</td> : null}
+                  {paired ? <td>{m.diff ?? '—'}</td> : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </article>
+  );
+}
