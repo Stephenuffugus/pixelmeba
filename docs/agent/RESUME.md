@@ -1,14 +1,11 @@
 # Resume point — read this first after a restart
 
-> **Update 2026‑09‑28 (night session):** wave B is committed (`d085a65`, check 407/407) with decisions
-> D‑0024…D‑0027 (`ec807c6`). The wave B fix workflow (`docs/agent/g2-wave-b-fix.workflow.js.txt`, verifier
-> findings in `docs/reports/reviews/g2-wave-b/`) is running. If this session died: rerun that fix workflow
-> (it is idempotent against the findings: fixers re-check each item), then continue from step 3 below
-> (integration → wave C → P2.9 → G2). The Phase 3 plan is `docs/agent/g3-plan.md` (preflight + six waves).
-
-
-Written 2026‑09‑28 02:30 UTC, before a planned codespace restart. The owner will say
-"let's get started"; continue from here without asking.
+> **Update 2026‑09‑28 (night session):** wave B and both fix rounds are committed (`d085a65`, `b17aa5b`,
+> `4804a91`, `87204e7`; check 501/501; Playwright 93/93 after the landscape sheet fix), decisions
+> D‑0024…D‑0028. Wave C (`docs/agent/g2-wave-c.workflow.js.txt`) was launched after `87204e7`. If this
+> session died: look at `git status` (wave C builders' uncommitted work may be in the tree), rerun
+> wave C with its script if nothing useful is there, then integrate (verifier findings → fixes →
+> check + full Playwright → commit), then P2.9 → G2 (steps 5–7 below). Phase 3 plan: `docs/agent/g3-plan.md`.
 
 ## Where things stand
 - `main` = `bf3ba9b` (plus this note), pushed. Tags `g0`, `g1` pushed. `npm run check` 311/311 and
