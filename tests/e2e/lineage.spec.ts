@@ -64,8 +64,18 @@ async function aliveCount(page: Page): Promise<number> {
 }
 
 test('a real discovery: compare ancestor, rename, pin, specimen, trait overlay, follow lineage, family link', async ({ page }) => {
-  test.setTimeout(240_000);
-  await importFixture(page, { pauseOnDiscoveries: true });
+  // The longest journey (Settings, discovery, tree, overlay, follow, specimen); desktop SwiftShader is slow.
+  test.setTimeout(360_000);
+  // "Pause on discoveries" is chosen in Settings (UX §2), where it lives with the other preferences.
+  await seedSettings(page, { showPrompts: false });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const pauseSetting = page.getByTestId('pause-on-discoveries');
+  await expect(pauseSetting).not.toBeChecked();
+  await expectReachable(page.locator('label', { has: pauseSetting }));
+  await pauseSetting.check();
+  await expectNoSeriousA11yViolations(page);
+  await importFixture(page, {});
   await runToDiscovery(page);
   // "Pause on discoveries" was chosen: the card paused the dish.
   await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
@@ -76,6 +86,7 @@ test('a real discovery: compare ancestor, rename, pin, specimen, trait overlay, 
   await expect(card).toContainText('Ancestor:');
   await expect(card).toContainText('Inherited difference:');
   await expect(card).toContainText('Game rule:');
+  await expect(card).not.toContainText(/no longer pays|senses food from farther/);
   await expect(card).toContainText(/living descendants across \d+ generations when named/);
   await expect(card).toContainText('The dish is paused');
   await expect(card).not.toContainText(/superior|advanced|perfect|adapted|immune/i);
@@ -93,6 +104,8 @@ test('a real discovery: compare ancestor, rename, pin, specimen, trait overlay, 
   await expect(table.getByRole('columnheader', { name: 'Ancestor' })).toBeVisible();
   await expect(table.getByRole('columnheader', { name: 'This branch' })).toBeVisible();
   await expect(table.getByRole('rowheader', { name: 'Abilities' })).toBeVisible();
+  await expect(table).toContainText('founder of this line');
+  await expect(page.getByTestId('lineage-rules')).toContainText('Game rule:');
   await expect(panel).not.toContainText(/superior|advanced|perfect|adapted|immune/i);
   await expectNoSeriousA11yViolations(page);
 
@@ -122,7 +135,8 @@ test('a real discovery: compare ancestor, rename, pin, specimen, trait overlay, 
   const legend = page.getByTestId('trait-legend');
   await expect(legend).toBeVisible();
   await expect(legend).toContainText('Feeding investment');
-  await expect(legend).toContainText(/47–53 \(near the founders’ 50\): \d+/);
+  await expect(legend).toContainText(/47–53 · middle: \d+/);
+  await expect(legend).not.toContainText('founders’ 50');
   await page.getByTestId('lineage-close').click();
   await expect(panel).toBeHidden();
   await expectNoSeriousA11yViolations(page);
@@ -181,7 +195,15 @@ test('without "pause on discoveries" the card leaves the dish running; Dismiss c
 
 test('the family tree works at 200 % text: targets reachable, nothing sideways', async ({ page }) => {
   test.setTimeout(240_000);
-  await importFixture(page, { pauseOnDiscoveries: true, textScale: 2 });
+  // The Settings row first, at 200 % text.
+  await seedSettings(page, { showPrompts: false, pauseOnDiscoveries: true, textScale: 2 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await expect(page.getByTestId('pause-on-discoveries')).toBeChecked();
+  await expectReachable(page.locator('label', { has: page.getByTestId('pause-on-discoveries') }));
+  await expectNoHorizontalOverflow(page);
+  await expectNoSeriousA11yViolations(page);
+  await importFixture(page, {});
   await runToDiscovery(page);
   for (const t of ['discovery-follow', 'discovery-compare', 'discovery-dismiss']) await expectReachable(page.getByTestId(t));
   await expectNoSeriousA11yViolations(page);

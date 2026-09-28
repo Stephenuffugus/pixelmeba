@@ -54,106 +54,57 @@ const OPEN_CELLS =
   'Any cell inside the rim without a stone, wall or porous bead. Covered cells that have one are crossed out in the preview and skipped.';
 const EMPTY_CELLS =
   'Empty cells inside the rim: no organism in the cell and no other structure. Covered cells that are not empty are crossed out in the preview and skipped.';
-const MOVED_ASIDE =
-  'Anything dissolved or lying in a covered cell is moved, whole, into the nearest open cells on the same side, so no material is lost or made.';
-const SAME_PLACE =
-  'Organisms, deposits and dissolved amounts stay exactly where they are. Cells under a structure keep their own substrate.';
+const ANY_CELL = 'Any cell inside the rim.';
 
-export const HABITAT_TOOLS: Readonly<Record<HabitatToolId, ItemCopy>> = {
-  'paint:water': {
-    name: 'Water',
-    purpose: 'Paint cells as open water.',
+/**
+ * UI chrome for the habitat and structure brushes: what each kind of edit does to the cells it covers
+ * (the rules in src/sim/structures.ts applyHabitatEdit). Each item's own name, purpose, rules text and
+ * example come from its content record (src/ui/panels/LabTrayContent.tsx), never from here.
+ */
+export const BRUSH_COPY = {
+  substrate: {
     habitats: OPEN_CELLS,
     dose: 'Replaces the substrate of each covered cell. Adds nothing.',
-    changes:
-      'The substrate becomes water: dissolved things spread fastest here (0.10 per tick, against 0.025 in gel and 0.01 in sediment) and gas exchange with the air runs at full rate.',
-    unchanged: SAME_PLACE,
-    watch: 'Food and gases spreading faster through the painted cells; swimmers crossing them.',
+    unchanged:
+      'Organisms, deposits and dissolved amounts stay exactly where they are. Cells under a structure keep their own substrate.',
   },
-  'paint:gel': {
-    name: 'Gel',
-    purpose: 'Paint cells as soft gel where things spread slowly.',
-    habitats: OPEN_CELLS,
-    dose: 'Replaces the substrate of each covered cell. Adds nothing.',
-    changes:
-      'The substrate becomes gel: dissolved things spread a quarter as fast as in water (0.025 per tick instead of 0.10). Gel is an attachment surface.',
-    unchanged: SAME_PLACE,
-    watch: 'Food released on gel staying close. Organisms that cannot live in gel lose suitability there.',
-  },
-  'paint:sediment': {
-    name: 'Sediment',
-    purpose: 'Paint cells as muddy sediment.',
-    habitats: OPEN_CELLS,
-    dose: 'Replaces the substrate of each covered cell. Adds nothing.',
-    changes:
-      'The substrate becomes sediment: dissolved things spread a tenth as fast as in water (0.01 per tick) and gas exchange with the air is ten times slower. Sediment is an attachment surface.',
-    unchanged: SAME_PLACE,
-    watch:
-      'Oxygen refilling slowly in sediment. Organisms that cannot live in sediment lose suitability there.',
-  },
-  'shade:paint': {
-    name: 'Shade',
-    purpose: 'Dim the light in the cells you paint.',
-    habitats: 'Any cell inside the rim.',
-    dose: 'Light × 0.1 on each covered cell. Painting again does not darken it further.',
-    changes: 'Only the light reaching the covered cells.',
+  shade: {
+    habitats: ANY_CELL,
+    dose: (factor: number) =>
+      `Light × ${factor} on each covered cell. Painting again does not darken it further.`,
     unchanged: 'No substance is added or moved; nothing else in the cells changes.',
-    watch: 'Organisms that make food from light growing more slowly in the shade.',
   },
-  'shade:erase': {
-    name: 'Remove shade',
-    purpose: 'Give shaded cells their full light back.',
-    habitats: 'Any cell inside the rim.',
-    dose: 'Sets the shade factor of each covered cell back to 1.0.',
-    changes: 'Only the light reaching the covered cells, back to the habitat’s own level.',
-    unchanged: 'No substance is added or moved; unshaded cells stay as they are.',
-    watch: 'Light-feeding organisms making food there again.',
+  place: {
+    habitats: EMPTY_CELLS,
+    wallHabitats: `${EMPTY_CELLS} A wall never crosses the rim.`,
+    dose: 'Fills each covered empty cell.',
+    sealedUnchanged:
+      'The total of every material: anything dissolved or lying in a covered cell is moved, whole, into the nearest open cells on the same side. Organisms, other structures and the substrate underneath (erasing brings it back).',
+    beadUnchanged:
+      'Nothing is moved: what the cell held stays and keeps spreading. Organisms, other structures and the substrate underneath.',
   },
+} as const;
+
+/** The shade paint's erase mode (a mode of the tool, not a content item). */
+export const SHADE_ERASE: ItemCopy = {
+  name: 'Remove shade',
+  purpose: 'Give shaded cells their full light back.',
+  habitats: ANY_CELL,
+  dose: 'Sets the shade factor of each covered cell back to 1.0.',
+  changes: 'Only the light reaching the covered cells, back to the habitat’s own level.',
+  unchanged: 'No substance is added or moved; unshaded cells stay as they are.',
+  watch: 'Light-feeding organisms making food there again.',
 };
 
-export const STRUCTURE_TOOLS: Readonly<Record<StructureToolId, ItemCopy>> = {
-  'place:stone': {
-    name: 'Stone',
-    purpose: 'Place a solid stone.',
-    habitats: EMPTY_CELLS,
-    dose: 'Fills each covered empty cell.',
-    changes: `Covered cells become stone: nothing moves through them, dissolved or alive. Open cells beside a stone become a “stone edge” attachment surface. ${MOVED_ASIDE}`,
-    unchanged:
-      'Organisms, other structures, the substrate underneath (erasing the stone brings it back) and the total of every material.',
-    watch: 'Swimmers going around it, and food spreading around it.',
-  },
-  'place:wall': {
-    name: 'Wall',
-    purpose: 'Place an impermeable wall that blocks everything.',
-    habitats: `${EMPTY_CELLS} A wall never crosses the rim.`,
-    dose: 'Fills each covered empty cell.',
-    changes: `Covered cells become wall: food, gases and organisms cannot cross it. ${MOVED_ASIDE}`,
-    unchanged:
-      'Organisms, other structures, the substrate underneath (erasing the wall brings it back) and the total of every material.',
-    watch:
-      'Two sides of a closed wall becoming separate little worlds. A pocket with no open neighbour cannot be sealed.',
-  },
-  'place:bead': {
-    name: 'Porous bead',
-    purpose: 'Place a porous bead: dissolved things pass, swimmers do not.',
-    habitats: EMPTY_CELLS,
-    dose: 'Fills each covered empty cell.',
-    changes:
-      'Covered cells become porous bead. Dissolved things keep spreading through them; free swimmers cannot enter. Beads are an attachment surface.',
-    unchanged:
-      'Nothing is moved: what the cell held stays and keeps spreading. Organisms and the substrate underneath.',
-    watch: 'Food reaching organisms behind a bead line that swimmers cannot cross.',
-  },
-  erase: {
-    name: 'Erase structure',
-    purpose: 'Remove stones, walls and porous beads.',
-    habitats:
-      'Cells with a stone, wall or porous bead (other cells are left alone; the rim is never erased).',
-    dose: 'Removes the structure from each covered cell.',
-    changes: 'Only the structures: the water, gel or sediment underneath is exactly as it was before.',
-    unchanged: 'Nothing is added. A freed stone or wall cell starts empty and fills by ordinary spreading.',
-    watch: 'Organisms and food moving through the opening.',
-  },
+/** Erasing structures (a tool, not a content item). */
+export const ERASE_STRUCTURE: ItemCopy = {
+  name: 'Erase structure',
+  purpose: 'Remove stones, walls and porous beads.',
+  habitats: 'Cells with a stone, wall or porous bead (other cells are left alone; the rim is never erased).',
+  dose: 'Removes the structure from each covered cell.',
+  changes: 'Only the structures: the water, gel or sediment underneath is exactly as it was before.',
+  unchanged: 'Nothing is added. A freed stone or wall cell starts empty and fills by ordinary spreading.',
+  watch: 'Organisms and food moving through the opening.',
 };
 
 export interface MaterialCopy {
@@ -192,9 +143,11 @@ export const MATERIAL_COPY: Readonly<Record<string, MaterialCopy>> = {
   },
   NUTRIENT: {
     habitats: 'Open water, gel or sediment, and porous beads. It spreads like sugar.',
-    changes: 'Adds free mineral nutrient to each covered open cell, logged as an input.',
-    unchanged: 'It is not food: adding nutrient alone creates no growth.',
-    watch: 'Growth that was limited by minerals resuming nearby.',
+    changes:
+      'Adds free mineral nutrient to each covered open cell, logged as an input. New body needs nutrient as well as food, so where minerals are what limits growth it can let that growth go on.',
+    unchanged:
+      'It is not food: it adds no carbon and no energy, so organisms still need food to grow. Where minerals are not the limit, it changes nothing else.',
+    watch: 'Where the inspector says growth is limited by minerals, whether growth goes on nearby.',
     unit: 'N',
   },
 };
@@ -300,22 +253,26 @@ function movedText(r: CommandResult): string {
   return parts.length > 0 ? ` ${parts.join(' and ')} moved to the nearest open cells.` : '';
 }
 
-/** The announcement after a habitat edit, from the counts the simulation returned. */
-export function habitatEditOutcome(p: CommandPayload, r: CommandResult): string {
+/**
+ * The announcement after a habitat edit, from the counts the simulation returned. `label` is the
+ * item's content name in lower case ("gel", "impermeable wall"); `factor` the dish's shade factor.
+ */
+export function habitatEditOutcome(p: CommandPayload, r: CommandResult, label = '', factor: number | null = null): string {
+  // Refused whole (malformed, or not in this dish's recorded content): say why.
+  if (r.accepted === 0 && r.rejected === 0 && r.note && !r.note.startsWith('nothing')) return `Not changed: ${r.note}.`;
   switch (p.kind) {
     case 'paintSubstrate':
       return r.accepted === 0
         ? `Nothing painted.${skippedText(r)}`
-        : `Painted ${p.substrate} on ${r.accepted} cell${s(r.accepted)}.${skippedText(r)}`;
+        : `Painted ${label || p.substrate} on ${r.accepted} cell${s(r.accepted)}.${skippedText(r)}`;
     case 'paintShade':
       if (r.accepted === 0) return `Nothing shaded.${skippedText(r)}`;
       return p.erase
         ? `Full light back on ${r.accepted} cell${s(r.accepted)}.${skippedText(r)}`
-        : `Shaded ${r.accepted} cell${s(r.accepted)} (light × 0.1).${skippedText(r)}`;
+        : `Shaded ${r.accepted} cell${s(r.accepted)}${factor !== null ? ` (light × ${factor})` : ''}.${skippedText(r)}`;
     case 'placeStructure': {
-      const name = p.structure === 'bead' ? 'porous bead' : p.structure;
       if (r.accepted === 0) return `Nothing placed.${skippedText(r)}`;
-      return `Placed ${name} on ${r.accepted} cell${s(r.accepted)}.${movedText(r)}${skippedText(r)}`;
+      return `Placed ${label || p.structure} on ${r.accepted} cell${s(r.accepted)}.${movedText(r)}${skippedText(r)}`;
     }
     case 'eraseStructure':
       return r.accepted === 0
@@ -340,6 +297,8 @@ export const LAB_TEXT = {
   hideTray: 'Hide',
   use: 'Use on the dish',
   pickItem: 'Pick an item to see what it does before you use it.',
+  noPaint: 'This dish’s recorded content has no habitat paint, so there is none to use here.',
+  noStructures: 'This dish’s recorded content has no stones, walls or beads to place.',
   inspectHint: 'Tap an organism or a cell. Drag to move around.',
   lifeHint: 'Tap the dish to place. The tool stays selected.',
   brushHint: 'Drag on the dish to paint; two fingers pan. One stroke is one change.',

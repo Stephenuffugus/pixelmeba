@@ -147,6 +147,36 @@ describe('founder groups follow lineage (checked against an independent walk of 
     for (const i of living(w)) expect(w.genomes.get(c.genome[i]!).modules.includes('E05')).toBe(obs.groupOfSlot(w, i) === 0);
   });
 
+  it('each founder group’s energy distribution (median, lowest, highest) matches an independent walk of parent links', () => {
+    const w = realizeRecipe(registry(), 'RESERVE_COMPARE_V1');
+    const obs = new ArmObserver(w);
+    const ids = ['E05', 'none'].flatMap((g) => ['descendants', 'groupEnergy', 'groupEnergyMedian', 'groupEnergyMin', 'groupEnergyMax'].map((h) => `${h}.B01.${g}`));
+    // At the start every founder holds 50 E: one value per group.
+    const start = measureArm(w, obs, ids);
+    for (const g of ['E05', 'none']) for (const h of ['groupEnergy', 'groupEnergyMedian', 'groupEnergyMin', 'groupEnergyMax']) expect(start[`${h}.B01.${g}`]).toBe(INITIAL_ENERGY);
+    for (let t = 0; t < 900; t++) stepObserved(w, obs); // 90 s: energies have spread out
+    const m = measureArm(w, obs, ids);
+    const c = w.ents.cols;
+    const energies: Record<'E05' | 'none', number[]> = { E05: [], none: [] };
+    for (const i of living(w)) {
+      let id = c.birthId[i]!;
+      for (let parent = lineageField(w.lineage, 'parent', id)!; parent !== 0; parent = lineageField(w.lineage, 'parent', id)!) id = parent;
+      energies[w.genomes.get(lineageField(w.lineage, 'genome', id)!).modules.includes('E05') ? 'E05' : 'none'].push(c.E[i]!);
+    }
+    for (const g of ['E05', 'none'] as const) {
+      const e = energies[g].sort((x, y) => x - y);
+      expect(e.length, g).toBeGreaterThan(1);
+      const mid = e.length % 2 === 1 ? e[(e.length - 1) / 2]! : (e[e.length / 2 - 1]! + e[e.length / 2]!) / 2;
+      expect(m[`descendants.B01.${g}`]).toBe(e.length);
+      expect(m[`groupEnergyMin.B01.${g}`]).toBe(e[0]);
+      expect(m[`groupEnergyMax.B01.${g}`]).toBe(e[e.length - 1]);
+      expect(m[`groupEnergyMedian.B01.${g}`]).toBe(mid);
+      expect(m[`groupEnergyMin.B01.${g}`]!).toBeLessThan(m[`groupEnergyMax.B01.${g}`]!);
+      expect(m[`groupEnergy.B01.${g}`]).toBeGreaterThanOrEqual(m[`groupEnergyMin.B01.${g}`]!);
+      expect(m[`groupEnergy.B01.${g}`]).toBeLessThanOrEqual(m[`groupEnergyMax.B01.${g}`]!);
+    }
+  });
+
   it('reserveHeld and reservePeak read energy above the normal cap (labelled test state: one carrier set to 130 E)', () => {
     const w = realizeRecipe(registry(), 'RESERVE_COMPARE_V1');
     const carrier = living(w).find((i) => w.genomes.get(w.ents.cols.genome[i]!).modules.includes('E05'))!;
@@ -199,6 +229,39 @@ describe('Experiment C — Why variation can matter (RESERVE_COMPARE_V1 r1, seed
     expect(A['field.sugar']).toBeCloseTo(56.5 + A['inputCarbon']! - A['consumed.sugar']!, 9);
     expect(B['field.sugar']).toBeCloseTo(56.5 - B['consumed.sugar']!, 9);
     expect(A['intake.B01']).toBeGreaterThan(B['intake.B01']!);
+  });
+
+  it('records energy distributions per founder group (CT §9.2) in the measurements and beside the timeline', () => {
+    for (const arm of [r.A, r.B!]) {
+      // The group timeline is sampled at exactly the timeline's seconds.
+      expect(arm.groupTimeline.map((s) => s.second)).toEqual(arm.timeline.map((s) => s.second));
+      const first = arm.groupTimeline[0]!;
+      expect(first.groups).toEqual([
+        { group: 'B01.E05', alive: 12, meanE: INITIAL_ENERGY, medianE: INITIAL_ENERGY, minE: INITIAL_ENERGY, maxE: INITIAL_ENERGY },
+        { group: 'B01.none', alive: 12, meanE: INITIAL_ENERGY, medianE: INITIAL_ENERGY, minE: INITIAL_ENERGY, maxE: INITIAL_ENERGY },
+      ]);
+      let spread = false;
+      for (const s of arm.groupTimeline)
+        for (const g of s.groups) {
+          if (g.alive === 0) {
+            // A group with no living member has no distribution: nothing is shown as a real zero.
+            expect([g.meanE, g.medianE, g.minE, g.maxE], `${s.second} s ${g.group}`).toEqual([null, null, null, null]);
+            continue;
+          }
+          expect(g.minE!).toBeLessThanOrEqual(g.medianE!);
+          expect(g.medianE!).toBeLessThanOrEqual(g.maxE!);
+          expect(g.meanE!).toBeGreaterThanOrEqual(g.minE! - 1e-9);
+          expect(g.meanE!).toBeLessThanOrEqual(g.maxE! + 1e-9);
+          if (g.maxE! > g.minE!) spread = true;
+        }
+      expect(spread).toBe(true);
+      // The card reports the distribution at the end; both groups are empty then (see below), recorded as 0 beside a count of 0.
+      for (const g of ['E05', 'none']) {
+        expect(arm.reported[`descendants.B01.${g}`]).toBe(0);
+        for (const h of ['groupEnergyMedian', 'groupEnergyMin', 'groupEnergyMax']) expect(arm.reported[`${h}.B01.${g}`]).toBe(0);
+      }
+      expect(arm.groupTimeline.at(-1)!.groups.every((g) => g.alive === 0 && g.medianE === null)).toBe(true);
+    }
   });
 
   it('records the measured limiting factor: energy never exceeds the normal cap, food access limits intake, both groups die out', () => {

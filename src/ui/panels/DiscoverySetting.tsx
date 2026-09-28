@@ -1,7 +1,7 @@
 /**
  * "Pause when a new branch is named" (UX §2 Settings "pause on discoveries"; P2.3). A device
  * preference, off unless chosen; it only pauses the dish when a discovery card opens and never
- * changes the simulation. Shown in the family tree; the Settings page can place the same control.
+ * changes the simulation. Shown in Settings (UX §2) and in the family tree.
  */
 import { settings, updateSettings } from '../state';
 import { LINEAGE_TEXT as T } from '../strings/lineage';

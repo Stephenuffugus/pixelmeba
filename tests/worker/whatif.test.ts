@@ -21,7 +21,8 @@ import { realizeVariant, variantRecordOf, type VariantRecord } from '../../src/s
 import type { World } from '../../src/sim/world';
 import { GRID_W } from '../../src/sim/constants';
 import { MemoryBackend, SaveStore } from '../../src/persistence/store';
-import { loadSaveFile } from '../../src/persistence/saveFile';
+import { buildSaveFile, loadSaveFile, saveMetaVariant } from '../../src/persistence/saveFile';
+import { realizeRecipe } from '../../src/sim/recipes';
 import { DishHost } from '../../src/worker/host';
 import type {
   DishInfo,
@@ -492,5 +493,202 @@ describe('Provenance of a variant dish (D09 §4 "Identity")', () => {
     const again = await h.started('imp2', 'imp', { kind: 'again' });
     expect(h.hash('imp2')).toBe(rec.initialStateHash);
     expect(again.info.variant?.initialStateHash).toBe(rec.initialStateHash);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Wave B fix (whatif-verify.md; D-0026)
+
+/** A save file of `w` exactly as an older build wrote it: no recorded overrides, no meta.variant. */
+async function oldSaveText(w: World): Promise<string> {
+  delete (w.content.provenance as { overrides?: unknown }).overrides;
+  return (
+    await buildSaveFile(w, {
+      name: 'Old dish',
+      savedAt: '2026-09-01T00:00:00.000Z',
+      recipeId: 'FIRST_DISH_V1',
+    })
+  ).text;
+}
+
+describe('What if? is offered only for the authored recipe or a variant dish (D09 §4; item 1)', () => {
+  it('a custom New Dish (own seed, Accelerated/Varied, Empty) gets no ideas; its overrides are recorded', async () => {
+    const h = harness();
+    // The verifier's repro: every override at once.
+    const custom = await h.create('c', {
+      kind: 'recipe',
+      recipeId: 'FIRST_DISH_V1',
+      seed: 5,
+      overrides: { mutationPreset: 'accelerated', founderMode: 'varied', empty: true },
+    });
+    expect(custom.whatIfSourceId).toBeNull();
+    expect(h.world('c').content.provenance).toMatchObject({
+      recipeId: 'FIRST_DISH_V1',
+      recipeRevision: 1,
+      createdFrom: 'recipe',
+      overrides: { seed: 5, mutationPreset: 'accelerated', founderMode: 'varied', empty: true },
+    });
+    const r = await h.ask({ type: 'whatIf', sourceId: null, aboutDishId: 'c' });
+    expect(r.type).toBe('whatIfRefused');
+    // Each single override is already a custom dish.
+    const one = [
+      { seed: 5, overrides: {} },
+      { seed: 104729, overrides: { mutationPreset: 'accelerated' } },
+      { seed: 104729, overrides: { founderMode: 'varied' } },
+      { seed: 104729, overrides: { empty: true } },
+    ] as const;
+    for (const [k, o] of one.entries()) {
+      const info = await h.create(`c${k}`, {
+        kind: 'recipe',
+        recipeId: 'FIRST_DISH_V1',
+        seed: o.seed,
+        overrides: o.overrides,
+      });
+      expect(info.whatIfSourceId, JSON.stringify(o)).toBeNull();
+    }
+    // It stays custom through its own save file.
+    const text = ((await h.ask({ type: 'exportDish', dishId: 'c', strip: false })) as Of<'exported'>).text;
+    const back = (await h.ask({ type: 'importDish', text, newDishId: 'c-back' })) as Of<'loaded'>;
+    expect(back.info.whatIfSourceId).toBeNull();
+  });
+
+  it('the authored recipe itself (Play → Start, or New Dish with exactly its seed and settings) gets the ideas', async () => {
+    const h = harness();
+    expect((await h.create('g')).whatIfSourceId).toBe('FIRST_DISH_V1');
+    expect(h.world('g').content.provenance).toMatchObject({ createdFrom: 'recipe', overrides: {} });
+    const same = await h.create('n', {
+      kind: 'recipe',
+      recipeId: 'FIRST_DISH_V1',
+      seed: 104729,
+      overrides: { mutationPreset: 'standard', founderMode: 'identical', empty: false },
+    });
+    expect(same.whatIfSourceId).toBe('FIRST_DISH_V1');
+    expect(h.hash('n')).toBe(h.hash('g')); // it IS the authored start
+    expect((await h.answer(null, 'n')).choices.map((c) => c.preview.id)).toEqual(['R-G1', 'R-G2', 'R-G3']);
+  });
+
+  it('an older save without recorded overrides counts only when its seed and settings match the recipe exactly', async () => {
+    const h = harness();
+    const authored = realizeRecipe(REG, 'FIRST_DISH_V1', { worldId: 'old-a' });
+    const otherSeed = realizeRecipe(REG, 'FIRST_DISH_V1', { worldId: 'old-b', seed: 5 });
+    const accelerated = realizeRecipe(REG, 'FIRST_DISH_V1', {
+      worldId: 'old-c',
+      transform: (r) => ({ ...r, mutationPreset: 'accelerated' }),
+    });
+    const cases: [World, string | null][] = [
+      [authored, 'FIRST_DISH_V1'],
+      [otherSeed, null],
+      [accelerated, null],
+    ];
+    for (const [k, [w, expected]] of cases.entries()) {
+      const text = await oldSaveText(w);
+      expect(JSON.parse(text).state.content.provenance.overrides).toBeUndefined();
+      const loaded = await h.ask({ type: 'importDish', text, newDishId: `old${k}` });
+      expect(loaded.type).toBe('loaded');
+      expect((loaded as Of<'loaded'>).info.whatIfSourceId).toBe(expected);
+    }
+  });
+});
+
+describe('"Unchanged, rebuilds exactly" only when this build rebuilds it exactly (item 2)', () => {
+  async function exportedAtStart(): Promise<{ text: string; start: string }> {
+    const made = harness();
+    await made.started('v', null, { kind: 'variant', variantId: 'R-G3' });
+    const text = ((await made.ask({ type: 'exportDish', dishId: 'v', strip: false })) as Of<'exported'>).text;
+    return { text, start: made.hash('v') };
+  }
+
+  it('a tick-0 R-G3 dish imported where R-G3 is revised is kept through the save flow, never called unchanged', async () => {
+    const { text, start } = await exportedAtStart();
+    const revised: ContentRegistry = {
+      ...REG,
+      variants: { ...REG.variants, 'R-G3': { ...REG.variants['R-G3']!, revision: 2 } },
+    };
+    const h = harness(revised);
+    await h.ask({ type: 'importDish', text, newDishId: 'old' });
+    expect(h.world('old').tick).toBe(0);
+    expect(h.hash('old')).toBe(start);
+    const a = await h.answer(null, 'old');
+    expect(a.current?.atStart).toBe(false);
+    expect(a.plan).toEqual({ kind: 'slot', slotId: 'slot1', own: false, name: 'Dinner farther away' });
+    const s = await h.started('n', 'old', { kind: 'variant', variantId: 'R-G1' });
+    expect(s.kept).toMatchObject({ kind: 'slot', autosaved: true });
+    expect(s.kept.slot?.slotId).toBe('slot1');
+    expect(await h.slotHash('slot1')).toBe(start);
+    expect(await h.slotHash('autosave')).toBe(start);
+  });
+
+  it('after a content update elsewhere, Again still starts (D-0021) but the dish is saved, not skipped', async () => {
+    const { text, start } = await exportedAtStart();
+    const updated: ContentRegistry = {
+      ...REG,
+      manifest: { ...REG.manifest, contentHash: `${REG.manifest.contentHash}-next` },
+    };
+    const h = harness(updated);
+    await h.ask({ type: 'importDish', text, newDishId: 'old' });
+    expect((await h.answer(null, 'old')).plan.kind).toBe('slot');
+    const again = await h.started('n', 'old', { kind: 'again' });
+    expect(again.kept.kind).toBe('slot');
+    expect(await h.slotHash(again.kept.slot!.slotId)).toBe(start);
+  });
+
+  it('on this build, an untouched variant dish is still unchanged (nothing written)', async () => {
+    const h = harness();
+    await h.started('v', null, { kind: 'variant', variantId: 'R-G2' });
+    expect((await h.answer(null, 'v')).plan.kind).toBe('unchanged');
+    expect((await h.started('w', 'v', { kind: 'another' })).kept.kind).toBe('unchanged');
+    expect(await h.store.list()).toEqual([]);
+  });
+});
+
+describe('The choice Details describe the world-to-be like provenance does (UX §3.3; item 4)', () => {
+  it('the answer carries the registry label a dish of this build shows', async () => {
+    const h = harness();
+    const info = await h.create('g');
+    const a = (await h.answer('FIRST_DISH_V1', null)) as { registryLabel?: string };
+    expect(a.registryLabel).toBe(info.manifestLabel);
+    const fromDish = (await h.answer(null, 'g')) as { registryLabel?: string };
+    expect(fromDish.registryLabel).toBe(info.manifestLabel);
+  });
+});
+
+describe('A variant dish names itself in the save file meta (item 7)', () => {
+  it('slot saves and exports carry meta.variant; other dishes do not; files without it still load', async () => {
+    const h = harness();
+    const s = await h.started('v', null, { kind: 'variant', variantId: 'R-G3' });
+    h.steps('v', 3);
+    const expected = {
+      variantId: 'R-G3',
+      variantRevision: 1,
+      title: 'Dinner farther away',
+      sourceId: 'FIRST_DISH_V1',
+      sourceRevision: 1,
+      seed: 104729,
+    };
+    for (const strip of [false, true]) {
+      const text = ((await h.ask({ type: 'exportDish', dishId: 'v', strip })) as Of<'exported'>).text;
+      expect(JSON.parse(text).meta.variant).toEqual(expected);
+      expect(saveMetaVariant(JSON.parse(text).meta)).toEqual(expected);
+    }
+    await h.ask({ type: 'saveSlot', dishId: 'v', slotId: 'slot2', name: 'Mine' });
+    const slotText = (await h.store.load('slot2', () => Promise.resolve(true)))!.text;
+    expect(JSON.parse(slotText).meta.variant).toEqual(expected);
+    // A dish not made from an idea has none.
+    await h.create('g');
+    const plain = ((await h.ask({ type: 'exportDish', dishId: 'g', strip: false })) as Of<'exported'>).text;
+    expect(JSON.parse(plain).meta.variant).toBeUndefined();
+    // A file without it (an older build's) loads, and the world's own record still describes it.
+    const file = JSON.parse(slotText) as { meta: Record<string, unknown> };
+    delete file.meta.variant;
+    const loaded = (await h.ask({
+      type: 'importDish',
+      text: JSON.stringify(file),
+      newDishId: 'old',
+    })) as Of<'loaded'>;
+    expect(loaded.type).toBe('loaded');
+    expect(loaded.info.variant).toEqual(s.info.variant);
+    // Meta is untrusted text: a malformed entry reads as absent.
+    expect(saveMetaVariant({ variant: { variantId: 7 } })).toBeNull();
+    expect(saveMetaVariant(null)).toBeNull();
   });
 });

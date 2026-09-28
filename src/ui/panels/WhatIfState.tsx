@@ -29,8 +29,14 @@ export type FullStep =
       readonly slotId: string | null;
     };
 
+/**
+ * The worker's answer. It also carries `registryLabel` (UX §3.3 label of the world a choice builds),
+ * an additive field the host sends ahead of its declaration in protocol.ts.
+ */
+export type WhatIfAnswerView = WhatIfAnswer & { readonly registryLabel?: string };
+
 export const whatIfOpen = signal<WhatIfContext | null>(null);
-export const whatIfAnswer = signal<WhatIfAnswer | null>(null);
+export const whatIfAnswer = signal<WhatIfAnswerView | null>(null);
 export const whatIfLoadError = signal<string | null>(null);
 export const whatIfSelected = signal<string | null>(null);
 /** A readable refusal from the worker (e.g. Again on a revised idea); nothing was changed. */
@@ -41,9 +47,25 @@ export const whatIfFull = signal<FullStep | null>(null);
 /** The dish the sheet was opened over, and the run speed to restore if nothing is started. */
 let openedOver: { dishId: string; speed: Speed } | null = null;
 let loadSeq = 0;
+/** The control focused when the sheet was opened (the Play link, or the More sheet's item). */
+let opener: HTMLElement | null = null;
+
+/**
+ * Where focus goes when the sheet closes: the control that opened it; opened from the dish's More
+ * sheet (whose item is gone by then), the dish's More button, which opened that sheet.
+ */
+export function whatIfReturnTarget(context: WhatIfContext): HTMLElement | null {
+  if (opener?.isConnected) return opener;
+  if (context === 'dish') return document.querySelector<HTMLElement>('[data-testid="more"]');
+  return null;
+}
 
 export function openWhatIf(context: WhatIfContext): void {
   const info = dishInfo.value;
+  opener =
+    document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+      ? document.activeElement
+      : null;
   batch(() => {
     whatIfOpen.value = context;
     whatIfAnswer.value = null;

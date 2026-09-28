@@ -9,7 +9,7 @@ import { IconBack } from '../icons';
 import { journal, journalUnseen, type JournalEntry } from '../journal';
 import { CONCLUSIONS } from '../panels/CompareText';
 import { experimentCards, experimentCardsError, loadExperimentCards, route } from '../state';
-import { durationText, recordedText } from '../strings/experiments';
+import { durationText, journalMeasureCells, recordedText } from '../strings/experiments';
 import { clock } from '../panels/CompareText';
 
 type Tab = 'journal' | 'experiments';
@@ -219,7 +219,7 @@ function JournalStamp({ entry: e }: { entry: JournalEntry }) {
               </tr>
             </thead>
             <tbody>
-              {e.measures.map((m) => (
+              {journalMeasureCells(e.measures).map((m) => (
                 <tr key={m.id}>
                   <th scope="row">{m.label}</th>
                   <td>{m.a}</td>

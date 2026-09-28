@@ -20,7 +20,7 @@ import {
 } from '../state';
 import { reasonText } from '../strings/reasons';
 import { dietAnswer, familySummary, relationLabel, stopAnswer } from '../strings/shortcuts';
-import { dormancyLines, energyCapText, LIFE_ACTIVE, lifeStateLabel, moduleText, upkeepText } from '../strings/modules';
+import { dormancyLines, energyCapText, LIFE_ACTIVE, lifeStateLabel, moduleText, originChip, upkeepText } from '../strings/modules';
 import { openLineage } from './LineageState';
 
 const LOCUS_NAMES = [
@@ -210,7 +210,7 @@ function EntityView({ e }: { e: EntityInspect }) {
             <span class="chip">{actionOf(e)}</span>
             <span class="chip">age {Math.floor(e.age)} s</span>
             <span class="chip">generation {e.generation}</span>
-            {e.origin === 1 ? <span class="chip">added by you or the recipe</span> : null}
+            {originChip(e.origin) ? <span class="chip">{originChip(e.origin)}</span> : null}
             {e.dormancy && e.dormancy.state === LIFE_ACTIVE && e.dormancy.lockoutSeconds > 0 ? (
               <span class="chip">just woke up</span>
             ) : null}

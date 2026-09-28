@@ -394,7 +394,9 @@ stable‑food schedule is five recipe scheduled deposits (0.50 per cell at (64.5
   and differ only in the pending queue.
 - **Measurements** (CT §9.2 "energy distributions, food consumed, births, deaths by cause, live
   descendants per founder group, extinction times"): `founders`, `descendants`, `groupEnergy`,
-  `groupExtinctAt` for `B01.E05` and `B01.none`; `reservePeak.B01`, `meanEnergy.B01`, `intake.B01`,
+  `groupEnergyMedian`, `groupEnergyMin`, `groupEnergyMax` (the energy distribution of each founder
+  group; added in the fix wave, see §6), `groupExtinctAt` for `B01.E05` and `B01.none`;
+  `reservePeak.B01`, `meanEnergy.B01`, `intake.B01`,
   `consumed.sugar`, `field.sugar`, `inputCarbon`, `births.B01`, `deaths.B01`,
   `deaths.B01.DEATH_STARVATION`, `alive.B01`, `extinctAt.B01`.
 - **New measurement families** (grammar in `pairedRun.ts`). A *founder group* is the organisms alive
@@ -403,8 +405,9 @@ stable‑food schedule is five recipe scheduled deposits (0.50 per cell at (64.5
   `descendants.SP.GROUP` counts living members (a founder that has not divided counts as its own
   line). A fixture checks it against an independent walk of lineage parent links to each living
   organism's generation‑0 ancestor after 90 s (with births). `reserveHeld.SP` is the energy living SP
-  hold above the normal 100 E cap (only a reserve chamber allows any); `reservePeak.SP` its largest
-  value at the end of any tick (checked with a labelled test state: one carrier set to 130 E).
+  hold above the normal 100 E cap, summed over all living members of SP (a population total, not one
+  organism's amount; only a reserve chamber allows any); `reservePeak.SP` the largest such total at
+  the end of any tick (checked with a labelled test state: one carrier set to 130 E).
 - **Gate** (a proposed decision): both copies ran 600 s **and** in copy B a reserve chamber held
   energy above the normal cap (`B reservePeak.B01 > 0`). D06 §11 states the card's question as
   "whether storing surplus changes outcomes when food stops"; a chamber that never holds surplus
@@ -420,7 +423,7 @@ stable‑food schedule is five recipe scheduled deposits (0.50 per cell at (64.5
 | Sugar eaten (`consumed.sugar` = `intake.B01`) | 320.01 C | 52.04 C |
 | Sugar left | 18.99 C | 4.46 C |
 | Births / deaths (all starvation) | 52 / 76 | 10 / 34 |
-| Most energy held above the normal cap | 0 | 0 |
+| Most energy held above the normal cap at one moment, all Sprinters together | 0 | 0 |
 | Founder family with a Reserve chamber: died out at | 473 s | 216 s |
 | Founder family with no extra ability: died out at | 488 s | 230 s |
 | Living descendants at 600 s (E05 / none) | 0 / 0 | 0 / 0 |
@@ -459,7 +462,7 @@ the five stable meals ("the same meal again"). All runs are 600 s, and every led
 
 Seed 104729, one candidate at a time:
 
-| Candidate (V2) | Gate | Most energy held above the cap (A = B, identical before 60 s) | Families died out in A (E05 / none) | Families died out in B (E05 / none) | Births A / B | Food eaten A / B |
+| Candidate (V2) | Gate | Most energy held above the cap, all Sprinters together (A = B, identical before 60 s) | Families died out in A (E05 / none) | Families died out in B (E05 / none) | Births A / B | Food eaten A / B |
 |---|---|---|---|---|---|---|
 | V1 as is (dose 0.50, r 6) | not reached | 0 | 473 / 488 s | 216 / 230 s | 52 / 10 | 320.0 / 52.0 C |
 | meal r 3 (same dose) | not reached | 0 | 457 / 501 s | 141 / 150 s | 3 / 0 | 65.2 / 13.7 C |
@@ -469,7 +472,8 @@ Seed 104729, one candidate at a time:
 
 Dose 2.0 on the six CT §11 development seeds:
 
-- **The gate is reached on 6 / 6 seeds**; the most energy held above the cap is 26.6–29.6 E.
+- **The gate is reached on 6 / 6 seeds**; the most energy held above the cap, summed over all
+  living Sprinters at one moment, is 26.6–29.6 E.
 - Both families still die out in both copies on every seed (B at 207–233 s, A at 445–479 s).
 - In copy B the reserve‑chamber family died out first on 5 / 6 seeds (8–19 s earlier) and at the same
   second on 1 (seed 196613).
@@ -485,7 +489,7 @@ Dose 2.0 on the six CT §11 development seeds:
 - That is an honest, explainable outcome, which D06 allows ("without promising the reserve carrier
   will win").
 - A longer famine alone (duration) cannot help while nothing is stored. Dose 1.0 reaches the gate
-  with only 1.1 E stored, too close to the threshold to rely on.
+  with only 1.1 E stored in total, too close to the threshold to rely on.
 
 ## 3. Cards in the app
 
@@ -504,12 +508,14 @@ Dose 2.0 on the six CT §11 development seeds:
 - The card's change is B's only change: other commands on B and Clear change are refused. The run's
   horizon is the card's stopping point whatever the UI asks.
 - After every pair (or single‑arm tick) the same `GateWatch` as the headless runner evaluates the gate
-  at whole seconds; on reaching it the worker posts `experimentStamp` (the stamp plus the card's
-  measurements at that moment) and the run goes on. `compareState.experiment` carries the gate
-  clauses as measured so far, the stamp and the card's measurements at the end.
+  at whole seconds; on reaching it the worker records the stamp (the stamp plus the card's
+  measurements at that moment) and posts `experimentStamp` once the card's player steps are also
+  taken (fix wave, §6); the run goes on. `compareState.experiment` carries the gate clauses as
+  measured so far, the steps, the stamp once posted and the card's measurements at the end.
 - A player command on a single‑arm card's dish (a lineage note excepted) ends that card's
-  observation (`experimentEnded`): the measurements would no longer describe the card. The dish goes
-  on; nothing is stamped.
+  observation (`experimentEnded`): the measurements would no longer describe the card. A command
+  that placed nothing (accepted 0) changed nothing and does not end it (fix wave). The dish goes on;
+  nothing is stamped.
 
 `tests/experiments/app-flow.test.ts` drives the real host: Experiment A in the app gives **the same
 stamp, gate and card measurements (`toEqual`) and the same end hashes as `runExperiment`**; EXP_B's
@@ -603,3 +609,66 @@ Commands (this session):
   not yet checked in the app. The stamp records the measured gate only.
 - The inspector does not yet say "present at creation" for Experiment C's seeded founders (lineage
   origin 2). The lineage strings already do.
+
+## 6. Wave B fix wave (adversarial verification: `docs/reports/reviews/g2-wave-b/experiments-verify.md`)
+
+- **Completion copy per card kind.** The card detail says what completing it does
+  (`completionText`): one dish — "The world keeps running."; a paired card — both copies run to their
+  stopping point and then stop; they are copies, so the player's dish is unchanged and closing the run
+  discards them. The steps the stamp also needs are listed on the card.
+- **Energy distributions (CT §9.2).** New founder‑group measurements `groupEnergyMedian`,
+  `groupEnergyMin` and `groupEnergyMax` (`.SP.GROUP`), reported by EXP_C for both groups. The headless
+  result also carries `groupTimeline` beside `timeline`, sampled at the same seconds: per group, the
+  living count and the mean, median, lowest and highest energy (`null` when none is alive). The wave
+  A timeline samples are unchanged (their hashes are pinned by the golden file), and every wave A
+  number is identical (additions only). Checked against an independent walk of lineage parent links
+  after 90 s, and on the 600 s run (min ≤ median ≤ max, mean inside, spread present, empty at the end).
+- **Empty groups.** An energy over nobody (a group's mean, median, lowest or highest; a species'
+  `meanEnergy`) is still recorded as 0 (wave A's convention, pinned by the golden file) but is shown
+  as "none alive", and its B − A as "—". Content validation now requires a card that reports such an
+  energy to also report its living count (`alive.SP` / `descendants.SP.GROUP`), so the UI can always
+  tell. The Journal re‑reads stamps from their raw numbers, so stamps recorded before the rule read
+  correctly too.
+- **Population totals.** `reserveHeld`/`reservePeak` are labelled "…, all Sprinters together": they
+  are sums over living members, not one organism's amount (this report's numbers above say so too).
+- **Refused commands** (accepted 0) no longer end a single‑arm card's observation.
+- **Player steps (CT §10.1, `completion.playerSteps`).** A stamp needs the measured gate **and** every
+  listed step. The worker notes steps from UI events only (never simulation state; never saved):
+  "inspector identifies food use" = the inspector's organism is of the species the gate follows and
+  took in food in the last second; "resource history opened" = the dish's History was requested;
+  "view the comparison" = the paired run's results are on its screen; "read the prey history" = the
+  results' "Population history, A and B" was opened (it reads both copies' own history). The stamp
+  keeps the values of the moment the measured gate held; steps may come before or after it. A step on
+  a paired card needs a paired card and vice versa (content validation). The run screen marks each
+  step ✓ / ○.
+- **Present at creation.** The inspector's chip for a seeded founder (lineage origin 2, e.g. Experiment
+  C's reserve‑chamber founders) reads "present at creation" (UX §3.3).
+- **A/B toggle** (`.compare-toggle`, also wave A's Compare screen): 48 × 48 px on phones.
+- **Recipe text.** RESERVE_COMPARE_V1 now says "24 Sprinters with the same neutral traits … only the
+  reserve chamber differs" (content revision unchanged: wording only; contentHash rewritten).
+
+### Journal storage
+
+The journal is a device store today: `localStorage` key `pixelmeba.journal` (`src/ui/journal.ts`), a
+JSON list of stamp entries, newest first, at most 200, readable after a reload and session‑only when
+storage is unavailable. Each entry keeps the card, the moment (dish second and wall‑clock time), the
+recipe and content versions, the gate values, the card's measurements (formatted when recorded plus the
+raw numbers), the prediction and the conclusion. It is **not** part of any world save: not in the
+checksummed save file, not in a `.pixelmeba` export, not restored with a slot, and nothing in it is
+read by a world. SPEC §14.1 lists "journal" as save content; D‑0027 records the plan (from P2.8,
+entries that belong to a dish are also written with that dish's save, outside the state hash, and
+exported with it; the device list stays the Notebook's index). The lead records that decision; this
+wave does not move the store because P2.8 extends it next.
+
+### Not done in the fix wave
+
+- A dish made from a card and opened again from a save or a file does not yet say that the card's
+  observation ended when it was closed: the notice needs a new `experimentEnded` reason in
+  `src/worker/protocol.ts` and its toast in `src/ui/state.ts`, outside this wave's files. The worker
+  and string halves are in place (`experimentOf`, `experimentEndedText`); a ready patch
+  (`tmp/p25-item7-reopen-notice.patch`) was checked in a scratch copy (typecheck clean, host test
+  passes).
+- A single‑arm card whose measured gate held but whose step is still missing says so only on the card
+  detail (the dish view has no experiment panel yet).
+- The History sheet charts sugar, nutrient and oxygen totals but not debris, although EXP_103, its
+  recipe text and the Debris material say to open it "to see the debris total".

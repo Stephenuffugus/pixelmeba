@@ -37,8 +37,10 @@ import {
   whatIfLoadError,
   whatIfNotice,
   whatIfOpen,
+  whatIfReturnTarget,
   whatIfSelected,
   type FullStep,
+  type WhatIfAnswerView,
   type WhatIfContext,
 } from './WhatIfState';
 
@@ -49,14 +51,52 @@ export function WhatIfHost(props: { readonly context: WhatIfContext }) {
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
 
+/**
+ * Make everything outside `root` inert (no focus, no pointer, hidden from assistive technology): each
+ * sibling of `root` and of every ancestor up to <body>. Returns the undo (only what this set).
+ */
+function inertOutside(root: HTMLElement): () => void {
+  const made: HTMLElement[] = [];
+  for (let el: HTMLElement | null = root; el && el !== document.body; el = el.parentElement) {
+    const parent: HTMLElement | null = el.parentElement;
+    if (!parent) break;
+    for (const sib of Array.from(parent.children)) {
+      if (sib === el || !(sib instanceof HTMLElement) || sib.inert) continue;
+      sib.inert = true;
+      made.push(sib);
+    }
+  }
+  return () => {
+    for (const el of made) el.inert = false;
+  };
+}
+
 function WhatIfModal(props: { readonly context: WhatIfContext }) {
+  const modal = useRef<HTMLDivElement>(null);
   const dialog = useRef<HTMLElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // A blocking modal (D-0026): the dish or shelf behind is inert while the sheet is open.
+    const restore = modal.current ? inertOutside(modal.current) : () => undefined;
     heading.current?.focus();
+    // Keys that arrive outside the sheet (focus left on the page) never reach the dish behind it.
+    const guard = (e: KeyboardEvent) => {
+      const d = dialog.current;
+      if (!d || (e.target instanceof Node && d.contains(e.target))) return; // the sheet's own handler runs
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (!whatIfBusy.value) closeWhatIf();
+      } else if (e.key === 'Tab' || e.key === ' ') {
+        e.preventDefault();
+        heading.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', guard, true);
     return () => {
-      if (opener?.isConnected) opener.focus();
+      window.removeEventListener('keydown', guard, true);
+      restore(); // before returning focus: an inert element cannot take it
+      whatIfReturnTarget(props.context)?.focus();
     };
   }, []);
   const onKeyDown = (e: KeyboardEvent) => {
@@ -80,7 +120,15 @@ function WhatIfModal(props: { readonly context: WhatIfContext }) {
     }
   };
   return (
-    <div class="whatif-modal" data-testid="whatif-modal">
+    <div
+      ref={modal}
+      class="whatif-modal"
+      data-testid="whatif-modal"
+      // A press on the backdrop keeps focus in the sheet (it would otherwise fall to the page).
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) e.preventDefault();
+      }}
+    >
       <section
         ref={dialog}
         class="sheet whatif-sheet"
@@ -190,7 +238,7 @@ function Choices(props: { readonly answer: WhatIfAnswer }) {
   );
 }
 
-function Selected(props: { readonly answer: WhatIfAnswer; readonly choice: WhatIfChoice }) {
+function Selected(props: { readonly answer: WhatIfAnswerView; readonly choice: WhatIfChoice }) {
   const p = props.choice.preview;
   const busy = whatIfBusy.value;
   return (
@@ -198,7 +246,11 @@ function Selected(props: { readonly answer: WhatIfAnswer; readonly choice: WhatI
       <h3 id="whatif-selected-title">{p.title}</h3>
       <p class="whatif-text whatif-question">{p.question}</p>
       <WhatIfPreview choice={props.choice} layout={props.answer.layout} />
-      <Details rows={choiceDetails(p, props.choice)} identity={p.identity} testid="whatif-choice" />
+      <Details
+        rows={choiceDetails(p, props.choice, props.answer.registryLabel ?? null)}
+        identity={p.identity}
+        testid="whatif-choice"
+      />
       <button
         class="btn primary whatif-wide"
         disabled={busy}

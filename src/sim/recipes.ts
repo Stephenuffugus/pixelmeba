@@ -142,6 +142,40 @@ function patchCells(world: World, center: readonly [number, number], radius: num
   return validPatchCells(world.grid, center, radius, substrate);
 }
 
+/**
+ * What a custom New Dish changed from the authored recipe (its own seed, evolution setting, founders,
+ * or an empty start), recorded in the world's provenance so a save says whether it IS the authored
+ * recipe (D09 §4: What if? remixes authored starting recipes, not custom dishes). `{}` = no change.
+ */
+export interface RecipeOverridesRecord {
+  readonly seed?: number;
+  readonly mutationPreset?: RecipeDef['mutationPreset'];
+  readonly founderMode?: RecipeDef['founderMode'];
+  readonly empty?: boolean;
+}
+
+/** Provenance of a world realized from a recipe; `overrides` is absent in saves made before it was recorded. */
+export interface RecipeWorldProvenance extends Readonly<WorldContent['provenance']> {
+  readonly overrides?: RecipeOverridesRecord;
+}
+
+/**
+ * The overrides a recipe world recorded at creation: `{}` for none; undefined when the world did not
+ * record them (an older save); null when they are malformed (provenance also arrives from save files).
+ */
+export function recipeOverridesOf(world: World): RecipeOverridesRecord | null | undefined {
+  const o = (world.content.provenance as RecipeWorldProvenance).overrides;
+  if (o === undefined) return undefined;
+  if (typeof o !== 'object' || o === null || Array.isArray(o)) return null;
+  const r = o as Record<string, unknown>;
+  const ok =
+    (r.seed === undefined || (Number.isInteger(r.seed) && (r.seed as number) >= 0)) &&
+    (r.mutationPreset === undefined || typeof r.mutationPreset === 'string') &&
+    (r.founderMode === undefined || typeof r.founderMode === 'string') &&
+    (r.empty === undefined || typeof r.empty === 'boolean');
+  return ok ? o : null;
+}
+
 export interface RealizeOptions {
   readonly worldId?: string;
   readonly seed?: number;

@@ -14,17 +14,21 @@ import { CELL_COUNT, DT, GRID_H, GRID_W } from './constants';
 import { FLAG, LIFE_ACTIVE } from './entities';
 import { FIELD_DEFS, FIELD_IDS, type FieldId } from './fields';
 import { dormancyStep } from './dormancy';
+import type { MaterialDef } from './content/schema';
 import {
   brushCellOutcome,
-  displacementTargets,
+  isLabRadius,
   LAB_MAX_RADIUS,
-  PAINTED_SHADE,
+  PLACEABLE_STRUCTURES,
+  planSealing,
   sealsCell,
   strokeFootprint,
   STRUCTURE_CODES,
+  STRUCTURE_RECORD_IDS,
   ST_NONE,
   SUBSTRATE_CODES,
   type LabBrushRule,
+  type PaintTarget,
   type PlaceableStructure,
   type SubstrateName,
 } from './grid';
@@ -93,16 +97,20 @@ export function stageStructures(world: World): void {
 // cell once, ascending). No edit creates or destroys material:
 // - paint substrate: replaces water/gel/sediment on open cells; life, deposits and dissolved amounts
 //   stay exactly where they are; cells under a structure keep their substrate (skipped);
-// - paint shade: light × 0.1 on covered cells, or back to 1.0 when erasing; moves nothing;
+// - paint shade: light × the recorded SHADE paint factor (CT §5.1: 0.1) on covered cells, or back to
+//   1.0 when erasing; moves nothing;
 // - place stone/wall/bead: only on empty in-dish cells (no structure, no live organism, never past
 //   the rim). Stone and wall hold no solutes (the invariant applyHabitat establishes), so whatever a
 //   newly sealed cell held is moved, whole and exactly, into the nearest open cells on the same side
-//   (displacementTargets); a sealed region with no open neighbor is refused. Porous beads pass
-//   solutes, so nothing moves;
+//   (planSealing); a sealed region with no open neighbor is refused. Porous beads pass solutes, so
+//   nothing moves;
 // - erase structure: removes stone/wall/bead only; the substrate underneath was never changed, so it
 //   is restored as it was; the freed cell starts empty and fills by ordinary transport.
 // Totals are unchanged by every edit (moves are internal); the amount moved aside is recorded in the
 // command's result, which the saved command log keeps. No randomness is used.
+// Content is data (CLAUDE.md; D-0024): a world paints only with the paint materials its recorded
+// content has (kind 'paint', by target) and places only the structures its recorded manifest enables
+// (enabledStructures, by content ID); an older world without them refuses these edits whole.
 
 export type LabStroke = ReadonlyArray<readonly [number, number]>;
 
@@ -189,13 +197,8 @@ export function occupiedCells(world: World): Uint8Array {
 
 /** A malformed payload (from a damaged file or a bug) is refused whole: reason, or null when valid. */
 export function invalidHabitatEdit(p: HabitatEditPayload): string | null {
-  if (
-    typeof p.radius !== 'number' ||
-    !Number.isFinite(p.radius) ||
-    p.radius <= 0 ||
-    p.radius > LAB_MAX_RADIUS
-  )
-    return 'invalid radius';
+  // CT §5.1: the Lab brush radius is 1, 3 or 6, nothing in between.
+  if (!isLabRadius(p.radius)) return 'invalid radius';
   if (!Array.isArray(p.points) || p.points.length === 0) return 'empty stroke';
   if (p.points.length > LAB_MAX_POINTS) return 'stroke too long';
   for (const pt of p.points as readonly unknown[]) {
@@ -215,12 +218,47 @@ export function invalidHabitatEdit(p: HabitatEditPayload): string | null {
   return null;
 }
 
+/** The world's recorded paint material with this target (CT §5.1), or null when it has none. */
+export function paintMaterial(world: World, target: PaintTarget): MaterialDef | null {
+  return world.content.materials.find((m) => m.kind === 'paint' && m.target === target) ?? null;
+}
+
+/**
+ * The light factor this world's shade paint applies (its recorded dose; CT §5.1: 0.1), or null when
+ * the world has no usable shade paint.
+ */
+export function shadeFactor(world: World): number | null {
+  const mat = paintMaterial(world, 'shade');
+  const f = mat ? mat.doses[mat.defaultDoseIndex] : undefined;
+  return typeof f === 'number' && f > 0 && f <= 1 ? f : null;
+}
+
+/** Whether this world's recorded manifest enables a structure (by its content ID). */
+export function structureEnabled(world: World, s: PlaceableStructure): boolean {
+  const ids = world.content.manifest.enabledStructures;
+  return Array.isArray(ids) && ids.includes(STRUCTURE_RECORD_IDS[s]);
+}
+
+/** Why this world cannot make this edit (its recorded content lacks it), or null when it can. */
+export function unavailableHabitatEdit(world: World, p: HabitatEditPayload): string | null {
+  switch (p.kind) {
+    case 'paintSubstrate':
+      return paintMaterial(world, p.substrate) ? null : `${p.substrate} paint is not in this dish`;
+    case 'paintShade':
+      return shadeFactor(world) !== null ? null : 'shade paint is not in this dish';
+    case 'placeStructure':
+      return structureEnabled(world, p.structure) ? null : `${p.structure} is not in this dish`;
+    case 'eraseStructure':
+      return PLACEABLE_STRUCTURES.some((s) => structureEnabled(world, s)) ? null : 'structures are not in this dish';
+  }
+}
+
 /**
  * Apply one habitat edit (stage 1, as a command). Returns accepted/rejected cell counts; `skipped`
  * says why cells were refused and `moved` how much material a new stone or wall pushed aside.
  */
 export function applyHabitatEdit(world: World, p: HabitatEditPayload): HabitatEditResult {
-  const invalid = invalidHabitatEdit(p);
+  const invalid = invalidHabitatEdit(p) ?? unavailableHabitatEdit(world, p);
   if (invalid) return { accepted: 0, rejected: 0, note: invalid };
   const g = world.grid;
   const rule = habitatEditRule(p.kind);
@@ -245,7 +283,7 @@ export function applyHabitatEdit(world: World, p: HabitatEditPayload): HabitatEd
       break;
     }
     case 'paintShade': {
-      const factor = p.erase ? 1 : PAINTED_SHADE;
+      const factor = p.erase ? 1 : shadeFactor(world)!;
       for (const cell of ok) {
         if (g.shade[cell] !== factor) changed = true;
         g.shade[cell] = factor;
@@ -264,25 +302,19 @@ export function applyHabitatEdit(world: World, p: HabitatEditPayload): HabitatEd
         break;
       }
       // Plan every move before changing anything (a refused region stays exactly as it was).
-      const sealing = new Uint8Array(CELL_COUNT);
-      for (const cell of ok) sealing[cell] = 1;
-      const mark = new Int32Array(CELL_COUNT);
-      const plan: { cell: number; targets: number[] }[] = [];
-      let stamp = 0;
-      for (const cell of ok) {
-        const targets = displacementTargets(g, cell, sealing, mark, ++stamp);
-        if (targets.length === 0) skipped.enclosed++;
-        else plan.push({ cell, targets });
-      }
+      const plan = planSealing(g, ok);
+      skipped.enclosed += plan.enclosed;
       // A region with no open neighbor is refused whole; its cells stay open, and they are never
-      // targets of another region (touching cells belong to the same region).
+      // targets of another region (touching cells belong to the same region). Targets are open cells,
+      // never cells being sealed, so each sealed cell's contents are read before anything reaches it.
       moved = { c: 0, n: 0, m: 0 };
-      for (const { cell, targets } of plan) {
-        moveContents(world, cell, targets, moved);
+      for (let k = 0; k < plan.sealed.length; k++) {
+        const cell = plan.sealed[k]!;
+        moveContents(world, cell, plan.targets, plan.start[cell]!, plan.count[cell]!, moved);
         g.structure[cell] = code;
       }
-      applied = plan.length;
-      changed = plan.length > 0;
+      applied = plan.sealed.length;
+      changed = applied > 0;
       break;
     }
   }
@@ -306,25 +338,26 @@ export function applyHabitatEdit(world: World, p: HabitatEditPayload): HabitatEd
 }
 
 /**
- * Move everything a cell holds (every allocated field, in canonical order) into `targets` in equal
- * shares; the last target takes the exact remainder. Tallies the conserved material moved (carbon,
- * nutrient, mineral) into `moved`.
+ * Move everything a cell holds (every allocated field, in canonical order) into its `k` targets
+ * (`targets[from…from+k)`, ascending) in equal shares; the last target takes the exact remainder.
+ * Tallies the conserved material moved (carbon, nutrient, mineral) into `moved`.
  */
 function moveContents(
   world: World,
   cell: number,
-  targets: readonly number[],
+  targets: Int32Array,
+  from: number,
+  k: number,
   moved: { c: number; n: number; m: number },
 ): void {
-  const k = targets.length;
   for (const id of FIELD_IDS) {
     const arr = world.fields[id];
     if (!arr) continue;
     const v = arr[cell]!;
     if (v === 0) continue;
     const share = v / k;
-    for (let j = 0; j < k - 1; j++) arr[targets[j]!]! += share;
-    arr[targets[k - 1]!]! += v - share * (k - 1);
+    for (let j = 0; j < k - 1; j++) arr[targets[from + j]!]! += share;
+    arr[targets[from + k - 1]!]! += v - share * (k - 1);
     arr[cell] = 0;
     markField(world, id);
     const def = FIELD_DEFS[id];

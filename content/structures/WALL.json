@@ -1,0 +1,13 @@
+{
+  "id": "WALL",
+  "name": "Impermeable wall",
+  "kind": "cell",
+  "guide": {
+    "summary": "A wall that blocks everything.",
+    "biology": "A glass or plastic divider splits one pond into separate pools that no longer share water.",
+    "rules": "A wall cell blocks everything: food, gases and organisms cannot cross it, and it holds nothing. It cannot cross the rim or cover a live organism. Whatever was dissolved or lying in a covered cell is moved, whole, into the nearest open cells on the same side, so no material is lost or made; a pocket with no open neighbour cannot be sealed. Unlike stone, its edges are not an attachment surface. Erasing it brings back the substrate underneath. No additional modeled reaction.",
+    "example": "Close a wall across the dish, then compare the two sides: they become separate little worlds."
+  },
+  "iconId": "structure_wall",
+  "phase": 2
+}

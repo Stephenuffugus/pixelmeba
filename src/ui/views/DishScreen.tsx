@@ -43,6 +43,7 @@ import { HistorySheet } from '../panels/HistorySheet';
 import { FamilyMarkers } from '../panels/FamilyMarkers';
 import { LineageSheet } from '../panels/LineageSheet';
 import { WhatIfHost } from '../panels/WhatIfSheet';
+import { whatIfOpen } from '../panels/WhatIfState';
 import { LineageLegend } from '../panels/LineageLegend';
 import { DiscoveryCard } from '../panels/DiscoveryCard';
 import { placeSpecimenTap } from '../panels/LineageState';
@@ -108,6 +109,7 @@ export function DishScreen() {
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      if (whatIfOpen.value !== null) return; // What if? is a blocking modal (D-0026): no dish key acts behind it
       if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
       if (handleViewKey(e)) return; // I / L / F / Esc per view (UX §4.2; P2.7)
       const r = getRenderer();

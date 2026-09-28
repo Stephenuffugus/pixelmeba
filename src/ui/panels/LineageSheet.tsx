@@ -11,7 +11,7 @@ import type { LineageAnswer, LineageBranchRow, LineageDetail } from '@sim/lineag
 import { SPECIMEN_COUNTS } from '@sim/specimens';
 import { IconBack, IconClose, IconFollow, IconSave } from '../icons';
 import { getRenderer, showOrganism } from '../state';
-import { cellText, costSentence, formatSimTime, LINEAGE_TEXT as T, livingLine, recordLine, stateLabel, traitSentence, variationLine } from '../strings/lineage';
+import { cellText, formatSimTime, LINEAGE_TEXT as T, livingLine, recordLine, ruleLines, stateLabel, traitSentence, variationLine } from '../strings/lineage';
 import { PauseOnDiscoveriesToggle } from './DiscoverySetting';
 import {
   beginSpecimenPlacement,
@@ -172,7 +172,7 @@ function CompareTable({ ans, det }: { ans: LineageAnswer; det: LineageDetail }) 
       <h4 id="compare-title">{T.compareTitle}</h4>
       <div class="lineage-table-wrap" tabIndex={0} role="region" aria-label="Trait comparison table">
         <table>
-          <caption>{det.ancestorLabel} (reference) beside this branch’s founder; “Living now” is the median and range of its living members.</caption>
+          <caption>{det.ancestorLabel} (the reference genome) beside this branch’s founder; “Living now” is the median and range of its living members.</caption>
           <thead>
             <tr>
               <th scope="col">Trait</th>
@@ -230,7 +230,7 @@ function Detail({ ans, det }: { ans: LineageAnswer; det: LineageDetail }) {
   }, [comparing]);
   const following = followedBranch.value === row.id;
   const f = det.family;
-  const cost = costSentence(row);
+  const rules = ruleLines(row.rules);
   return (
     <>
       <button class="btn ghost lineage-back" data-testid="lineage-back" onClick={() => void selectBranch(null)}>
@@ -251,10 +251,19 @@ function Detail({ ans, det }: { ans: LineageAnswer; det: LineageDetail }) {
         <dt>Ancestor</dt>
         <dd>{det.ancestorLabel}</dd>
         <dt>Inherited difference</dt>
-        <dd>
-          {traitSentence(row, ans.loci)}
-          {cost ? ` ${cost}` : ''}
-        </dd>
+        <dd>{traitSentence(row, ans.loci)}</dd>
+        {rules.length > 0 ? (
+          <>
+            <dt>Game rules</dt>
+            <dd>
+              <ul class="lineage-rules" data-testid="lineage-rules" style={{ margin: 0, paddingLeft: '1.1rem' }}>
+                {rules.map((l) => (
+                  <li key={l}>{l}</li>
+                ))}
+              </ul>
+            </dd>
+          </>
+        ) : null}
         <dt>First appeared</dt>
         <dd>
           {formatSimTime(row.candidateTick)} (founder #{row.rootBirthId}

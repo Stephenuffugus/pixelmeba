@@ -82,8 +82,10 @@ export function paintDish(img: ImageData, substrate: Uint8Array, structure: Uint
           rgb = r < 0.03 ? C.waterLight : r > 0.985 ? C.waterDeep : C.water;
         }
         if (st === 3 && (x + y) % 2 === 0) rgb = C.bead;
+        // Painted shade shows wherever it is painted (open cells and porous beads alike; SPEC §10.4:
+        // shade can be painted on any cell inside the dish), so a shaded bead reads as shaded.
         const sh = shade[i]!;
-        if (sh < 1 && st === 0) rgb = [Math.round(rgb[0] * 0.72), Math.round(rgb[1] * 0.74), Math.round(rgb[2] * 0.78)];
+        if (sh < 1) rgb = [Math.round(rgb[0] * 0.72), Math.round(rgb[1] * 0.74), Math.round(rgb[2] * 0.78)];
         put(img, cx + x, cy + y, rgb);
       }
     }
@@ -210,13 +212,17 @@ function ramp(map: Colormap, t: number): RGB {
   return [Math.round(a[0] + (b[0] - a[0]) * f), Math.round(a[1] + (b[1] - a[1]) * f), Math.round(a[2] + (b[2] - a[2]) * f)];
 }
 
-/** One pixel per cell. `scaleMax` is the value mapped to the top of the ramp. */
+/**
+ * One pixel per cell. `scaleMax` is the value mapped to the top of the ramp. Cells that hold nothing
+ * (stone, wall, outside the rim) stay clear; porous beads hold and pass dissolved material, so the
+ * overlay shows their measured values like open cells.
+ */
 export function paintOverlay(img: ImageData, data: Float32Array, structure: Uint8Array | null, id: string, scaleMax: number): void {
   const map = colormapFor(id);
   const isPh = id === 'ph';
   for (let i = 0; i < CELL_COUNT; i++) {
     const o = i * 4;
-    if (structure && structure[i] !== 0) {
+    if (structure && structure[i] !== 0 && structure[i] !== 3) {
       img.data[o + 3] = 0;
       continue;
     }

@@ -9,6 +9,12 @@
  * (its release commits nothing, the gesture layer's pending stroke is cancelled); and, as a positive
  * control, a completed Lab stroke sends exactly one undoable command and changes the hash, which the
  * ordinary Undo restores.
+ *
+ * Also (wave B fixes): a saved specimen waiting for its placement tap takes that tap whatever Lab tool
+ * is selected; the Habitat and Tools trays offer exactly what the dish's recorded content has, named
+ * and described from content, and an older dish without paints or structures offers none; the Life
+ * preview's rule is built from the dish's recorded species exactly as the simulation's species table
+ * is; overlays and shade are drawn on porous beads.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type * as UiState from '../../src/ui/state';
@@ -17,6 +23,11 @@ import type * as OverlayPickerModule from '../../src/ui/panels/OverlayPicker';
 import type { GestureHandlers } from '../../src/ui/gestures';
 import { DishHost } from '../../src/worker/host';
 import type { FromWorker, ToWorker } from '../../src/worker/protocol';
+import { canonicalJson, sha256Hex } from '../../src/sim/hash';
+import { CELL_COUNT } from '../../src/sim/constants';
+import { cellIndex, ST_BEAD, ST_NONE } from '../../src/sim/grid';
+import { buildSpeciesTable } from '../../src/sim/species';
+import { DISH_PX_PER_CELL, DISH_TEX, paintDish, paintOverlay } from '../../src/render/layers';
 import { registry } from '../helpers/world';
 
 type Msg = ToWorker & { protocolVersion?: number };
@@ -256,5 +267,194 @@ describe('Explore ⇄ Lab changes no state (P2.7)', () => {
     await flush();
     expect(await hash()).toBe(before);
     lab.setDishView('explore');
+  });
+});
+
+// ------------------------------------------------------------------------------------------------
+// Wave B fixes.
+
+/** Rewrite a current save as one recorded before the paints and structures were content. */
+async function withoutLabContent(text: string): Promise<string> {
+  const file = JSON.parse(text) as { state: { content: Record<string, unknown> }; checksum: string };
+  const content = file.state.content as {
+    manifest: Record<string, unknown> & { enabledMaterials: string[] };
+    materials: { kind: string }[];
+  };
+  const manifest = { ...content.manifest };
+  delete manifest.enabledStructures;
+  manifest.enabledMaterials = manifest.enabledMaterials.filter((id) => !['GEL', 'SEDIMENT', 'SHADE', 'WATER'].includes(id));
+  manifest.contentHash = 'a1'.repeat(32);
+  const state = { ...file.state, content: { ...content, manifest, materials: content.materials.filter((m) => m.kind !== 'paint') } };
+  const checksum = `sha256:${await sha256Hex(canonicalJson(state))}`;
+  return JSON.stringify({ ...file, contentHash: manifest.contentHash, state, checksum });
+}
+
+describe('Lab: specimen placement takes the tap (P2.3 × P2.7)', () => {
+  it('a saved specimen waiting for its tap is placed by that tap whatever Lab tool is selected', async () => {
+    const lineage = await import('../../src/ui/panels/LineageState');
+    // The dish screen's own tap handler: the specimen first, as DishScreen.onTap does.
+    const onTap = vi.fn((_sx: number, _sy: number, wx: number, wy: number) => {
+      lineage.placeSpecimenTap(wx, wy);
+    });
+    const h = lab.labGestures({ onTap, onStroke: vi.fn(), paints: () => false, onCameraMoved: () => undefined });
+    lab.setDishView('lab');
+    lab.selectLabTool('place:wall');
+    expect(h.paints()).toBe(true);
+    const mark = sent.length;
+    lineage.beginSpecimenPlacement(0, 3, 'Test line');
+    expect(h.paints()).toBe(false); // while it waits, a drag pans instead of painting walls
+    h.onTap(10, 10, 60.5, 40.5);
+    expect(onTap).toHaveBeenCalledTimes(1);
+    expect(lineage.specimenPlacement.value).toBeNull();
+    await flush();
+    const commands = sent
+      .slice(mark)
+      .filter((m): m is Extract<Msg, { type: 'command' }> => m.type === 'command');
+    expect(commands.map((c) => c.payload.kind)).toEqual(['lineage']);
+    expect(commands[0]!.payload).toMatchObject({ kind: 'lineage', op: 'spawnSpecimen', specimen: 0, x: 60.5, y: 40.5 });
+    // Positive control: with no specimen waiting, the same tap is the Lab tool's.
+    const mark2 = sent.length;
+    h.onTap(10, 10, 60.5, 40.5);
+    expect(onTap).toHaveBeenCalledTimes(1);
+    await flush();
+    const after = sent
+      .slice(mark2)
+      .filter((m): m is Extract<Msg, { type: 'command' }> => m.type === 'command');
+    expect(after.map((c) => c.payload)).toMatchObject([{ kind: 'placeStructure', structure: 'wall' }]);
+    await ui.undo();
+    await flush();
+    lab.selectLabTool('inspect');
+    lab.setDishView('explore');
+  });
+});
+
+describe('Lab trays offer what the dish records (content is data; D-0024)', () => {
+  it('this build: the paints and structures, named and described from their content records', async () => {
+    const tray = await import('../../src/ui/panels/LabTray');
+    const reg = registry();
+    expect(tray.trayItems('habitat').map((i) => [i.id, i.name])).toEqual([
+      ['paint:water', 'Water'],
+      ['paint:gel', 'Gel'],
+      ['paint:sediment', 'Sediment'],
+      ['shade:paint', 'Shade paint'],
+      ['shade:erase', 'Remove shade'],
+    ]);
+    expect(tray.trayItems('tools').map((i) => [i.id, i.name])).toEqual([
+      ['place:stone', reg.structures.STONE!.name],
+      ['place:wall', reg.structures.WALL!.name],
+      ['place:bead', reg.structures.BEAD!.name],
+      ['erase', 'Erase structure'],
+    ]);
+    const wall = tray.itemCopy('place:wall')!;
+    expect(wall).toMatchObject({
+      name: 'Impermeable wall',
+      purpose: reg.structures.WALL!.guide.summary,
+      changes: reg.structures.WALL!.guide.rules,
+      watch: reg.structures.WALL!.guide.example,
+    });
+    const gel = tray.itemCopy('paint:gel')!;
+    expect(gel.purpose).toBe(reg.materials.GEL!.guide.summary);
+    expect(gel.changes).toBe(reg.materials.GEL!.guide.rules);
+    expect(gel.watch.startsWith(reg.materials.GEL!.guide.example)).toBe(true);
+    expect(tray.itemCopy('shade:paint')!.dose).toContain('Light × 0.1');
+  });
+
+  it('the Life preview rule comes from the recorded species of the dish exactly as the species table does', async () => {
+    const content = await import('../../src/ui/panels/LabTrayContent');
+    const info = ui.dishInfo.value!;
+    const reg = registry();
+    const table = buildSpeciesTable(info.speciesIds.map((id) => reg.species[id]!));
+    for (const sp of table)
+      expect(content.lifeBrushFor(info, sp.id)).toEqual({ habitatMask: sp.habitatMask, attached: sp.attached });
+    expect(content.lifeBrushFor(info, 'X99')).toBeNull();
+  });
+
+  it('when the worker lists the dish manifest structure IDs, that list decides (not this build)', async () => {
+    const content = await import('../../src/ui/panels/LabTrayContent');
+    const info = ui.dishInfo.value!;
+    expect(content.structureTools(info)).toEqual(['place:stone', 'place:wall', 'place:bead', 'erase']);
+    expect(content.structureTools({ ...info, structureIds: ['STONE'] } as typeof info)).toEqual(['place:stone', 'erase']);
+    expect(content.structureTools({ ...info, structureIds: [] } as typeof info)).toEqual([]);
+    // Without the list, another content version's dish is offered none (the simulation would refuse).
+    expect(content.structureTools({ ...info, contentHash: 'b2'.repeat(32) })).toEqual([]);
+  });
+
+  it('an older dish without paints or structures still opens, and its Lab offers none of those tools', async () => {
+    const tray = await import('../../src/ui/panels/LabTray');
+    const content = await import('../../src/ui/panels/LabTrayContent');
+    const info = ui.dishInfo.value!;
+    const { text } = await ui.getClient().exportDish(info.dishId, false);
+    lab.setDishView('lab');
+    lab.selectLabTool('place:wall');
+    await ui.importFile(new File([await withoutLabContent(text)], 'older.pixelmeba'));
+    await flush();
+    const older = ui.dishInfo.value!;
+    expect(older.dishId).not.toBe(info.dishId);
+    expect(older.materials.some((m) => m.kind === 'paint')).toBe(false);
+    expect(tray.trayItems('habitat')).toEqual([]);
+    expect(tray.trayItems('tools')).toEqual([]);
+    for (const id of ['paint:gel', 'shade:paint', 'shade:erase', 'place:stone', 'place:wall', 'place:bead', 'erase'] as const) {
+      expect(content.toolAvailable(older, id), id).toBe(false);
+      expect(tray.itemCopy(id), id).toBeNull();
+    }
+    // Everything else in its Lab is still there.
+    expect(tray.trayItems('life').length).toBe(older.speciesIds.length);
+    expect(tray.trayItems('food').length).toBeGreaterThan(0);
+    expect(content.toolAvailable(older, 'material:SUGAR')).toBe(true);
+    // A wall command from a stale tool is refused whole by the simulation (the dish's own ruleset).
+    const res = await lab.sendLabCommand({ kind: 'placeStructure', structure: 'wall', points: STROKE, radius: 3 });
+    expect(res).toMatchObject({ accepted: 0, rejected: 0 });
+    expect(res?.note).toMatch(/not in this dish/);
+    lab.selectLabTool('inspect');
+    lab.setDishView('explore');
+  });
+});
+
+describe('Lab drawing: porous beads show what they hold (P2.7)', () => {
+  const image = () => ({ width: DISH_TEX, height: DISH_TEX, data: new Uint8ClampedArray(DISH_TEX * DISH_TEX * 4) }) as unknown as ImageData;
+
+  it('an overlay draws the measured value on a bead cell (stone stays clear)', () => {
+    const structure = new Uint8Array(CELL_COUNT);
+    const bead = cellIndex(40, 40);
+    const stone = cellIndex(41, 40);
+    structure[bead] = ST_BEAD;
+    structure[stone] = 1;
+    const data = new Float32Array(CELL_COUNT);
+    data[bead] = 0.5;
+    data[stone] = 0.5;
+    data[cellIndex(42, 40)] = 0.5;
+    const img = { width: 128, height: 128, data: new Uint8ClampedArray(128 * 128 * 4) } as unknown as ImageData;
+    paintOverlay(img, data, structure, 'sugar', 1);
+    const px = (i: number) => Array.from(img.data.slice(i * 4, i * 4 + 4));
+    expect(px(bead)[3]).toBe(255);
+    expect(px(bead)).toEqual(px(cellIndex(42, 40))); // the same value looks the same as on open water
+    expect(px(stone)[3]).toBe(0);
+  });
+
+  it('shade painted on a bead is visible', () => {
+    const substrate = new Uint8Array(CELL_COUNT);
+    const structure = new Uint8Array(CELL_COUNT);
+    const shade = new Float32Array(CELL_COUNT).fill(1);
+    const bead = cellIndex(40, 40);
+    structure[bead] = ST_BEAD;
+    const plain = image();
+    paintDish(plain, substrate, structure, shade);
+    shade[bead] = 0.1;
+    const shaded = image();
+    paintDish(shaded, substrate, structure, shade);
+    const block = (img: ImageData) => {
+      const out: number[] = [];
+      for (let y = 0; y < DISH_PX_PER_CELL; y++)
+        for (let x = 0; x < DISH_PX_PER_CELL; x++) {
+          const o = ((40 * DISH_PX_PER_CELL + y) * DISH_TEX + 40 * DISH_PX_PER_CELL + x) * 4;
+          out.push(img.data[o]!, img.data[o + 1]!, img.data[o + 2]!);
+        }
+      return out;
+    };
+    const a = block(plain);
+    const b = block(shaded);
+    expect(b).not.toEqual(a);
+    for (let k = 0; k < a.length; k++) expect(b[k]!).toBeLessThan(a[k]!); // every bead pixel is darker
+    expect(structure[cellIndex(41, 40)]).toBe(ST_NONE);
   });
 });

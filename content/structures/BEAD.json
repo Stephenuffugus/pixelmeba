@@ -1,0 +1,13 @@
+{
+  "id": "BEAD",
+  "name": "Porous bead",
+  "kind": "cell",
+  "guide": {
+    "summary": "A porous bead: dissolved things pass, swimmers do not.",
+    "biology": "Fine porous beads let water and dissolved chemicals through their tiny holes while keeping swimming microbes out; some microbes attach to them.",
+    "rules": "Dissolved things keep spreading through a bead cell and it holds them like water does. Free swimmers cannot enter it; attached organisms that can live on the substrate underneath may sit on it (it is an attachment surface). It can only be placed on an empty cell inside the rim, and nothing is moved when it is. Erasing it keeps whatever it held and brings back the substrate underneath. No additional modeled reaction.",
+    "example": "Ring a sugar patch with beads: the sugar still spreads out, but swimmers cannot reach the middle."
+  },
+  "iconId": "structure_bead",
+  "phase": 2
+}

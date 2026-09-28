@@ -3,12 +3,14 @@
  * content the worker sent: the changed patch's exact cells before and after (the same cells
  * realization fills) and the founders' recorded start areas. Nothing is simulated.
  * R-G3: the After panel shows a dashed outline at the old patch and a solid new patch. An amount
- * change keeps the cells and changes the fill strength. Shapes carry the meaning, not color alone.
+ * change keeps the cells and changes the fill along a light-to-dark amber ramp (darker = more), with
+ * the direction also written under the After panel; every fill stays ≥ 3:1 on water (UX §4.1
+ * "essential graphics"), so nothing is drawn faint. Shapes carry the meaning, not color alone.
  */
 import type { JSX } from 'preact';
 import { GRID_W, MASK_CX, MASK_CY, MASK_R } from '@sim/constants';
 import type { WhatIfChoice, WhatIfLayout } from '@worker/protocol';
-import { patchName, previewAlt, WHATIF_TEXT } from '../strings/whatif';
+import { patchName, previewAlt, previewCaption, WHATIF_TEXT } from '../strings/whatif';
 
 /** Colors from the UX §6.1 palette: water, rim, text; the patch is a dark amber for ≥ 3:1 on water. */
 const WATER = '#D6E7E5';
@@ -17,6 +19,9 @@ const OUTSIDE = '#14252D';
 const PATCH = '#9C6412';
 const OUTLINE = '#172C35';
 const START_RING = '#256E9E';
+/** Amount ramp ends: the least amount is still 3.41:1 on water, the most 9.56:1 (never opacity). */
+const AMOUNT_LEAST = '#A86C14';
+const AMOUNT_MOST = '#4E2E06';
 
 interface View {
   readonly x: number;
@@ -78,8 +83,16 @@ function startsIn(v: View, layout: WhatIfLayout): WhatIfLayout['founders'] {
   });
 }
 
-function strength(value: number, max: number): number {
-  return max > 0 ? 0.3 + (0.7 * value) / max : 1;
+/** Opaque fill for an amount: the ramp position is the amount's share of the larger of the two amounts. */
+export function amountFill(value: number, max: number): string {
+  const t = max > 0 ? Math.min(1, Math.max(0, value / max)) : 1;
+  const a = parseInt(AMOUNT_LEAST.slice(1), 16);
+  const b = parseInt(AMOUNT_MOST.slice(1), 16);
+  const ch = (shift: number) => Math.round(((a >> shift) & 255) * (1 - t) + ((b >> shift) & 255) * t);
+  return `#${[16, 8, 0]
+    .map((s) => ch(s).toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase()}`;
 }
 
 function Panel(props: {
@@ -96,14 +109,21 @@ function Panel(props: {
   if (change.kind === 'amount') {
     const max = Math.max(change.before, change.after);
     const v = side === 'before' ? change.before : change.after;
-    patch = (
-      <path
-        d={cellsPath(choice.oldCells)}
-        fill={PATCH}
-        fill-opacity={strength(v, max)}
-        data-testid={side === 'before' ? 'whatif-before-patch' : 'whatif-new-patch'}
-      />
-    );
+    const testid = side === 'before' ? 'whatif-before-patch' : 'whatif-new-patch';
+    // None at all: an outline where the patch would be, never a pale fill that looks like some food.
+    patch =
+      v > 0 ? (
+        <path d={cellsPath(choice.oldCells)} fill={amountFill(v, max)} data-testid={testid} />
+      ) : (
+        <path
+          d={outlinePath(choice.oldCells)}
+          fill="none"
+          stroke={OUTLINE}
+          stroke-width={0.6 * k}
+          stroke-dasharray={`${1.4 * k} ${1 * k}`}
+          data-testid={testid}
+        />
+      );
   } else if (change.kind === 'moved') {
     patch =
       side === 'before' ? (
@@ -132,7 +152,7 @@ function Panel(props: {
         shape-rendering="crispEdges"
         data-testid={`whatif-${side}`}
       >
-        <rect x={view.x} y={view.y} width={view.size} height={view.size} fill={OUTSIDE} />
+        <rect x={view.x} y={view.y} width={view.size} height={view.size} fill={OUTSIDE} data-layer="ground" />
         <circle
           cx={MASK_CX + 0.5}
           cy={MASK_CY + 0.5}
@@ -140,6 +160,7 @@ function Panel(props: {
           fill={WATER}
           stroke={RIM}
           stroke-width={1.2 * k}
+          data-layer="ground"
         />
         {patch}
         {starts.map((f) => (
@@ -152,6 +173,7 @@ function Panel(props: {
               fill="none"
               stroke={WATER}
               stroke-width={1.4 * k}
+              data-layer="halo"
             />
             <circle
               cx={f.center[0] + 0.5}
@@ -165,7 +187,7 @@ function Panel(props: {
           </g>
         ))}
       </svg>
-      <figcaption>{side === 'before' ? WHATIF_TEXT.before : WHATIF_TEXT.after}</figcaption>
+      <figcaption>{previewCaption(change, side)}</figcaption>
     </figure>
   );
 }
@@ -188,14 +210,20 @@ export function WhatIfPreview(props: { readonly choice: WhatIfChoice; readonly l
         <Panel choice={choice} layout={layout} view={view} side="after" />
       </div>
       <ul class="whatif-legend">
-        {change.kind !== 'unchanged' ? (
+        {change.kind === 'amount' ? (
+          <li>
+            <svg class="whatif-swatch" viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="2" y="2" width="6" height="12" fill={AMOUNT_LEAST} />
+              <rect x="8" y="2" width="6" height="12" fill={AMOUNT_MOST} />
+            </svg>
+            {`${capital(name)}: a darker fill means more ${change.field}`}
+          </li>
+        ) : change.kind === 'moved' ? (
           <li>
             <svg class="whatif-swatch" viewBox="0 0 16 16" aria-hidden="true">
               <rect x="2" y="2" width="12" height="12" fill={PATCH} />
             </svg>
-            {change.kind === 'amount'
-              ? `${capital(name)}: a stronger fill means more ${change.field}`
-              : capital(name)}
+            {capital(name)}
           </li>
         ) : null}
         {change.kind === 'moved' ? (

@@ -15,6 +15,7 @@ import {
   ObjectiveSchema,
   RecipeSchema,
   SpeciesSchema,
+  StructureSchema,
   VariantSchema,
   type ExperimentDef,
   type HabitatDef,
@@ -24,12 +25,14 @@ import {
   type ObjectiveDef,
   type RecipeDef,
   type Species,
+  type StructureDef,
   type VariantDef,
 } from './schema';
 import { IMPLEMENTED_MODULES, IMPLEMENTED_NATIVE_ABILITIES } from './implemented';
 import { MODULE_NATIVE_ABILITY, missingModuleParams, moduleSetProblem } from './moduleRules';
 import { MAX_WHAT_IF_CHOICES, variantPatchProblems } from '../variants';
 import { experimentProblems } from '../experiments';
+import { PAINT_TARGETS, STRUCTURE_RECORD_IDS } from '../grid';
 
 export interface RawFile {
   readonly file: string;
@@ -76,6 +79,8 @@ export interface ContentRegistry {
   readonly moduleIds: readonly string[];
   readonly habitats: Readonly<Record<string, HabitatDef>>;
   readonly habitatIds: readonly string[];
+  readonly structures: Readonly<Record<string, StructureDef>>;
+  readonly structureIds: readonly string[];
   readonly recipes: Readonly<Record<string, RecipeDef>>;
   readonly recipeIds: readonly string[];
   readonly experiments: Readonly<Record<string, ExperimentDef>>;
@@ -193,6 +198,7 @@ export function validateContent(raw: RawPacks): ValidationResult {
   const materials = parseCollection(raw.materials, MaterialSchema, issues);
   const modules = parseCollection(raw.modules, ModuleSchema, issues);
   const habitats = parseCollection(raw.habitats, HabitatSchema, issues);
+  const structures = parseCollection(raw.structures, StructureSchema, issues);
   const recipes = parseCollection(raw.recipes, RecipeSchema, issues);
   const experiments = parseCollection(raw.experiments, ExperimentSchema, issues);
   const variants = parseCollection(raw.variants, VariantSchema, issues);
@@ -313,6 +319,7 @@ export function validateContent(raw: RawPacks): ValidationResult {
     sortedUnique(m.enabledModules, 'enabledModules');
     sortedUnique(m.enabledMaterials, 'enabledMaterials');
     sortedUnique(m.enabledHabitats, 'enabledHabitats');
+    sortedUnique(m.enabledStructures ?? [], 'enabledStructures');
     if (!m.enabledSystems.includes('core')) err(mf, 'enabledSystems', 'must include "core"');
     m.enabledSpecies.forEach((id, i) => {
       const s = species.map[id];
@@ -344,7 +351,28 @@ export function validateContent(raw: RawPacks): ValidationResult {
       }
     });
     m.enabledMaterials.forEach((id, i) => {
-      if (materials.map[id] === undefined) err(mf, `enabledMaterials.${i}`, `unknown material "${id}"`);
+      const mat = materials.map[id];
+      if (mat === undefined) return err(mf, `enabledMaterials.${i}`, `unknown material "${id}"`);
+      if (mat.phase > m.buildPhase) err(mf, `enabledMaterials.${i}`, `"${id}" belongs to phase ${mat.phase} (build phase ${m.buildPhase})`);
+      // Habitat paint (CT §5.1; P2.7): the simulation implements these targets; shade paint's dose is
+      // the one light factor it applies, so its three doses must agree and lie in (0, 1].
+      if (mat.kind === 'paint') {
+        const file = materials.files[id]!;
+        if (!(PAINT_TARGETS as readonly string[]).includes(mat.target))
+          err(file, 'target', `enabled paint "${id}" targets "${mat.target}", which the simulation does not implement (${PAINT_TARGETS.join(', ')})`);
+        if (mat.target === 'shade' && (mat.doses.some((d) => d !== mat.doses[0]) || !(mat.doses[0]! > 0 && mat.doses[0]! <= 1)))
+          err(file, 'doses', 'shade paint needs one light factor in (0, 1], the same at every dose');
+        if (mat.target !== 'shade' && mat.doses.some((d) => d !== 0)) err(file, 'doses', 'substrate paint adds nothing: doses must be 0');
+      }
+    });
+    // Structures (ARCH §2; CT §4; P2.7): known, shipped by this phase, and implemented by the simulation.
+    const implementedStructures: readonly string[] = Object.values(STRUCTURE_RECORD_IDS);
+    (m.enabledStructures ?? []).forEach((id, i) => {
+      const st = structures.map[id];
+      if (st === undefined) return err(mf, `enabledStructures.${i}`, `unknown structure "${id}"`);
+      if (st.phase > m.buildPhase) err(mf, `enabledStructures.${i}`, `"${id}" belongs to phase ${st.phase} (build phase ${m.buildPhase})`);
+      if (!implementedStructures.includes(id)) err(mf, `enabledStructures.${i}`, `"${id}" is not implemented by the simulation yet`);
+      else if (st.kind !== 'cell') err(structures.files[id]!, 'kind', `${id} is a cell structure in the simulation`);
     });
     m.enabledHabitats.forEach((id, i) => {
       if (habitats.map[id] === undefined) err(mf, `enabledHabitats.${i}`, `unknown habitat "${id}"`);
@@ -399,6 +427,8 @@ export function validateContent(raw: RawPacks): ValidationResult {
     moduleIds: modules.ids,
     habitats: habitats.map,
     habitatIds: habitats.ids,
+    structures: structures.map,
+    structureIds: structures.ids,
     recipes: recipes.map,
     recipeIds: recipes.ids,
     experiments: experiments.map,

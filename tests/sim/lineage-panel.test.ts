@@ -12,6 +12,7 @@ import { run } from '../../src/sim/tick';
 import { activeLoci } from '../../src/sim/phenotype';
 import { packEntities } from '../../src/worker/snapshot';
 import { ID_STRIDE } from '../../src/worker/protocol';
+import { bandLabel, discoveryLines } from '../../src/ui/strings/lineage';
 import { registry } from '../helpers/world';
 
 function accelerated() {
@@ -44,7 +45,8 @@ describe('P2.3 lineage panel data', () => {
     expect(ans.loci).toHaveLength(8);
     const det = ans.selected!;
     expect(det.branch).toBe(0);
-    expect(det.ancestorLabel).toMatch(/founders$|·/);
+    // On an ancestral line the reference is the one founder genome of that line (singular).
+    expect(det.ancestorLabel).toMatch(/^The \S+ founder of this line$|·/);
     // Compare ancestor: side-by-side reference values; living members summarized per active locus.
     const br = w.branches.branches[0]!;
     expect(det.compare.map((r) => r.branch)).toEqual([...w.genomes.get(br.refGenome).loci]);
@@ -126,6 +128,19 @@ describe('P2.3 lineage panel data', () => {
       expect(row.membersAtEstablish).toBeGreaterThanOrEqual(5);
       expect(row.depthAtEstablish).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  it('wording: one founder genome is the reference; the middle band names its range, not "the founders’ 50"', () => {
+    const ans = buildLineage(w, { branch: 0 });
+    const row = ans.branches[0]!;
+    expect(row.parentBranch).toBe(-1);
+    const sp = ans.species[row.species]!.name;
+    expect(ans.selected!.ancestorLabel).toBe(`The ${sp} founder of this line`);
+    expect(discoveryLines(row, ans)[0]).toBe(`Ancestor: the ${sp} founder of this line.`);
+    const loc = ans.loci[1];
+    expect(bandLabel(2, loc)).toBe('47–53 · middle');
+    for (let b = 0; b < TRAIT_BANDS.length; b++) expect(bandLabel(b, loc)).not.toMatch(/founders/);
+    expect(bandLabel(0, loc)).toBe(`0–39 · far ${loc!.low} side`);
   });
 
   it('unknown branches, bad ids and bad footprints are refused and change nothing', () => {

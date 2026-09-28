@@ -3,10 +3,11 @@
  * Every sentence is built from recorded branch, lineage and genome values sent by the worker. A branch
  * is a named family line in this dish, not a verified species; nothing is called better, superior,
  * advanced, perfect, adapted or immune, and a difference is never said to have caused an outcome.
- * Costs quote this game's recorded rules (CT §6.1 tradeoffs, module registry), never a benefit.
+ * "Game rule:" lines compare the two genomes' phenotype profiles (the same function the simulation
+ * uses) and quote every recorded module cost; they state only differences that exist in those numbers.
  */
 import type { BranchTrait } from '@sim/branches';
-import type { LineageAnswer, LineageBranchRow, LineageLocus, LineageRecordRow, LineageVariationRow } from '@sim/lineage';
+import type { LineageAnswer, LineageBranchRow, LineageLocus, LineageModuleChange, LineageProfile, LineageRecordRow, LineageRules, LineageVariationRow, ModuleCostKey } from '@sim/lineage';
 import { TRAIT_BANDS } from '@sim/lineage';
 import { MUT_MODULE_GAIN, MUT_MODULE_LOSS, MUT_POLICY_ESTABLISHED, MUT_PREF, MUT_QUANT } from '@sim/mutation';
 import { GRID_W } from '@sim/constants';
@@ -38,7 +39,7 @@ export const LINEAGE_TEXT = {
   specimenCount: 'How many to add',
   traitOverlay: 'Trait overlay',
   traitOff: 'Off',
-  traitHint: 'Tints living organisms by their inherited value for one trait. It never changes the dish.',
+  traitHint: 'Rings each living organism in the colour of its inherited value for one trait. It never changes the dish.',
   pauseOnDiscoveries: 'Pause when a new branch is named',
   close: 'Close',
   members: 'Living members',
@@ -97,39 +98,108 @@ export function traitSentence(row: Pick<LineageBranchRow, 'trait' | 'descriptor'
   }
 }
 
-/** Recorded tradeoffs of each locus in this game's rules (CT §6.1), for a rise and for a fall. */
-const LOCUS_COSTS: readonly (readonly [string, string])[] = [
-  ['moves faster; every cell moved costs more energy', 'moves more slowly; moving costs less energy'],
-  ['takes in food faster; costs more energy to maintain', 'takes in food more slowly; costs less energy to maintain'],
-  ['senses food from farther away; costs more energy to maintain', 'senses food less far away; costs less energy to maintain'],
-  ['may split sooner; each split costs more energy', 'waits longer between splits; each split costs less energy'],
-  ['prefers more basic water; its preferred range keeps its width', 'prefers more acidic water; its preferred range keeps its width'],
-  ['prefers saltier water; fresh water suits it less', 'prefers fresher water; salty water suits it less'],
-  ['prefers warmer water', 'prefers cooler water'],
-  ['starts resting sooner when food runs short, losing feeding time', 'starts resting later when food runs short'],
-];
+/** Two values printed with the fewest decimals (from `minDp`, up to 4) that tell them apart. */
+function pair(a: number, b: number, minDp: number): [string, string] {
+  const f = (v: number, dp: number) => String(Number(v.toFixed(dp)));
+  for (let dp = minDp; dp <= 4; dp++) if (f(a, dp) !== f(b, dp)) return [f(a, dp), f(b, dp)];
+  return [f(a, 4), f(b, 4)];
+}
 
-/** The recorded cost of the difference, in this game's rules (never a benefit claim). */
-export function costSentence(row: Pick<LineageBranchRow, 'trait' | 'module'>): string {
-  const t = row.trait;
-  if (!t) return '';
-  switch (t.kind) {
-    case 'module': {
-      const m = row.module;
-      if (!m) return '';
-      if (!t.gained) return `Without it, it no longer pays that ability’s upkeep (${m.surchargePerSecond} energy per second).`;
-      const extra = m.params.upkeepPerSecond ? ` plus ${m.params.upkeepPerSecond} upkeep` : '';
-      return `Game rule: carrying it costs ${m.surchargePerSecond} energy per second${extra}.`;
-    }
-    case 'locus': {
-      const pair = LOCUS_COSTS[t.locus];
-      return pair ? `Game rule: it ${t.delta > 0 ? pair[0] : pair[1]}.` : '';
-    }
-    case 'policy':
-      return 'Game rule: its intake follows inherited weights over the foods present.';
-    case 'weight':
-      return 'Game rule: it takes a larger share of that food when several are present.';
+function differs(a: number, b: number): boolean {
+  return Math.abs(a - b) > 1e-9;
+}
+
+/** Each module cost parameter in words (CT §7.1); the value is the world's recorded number. */
+const COST_WORDS: Readonly<Record<ModuleCostKey, (v: string) => string>> = {
+  upkeepPerSecond: (v) => `${v} energy per second upkeep`,
+  emitCost: (v) => `${v} energy per second while releasing`,
+  glowCost: (v) => `${v} energy per second while glowing`,
+  prepareCost: (v) => `${v} energy to prepare to rest`,
+  restMaintenance: (v) => `${v} energy per second while resting`,
+  wakeCost: (v) => `${v} energy to wake`,
+  attachedUpkeep: (v) => `${v} energy per second while attached`,
+  moveCostFactor: (v) => `a moving cost with factor ${v}`,
+  energyPerCarbon: (v) => `${v} energy per unit of carbon moved`,
+  energyPerMineral: (v) => `${v} energy per unit of mineral bound`,
+  linkCost: (v) => `${v} energy per link made`,
+  perLinkUpkeep: (v) => `${v} energy per second per link`,
+  settleCost: (v) => `${v} energy to settle`,
+  adultUpkeep: (v) => `${v} energy per second once settled`,
+  bondCost: (v) => `${v} energy per bond made`,
+  bondUpkeep: (v) => `${v} energy per second per bond`,
+  creationCost: (v) => `${v} energy to make a cache`,
+};
+
+function joinWords(parts: readonly string[]): string {
+  return parts.length <= 1 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
+/** Every recorded cost of one module: its surcharge while carried plus each cost parameter. */
+export function moduleCostWords(m: LineageModuleChange): string {
+  return joinWords([`${m.surchargePerSecond} energy per second while carried`, ...m.costs.map((c) => COST_WORDS[c.key](String(c.value)))]);
+}
+
+function moduleLine(m: LineageModuleChange): string {
+  const name = `${lower(m.name)} (${m.id})`;
+  return m.gained ? `Game rule: it carries ${name}, which costs ${moduleCostWords(m)}.` : `Game rule: it does not carry ${name}; its ancestor did, at ${moduleCostWords(m)}.`;
+}
+
+function rangeText(r: readonly [number, number], other: readonly [number, number]): [string, string] {
+  const [a0, b0] = pair(r[0], other[0], 1);
+  const [a1, b1] = pair(r[1], other[1], 1);
+  return [`${a0}–${a1}`, `${b0}–${b1}`];
+}
+
+function weightsText(p: LineageProfile): string {
+  return p.weights ? p.weights.map((w, k) => `${p.foods[k] ?? 'food'} ${w.toFixed(2)}`).join(' / ') : 'a fixed order';
+}
+
+/**
+ * The "Game rule:" lines of a branch: one per module it carries and its ancestor did not (or the
+ * reverse), with every recorded cost, then one per profile number that differs (branch value first,
+ * the ancestor's in brackets). Nothing is said about a number that is the same in both profiles.
+ */
+export function ruleLines(rules: LineageRules | null): string[] {
+  if (!rules) return [];
+  const a = rules.ancestor;
+  const b = rules.branch;
+  const out = rules.modules.map(moduleLine);
+  const num = (x: number, y: number, minDp: number, text: (v: string, w: string) => string) => {
+    if (!differs(x, y)) return;
+    const [va, vb] = pair(x, y, minDp);
+    out.push(`Game rule: ${text(vb, va)}.`);
+  };
+  num(a.sensing, b.sensing, 0, (v, w) => `it senses food up to ${v} cells away (ancestor: ${w})`);
+  num(a.speed, b.speed, 2, (v, w) => `it moves up to ${v} cells per second (ancestor: ${w})`);
+  num(a.moveCostPerCell, b.moveCostPerCell, 2, (v, w) => `each cell it moves costs ${v} energy (ancestor: ${w})`);
+  num(a.intake, b.intake, 2, (v, w) => `it takes in at most ${v} carbon per second (ancestor: ${w})`);
+  num(a.maintenance, b.maintenance, 2, (v, w) => `its maintenance costs ${v} energy per second (ancestor: ${w})`);
+  // Upkeep comes from modules, whose lines above already quote it.
+  if (rules.modules.length === 0) num(a.upkeep, b.upkeep, 2, (v, w) => `its extra upkeep is ${v} energy per second (ancestor: ${w})`);
+  num(a.minDivisionAge, b.minDivisionAge, 1, (v, w) => `it can split once it is ${v} s old (ancestor: ${w} s)`);
+  num(a.divisionCost, b.divisionCost, 1, (v, w) => `each split costs ${v} energy (ancestor: ${w})`);
+  num(a.energyCap, b.energyCap, 0, (v, w) => `it can hold at most ${v} energy (ancestor: ${w})`);
+  for (const [key, label] of [
+    ['ph', 'pH'],
+    ['salinity', 'salinity'],
+    ['warmth', 'warmth'],
+  ] as const) {
+    if (!differs(a[key][0], b[key][0]) && !differs(a[key][1], b[key][1])) continue;
+    const [vb, va] = rangeText(b[key], a[key]);
+    out.push(`Game rule: its preferred ${label} is ${vb} (ancestor: ${va}).`);
   }
+  if (a.restAfter !== null && b.restAfter !== null) num(a.restAfter, b.restAfter, 1, (v, w) => `it starts resting after ${v} s without usable food (ancestor: ${w} s)`);
+  if (a.policy !== b.policy) {
+    out.push(
+      b.policy === 'weighted'
+        ? `Game rule: it shares its intake by inherited weights (${weightsText(b)}); its ancestor ate its foods in a fixed order.`
+        : `Game rule: it eats its foods in a fixed order; its ancestor shared its intake by inherited weights (${weightsText(a)}).`,
+    );
+  } else if (a.weights && b.weights && a.weights.some((w, k) => differs(w, b.weights![k] ?? 0))) {
+    out.push(`Game rule: its food weights are ${weightsText(b)} (ancestor: ${weightsText(a)}).`);
+  }
+  if (out.length === 0) out.push('Game rule: none of its rule numbers differ from its ancestor’s.');
+  return out;
 }
 
 /** One line per family record: who, when, and what it inherited. */
@@ -164,20 +234,19 @@ export function variationLine(v: LineageVariationRow): string {
 export function discoveryLines(row: LineageBranchRow, ans: LineageAnswer): string[] {
   const sp = ans.species[row.species]?.name ?? 'organism';
   const parent = row.parentBranch >= 0 ? ans.branches[row.parentBranch] : null;
-  const cost = costSentence(row);
   return [
-    `Ancestor: ${parent ? parent.name : `${sp} founders`}.`,
+    `Ancestor: ${parent ? parent.name : `the ${sp} founder of this line`}.`,
     `Inherited difference: ${traitSentence(row, ans.loci)}`,
-    ...(cost ? [cost] : []),
+    ...ruleLines(row.rules),
     `First appeared at ${formatSimTime(row.candidateTick)}${row.rootCell >= 0 ? ` near ${cellText(row.rootCell)}` : ''}; named at ${formatSimTime(row.establishedTick)}.`,
     `${row.membersAtEstablish} living descendants across ${row.depthAtEstablish} generations when named; ${row.living} living now.`,
   ];
 }
 
-/** "0–39 · Drifter side", "47–53 (near the founders’ 50)", … */
+/** "0–39 · far Drifter side", "47–53 · middle", … (founders start at 50 or 45–55, so the middle band names only its range). */
 export function bandLabel(band: number, locus: LineageLocus | undefined): string {
   const [lo, hi] = TRAIT_BANDS[band]!;
-  if (band === 2) return `${lo}–${hi} (near the founders’ 50)`;
+  if (band === 2) return `${lo}–${hi} · middle`;
   const word = band <= 1 ? (locus?.low ?? 'low') : (locus?.high ?? 'high');
   return `${lo}–${hi} · ${band === 0 || band === 4 ? 'far ' : ''}${word} side`;
 }

@@ -29,27 +29,32 @@ import { DISH_PX_PER_CELL, DISH_TEX, paintAggregation, paintDeposits, paintDish,
 import { speciesRgb } from './speciesColors';
 import { buildLayerAtlas, featureLayers, layerKey, type LayerPick } from './features';
 import { FEATURE_LAYERS, type FeatureLayerId } from '@art/src/layers/modules';
-import { brushCellOutcome, ST_NONE, ST_OUTSIDE, type LabBrushRule } from '@sim/grid';
+import { brushCellOutcome, lifeCellOutcome, ST_NONE, SUB_WATER, type LabBrushRule, type LifeBrush } from '@sim/grid';
 import type { LineageMarks } from '@worker/protocol';
 
 const FLAG_MOVING = 1 << 6;
 
 /**
- * Trait overlay (P2.3): tints for the five locus bands (low → high, see @sim/lineage TRAIT_BANDS), a
- * blue–orange diverging scale that stays distinct under common colour-vision deficiencies. Organisms
- * whose locus is not active are dimmed grey. The legend uses the same colours (TRAIT_BAND_CSS) and
- * names and counts every band in words, so colour is never the only carrier of the meaning.
+ * Trait overlay (P2.3): one colour per locus band (low → high, see @sim/lineage TRAIT_BANDS), a
+ * blue–orange diverging scale that stays distinct under common colour-vision deficiencies; grey for
+ * organisms whose locus is not active. Zoomed in, each organism gets a band ring drawn around it in
+ * exactly that colour (a white ring texture tinted, framed by a dark outline, beneath the body), so
+ * the species sprite and its resting grey are never recoloured and every band reads the same on
+ * every species. At wide zoom each cell shows its most common band in the same colours. The legend
+ * uses these same values (TRAIT_BAND_CSS, TRAIT_INACTIVE_CSS) and names and counts every band.
  */
-export const TRAIT_BAND_TINTS = [0x3f7fd0, 0x9cc4ec, 0xe8e8e8, 0xf4bf7a, 0xe0663a] as const;
-export const TRAIT_BAND_CSS = ['#3f7fd0', '#9cc4ec', '#c9ced1', '#f4bf7a', '#e0663a'] as const;
-const TRAIT_BAND_AGG: readonly [number, number, number][] = [
-  [63, 127, 208],
-  [156, 196, 236],
-  [201, 206, 209],
-  [244, 191, 122],
-  [224, 102, 58],
-];
-const TRAIT_INACTIVE_TINT = 0x7a7a7a;
+export const TRAIT_BAND_COLORS = [0x2f6bc0, 0x8fbde8, 0xf2efe6, 0xf5b56a, 0xd4552a] as const;
+export const TRAIT_INACTIVE_COLOR = 0x7a7a7a;
+const hexCss = (v: number) => `#${v.toString(16).padStart(6, '0')}`;
+export const TRAIT_BAND_CSS: readonly string[] = TRAIT_BAND_COLORS.map(hexCss);
+export const TRAIT_INACTIVE_CSS = hexCss(TRAIT_INACTIVE_COLOR);
+/** Outline around each band ring (the dish's dark ink). */
+export const TRAIT_RING_OUTLINE_CSS = '#172c35';
+const TRAIT_BAND_AGG: readonly [number, number, number][] = TRAIT_BAND_COLORS.map((v) => [(v >> 16) & 255, (v >> 8) & 255, v & 255]);
+/** Band ring texture: 20 px, a white band (tinted to the band colour) between two dark outlines. */
+const TRAIT_RING_PX = 20;
+/** The ring's outer diameter is the sprite frame plus this many sprite pixels. */
+const TRAIT_RING_EXTRA = 4;
 /** Lineage rings drawn at once (CT §12.10 "descendants highlighted ≤ 200"). */
 const LINEAGE_RINGS_MAX = 200;
 
@@ -267,6 +272,7 @@ export class DishRenderer {
     this.buildFeatureLayers();
     this.drawRim();
     this.world.addChild(this.dishSprite, this.depositSprite, this.overlaySprite, this.aggSprite, this.rim, this.particles, this.featureParticles, this.effects, this.selectionG);
+    this.buildBandRings();
     this.root.addChild(this.world);
     this.app.stage.addChild(this.root);
     this.app.ticker.add(() => this.frame());
@@ -380,6 +386,7 @@ export class DishRenderer {
   applyGeometry(s: SnapshotMsg): void {
     if (this.destroyed || !s.geometry) return;
     this.structure = s.geometry.structure;
+    this.brushSubstrate = s.geometry.substrate;
     const ctx = this.dishCanvas.getContext('2d')!;
     const img = ctx.createImageData(DISH_TEX, DISH_TEX);
     paintDish(img, s.geometry.substrate, s.geometry.structure, s.geometry.shade);
@@ -564,8 +571,10 @@ export class DishRenderer {
     const draw = this.particles.visible && this.particles.alpha > 0;
     const list = this.particles.particleChildren;
     const flist = this.featureParticles.particleChildren;
+    const blist = this.bandParticles?.particleChildren;
     let n = 0;
     let nf = 0;
+    let nb = 0;
     if (draw) {
       const needed = s.count;
       while (this.pool.length < needed) {
@@ -622,12 +631,18 @@ export class DishRenderer {
         // Newborns fade in over their first snapshot; feeders glow very slightly brighter.
         const born = cue & CUE_JUST_BORN ? 0.75 + 0.25 * alpha : 1;
         if (p.alpha !== born) p.alpha = born;
-        const tint = this.traitTint(k) ?? (dormant ? 0xc8c8c8 : cue & CUE_FEEDING ? 0xffffff : 0xf0f0f0);
+        const tint = dormant ? 0xc8c8c8 : cue & CUE_FEEDING ? 0xffffff : 0xf0f0f0;
         if (this.poolTint[k] !== tint) {
           p.tint = tint;
           this.poolTint[k] = tint;
         }
         list[n++] = p;
+        // Trait overlay: a band ring in the legend's exact colour (the body keeps its own colours).
+        const band = this.traitColor(k);
+        if (band !== undefined && blist) {
+          blist[nb] = this.bandRing(nb, x, y, (scale * (d.size + TRAIT_RING_EXTRA)) / TRAIT_RING_PX, band, born);
+          nb++;
+        }
         // Module feature layers: only marks the snapshot says are real for this organism.
         const marks = featureLayers(cue, life, ids[k * ID_STRIDE] === this.selectedBirthId, this.picks);
         for (let m = 0; m < marks; m++) {
@@ -671,6 +686,13 @@ export class DishRenderer {
       this.particles.update();
       flist.length = nf;
       this.featureParticles.update();
+    }
+    if (this.bandParticles && blist) {
+      this.bandParticles.visible = draw && nb > 0;
+      if (blist.length !== nb || nb > 0) {
+        blist.length = nb;
+        this.bandParticles.update();
+      }
     }
 
     // Effects.
@@ -741,12 +763,70 @@ export class DishRenderer {
   private lineageG: Graphics | null = null;
   private lineageFollow = false;
 
-  /** Band tint for snapshot entry k while a trait overlay is on (undefined = normal tint). */
-  private traitTint(k: number): number | undefined {
+  /** Band rings beneath the bodies (trait overlay), their pool and the last colour set on each. */
+  private bandParticles: ParticleContainer | null = null;
+  private bandPool: Particle[] = [];
+  private bandTint: number[] = [];
+
+  /** Band colour for snapshot entry k while a trait overlay is on (undefined = overlay off). */
+  private traitColor(k: number): number | undefined {
     const l = this.lineage;
     if (!l || l.locus === null) return undefined;
     const band = (l.marks[k] ?? 7) & 7;
-    return band < TRAIT_BAND_TINTS.length ? TRAIT_BAND_TINTS[band] : TRAIT_INACTIVE_TINT;
+    return band < TRAIT_BAND_COLORS.length ? TRAIT_BAND_COLORS[band] : TRAIT_INACTIVE_COLOR;
+  }
+
+  /** The white band ring texture and its container, inserted just beneath the organism bodies. */
+  private buildBandRings(): void {
+    const canvas = document.createElement('canvas');
+    canvas.width = TRAIT_RING_PX;
+    canvas.height = TRAIT_RING_PX;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const img = ctx.createImageData(TRAIT_RING_PX, TRAIT_RING_PX);
+    const c = TRAIT_RING_PX / 2;
+    for (let y = 0; y < TRAIT_RING_PX; y++) {
+      for (let x = 0; x < TRAIT_RING_PX; x++) {
+        const dist = Math.hypot(x + 0.5 - c, y + 0.5 - c);
+        const o = (y * TRAIT_RING_PX + x) * 4;
+        // Dark outline, white band (takes the tint exactly), dark outline.
+        const rgb = dist >= 6.5 && dist < 7.5 ? [0x17, 0x2c, 0x35] : dist >= 7.5 && dist < 9 ? [255, 255, 255] : dist >= 9 && dist < 10 ? [0x17, 0x2c, 0x35] : null;
+        if (!rgb) continue;
+        img.data[o] = rgb[0]!;
+        img.data[o + 1] = rgb[1]!;
+        img.data[o + 2] = rgb[2]!;
+        img.data[o + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = Texture.from(canvas);
+    tex.source.scaleMode = 'nearest';
+    this.bandParticles = new ParticleContainer({
+      dynamicProperties: { position: true, uvs: false, color: true, vertex: true, rotation: false },
+      texture: tex,
+      roundPixels: false,
+    });
+    this.bandParticles.visible = false;
+    this.world.addChildAt(this.bandParticles, this.world.getChildIndex(this.particles));
+  }
+
+  private bandRing(i: number, x: number, y: number, scale: number, color: number, alpha: number): Particle {
+    let bp = this.bandPool[i];
+    if (!bp) {
+      bp = new Particle({ texture: this.bandParticles!.texture, anchorX: 0.5, anchorY: 0.5 });
+      this.bandPool[i] = bp;
+      this.bandTint[i] = -1;
+    }
+    bp.x = x;
+    bp.y = y;
+    bp.scaleX = scale;
+    bp.scaleY = scale;
+    if (bp.alpha !== alpha) bp.alpha = alpha;
+    if (this.bandTint[i] !== color) {
+      bp.tint = color;
+      this.bandTint[i] = color;
+    }
+    return bp;
   }
 
   /** Wide zoom with a trait overlay: each cell shows its most common band (ties → lower band). */
@@ -812,7 +892,9 @@ export class DishRenderer {
     const lw = 1.2 / cam.zoom;
     const halfW = cam.viewW / (2 * cam.zoom) + 1;
     const halfH = cam.viewH / (2 * cam.zoom) + 1;
-    const r = Math.max(1.1, 6 / cam.zoom);
+    // Outside the trait band rings when both show.
+    const bandR = l.locus !== null ? ((this.maxFrameSize + TRAIT_RING_EXTRA) / 2) * (cam.spritePixelScale() / cam.zoom) + 3 / cam.zoom : 0;
+    const r = Math.max(1.1, 6 / cam.zoom, bandR);
     for (let k = 0; k < s.count; k++) {
       if (!((l.marks[k] ?? 0) & 8)) continue;
       const x = this.prevX[k]! + (this.curX[k]! - this.prevX[k]!) * alpha;
@@ -843,6 +925,8 @@ export class DishRenderer {
   // Lab brush preview (UX §4.2; P2.7): drawn above everything, cosmetic only.
 
   private brushG: Graphics | null = null;
+  /** Substrate codes from the latest geometry (the Life brush preview's habitat rule). */
+  private brushSubstrate: Uint8Array | null = null;
   /** Follows the host element's size (see create()). */
   private hostObserver: ResizeObserver | null = null;
 
@@ -851,10 +935,16 @@ export class DishRenderer {
    * would refuse (a structure, a live organism, past the rim) are tinted red and crossed. Uses the same
    * rule as the simulation (brushCellOutcome) over the latest geometry and snapshot, so it never
    * promises what the command refuses; the command's own counts stay authoritative. 'life' marks
-   * cells an organism could be placed in (no structure). Returns the counts shown to the player;
+   * the cells the inoculate command can use for that species (lifeCellOutcome: structure and
+   * habitat, exactly canOccupy) and crosses out the rest. Returns the counts shown to the player;
    * null clears the preview.
    */
-  setBrushPreview(p: { readonly cells: readonly number[]; readonly rule: LabBrushRule | 'life' } | null): { ok: number; refused: number } {
+  setBrushPreview(
+    p:
+      | { readonly cells: readonly number[]; readonly rule: LabBrushRule }
+      | { readonly cells: readonly number[]; readonly rule: 'life'; readonly life: LifeBrush }
+      | null,
+  ): { ok: number; refused: number } {
     if (this.destroyed) return { ok: 0, refused: 0 };
     if (!this.brushG) {
       this.brushG = new Graphics();
@@ -875,7 +965,10 @@ export class DishRenderer {
     let ok = 0;
     for (const cell of p.cells) {
       const st = this.structure ? this.structure[cell]! : ST_NONE;
-      const o = p.rule === 'life' ? (st === ST_NONE ? 'ok' : st === ST_OUTSIDE ? 'rim' : 'structure') : brushCellOutcome(p.rule, st, occupied[cell] === 1);
+      const o =
+        p.rule === 'life'
+          ? lifeCellOutcome(st, this.brushSubstrate ? this.brushSubstrate[cell]! : SUB_WATER, p.life)
+          : brushCellOutcome(p.rule, st, occupied[cell] === 1);
       if (o === 'ok') {
         ok++;
         g.rect(cell % GRID_W, Math.floor(cell / GRID_W), 1, 1);

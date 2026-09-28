@@ -7,7 +7,9 @@
  * (parent released, then each daughter recorded). Also: the oldest qualifying ancestor is the branch
  * founder even when it was its candidate's only member when it divided; renamed and extinct branches
  * keep their history, also across save/reload; a specimen spawn is an external introduction that is
- * ledgered and deterministic.
+ * ledgered and deterministic. Wave B fixes: members that already qualify against a newly named
+ * reference become candidates rooted at their oldest qualifying ancestor (sub-branches); the
+ * "Game rule:" lines come from both phenotype profiles; pinned branches keep their birth details.
  */
 import { describe, expect, it } from 'vitest';
 import { applyNow, type CommandPayload } from '../../src/sim/commands';
@@ -25,7 +27,7 @@ import {
 import { INITIAL_NUTRIENT_RATIO } from '../../src/sim/constants';
 import { neutralGenome, type GenomeInput } from '../../src/sim/genome';
 import { checkLedger } from '../../src/sim/ledger';
-import { field, recordBirth, recordDivisionEnd } from '../../src/sim/lineage';
+import { buildLineage, compactLineage, field, has, LINEAGE_RETAIN, MODULE_COST_KEYS, recordBirth, recordDivisionEnd } from '../../src/sim/lineage';
 import { killEntity } from '../../src/sim/maintenance';
 import { realizeRecipe } from '../../src/sim/recipes';
 import { R } from '../../src/sim/reasons';
@@ -33,6 +35,7 @@ import { deserializeWorld, serializeWorld, stateHash } from '../../src/sim/seria
 import { run, step } from '../../src/sim/tick';
 import { speciesIndex, type World } from '../../src/sim/world';
 import { buildSaveFile, loadSaveFile } from '../../src/persistence/saveFile';
+import { discoveryLines } from '../../src/ui/strings/lineage';
 import { clearWater, place, registry } from '../helpers/world';
 
 // ---------------------------------------------------------------------------------------------
@@ -548,6 +551,218 @@ describe('P2.3 a real Accelerated dish', () => {
     const f = make();
     run(f, 1800);
     expect(stateHash(f)).toBe(stateHash(w));
+  });
+});
+
+describe('P2.3 sub-branches: members that already qualify against a new reference become candidates', () => {
+  /**
+   * F → R (v) + S; R → R1, R2; R1 → R11, R12; R2 → R21 (v), R22 (`r22`); R11 → R111, R112 names X
+   * (reference v). R22 already differs from v when X is named. Then R22 → A, B; A → A1, A2;
+   * B → B1, B2; A1 → A11, A12, all carrying `r22`: five living descendants of R22, three generations
+   * deep (the tree from the wave B verification).
+   */
+  function verifierTree(r22Patch: (d: Dish, v: number) => number) {
+    const d = dish();
+    const { w, founder, base } = d;
+    const c = w.ents.cols;
+    const v = d.gen({ loci: bump(w.genomes.get(base).loci, { 0: 10 }) });
+    const g22 = r22Patch(d, v);
+    const [R] = split(w, founder, v, base);
+    const [R1, R2] = split(w, R, v, v);
+    const [R11] = split(w, R1, v, v);
+    const [, R22] = split(w, R2, v, g22);
+    const r22Birth = c.birthId[R22]!;
+    split(w, R11, v, v);
+    const afterNaming = { established: w.branches.established, candidates: Object.keys(w.branches.candidates).map(Number) };
+    const [A, B] = split(w, R22, g22, g22);
+    const [A1] = split(w, A, g22, g22);
+    split(w, B, g22, g22);
+    const beforeLast = w.branches.established;
+    split(w, A1, g22, g22);
+    return { w, v, g22, r22Birth, afterNaming, beforeLast };
+  }
+
+  it('R22 carrying v + E05 is a candidate root as soon as X is named, so its family becomes a second branch', () => {
+    const t = verifierTree((d, v) => d.gen({ loci: d.w.genomes.get(v).loci, modules: ['E05'] }));
+    const { w } = t;
+    expect(t.afterNaming.established).toBe(1);
+    expect(t.afterNaming.candidates).toEqual([t.r22Birth]); // the oldest qualifying ancestor, at once
+    expect(t.beforeLast).toBe(1); // four living, two generations deep
+    expect(w.branches.established).toBe(2);
+    const y = w.branches.branches[1]!;
+    expect(y.parentBranch).toBe(0);
+    expect(y.rootBirthId).toBe(t.r22Birth);
+    expect(y.refGenome).toBe(t.g22);
+    expect(y.ancestorGenome).toBe(t.v);
+    expect(y.trait).toEqual({ kind: 'module', module: 'E05', gained: true });
+    expect(y.membersAtEstablish).toBe(MIN_DESCENDANTS);
+    expect(y.depthAtEstablish).toBe(MIN_GENERATIONS);
+    expect(y.alive).toBe(MIN_DESCENDANTS);
+    expect(Object.keys(w.branches.candidates)).toHaveLength(0);
+  });
+
+  it('the root is the oldest qualifying ancestor even when it divided before the naming (read from its birth record)', () => {
+    const d = dish();
+    const { w, founder, base } = d;
+    const c = w.ents.cols;
+    const v = d.gen({ loci: bump(w.genomes.get(base).loci, { 0: 10 }) });
+    const vE = d.gen({ loci: w.genomes.get(v).loci, modules: ['E05'] });
+    const [R] = split(w, founder, v, base);
+    const [R1, R2] = split(w, R, v, v);
+    split(w, R1, v, v);
+    const [, R22] = split(w, R2, v, vE);
+    const r22Birth = c.birthId[R22]!;
+    const [A, B] = split(w, R22, vE, vE); // the fifth living member, three generations deep: X is named
+    expect(w.branches.established).toBe(1);
+    expect(c.alive[R22] === 1 && c.birthId[R22] === r22Birth).toBe(false); // R22 itself has divided
+    expect(Object.keys(w.branches.candidates).map(Number)).toEqual([r22Birth]);
+    expect(w.branches.candidates[r22Birth]!.alive).toBe(2);
+    expect(c.candRoot[A]).toBe(r22Birth);
+    expect(c.candRoot[B]).toBe(r22Birth);
+    const [A1] = split(w, A, vE, vE);
+    split(w, B, vE, vE);
+    split(w, A1, vE, vE);
+    expect(w.branches.established).toBe(2);
+    expect(w.branches.branches[1]!.rootBirthId).toBe(r22Birth);
+    expect(w.branches.branches[1]!.parentBranch).toBe(0);
+  });
+
+  it('a member that qualified against the founder but not against the new reference starts nothing', () => {
+    // R22 at +15 on locus 0: 15 points from the founder (joins X's candidate), only 5 from v.
+    const t = verifierTree((d) => d.gen({ loci: bump(d.w.genomes.get(d.base).loci, { 0: 15 }) }));
+    const { w } = t;
+    expect(t.afterNaming).toEqual({ established: 1, candidates: [] });
+    expect(w.branches.established).toBe(1);
+    expect(Object.keys(w.branches.candidates)).toHaveLength(0);
+    expect(w.events.ring.filter((e) => e.type === 'branchCandidate' && e.birthId === t.r22Birth)).toHaveLength(0);
+  });
+});
+
+describe('P2.3 honest "Game rule:" lines: computed from both phenotype profiles', () => {
+  const lines = (w: World, branch = 0) => {
+    const ans = buildLineage(w);
+    return { row: ans.branches[branch]!, text: discoveryLines(ans.branches[branch]!, ans).join('\n') };
+  };
+
+  it('Sprinter sensing 60: radius unchanged at 2, so only the maintenance line (no "senses farther")', () => {
+    const d = dish();
+    const v = d.gen({ loci: bump(d.w.genomes.get(d.base).loci, { 2: 10 }) });
+    standardTree(d, v);
+    const { row, text } = lines(d.w);
+    expect(text).not.toMatch(/senses food|farther|less far/);
+    expect(text).toMatch(/Game rule: its maintenance costs 0\.53 energy per second \(ancestor: 0\.5\)\./);
+    expect(text).not.toMatch(/superior|advanced|perfect|adapted|immune/i);
+    expect(row.rules!.ancestor.sensing).toBe(2);
+    expect(row.rules!.branch.sensing).toBe(2);
+  });
+
+  it('Sprinter sensing 75: radius 3, and the line says so with the ancestor’s 2', () => {
+    const d = dish();
+    const v = d.gen({ loci: bump(d.w.genomes.get(d.base).loci, { 2: 25 }) });
+    standardTree(d, v);
+    const { row, text } = lines(d.w);
+    expect(text).toMatch(/Game rule: it senses food up to 3 cells away \(ancestor: 2\)\./);
+    expect(text).toMatch(/Game rule: its maintenance costs 0\.56 energy per second \(ancestor: 0\.5\)\./);
+    expect(row.rules!.branch.sensing).toBe(3);
+  });
+
+  it('division +10 states the minimum age and split cost numbers, not "waits longer between splits"', () => {
+    const d = dish();
+    const v = d.gen({ loci: bump(d.w.genomes.get(d.base).loci, { 3: 10 }) });
+    standardTree(d, v);
+    const { text } = lines(d.w);
+    expect(text).toMatch(/Game rule: it can split once it is 10\.8 s old \(ancestor: 12 s\)\./);
+    expect(text).toMatch(/Game rule: each split costs 22 energy \(ancestor: 20\)\./);
+    expect(text).not.toMatch(/waits longer/);
+  });
+
+  it('gaining a reserve chamber quotes its surcharge and its upkeep, and the energy cap it adds', () => {
+    const d = dish();
+    const v = d.gen({ modules: ['E05'] });
+    standardTree(d, v);
+    const { text } = lines(d.w);
+    expect(text).toMatch(/Game rule: it carries reserve chamber \(E05\), which costs 0\.02 energy per second while carried and 0\.03 energy per second upkeep\./);
+    expect(text).toMatch(/Game rule: it can hold at most 140 energy \(ancestor: 100\)\./);
+  });
+
+  it('losing a reserve chamber is stated as a rule difference with every recorded cost, not as a saving', () => {
+    const d = dish();
+    const c = d.w.ents.cols;
+    const withE05 = d.gen({ modules: ['E05'] });
+    c.genome[d.founder] = withE05;
+    c.refGenome[d.founder] = withE05;
+    standardTree({ ...d, base: withE05 }, d.base);
+    const { row, text } = lines(d.w);
+    expect(row.trait).toEqual({ kind: 'module', module: 'E05', gained: false });
+    expect(text).toMatch(/Game rule: it does not carry reserve chamber \(E05\); its ancestor did, at 0\.02 energy per second while carried and 0\.03 energy per second upkeep\./);
+    expect(text).toMatch(/Game rule: it can hold at most 100 energy \(ancestor: 140\)\./);
+    expect(text).not.toMatch(/no longer pays|saves|saving/);
+  });
+
+  it('every cost-like parameter in the module content is quoted', () => {
+    for (const m of Object.values(registry().modules)) {
+      for (const key of Object.keys(m.params)) {
+        if (/cost|upkeep|maintenance|energyPer/i.test(key)) expect(MODULE_COST_KEYS as readonly string[], `${m.id}.${key}`).toContain(key);
+      }
+    }
+  });
+});
+
+describe('P2.3 pinned branches keep their birth details through compaction (CT §12.10)', () => {
+  /** Record enough later births that the branch founder's family falls out of the recent window. */
+  function flood(w: World): void {
+    const L = w.lineage;
+    const n = LINEAGE_RETAIN + 2100;
+    for (let k = 0; k < n; k++) {
+      recordBirth(L, w.counters.nextBirthId++, { parent: 0, genome: 0, tick: w.tick, generation: 0, species: 0, entityId: -1, origin: 1 });
+    }
+    expect(compactLineage(L)).toBeGreaterThan(0);
+  }
+
+  function pinnedDish(pin: boolean) {
+    const d = dish();
+    const { w } = d;
+    const c = w.ents.cols;
+    const founderBirth = c.birthId[d.founder]!;
+    const v = d.gen({ loci: bump(w.genomes.get(d.base).loci, { 5: 10 }) });
+    const t = standardTree(d, v);
+    if (pin) expect(applyNow(w, 'pin', { kind: 'lineage', op: 'pin', branch: 0, pinned: true }).result!.accepted).toBe(1);
+    const sBirth = c.birthId[t.S]!;
+    const kids = [field(w.lineage, 'parent', c.birthId[t.R12]!)!, field(w.lineage, 'parent', c.birthId[t.R21]!)!].sort((a, b) => a - b);
+    flood(w);
+    return { ...d, t, founderBirth, sBirth, kids };
+  }
+
+  it('the founder, its parent, sibling and children stay readable; the panel does not call them summarized', () => {
+    const { w, t, founderBirth, sBirth, kids } = pinnedDish(true);
+    expect(has(w.lineage, t.rootBirth)).toBe(false); // compacted from the main arrays…
+    const fam = buildLineage(w, { branch: 0 }).selected!.family;
+    expect(fam.root?.birthId).toBe(t.rootBirth); // …but kept for the pinned branch
+    expect(fam.parent?.birthId).toBe(founderBirth);
+    expect(fam.siblings.map((s) => s.birthId)).toEqual([sBirth]);
+    expect(fam.children.map((s) => s.birthId)).toEqual(kids);
+    expect(fam.root?.status).toBe('divided');
+    expect(fam.historyIncomplete).toBe(false);
+    // A kept record still follows its individual: the sibling dies after compaction.
+    killEntity(w, t.S, R.DEATH_STARVATION);
+    expect(buildLineage(w, { branch: 0 }).selected!.family.siblings[0]!.status).toBe('died');
+    // Save → reload keeps them, and the hash is unchanged.
+    const again = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(w))));
+    expect(buildLineage(again, { branch: 0 }).selected!.family).toEqual(buildLineage(w, { branch: 0 }).selected!.family);
+    expect(stateHash(again)).toBe(stateHash(w));
+    // Unpinning releases them.
+    applyNow(w, 'unpin', { kind: 'lineage', op: 'pin', branch: 0, pinned: false });
+    expect(w.lineage.kept).toBeUndefined();
+    expect(w.lineage.keep).toBeUndefined();
+    expect(buildLineage(w, { branch: 0 }).selected!.family.historyIncomplete).toBe(true);
+  });
+
+  it('an unpinned branch’s founder family is compacted like any other record', () => {
+    const { w } = pinnedDish(false);
+    const fam = buildLineage(w, { branch: 0 }).selected!.family;
+    expect(fam.root).toBeNull();
+    expect(fam.historyIncomplete).toBe(true);
+    expect(w.lineage.kept).toBeUndefined();
   });
 });
 

@@ -8,7 +8,8 @@
  */
 import { applyNow, type CommandPayload } from '@sim/commands';
 import type { ContentRegistry } from '@sim/content/registry';
-import { realizeRecipe } from '@sim/recipes';
+import type { RecipeDef } from '@sim/content/schema';
+import { realizeRecipe, recipeOverridesOf, type RecipeOverridesRecord, type RecipeWorldProvenance } from '@sim/recipes';
 import { deserializeWorld, serializeWorld, stateHash, type WorldState } from '@sim/serialize';
 import { step } from '@sim/tick';
 import type { World } from '@sim/world';
@@ -17,9 +18,10 @@ import { buildFamily, buildInspector, packDeposits, packEntities, packOverlay, v
 import { buildLineage, packLineageMarks } from '@sim/lineage';
 import type { LineageMarks, LineageView } from './protocol';
 import { stamp, type DishInfo, type DishSource, type Envelope, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
+import type { ExperimentStampMsg } from './protocol';
 import { captureBaseline, PairedRun, realizeArm, type CompareSpeed, type CompareStatus, type ComparisonResults, type ComparisonState, type Intervention } from './comparison';
 import type { ComparisonExperiment } from './comparison';
-import { experimentCardView, experimentCatalog, GateWatch, realizeExperimentArms } from '@sim/experiments';
+import { experimentCardView, experimentCatalog, GateWatch, inspectShowsFoodUse, PlayerSteps, realizeExperimentArms, stepSpecies, type PlayerStep } from '@sim/experiments';
 import { PAIRED_RUN_LABEL, SINGLE_RUN_LABEL, stepObserved, type ArmObserver } from '@sim/pairedRun';
 import { TICKS_PER_SECOND } from '@sim/constants';
 import { isIntervention } from '@sim/specimens';
@@ -84,6 +86,8 @@ interface Dish {
   arm: { readonly compareId: string; readonly role: 'A' | 'B' } | null;
   /** Trait overlay / lineage highlight requested by the lineage panel (P2.3; render-only). */
   lineageView?: LineageView | null;
+  /** Names, pins and saved specimens applied since the undoable command (P2.3): re-applied after Undo. */
+  undoLabels?: { readonly commandId: string; readonly payload: CommandPayload }[];
   /** A single-arm experiment card running on this dish (P2.5): its gate is watched while it runs. */
   experiment?: SingleArmExperiment | null;
 }
@@ -95,6 +99,14 @@ interface SingleArmExperiment {
   readonly labels: readonly string[];
   /** The dish was changed or failed: the card's observation stopped (the dish itself goes on). */
   ended: boolean;
+  /** The player steps the card lists, noted from UI events (CT §10.1); the stamp needs them all. */
+  readonly steps: PlayerSteps;
+  /** The species those steps follow (e.g. the Sprinters whose food use the inspector shows). */
+  readonly species: readonly string[];
+  /** The stamp as recorded when the measured gate held, kept until every listed step is taken. */
+  pending: ExperimentStampMsg | null;
+  /** The stamp was posted (the observation is complete). */
+  posted: boolean;
 }
 
 /** An experiment card's paired run (P2.5): the card's own arms, observers and gate. */
@@ -105,6 +117,11 @@ interface LiveExperiment {
   readonly labels: readonly string[];
   readonly horizonTicks: number;
   measured: { readonly A: Readonly<Record<string, number>>; readonly B: Readonly<Record<string, number>> } | null;
+  /** The player steps the card lists (results read, population history opened); the stamp needs them all. */
+  readonly steps: PlayerSteps;
+  /** The stamp as recorded when the measured gate held, kept until every listed step is taken. */
+  pending: ExperimentStampMsg | null;
+  posted: boolean;
 }
 
 /**
@@ -352,13 +369,17 @@ export class DishHost {
         const before = msg.undoable ? serializeWorld(d.world) : null;
         const tick = d.world.tick;
         const cmd = applyNow(d.world, msg.commandId, msg.payload);
-        if (d.experiment && !d.experiment.ended && (msg.payload.kind !== 'lineage' || isIntervention(msg.payload))) this.endExperiment(d, 'changed');
+        // A command that placed nothing (accepted 0) left the dish unchanged: the card keeps observing.
+        const changed = cmd.result === undefined || cmd.result.accepted > 0;
+        if (d.experiment && !d.experiment.ended && changed && (msg.payload.kind !== 'lineage' || isIntervention(msg.payload))) this.endExperiment(d, 'changed');
         if (before) {
           d.undo = before;
           // The pre-command state doubles as the rollback checkpoint.
           d.checkpoint = before;
           d.replay = [];
         }
+        if (before) d.undoLabels = [];
+        else if (d.undo && msg.payload.kind === 'lineage' && !isIntervention(msg.payload)) (d.undoLabels ??= []).push({ commandId: msg.commandId, payload: msg.payload });
         d.replay.push({ tick, commandId: msg.commandId, payload: msg.payload });
         this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: cmd.result ?? null });
         this.sendSnapshot(d);
@@ -377,6 +398,13 @@ export class DishHost {
         d.world = deserializeWorld(d.undo);
         d.checkpoint = d.undo;
         d.replay = [];
+        // Names, pins and saved specimens made after the undone command are notebook labels, not part
+        // of that change: re-apply them in their original order at the restored tick (P2.3).
+        for (const l of d.undoLabels ?? []) {
+          applyNow(d.world, l.commandId, l.payload);
+          d.replay.push({ tick: d.world.tick, commandId: l.commandId, payload: l.payload });
+        }
+        d.undoLabels = [];
         d.undo = null;
         d.speed = 0;
         d.lastEventId = d.world.counters.nextEventId - 1;
@@ -389,6 +417,7 @@ export class DishHost {
         const d = this.need(msg.dishId);
         d.overlay = msg.overlay;
         d.selection = msg.selection;
+        this.experimentSteps(d);
         this.sendSnapshot(d);
         return;
       }
@@ -431,6 +460,7 @@ export class DishHost {
         const h = d.world.history;
         const seconds = msg.lastSeconds !== undefined && msg.lastSeconds >= 0 ? h.seconds.slice(-msg.lastSeconds) : h.seconds;
         this.post({ type: 'history', requestId: msg.requestId, dishId: d.id, seconds, minutes: h.minutes, compacted: h.compacted });
+        this.experimentHistoryOpened(d);
         return;
       }
       case 'family': {
@@ -558,9 +588,10 @@ export class DishHost {
       worldIds: ids ? { A: `${msg.newDishId}+${ids.compareId}:A`, B: `${msg.newDishId}+${ids.compareId}:B`, shared: msg.newDishId } : { A: msg.newDishId },
     });
     const watch = new GateWatch(def, recipe, this.registry.manifest);
+    const steps = new PlayerSteps(def);
     if (!def.paired || !ids || !arms.B || !arms.obsB) {
       const dish = this.addDish(msg.newDishId, arms.A, name);
-      dish.experiment = { watch, obs: arms.obsA, labels, ended: false };
+      dish.experiment = { watch, obs: arms.obsA, labels, ended: false, steps, species: stepSpecies(def), pending: null, posted: false };
       this.post({ type: 'experimentStarted', requestId: msg.requestId, cardId: def.id, info: this.info(dish), compare: null });
       this.sendSnapshot(dish);
       return;
@@ -585,7 +616,7 @@ export class DishHost {
       run: null,
       results: null,
       error: null,
-      experiment: { watch, obsA: arms.obsA, obsB: arms.obsB, labels, horizonTicks, measured: null },
+      experiment: { watch, obsA: arms.obsA, obsB: arms.obsB, labels, horizonTicks, measured: null, steps, pending: null, posted: false },
     };
     this.comparison = c;
     for (const [role, world] of [
@@ -609,13 +640,55 @@ export class DishHost {
     return { A: m.A, B: m.B ?? {} };
   }
 
-  /** After every pair of an experiment's paired run: watch the gate; reaching it posts the stamp (the run goes on). */
+  /**
+   * After every pair of an experiment's paired run: watch the gate. When it holds, the stamp is recorded
+   * with the values of that moment and posted once the card's player steps are taken too (the run goes on).
+   */
   private experimentAfterPair(c: Comparison, run: PairedRun, x: LiveExperiment): void {
     const stamp = x.watch.afterTick({ world: run.a, obs: x.obsA }, { world: run.b, obs: x.obsB });
     if (!stamp) return;
     x.measured = this.experimentMeasured(run, x);
-    this.post({ type: 'experimentStamp', dishId: c.sourceDishId, stamp: { stamp, title: x.watch.def.title, label: PAIRED_RUN_LABEL, labels: x.labels, measured: x.measured } });
-    this.postCompare(c);
+    x.pending = { stamp, title: x.watch.def.title, label: PAIRED_RUN_LABEL, labels: x.labels, measured: x.measured };
+    if (this.experimentPostPaired(c, x)) this.postCompare(c);
+  }
+
+  /** Post a paired card's held stamp once its measured gate held and every listed step was taken. */
+  private experimentPostPaired(c: Comparison, x: LiveExperiment): boolean {
+    if (x.posted || !x.pending || !x.steps.complete) return false;
+    x.posted = true;
+    this.post({ type: 'experimentStamp', dishId: c.sourceDishId, stamp: x.pending });
+    return true;
+  }
+
+  /**
+   * The history of a dish was requested — the only request that opens a history view (the History sheet
+   * on a dish; the population history on a paired run's results). A UI event, never simulation state.
+   */
+  private experimentHistoryOpened(d: Dish): void {
+    if (d.arm) {
+      const c = this.comparison;
+      const x = c?.experiment;
+      if (!c || !x || c.id !== d.arm.compareId || c.status !== 'complete') return;
+      if (x.steps.note('viewPreyHistory') && this.experimentPostPaired(c, x)) this.postCompare(c);
+      return;
+    }
+    this.experimentSteps(d, 'openResourceHistory');
+  }
+
+  /**
+   * Note a player step on a single-arm card's dish (UI events only: reads the world, never writes it),
+   * including "the inspector identifies food use" for the organism selected now, and post the held stamp
+   * once the measured gate held and every listed step was taken.
+   */
+  private experimentSteps(d: Dish, step?: PlayerStep): void {
+    const x = d.experiment;
+    if (!x || x.ended || x.posted) return;
+    if (step) x.steps.note(step);
+    const sel = d.selection;
+    if (x.steps.needs('inspectFoodUse') && sel?.kind === 'entity' && inspectShowsFoodUse(d.world, sel.birthId, x.species)) x.steps.note('inspectFoodUse');
+    if (!x.pending || !x.steps.complete) return;
+    x.posted = true;
+    this.post({ type: 'experimentStamp', dishId: d.id, stamp: x.pending });
   }
 
   private experimentView(c: Comparison, x: LiveExperiment): ComparisonExperiment {
@@ -632,30 +705,35 @@ export class DishHost {
       change: def.change,
       horizonTicks: x.horizonTicks,
       gate: a && b ? x.watch.status({ world: a.world, obs: x.obsA }, { world: b.world, obs: x.obsB }) : null,
-      stamp: x.watch.stamp,
+      steps: x.steps.status(),
+      stamp: x.posted ? x.watch.stamp : null,
       measured: x.measured,
     };
   }
 
-  /** One tick of a free-running dish; a single-arm card's observer and gate ride along until the gate (read-only). */
+  /**
+   * One tick of a free-running dish; a single-arm card's observer and gate ride along until the gate
+   * (read-only). The stamp is recorded when the measured gate holds and posted once the card's player
+   * steps are taken too.
+   */
   private stepDish(d: Dish): void {
     const x = d.experiment;
-    if (!x || x.ended || x.watch.reached) {
-      step(d.world);
-      return;
+    if (!x || x.ended || x.watch.reached) step(d.world);
+    else {
+      stepObserved(d.world, x.obs);
+      const stamp = x.watch.afterTick({ world: d.world, obs: x.obs }, null);
+      if (stamp) {
+        const measured = x.watch.measured({ world: d.world, obs: x.obs }, null);
+        x.pending = { stamp, title: x.watch.def.title, label: SINGLE_RUN_LABEL, labels: x.labels, measured };
+      }
     }
-    stepObserved(d.world, x.obs);
-    const stamp = x.watch.afterTick({ world: d.world, obs: x.obs }, null);
-    if (stamp) {
-      const measured = x.watch.measured({ world: d.world, obs: x.obs }, null);
-      this.post({ type: 'experimentStamp', dishId: d.id, stamp: { stamp, title: x.watch.def.title, label: SINGLE_RUN_LABEL, labels: x.labels, measured } });
-    }
+    if (x && !x.ended && !x.posted) this.experimentSteps(d);
   }
 
   /** A single-arm card's dish was changed or failed before its gate: the observation stops; the dish goes on. */
   private endExperiment(d: Dish, reason: 'changed' | 'failed'): void {
     const x = d.experiment;
-    if (!x || x.ended || x.watch.reached) return;
+    if (!x || x.ended || x.posted) return;
     x.ended = true;
     this.post({ type: 'experimentEnded', dishId: d.id, cardId: x.watch.def.id, reason });
   }
@@ -796,6 +874,8 @@ export class DishHost {
     c.acc = 0;
     c.results = c.run!.results(c.interventions);
     if (c.experiment) c.experiment.measured = this.experimentMeasured(c.run!, c.experiment);
+    // The results are on the run's screen from this moment (the paired run's "view the comparison" step).
+    if (c.experiment && c.experiment.steps.note('viewComparison')) this.experimentPostPaired(c, c.experiment);
     this.sendSnapshot(this.dishes[c.aDishId]!);
     this.sendSnapshot(this.dishes[c.bDishId]!);
   }
@@ -864,9 +944,23 @@ export class DishHost {
               }),
             }
           : {}),
+        // What if? (D09 §4): record exactly what was applied above, so the world says whether it IS the authored recipe.
+        provenance: this.recipeProvenance(source),
       });
     }
     return deserializeWorld(source.state);
+  }
+
+  /** Provenance of a recipe dish with the overrides build() applies (`{}` = the recipe as authored). */
+  private recipeProvenance(source: Extract<DishSource, { kind: 'recipe' }>): RecipeWorldProvenance {
+    const o = source.overrides;
+    const overrides: RecipeOverridesRecord = {
+      ...(source.seed !== undefined ? { seed: source.seed } : {}),
+      ...(o?.mutationPreset ? { mutationPreset: o.mutationPreset } : {}),
+      ...(o?.founderMode ? { founderMode: o.founderMode } : {}),
+      ...(o?.empty ? { empty: true } : {}),
+    };
+    return { recipeId: source.recipeId, recipeRevision: this.registry.recipes[source.recipeId]?.revision ?? null, createdFrom: 'recipe', overrides };
   }
 
   // -------------------------------------------------------------------------------------------
@@ -874,13 +968,36 @@ export class DishHost {
   // content; realization builds a fresh world at tick 0 and never touches another world or its random
   // streams. The previous dish is kept through the save flow before the new dish opens.
 
-  /** DishInfo fields: the variant record (provenance) and the recipe whose What if? ideas apply. */
+  /**
+   * DishInfo fields: the variant record (provenance) and the recipe whose What if? ideas apply: a
+   * variant dish's source, or the recipe a dish IS exactly (D09 §4). A custom dish gets none.
+   */
   private whatIfInfo(w: World): { variant: VariantRecord | null; whatIfSourceId: string | null } {
     const record = variantRecordOf(w);
     if (record) return { variant: record, whatIfSourceId: record.sourceId };
     const p = w.content.provenance;
-    const ideas = p.createdFrom === 'recipe' && p.recipeId !== null && this.registry.recipes[p.recipeId] !== undefined && whatIfChoices(this.registry, p.recipeId).length > 0;
-    return { variant: null, whatIfSourceId: ideas ? p.recipeId : null };
+    const recipe = p.createdFrom === 'recipe' && p.recipeId !== null ? this.registry.recipes[p.recipeId] : undefined;
+    const ideas = recipe !== undefined && this.isAuthoredRecipe(w, recipe) && whatIfChoices(this.registry, recipe.id).length > 0;
+    return { variant: null, whatIfSourceId: ideas && recipe ? recipe.id : null };
+  }
+
+  /**
+   * D09 §4 "remixes authored starting recipes … In a custom dish, offer Duplicate dish": the world was
+   * made from this build's revision of the recipe with its own seed, no overrides and not empty. A
+   * save made before overrides were recorded counts only when its seed and settings match exactly; a
+   * malformed record never does.
+   */
+  private isAuthoredRecipe(w: World, recipe: RecipeDef): boolean {
+    if (w.content.provenance.recipeRevision !== recipe.revision || w.seed !== recipe.seed) return false;
+    const o = recipeOverridesOf(w);
+    if (o === null) return false;
+    if (o === undefined) return w.settings.mutationPreset === recipe.mutationPreset && w.settings.founderMode === recipe.founderMode;
+    return (
+      o.empty !== true &&
+      (o.seed ?? recipe.seed) === recipe.seed &&
+      (o.mutationPreset ?? recipe.mutationPreset) === recipe.mutationPreset &&
+      (o.founderMode ?? recipe.founderMode) === recipe.founderMode
+    );
   }
 
   /** Every What if? failure becomes a readable refusal: nothing was started, saved or changed. */
@@ -894,7 +1011,12 @@ export class DishHost {
     }
   }
 
-  private async whatIfAnswer(sourceIdIn: string | null, dishId: string | null): Promise<WhatIfAnswer> {
+  /**
+   * The answer also carries `registryLabel`: the UX §3.3 label of the world a choice would build (this
+   * build's manifest, by the same rule as DishInfo.manifestLabel), for the choice's Details. It is an
+   * additive field outside the WhatIfAnswer type until protocol.ts declares it (see D-0026 follow-up).
+   */
+  private async whatIfAnswer(sourceIdIn: string | null, dishId: string | null): Promise<WhatIfAnswer & { readonly registryLabel: string }> {
     const d = dishId !== null ? this.need(dishId) : null;
     const record = d ? variantRecordOf(d.world) : null;
     const sourceId = sourceIdIn ?? (d ? this.whatIfInfo(d.world).whatIfSourceId : null);
@@ -918,22 +1040,45 @@ export class DishHost {
         patches: (source?.fieldPatches ?? []).map((p, index) => ({ index, center: p.center, radius: p.radius, label: p.label ?? null })),
         founders: (source?.founders ?? []).map((f) => ({ speciesId: f.species, name: this.registry.species[f.species]?.name ?? f.species, count: f.count, center: f.center, radius: f.radius })),
       },
-      current: d && record ? { ...record, atStart: this.atRecordedStart(d) } : null,
+      current: d && record ? { ...record, atStart: await this.rebuildsExactly(d) } : null,
       next: next ? { id: next.id, title: next.title, question: next.question, previewDifference: next.previewDifference } : null,
       plan: await this.keepPlan(d),
+      registryLabel: this.registry.manifest.enabledModules.length < 17 ? 'Core prototype — quantitative evolution' : 'Standard Evolution',
     };
   }
 
-  /** A What if? dish still exactly at its recorded start (tick 0, the recorded start hash): Again rebuilds it exactly. */
-  private atRecordedStart(d: Dish): boolean {
+  /**
+   * A What if? dish that is still exactly its recorded start AND that this build rebuilds exactly
+   * (D-0026): tick 0 with the recorded start hash, and the variant revision, both checksums, the
+   * content hash and the rule versions all as recorded. Only such a dish is "unchanged" and not saved
+   * again; any other goes through the normal save flow.
+   */
+  private async rebuildsExactly(d: Dish): Promise<boolean> {
     const record = variantRecordOf(d.world);
-    return record !== null && d.world.tick === 0 && stateHash(d.world) === record.initialStateHash;
+    if (!record || !(await this.recordMatchesBuild(record))) return false;
+    // Checked after the await, with no await after it: the dish may have been stepped meanwhile.
+    return d.world.tick === 0 && stateHash(d.world) === record.initialStateHash;
+  }
+
+  /** The variant record names exactly what this build would realize (same idea, same rules). */
+  private async recordMatchesBuild(r: VariantRecord): Promise<boolean> {
+    const v = this.registry.variants[r.variantId];
+    const m = this.registry.manifest;
+    if (!v || v.revision !== r.variantRevision || v.sourceId !== r.sourceId || v.sourceRevision !== r.sourceRevision) return false;
+    if (m.contentHash !== r.contentHash || m.contentVersion !== r.contentVersion) return false;
+    if (m.simulationVersion !== r.simulationVersion || m.evolutionRulesVersion !== r.evolutionRulesVersion) return false;
+    try {
+      const sums = await variantChecksums(this.registry, r.variantId);
+      return sums.sourceChecksum === r.sourceChecksum && sums.variantChecksum === r.variantChecksum;
+    } catch {
+      return false;
+    }
   }
 
   /** How 'auto' would keep this dish (UX §3.4): its own slot, else the first free named slot. */
   private async keepPlan(d: Dish | null): Promise<WhatIfPlan> {
     if (!d) return { kind: 'none' };
-    if (this.atRecordedStart(d)) return { kind: 'unchanged', name: d.name };
+    if (await this.rebuildsExactly(d)) return { kind: 'unchanged', name: d.name };
     if (!this.store) return { kind: 'unavailable', name: d.name };
     const own = this.ownSlots[d.id];
     if (own !== undefined) return { kind: 'slot', slotId: own, own: true, name: d.name };
@@ -985,7 +1130,7 @@ export class DishHost {
    */
   private async keepDish(d: Dish | null, keep: WhatIfKeep): Promise<WhatIfKept> {
     if (!d) return { kind: 'none', slot: null, replaced: null, name: null, autosaved: false };
-    if (keep.kind === 'auto' && this.atRecordedStart(d)) return { kind: 'unchanged', slot: null, replaced: null, name: d.name, autosaved: false };
+    if (keep.kind === 'auto' && (await this.rebuildsExactly(d))) return { kind: 'unchanged', slot: null, replaced: null, name: d.name, autosaved: false };
     const priorSpeed = d.speed;
     d.speed = 0;
     d.acc = 0;

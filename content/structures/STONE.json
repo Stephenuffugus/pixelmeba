@@ -1,0 +1,13 @@
+{
+  "id": "STONE",
+  "name": "Stone",
+  "kind": "cell",
+  "guide": {
+    "summary": "A solid stone that nothing passes through.",
+    "biology": "Grains and pebbles on the bottom of a pond block the way, and many microbes cling to their edges.",
+    "rules": "A stone cell blocks movement and transport: nothing dissolved, lying or alive enters or crosses it, and it holds none of these. Open cells beside a stone are a stone-edge attachment surface. It can only be placed on an empty cell inside the rim; whatever was dissolved or lying there is moved, whole, into the nearest open cells on the same side, so no material is lost or made. Erasing it brings back the substrate underneath. No additional modeled reaction.",
+    "example": "Place a stone line between a sugar patch and a group of swimmers and watch them go around it."
+  },
+  "iconId": "structure_stone",
+  "phase": 2
+}

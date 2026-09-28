@@ -41,6 +41,7 @@ import {
   ArmObserver,
   groupModules,
   measureArm,
+  median,
   oxygenMean,
   PairedRun,
   PAIRED_RUN_LABEL,
@@ -163,6 +164,28 @@ export function evaluateGate(
   return { pass: out.every((c) => c.pass), clauses: out };
 }
 
+// ------------------------------------------------------------------------------ player steps and living counts
+
+/** A step of a card's completion evidence that the player takes in the app (CT §10.1; completion.playerSteps). */
+export type PlayerStep = ExperimentDef['completion']['playerSteps'][number];
+
+/** Steps taken on a paired run's screen; the other steps are taken on the card's own dish. */
+export const PAIRED_STEPS: readonly PlayerStep[] = ['viewComparison', 'viewPreyHistory'];
+
+const GROUP_ENERGY_HEADS = ['groupEnergy', 'groupEnergyMedian', 'groupEnergyMin', 'groupEnergyMax'];
+
+/**
+ * The living count an energy measurement needs beside it: a mean, median, lowest or highest energy is
+ * recorded as 0 when nothing is alive, and the count tells that apart from a real value (`alive.SP` for
+ * meanEnergy.SP, `descendants.SP.GROUP` for a founder group's energies). Null for every other id.
+ */
+export function livingCountFor(id: string): string | null {
+  const [head, a, b] = id.split('.');
+  if (head === 'meanEnergy' && a) return `alive.${a}`;
+  if (head !== undefined && GROUP_ENERGY_HEADS.includes(head) && a && b) return `descendants.${a}.${b}`;
+  return null;
+}
+
 // ------------------------------------------------------------------------------ validation
 
 export interface ExperimentProblem {
@@ -221,6 +244,16 @@ export function experimentProblems(def: ExperimentDef, recipe: RecipeDef | undef
   if (!(def.stoppingSeconds > 0) || !tickAligned(def.stoppingSeconds)) bad('stoppingSeconds', 'must be a positive whole number of ticks (0.1 s)');
   def.measurements.forEach((m, i) => measureOk(m, `measurements.${i}`));
   if (def.measurements.length === 0) bad('measurements', 'a card reports at least one measurement');
+  // An energy of a group with no living member is recorded as 0; the card also reports the count, so
+  // the value can always be shown as "none alive" instead of a real zero.
+  def.measurements.forEach((m, i) => {
+    const needs = livingCountFor(m);
+    if (needs !== null && !def.measurements.includes(needs)) bad(`measurements.${i}`, `"${m}" is 0 when nothing is alive; also report "${needs}" so an empty group reads "none alive"`);
+  });
+  // Player steps happen where the card runs: the dish view for one dish, the paired-run results for two.
+  def.completion.playerSteps.forEach((st, i) => {
+    if (PAIRED_STEPS.includes(st) !== def.paired) bad(`completion.playerSteps.${i}`, `"${st}" ${def.paired ? 'needs a card with one dish' : 'needs a paired card'}`);
+  });
 
   // Gate: a custom predicate over measured state.
   if (def.gate.type !== 'custom') bad('gate.type', `gate type "${def.gate.type}" is not supported for experiments (use "custom" with measurement clauses)`);
@@ -297,6 +330,40 @@ export interface TimelineSample {
 }
 
 const TIMELINE_FIELDS: readonly FieldId[] = ['sugar', 'starch', 'detritus', 'nutrient', 'co2'];
+
+/** One founder group's energy distribution at a timeline moment (null values: no living member). */
+export interface GroupEnergySample {
+  /** "SP.GROUP", e.g. "B01.E05" (pairedRun.ts founder groups). */
+  readonly group: string;
+  readonly alive: number;
+  readonly meanE: number | null;
+  readonly medianE: number | null;
+  readonly minE: number | null;
+  readonly maxE: number | null;
+}
+
+/**
+ * Founder groups' energy distributions at one timeline moment (CT §9.2 "record energy distributions").
+ * Kept beside `timeline`, sampled at the same seconds, so the wave A timeline records stay unchanged.
+ */
+export interface GroupTimelineSample {
+  readonly second: number;
+  readonly groups: readonly GroupEnergySample[];
+}
+
+function sampleGroups(world: World, obs: ArmObserver): GroupTimelineSample {
+  const lists = obs.groupEnergyLists(world);
+  return {
+    second: world.tick / TICKS_PER_SECOND,
+    groups: obs.groupKeys.map((group, g) => {
+      const e = lists[g]!;
+      const n = e.length;
+      let sum = 0;
+      for (const v of e) sum += v;
+      return { group, alive: n, meanE: n > 0 ? sum / n : null, medianE: n > 0 ? median(e) : null, minE: n > 0 ? e[0]! : null, maxE: n > 0 ? e[n - 1]! : null };
+    }),
+  };
+}
 
 function shares(counts: Record<string, number>, n: number): Record<string, number> {
   const out: Record<string, number> = {};
@@ -579,6 +646,82 @@ export class GateWatch {
   }
 }
 
+/**
+ * The player steps one running card lists (completion.playerSteps), noted from UI events by the app
+ * (src/worker/host.ts): opening the resource history, the inspector showing an organism's food use,
+ * the paired run's results and population history. Worker state only — never simulation state, never
+ * saved in a world; the headless runner has no player and records the measured gate alone. A card's
+ * stamp needs its measured gate AND every step listed here.
+ */
+export class PlayerSteps {
+  readonly required: readonly PlayerStep[];
+  private readonly done: PlayerStep[] = [];
+
+  constructor(def: ExperimentDef) {
+    this.required = def.completion.playerSteps.filter((st, i, all) => all.indexOf(st) === i);
+  }
+
+  /** True while `step` is listed and not yet taken. */
+  needs(step: PlayerStep): boolean {
+    return this.required.includes(step) && !this.done.includes(step);
+  }
+
+  /** Note a step the player took; returns true when it was a listed step not taken before. */
+  note(step: PlayerStep): boolean {
+    if (!this.needs(step)) return false;
+    this.done.push(step);
+    return true;
+  }
+
+  get complete(): boolean {
+    return this.required.every((st) => this.done.includes(st));
+  }
+
+  /** Every listed step in the card's order, with whether it was taken. */
+  status(): { readonly step: PlayerStep; readonly done: boolean }[] {
+    return this.required.map((step) => ({ step, done: this.done.includes(step) }));
+  }
+}
+
+/**
+ * The species a card's player steps follow: those its gate measures (e.g. B01 for Food trail), else
+ * those its measurements name. Recorded content only.
+ */
+export function stepSpecies(def: ExperimentDef): string[] {
+  const from = (ids: readonly string[]) => {
+    const out: string[] = [];
+    for (const id of ids) {
+      const ref = parseMeasure(id);
+      const sp = typeof ref === 'string' ? null : speciesOfRef(ref);
+      if (sp !== null && !out.includes(sp)) out.push(sp);
+    }
+    return out;
+  };
+  const gate = from(gateClauses(def).map((c) => c.measure));
+  return gate.length > 0 ? gate : from(def.measurements);
+}
+
+/**
+ * "The inspector identifies food use" (CT §10.1): the organism the inspector shows (`birthId`) is alive,
+ * belongs to one of `species` (any species when empty) and took in food during the last simulated
+ * second — the inspector then shows that intake and "It took in … carbon in the last second". Reads only.
+ */
+export function inspectShowsFoodUse(world: World, birthId: number, species: readonly string[]): boolean {
+  const c = world.ents.cols;
+  for (let i = 0; i < world.ents.highWater; i++) {
+    if (c.alive[i] !== 1 || c.birthId[i] !== birthId) continue;
+    const sp = world.species[c.species[i]!]!.id;
+    return (species.length === 0 || species.includes(sp)) && c.intakeLastSecond[i]! > 0;
+  }
+  return false;
+}
+
+/** The experiment card a world was made from (its recorded provenance), or null for any other dish. */
+export function experimentOf(world: World): string | null {
+  const p = world.content.provenance as Partial<ExperimentWorldProvenance> & World['content']['provenance'];
+  return p.createdFrom === 'experiment' && typeof p.experimentId === 'string' ? p.experimentId : null;
+}
+
 // ------------------------------------------------------------------------------ running
 
 export interface ArmResult {
@@ -591,6 +734,8 @@ export interface ArmResult {
   /** The card's own measurement list at the end. */
   readonly reported: Readonly<Record<string, number>>;
   readonly timeline: readonly TimelineSample[];
+  /** Founder groups' energy distributions at the timeline's seconds (an addition beside `timeline`). */
+  readonly groupTimeline: readonly GroupTimelineSample[];
   readonly ledger: { readonly ok: boolean; readonly everyCheckOk: boolean; readonly relErr: MaterialTotals; readonly checks: number };
   readonly unattributedDeaths: number;
 }
@@ -631,6 +776,7 @@ interface ArmRun {
   readonly obs: ArmObserver;
   readonly startHash: string;
   readonly timeline: TimelineSample[];
+  readonly groupTimeline: GroupTimelineSample[];
   everyCheckOk: boolean;
   checks: number;
 }
@@ -638,6 +784,7 @@ interface ArmRun {
 function sample(arm: ArmRun): void {
   const s = sampleArm(arm.world, arm.obs);
   arm.timeline.push(s);
+  arm.groupTimeline.push(sampleGroups(arm.world, arm.obs));
   arm.checks++;
   if (!s.ledgerOk) arm.everyCheckOk = false;
 }
@@ -652,6 +799,7 @@ function finishArm(arm: ArmRun, def: ExperimentDef): ArmResult {
     measurements: measureArm(w, arm.obs, null),
     reported: measureArm(w, arm.obs, def.measurements),
     timeline: arm.timeline,
+    groupTimeline: arm.groupTimeline,
     ledger: { ok: ledger.ok, everyCheckOk: arm.everyCheckOk && ledger.ok, relErr: ledger.relErr, checks: arm.checks + 1 },
     unattributedDeaths: arm.obs.unattributedDeaths(),
   };
@@ -671,7 +819,7 @@ export function runExperiment(registry: ContentRegistry, idOrDef: string | Exper
   const stopTick = Math.round(stopSecond * TICKS_PER_SECOND);
   if (stopTick <= arms.startTick) throw new ExperimentError(`${def.id}: stopping point ${stopSecond} s is not after the arms start`);
   const sampleTicks = Math.max(1, Math.round((opts.sampleSeconds ?? 30) * TICKS_PER_SECOND));
-  const mk = (world: World, obs: ArmObserver): ArmRun => ({ world, obs, startHash: stateHash(world), timeline: [], everyCheckOk: true, checks: 0 });
+  const mk = (world: World, obs: ArmObserver): ArmRun => ({ world, obs, startHash: stateHash(world), timeline: [], groupTimeline: [], everyCheckOk: true, checks: 0 });
   const a = mk(arms.A, arms.obsA);
   const b = arms.B && arms.obsB ? mk(arms.B, arms.obsB) : null;
   const paired =
@@ -777,6 +925,10 @@ export interface ExperimentCardView {
   readonly change: ExperimentChange;
   readonly gate: readonly GateClause[];
   readonly journalStamp: string;
+  /** The player steps the stamp also needs (completion.playerSteps, CT §10.1), in the card's order. */
+  readonly playerSteps: readonly PlayerStep[];
+  /** The species those steps follow (e.g. the Sprinters whose food use the inspector must show). */
+  readonly stepSpecies: readonly string[];
   readonly patches: readonly CardPatch[];
   readonly scheduled: readonly CardScheduled[];
   readonly founders: readonly { readonly speciesId: string; readonly count: number; readonly modules: readonly string[]; readonly assignment: string; readonly label: string | null }[];
@@ -813,6 +965,8 @@ export function experimentCardView(registry: ContentRegistry, def: ExperimentDef
     change: def.change,
     gate: gateClauses(def),
     journalStamp: def.completion.journalStamp,
+    playerSteps: def.completion.playerSteps.filter((st, i, all) => all.indexOf(st) === i),
+    stepSpecies: stepSpecies(def),
     patches: recipe.fieldPatches.map((p, index) => ({ index, label: p.label ?? null, center: p.center, radius: p.radius, add: { ...p.add } })),
     scheduled: recipe.scheduledCommands.map((sc, index) => ({ index, atSecond: sc.atSecond, label: sc.label, payload: sc.payload as unknown as CommandPayload })),
     founders: recipe.founders.map((f) => ({ speciesId: f.species, count: f.count, modules: [...f.modules], assignment: f.moduleAssignment, label: f.label ?? null })),

@@ -252,7 +252,7 @@ async function main(): Promise<void> {
   const r = registry!;
   console.log(
     `content ok · contentHash ${hash} · species ${r.speciesIds.length} (enabled ${r.manifest.enabledSpecies.length}) · ` +
-      `materials ${r.materialIds.length} · modules ${r.moduleIds.length} · habitats ${r.habitatIds.length} · ` +
+      `materials ${r.materialIds.length} · modules ${r.moduleIds.length} · habitats ${r.habitatIds.length} · structures ${r.structureIds.length} · ` +
       `recipes ${r.recipeIds.length} · experiments ${r.experimentIds.length} · variants ${r.variantIds.length} · ` +
       `atlas ${atlasFile} complete for ${r.manifest.enabledSpecies.length} enabled species (${atlasFrames} frames)`,
   );

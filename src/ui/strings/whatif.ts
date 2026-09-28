@@ -161,6 +161,14 @@ function capital(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** The caption under a preview panel; an amount change also names its direction in words, not by fill alone. */
+export function previewCaption(change: VariantChange, side: 'before' | 'after'): string {
+  if (side === 'before') return WHATIF_TEXT.before;
+  if (change.kind === 'amount')
+    return `${WHATIF_TEXT.after}: ${change.direction === 'less' ? 'less' : 'more'} ${change.field}`;
+  return WHATIF_TEXT.after;
+}
+
 /** Accessible descriptions of the two preview panels. */
 export function previewAlt(change: VariantChange, side: 'before' | 'after'): string {
   const p = patchName(change);
@@ -181,18 +189,22 @@ export interface DetailRow {
   readonly value: string;
 }
 
-/** Details for a choice: values, seed, versions, checksums (UX §3.4). */
+/**
+ * Details for a choice: values, seed, versions, checksums (UX §3.4), and the world-to-be's mode and
+ * registry labels (UX §3.3 "wherever a world is described"), the same rows as provenanceDetails.
+ */
 export function choiceDetails(
   p: VariantPreview,
   sums: { sourceChecksum: string; variantChecksum: string },
+  registryLabel: string | null,
 ): DetailRow[] {
   const v = p.versions;
   return [
     { term: 'Change', value: changeValues(p.change) },
     { term: 'Starts from', value: `${p.sourceName} (${p.sourceId}, revision ${p.sourceRevision})` },
     { term: 'Seed', value: String(p.seed) },
-    { term: 'Evolution', value: evolutionLabel(p.mutationPreset) },
-    { term: 'Founders', value: founderLabel(p.founderMode) },
+    { term: 'Evolution', value: `${evolutionLabel(p.mutationPreset)} · ${founderLabel(p.founderMode)}` },
+    ...(registryLabel !== null ? [{ term: 'Registry', value: registryLabel }] : []),
     {
       term: 'Versions',
       value: `simulation ${v.simulationVersion} · evolution rules ${v.evolutionRulesVersion} · module registry ${v.moduleRegistryVersion} · phenotype mapping ${v.phenotypeMappingVersion} · content ${v.contentVersion}`,

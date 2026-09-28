@@ -8,9 +8,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { CommandPayload } from '../../src/sim/commands';
-import { realizeExperimentArms, runExperiment } from '../../src/sim/experiments';
+import { experimentOf, realizeExperimentArms, runExperiment } from '../../src/sim/experiments';
+import { buildSaveFile, loadSaveFile } from '../../src/persistence/saveFile';
+import { experimentEndedText, stampToastText } from '../../src/ui/strings/experiments';
 import { realizeRecipe } from '../../src/sim/recipes';
-import { stateHash } from '../../src/sim/serialize';
+import { serializeWorld, stateHash } from '../../src/sim/serialize';
 import { run } from '../../src/sim/tick';
 import type { World } from '../../src/sim/world';
 import { DishHost } from '../../src/worker/host';
@@ -149,6 +151,46 @@ describe('a paired card runs through the comparison engine exactly as the headle
     expect(stateHash(h.world('xp-b'))).toBe(arms.baselineHash);
   }, 300_000);
 
+  // P2.5 fix wave (item 8): Predator balance lists "view the comparison" and "read the prey history".
+  it('Predator balance: the results complete one step; the stamp waits for the population history, then equals the headless one', () => {
+    const headless = runExperiment(registry(), 'EXP_106');
+    expect(headless.stamp).not.toBeNull();
+    const h = harness();
+    const started = h.ask('experimentStarted', (requestId) => ({ type: 'experimentStart', requestId, cardId: 'EXP_106', newDishId: 'xp-106', compare: IDS }));
+    expect(started.compare!.experiment!.steps).toEqual([
+      { step: 'viewComparison', done: false },
+      { step: 'viewPreyHistory', done: false },
+    ]);
+    // A history read before the results exist is not "reading the prey history" of the run.
+    h.ask('history', (requestId) => ({ type: 'history', requestId, dishId: IDS.bDishId }));
+    h.ask('compareState', (requestId) => ({ type: 'compareRun', requestId, compareId: IDS.compareId, horizonTicks: 1800, speed: 'max' }));
+    for (let k = 0; h.lastCompare().status === 'running'; k++) {
+      h.frame(k % 3 === 0 ? 250 : 16);
+      if (k > 100_000) throw new Error('never completed');
+    }
+    const done = h.lastCompare();
+    expect(done.status).toBe('complete');
+    // The measured gate held at the stopping point and the results are shown, but no stamp yet.
+    expect(done.experiment!.gate).toEqual(headless.gate);
+    expect(done.experiment!.steps).toEqual([
+      { step: 'viewComparison', done: true },
+      { step: 'viewPreyHistory', done: false },
+    ]);
+    expect(done.experiment!.stamp).toBeNull();
+    expect(h.stamps()).toHaveLength(0);
+    // The results' population history reads both copies' history: that is the step.
+    h.ask('history', (requestId) => ({ type: 'history', requestId, dishId: IDS.aDishId }));
+    h.ask('history', (requestId) => ({ type: 'history', requestId, dishId: IDS.bDishId }));
+    const stamps = h.stamps();
+    expect(stamps).toHaveLength(1);
+    expect(stamps[0]!.dishId).toBe('xp-106');
+    expect(stamps[0]!.stamp.stamp).toEqual(headless.stamp);
+    expect(stamps[0]!.stamp.measured).toEqual({ A: headless.A.reported, B: headless.B!.reported });
+    const after = h.lastCompare();
+    expect(after.experiment!.stamp).toEqual(headless.stamp);
+    expect(after.experiment!.steps.every((st) => st.done)).toBe(true);
+  }, 300_000);
+
   it('refuses without changing anything: an unknown card, a paired card without ids, a second open comparison', () => {
     const h = harness();
     const err = (msg: ToWorker) => {
@@ -167,7 +209,9 @@ describe('a paired card runs through the comparison engine exactly as the headle
 });
 
 describe('a single-arm card watches its own dish while it runs', () => {
-  it('Cleaning crew: the gate is reached while the dish runs; the stamp equals the headless one and the dish keeps running', () => {
+  // Behaviour changed by the P2.5 fix wave (item 8): the card lists "resource history opened" (CT §10.1),
+  // so the stamp waits for that step; before, the measured gate alone granted it.
+  it('Cleaning crew: the measured gate holds while the dish runs; the stamp waits for the history to be opened, then equals the headless one; the dish keeps running', () => {
     const headless = runExperiment(registry(), 'EXP_103', { stopAtSecond: 30 });
     const h = harness();
     const started = h.ask('experimentStarted', (requestId) => ({ type: 'experimentStart', requestId, cardId: 'EXP_103', newDishId: 'crew', compare: null }));
@@ -176,6 +220,11 @@ describe('a single-arm card watches its own dish while it runs', () => {
     expect(started.info.recipeId).toBe('CLEANING_CREW_V1');
     h.host.handle({ type: 'setSpeed', dishId: 'crew', speed: 4 });
     while (h.world('crew').tick < 300) h.frame(25);
+    // The measured gate held at 12 s; the measured gate alone does not grant the stamp.
+    expect(headless.stamp!.reachedAtSecond).toBeLessThan(30);
+    expect(h.stamps()).toHaveLength(0);
+    // Opening History (the History sheet asks the worker for the dish's history) is the listed step.
+    h.ask('history', (requestId) => ({ type: 'history', requestId, dishId: 'crew', lastSeconds: 300 }));
     const stamps = h.stamps();
     expect(stamps).toHaveLength(1);
     expect(stamps[0]!.stamp.label).toBe('this run');
@@ -189,6 +238,59 @@ describe('a single-arm card watches its own dish while it runs', () => {
     expect(stateHash(w)).toBe(stateHash(plain));
   }, 300_000);
 
+  it('a step taken before the gate counts: history opened at 0 s, the stamp arrives on the gate tick', () => {
+    const headless = runExperiment(registry(), 'EXP_103', { stopAtSecond: 20 });
+    const h = harness();
+    h.ask('experimentStarted', (requestId) => ({ type: 'experimentStart', requestId, cardId: 'EXP_103', newDishId: 'crew', compare: null }));
+    h.ask('history', (requestId) => ({ type: 'history', requestId, dishId: 'crew' }));
+    expect(h.stamps()).toHaveLength(0);
+    h.host.handle({ type: 'setSpeed', dishId: 'crew', speed: 4 });
+    while (h.world('crew').tick < headless.stamp!.reachedAtSecond * 10) h.frame(25);
+    expect(h.stamps().map((m) => m.stamp.stamp)).toEqual([headless.stamp]);
+  }, 120_000);
+
+  it('Food trail: a command that places nothing keeps the observation; the stamp waits for the inspector to show a Sprinter eating', () => {
+    const headless = runExperiment(registry(), 'EXP_101', { stopAtSecond: 20 });
+    const h = harness();
+    h.ask('experimentStarted', (requestId) => ({ type: 'experimentStart', requestId, cardId: 'EXP_101', newDishId: 'trail', compare: null }));
+    // A deposit outside the round dish places nothing (accepted 0): the dish is unchanged, the card keeps observing.
+    const outside: CommandPayload = { kind: 'deposit', materialId: 'SUGAR', points: [[1.5, 1.5]], radius: 0, dose: 0.5 };
+    const ack = h.ask('ack', (requestId) => ({ type: 'command', requestId, dishId: 'trail', commandId: 'miss', payload: outside, undoable: true }));
+    expect(ack.result).toEqual({ accepted: 0, rejected: 1 });
+    expect(h.out.filter((m) => m.type === 'experimentEnded')).toEqual([]);
+    h.host.handle({ type: 'setSpeed', dishId: 'trail', speed: 4 });
+    while (h.world('trail').tick < 150) h.frame(25); // past the card's 7 s gate
+    expect(headless.stamp!.reachedAtSecond).toBeLessThan(15);
+    // The measured gate alone does not grant the stamp.
+    expect(h.stamps()).toHaveLength(0);
+    h.host.handle({ type: 'setSpeed', dishId: 'trail', speed: 0 });
+    const w = h.world('trail');
+    const c = w.ents.cols;
+    const b01 = w.species.findIndex((sp) => sp.id === 'B01');
+    const view = (birthId: number) => h.host.handle({ type: 'view', dishId: 'trail', overlay: null, selection: { kind: 'entity', birthId } });
+    // Selecting a cell, or an organism that no longer exists, is not the step.
+    h.host.handle({ type: 'view', dishId: 'trail', overlay: null, selection: { kind: 'cell', cell: 64 * 128 + 50 } });
+    view(999_999);
+    const idle: number[] = [];
+    const eating: number[] = [];
+    for (let i = 0; i < w.ents.highWater; i++) if (c.alive[i] === 1 && c.species[i] === b01) (c.intakeLastSecond[i]! > 0 ? eating : idle).push(c.birthId[i]!);
+    // A Sprinter the inspector shows without food use is not the step either.
+    for (const id of idle) view(id);
+    expect(h.stamps()).toHaveLength(0);
+    expect(eating.length).toBeGreaterThan(0);
+    view(eating[0]!);
+    const stamps = h.stamps();
+    expect(stamps).toHaveLength(1);
+    // The stamp is the one recorded when the measured gate held (the headless runner's), not a later moment.
+    expect(stamps[0]!.stamp.stamp).toEqual(headless.stamp);
+    expect(stamps[0]!.stamp.label).toBe('this run');
+    // Observation only: the world is exactly the recipe run for the same ticks (the refused command changed nothing but the command counter).
+    const plain = realizeRecipe(registry(), 'FOOD_TRAIL_V1', { seed: 101 });
+    run(plain, w.tick);
+    expect(serializeWorld(w).entities).toEqual(serializeWorld(plain).entities);
+    expect(serializeWorld(w).fields).toEqual(serializeWorld(plain).fields);
+  }, 120_000);
+
   it('a change to a single-arm dish ends its observation: no stamp, and the dish goes on as the player made it', () => {
     const h = harness();
     h.ask('experimentStarted', (requestId) => ({ type: 'experimentStart', requestId, cardId: 'EXP_101', newDishId: 'trail', compare: null }));
@@ -199,4 +301,24 @@ describe('a single-arm card watches its own dish while it runs', () => {
     while (h.world('trail').tick < 150) h.frame(25); // past the card's 7 s gate on the unchanged recipe
     expect(h.stamps()).toHaveLength(0);
   }, 120_000);
+});
+
+describe('a reopened experiment dish (P2.5 fix wave, item 7)', () => {
+  it('a card’s dish keeps its card in its saved provenance; any other dish has none', async () => {
+    const arms = realizeExperimentArms(registry(), 'EXP_103', { worldIds: { A: 'crew' } });
+    expect(experimentOf(arms.A)).toBe('EXP_103');
+    const { text } = await buildSaveFile(arms.A, { name: 'Cleaning crew', savedAt: '2026-09-28T00:00:00.000Z', recipeId: 'CLEANING_CREW_V1' });
+    const { world } = await loadSaveFile(text);
+    expect(experimentOf(world)).toBe('EXP_103');
+    expect(experimentOf(realizeRecipe(registry(), 'CLEANING_CREW_V1'))).toBeNull();
+  });
+
+  it('says plainly why a reopened card no longer observes, and never claims a paired run keeps running', () => {
+    const closed = experimentEndedText('closed', 'Cleaning crew');
+    expect(closed).toContain('ended when the dish was closed');
+    expect(closed).toContain('cannot resume');
+    expect(experimentEndedText('changed', 'Food trail')).toContain('You changed the dish');
+    expect(stampToastText('Measured sugar made from starch', true, true)).not.toMatch(/keeps running/);
+    expect(stampToastText('Watched a cleaning crew eat debris', false, true)).toContain('The dish keeps running.');
+  });
 });

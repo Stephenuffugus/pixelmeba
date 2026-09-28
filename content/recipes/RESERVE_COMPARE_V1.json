@@ -34,6 +34,6 @@
   ],
   "labels": ["Seeded traits demonstration", "Experiment C"],
   "question": "Does storing surplus energy change who is left when food stops?",
-  "expectedObservationsText": "Seeded traits demonstration: the reserve chambers were given to alternate founders when the dish was made (present at creation); they are starting variation, not a discovery. 24 identical Sprinters share one sugar meal (0.50 per cell within r 6). In the stable copy the same meal is added again at 60, 120, 180, 240 and 300 s; in the single-meal copy it is not. A reserve chamber adds room for 40 more energy but costs 0.05 energy per second and gives no energy by itself. Either group may leave more descendants, or neither.",
+  "expectedObservationsText": "Seeded traits demonstration: the reserve chambers were given to alternate founders when the dish was made (present at creation); they are starting variation, not a discovery. 24 Sprinters with the same neutral traits share one sugar meal (0.50 per cell within r 6); only the reserve chamber differs. In the stable copy the same meal is added again at 60, 120, 180, 240 and 300 s; in the single-meal copy it is not. A reserve chamber adds room for 40 more energy but costs 0.05 energy per second and gives no energy by itself. Either group may leave more descendants, or neither.",
   "phase": 2
 }

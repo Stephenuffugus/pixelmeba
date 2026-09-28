@@ -5,7 +5,7 @@
  *
  * Everything here runs as a command (kind 'lineage') at stage 1, so it is in the command log, is
  * replayed exactly and is saved with the world:
- *   • rename / pin a branch — notebook labels only;
+ *   • rename / pin a branch — notebook labels only (a pin also keeps its founder family's birth records);
  *   • save a specimen — records a genome that already exists in this dish (the genome table keeps
  *     every genome it ever held) plus a short ancestry summary;
  *   • spawn a specimen — an external introduction exactly like Add Life: founder inventories, logged
@@ -21,7 +21,7 @@ import { displayBranchName, pinBranch, renameBranch } from './branches';
 import type { CommandResult, introduceOrganism } from './commands';
 import { CELL_SOFT_CAPACITY, GRID_W } from './constants';
 import { brushCells } from './grid';
-import { field as lineageField } from './lineage';
+import { recordField, retainPinnedRecords } from './lineage';
 import { validateModuleSet } from './modules';
 import { canOccupy } from './movement';
 import type { World } from './world';
@@ -104,7 +104,7 @@ export function saveSpecimen(world: World, from: 'branch' | 'organism', id: numb
     genome = br.refGenome;
     species = br.species;
     sourceBirthId = br.rootBirthId;
-    generation = lineageField(world.lineage, 'generation', br.rootBirthId) ?? -1;
+    generation = recordField(world.lineage, 'generation', br.rootBirthId) ?? -1;
     branch = br.id;
   } else if (from === 'organism') {
     let slot = -1;
@@ -196,7 +196,10 @@ export function applyLineage(world: World, p: LineageOp, introduce: typeof intro
     }
     case 'pin': {
       const note = pinBranch(world, p.branch, p.pinned === true);
-      return note ? { accepted: 0, rejected: 1, note } : { accepted: 1, rejected: 0 };
+      if (note) return { accepted: 0, rejected: 1, note };
+      // Pinned branches keep their founder family's birth details through compaction (CT §12.10).
+      retainPinnedRecords(world);
+      return { accepted: 1, rejected: 0 };
     }
     case 'saveSpecimen':
       return saveSpecimen(world, p.from, p.id);

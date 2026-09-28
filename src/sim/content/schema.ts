@@ -118,6 +118,22 @@ export const MaterialSchema = z.object({
 });
 export type MaterialDef = z.infer<typeof MaterialSchema>;
 
+/**
+ * A structure or device (ARCH §2 structures/*.json; CT §4). Its behaviour is implemented by the
+ * simulation and keyed by its ID, like a module (STONE, WALL and BEAD are the cell structures in
+ * src/sim/grid.ts STRUCTURE_RECORD_IDS); the record carries what the game shows about it and when it
+ * ships. Unknown IDs, and enabled records the simulation does not implement, are errors.
+ */
+export const StructureSchema = z.object({
+  id: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
+  name: z.string().min(1).max(40),
+  kind: z.enum(['cell', 'edge', 'furnishing', 'device']),
+  guide: GuideSchema,
+  iconId: z.string().regex(/^[a-z0-9_]+$/),
+  phase: PhaseSchema,
+});
+export type StructureDef = z.infer<typeof StructureSchema>;
+
 export const ModuleSchema = z.object({
   id: ModuleIdSchema,
   name: z.string().min(1),
@@ -349,6 +365,12 @@ export const ManifestSchema = z.object({
   enabledSystems: z.array(SystemFlagSchema),
   enabledMaterials: z.array(z.string()),
   enabledHabitats: z.array(z.string()),
+  /**
+   * Structure records the Lab may place (P2.7; content/structures). Optional: a world recorded before
+   * structures were content has none, so its Lab offers no structure tools and the simulation refuses
+   * structure edits there (its recorded ruleset is kept).
+   */
+  enabledStructures: z.array(z.string()).optional(),
   developmentalEnabled: z.boolean().default(false),
 });
 export type Manifest = z.infer<typeof ManifestSchema>;

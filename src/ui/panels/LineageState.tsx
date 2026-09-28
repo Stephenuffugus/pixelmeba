@@ -11,6 +11,7 @@ import { SPECIMEN_RADIUS, type LineageOp } from '@sim/specimens';
 import type { SnapshotMsg } from '@worker/protocol';
 import { dishInfo, getClient, getRenderer, meta, setSpeed, settings, sheet, showToast } from '../state';
 import { pinnedExtinctText } from '../strings/lineage';
+import { DiscoveryPacer } from './DiscoveryPacer';
 
 /** Latest lineage answer for the current dish (null until asked). */
 export const lineage = signal<LineageAnswer | null>(null);
@@ -36,18 +37,22 @@ export interface DiscoveryNotice {
 /** The open discovery card (one per burst). */
 export const discovery = signal<DiscoveryNotice | null>(null);
 
-/** Discoveries arriving within this window after the first make one notice ("one per burst"). */
-export const DISCOVERY_BURST_MS = 1500;
-/** At most one notice per 60 s (CT §12.10); later discoveries wait and join the next card. */
-export const DISCOVERY_GAP_MS = 60_000;
+export { DISCOVERY_BURST_MS, DISCOVERY_GAP_MS } from './DiscoveryPacer';
 
 let currentDish: string | null = null;
 /** Branch count last seen for the current dish (-1 = no snapshot yet: the first one is the baseline). */
 let knownBranches = -1;
-let pendingBranches: number[] = [];
-let lastShownAt = -Infinity;
-let timer: ReturnType<typeof setTimeout> | null = null;
+/** Lineage command ids: a per-session counter, the same scheme as state.ts sendCommand (no clock). */
 let counter = 0;
+
+/** One card per burst, at most one new card per 60 s (DiscoveryPacer); timers pace notices only. */
+const pacer = new DiscoveryPacer({
+  now: () => performance.now(),
+  setTimer: (fn, ms) => setTimeout(fn, ms),
+  clearTimer: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+  cardOpen: () => discovery.value !== null,
+  deliver: (ids, newCard) => void showDiscovery(ids, newCard),
+});
 
 function dishId(): string | null {
   return dishInfo.value?.dishId ?? null;
@@ -57,9 +62,7 @@ function dishId(): string | null {
 function resetFor(id: string | null): void {
   currentDish = id;
   knownBranches = -1;
-  pendingBranches = [];
-  if (timer) clearTimeout(timer);
-  timer = null;
+  pacer.reset();
   // A duplicated dish starts with the view it was copied with: clear it so marks match these signals.
   if (id) getClient().lineageView(id, null);
   getRenderer()?.followLineage(null);
@@ -130,7 +133,7 @@ async function lineageCommand(op: LineageOp, undoable: boolean): Promise<{ accep
   const id = ensureDish();
   if (!id) return null;
   try {
-    return await getClient().command(id, `lineage-${Date.now().toString(36)}-${++counter}`, { kind: 'lineage', ...op }, undoable);
+    return await getClient().command(id, `lineage-${++counter}`, { kind: 'lineage', ...op }, undoable);
   } catch (e) {
     showToast(`Nothing was changed: ${(e as Error).message}`, 3500);
     return null;
@@ -236,12 +239,10 @@ export function stopFollowing(): void {
 // a notice is never lost to the event ring; the first snapshot of a dish is the baseline, so opening
 // a dish never announces branches it already had.
 
-async function showDiscovery(): Promise<void> {
-  timer = null;
+async function showDiscovery(newIds: readonly number[], newCard: boolean): Promise<void> {
   const id = dishId();
-  if (!id || pendingBranches.length === 0) return;
-  const ids = [...(discovery.value?.branches ?? []), ...pendingBranches].filter((b, k, a) => a.indexOf(b) === k).sort((a, b) => a - b);
-  pendingBranches = [];
+  if (!id) return;
+  const ids = [...(newCard ? [] : (discovery.value?.branches ?? [])), ...newIds].filter((b, k, a) => a.indexOf(b) === k).sort((a, b) => a - b);
   let ans: LineageAnswer;
   try {
     ans = await getClient().lineage(id, null, null);
@@ -251,24 +252,13 @@ async function showDiscovery(): Promise<void> {
   if (dishId() !== id) return;
   const rows = ids.map((b) => ans.branches[b]).filter((r): r is LineageBranchRow => r !== undefined);
   if (rows.length === 0) return;
-  const wasOpen = discovery.value !== null;
   let paused = discovery.value?.paused ?? false;
-  if (!wasOpen) {
-    lastShownAt = Date.now();
-    if (settings.value.pauseOnDiscoveries === true && (meta.value?.speed ?? 0) > 0) {
-      setSpeed(0);
-      paused = true;
-    }
+  if (discovery.value === null && settings.value.pauseOnDiscoveries === true && (meta.value?.speed ?? 0) > 0) {
+    setSpeed(0);
+    paused = true;
   }
   discovery.value = { branches: rows.map((r) => r.id), rows, answer: ans, paused };
   if (sheet.value === 'lineage') lineage.value = ans;
-}
-
-function schedule(): void {
-  if (pendingBranches.length === 0 || timer) return;
-  // An open card takes new discoveries in; otherwise wait out the burst and the one-per-minute gap.
-  const wait = discovery.value ? 200 : Math.max(DISCOVERY_BURST_MS, lastShownAt + DISCOVERY_GAP_MS - Date.now());
-  timer = setTimeout(() => void showDiscovery(), wait);
 }
 
 function onSnapshot(s: SnapshotMsg): void {
@@ -281,14 +271,15 @@ function onSnapshot(s: SnapshotMsg): void {
   if (n !== undefined) {
     if (knownBranches < 0) knownBranches = n;
     else if (n > knownBranches) {
-      for (let b = knownBranches; b < n; b++) pendingBranches.push(b);
+      const ids: number[] = [];
+      for (let b = knownBranches; b < n; b++) ids.push(b);
       knownBranches = n;
       changed = true;
-      schedule();
+      pacer.discovered(ids);
     } else if (n < knownBranches) {
       // Undo rewound time past a discovery: that branch no longer exists in this dish.
       knownBranches = n;
-      pendingBranches = pendingBranches.filter((b) => b < n);
+      pacer.rewound(n);
       const d = discovery.value;
       if (d && d.branches.some((b) => b >= n)) discovery.value = null;
       if (followedBranch.value !== null && followedBranch.value >= n) stopFollowing();
@@ -317,5 +308,5 @@ export function watchLineage(): () => void {
 
 export function dismissDiscovery(): void {
   discovery.value = null;
-  if (pendingBranches.length > 0) schedule();
+  pacer.dismissed();
 }

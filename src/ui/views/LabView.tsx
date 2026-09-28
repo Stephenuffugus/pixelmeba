@@ -13,12 +13,15 @@ import {
   brushCells,
   strokeFootprint,
   type LabBrushRule,
+  type LifeBrush,
   type PlaceableStructure,
   type SubstrateName,
 } from '@sim/grid';
 import type { OverlayId } from '@worker/protocol';
 import type { GestureHandlers } from '../gestures';
 import { IconLab } from '../icons';
+import { editLabel, lifeBrushFor, shadeFactorOf } from '../panels/LabTrayContent';
+import { specimenPlacement } from '../panels/LineageState';
 import {
   candidates,
   dishInfo,
@@ -177,9 +180,17 @@ export function brushRule(id: LabToolId): LabBrushRule | null {
   return null;
 }
 
+/**
+ * A saved specimen is waiting for its placement tap (P2.3): until it is placed or cancelled, taps and
+ * drags on the dish belong to it and the ordinary dish handlers, whatever Lab tool is selected.
+ */
+function placingSpecimen(): boolean {
+  return specimenPlacement.value !== null;
+}
+
 /** Whether one-finger drag paints (true for every brush tool in Lab) instead of panning. */
 export function labPaints(): boolean {
-  return isLab() && brushRule(labTool.value) !== null;
+  return isLab() && !placingSpecimen() && brushRule(labTool.value) !== null;
 }
 
 /** The dose per cell the selected material tool uses (from the world's recorded material). */
@@ -230,7 +241,16 @@ export async function sendLabCommand(payload: CommandPayload): Promise<CommandRe
   const info = dishInfo.value;
   if (!info) return null;
   const res = await getClient().command(info.dishId, `lab-${++commandCounter}`, payload, true);
-  if (res && dishInfo.value?.dishId === info.dishId) showToast(habitatEditOutcome(payload, res), 4000);
+  if (res && dishInfo.value?.dishId === info.dishId) {
+    // Names and the shade factor come from the dish's recorded content (content is data).
+    const label =
+      payload.kind === 'paintSubstrate'
+        ? editLabel(info, 'paint', payload.substrate)
+        : payload.kind === 'placeStructure'
+          ? editLabel(info, 'place', payload.structure)
+          : '';
+    showToast(habitatEditOutcome(payload, res, label, shadeFactorOf(info)), 4000);
+  }
   return res;
 }
 
@@ -244,9 +264,12 @@ function previewCells(
   return { cells: strokeFootprint(points, labRadius.value), rule };
 }
 
-function showPreview(cells: readonly number[], rule: LabBrushRule | 'life'): void {
+/** Preview a brush footprint: a Lab brush rule, or the Life brush for one species. */
+function showPreview(cells: readonly number[], rule: LabBrushRule | LifeBrush): void {
   const r = getRenderer();
-  const counts = r ? r.setBrushPreview({ cells, rule }) : null;
+  const counts = r
+    ? r.setBrushPreview(typeof rule === 'string' ? { cells, rule } : { cells, rule: 'life', life: rule })
+    : null;
   brushInfo.value = counts
     ? { cells: counts.ok, refused: counts.refused }
     : { cells: cells.length, refused: 0 };
@@ -260,13 +283,18 @@ export function clearPreview(): void {
 /** Mouse hover (before pressing): the footprint of a tap here. Touch has no hover. */
 export function labHover(w: readonly [number, number] | null): void {
   if (!isLab() || pending) return;
-  if (!w) {
+  if (!w || placingSpecimen()) {
     clearPreview();
     return;
   }
   const id = labTool.value;
   if (id.startsWith('life:')) {
-    showPreview(brushCells(w[0], w[1], labRadius.value), 'life');
+    // The inoculate command uses only cells the organism can occupy (habitat and structure), so the
+    // preview crosses out the rest by the same rule (lifeCellOutcome).
+    const info = dishInfo.value;
+    const life = info ? lifeBrushFor(info, id.slice('life:'.length)) : null;
+    if (life) showPreview(brushCells(w[0], w[1], labRadius.value), life);
+    else clearPreview();
     return;
   }
   const p = previewCells([w]);
@@ -319,6 +347,8 @@ export function labTap(wx: number, wy: number): boolean {
   clearPreview();
   if (s && s.epoch !== viewEpoch) return true;
   if (!isLab()) return false;
+  // A saved specimen waiting to be placed takes the tap whatever tool is selected (P2.3).
+  if (placingSpecimen()) return false;
   const id = labTool.value;
   if (id === 'inspect') return false;
   if (id.startsWith('life:')) {

@@ -5,8 +5,9 @@
  * any other addition.
  */
 import { describe, expect, it } from 'vitest';
+import { applyNow } from '../../src/sim/commands';
 import { realizeRecipe } from '../../src/sim/recipes';
-import { serializeWorld } from '../../src/sim/serialize';
+import { deserializeWorld, serializeWorld, stateHash } from '../../src/sim/serialize';
 import { run } from '../../src/sim/tick';
 import { DishHost } from '../../src/worker/host';
 import type { FromWorker, SnapshotMsg, ToWorker } from '../../src/worker/protocol';
@@ -31,7 +32,7 @@ function setup() {
   ask('ready', (requestId) => ({ type: 'create', requestId, dishId: 'd', source: { kind: 'state', state: serializeWorld(w) } }));
   const hash = () => ask('hash', (requestId) => ({ type: 'hash', requestId, dishId: 'd' })).hash;
   const lastSnapshot = () => [...out].reverse().find((m): m is SnapshotMsg => m.type === 'snapshot')!;
-  return { out, send, ask, hash, lastSnapshot, host };
+  return { out, send, ask, hash, lastSnapshot, host, w };
 }
 
 describe('P2.3 lineage through the worker host', () => {
@@ -81,5 +82,39 @@ describe('P2.3 lineage through the worker host', () => {
     const undo = ask('ack', (requestId) => ({ type: 'undo', requestId, dishId: 'd' }));
     expect(undo.error).toBeUndefined();
     expect(hash()).toBe(before);
+  });
+
+  it('a rename, pin or saved specimen made after an undoable command survives Undo of that command', () => {
+    const { ask, w } = setup();
+    const cmd = (commandId: string, payload: Extract<ToWorker, { type: 'command' }>['payload'], undoable: boolean) =>
+      ask('ack', (requestId) => ({ type: 'command', requestId, dishId: 'd', commandId, payload, undoable }));
+    const lineage = () => ask('lineage', (requestId) => ({ type: 'lineage', requestId, dishId: 'd', branch: null, birthId: null })).lineage;
+    const labels = [
+      { id: 'lineage-2', payload: { kind: 'lineage', op: 'rename', branch: 0, name: 'Quiet savers' } },
+      { id: 'lineage-3', payload: { kind: 'lineage', op: 'pin', branch: 0, pinned: true } },
+      { id: 'lineage-4', payload: { kind: 'lineage', op: 'saveSpecimen', from: 'branch', id: 0 } },
+    ] as const;
+    expect(cmd('lineage-1', { kind: 'lineage', op: 'saveSpecimen', from: 'branch', id: 0 }, false).result).toMatchObject({ accepted: 1 });
+    const aliveBefore = lineage().species.reduce((a, s) => a + s.living, 0);
+    // The undoable change, then three notebook labels.
+    expect(cmd('lineage-sp', { kind: 'lineage', op: 'spawnSpecimen', specimen: 1, x: 40.5, y: 64.5, radius: 3, count: 5 }, true).result).toMatchObject({ accepted: 5 });
+    for (const l of labels) expect(cmd(l.id, l.payload, false).result).toMatchObject({ accepted: 1 });
+    const undo = ask('ack', (requestId) => ({ type: 'undo', requestId, dishId: 'd' }));
+    expect(undo.error).toBeUndefined();
+    const ans = lineage();
+    // The spawn is gone…
+    expect(ans.species.reduce((a, s) => a + s.living, 0)).toBe(aliveBefore);
+    expect(ans.specimens[0]!.spawned).toBe(0);
+    // …and the labels made after it are kept.
+    expect(ans.branches[0]!.name).toBe(`Quiet savers · ${ans.branches[0]!.shortId}`);
+    expect(ans.branches[0]!.pinned).toBe(true);
+    expect(ans.specimens.map((s) => s.id)).toEqual([1, 2]);
+    // Deterministic: exactly the pre-spawn world plus the same label commands at that tick.
+    const expected = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(w))));
+    applyNow(expected, 'lineage-1', { kind: 'lineage', op: 'saveSpecimen', from: 'branch', id: 0 });
+    for (const l of labels) applyNow(expected, l.id, l.payload);
+    expect(ask('hash', (requestId) => ({ type: 'hash', requestId, dishId: 'd' })).hash).toBe(stateHash(expected));
+    // Nothing is left to undo, and a second Undo changes nothing.
+    expect(ask('ack', (requestId) => ({ type: 'undo', requestId, dishId: 'd' })).error).toBe('nothing to undo');
   });
 });

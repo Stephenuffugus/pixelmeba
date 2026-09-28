@@ -114,6 +114,25 @@ describe('experiment validation names the file and field', () => {
     );
   });
 
+  // P2.5 fix wave: an energy over nobody must be tellable from a real zero, and steps belong to the card's kind.
+  it('requires the living count beside an energy measurement, and player steps that match the card kind', () => {
+    const without = (drop: string, target: string) => {
+      let at = -1;
+      const errs = errorsOf(
+        mutate(raw, 'experiments', 'EXP_C.json', (d) => {
+          d.measurements = (d.measurements as string[]).filter((m) => m !== drop);
+          at = (d.measurements as string[]).indexOf(target);
+        }),
+      );
+      expect(at).toBeGreaterThanOrEqual(0);
+      has(errs, 'experiments/EXP_C.json', `measurements.${at}`);
+    };
+    without('descendants.B01.E05', 'groupEnergyMedian.B01.E05');
+    without('alive.B01', 'meanEnergy.B01');
+    has(errorsOf(mutate(raw, 'experiments', 'EXP_101.json', (d) => ((d.completion as { playerSteps: string[] }).playerSteps = ['viewComparison']))), 'experiments/EXP_101.json', 'completion.playerSteps.0');
+    has(errorsOf(mutate(raw, 'experiments', 'EXP_A.json', (d) => ((d.completion as { playerSteps: string[] }).playerSteps = ['viewComparison', 'openResourceHistory']))), 'experiments/EXP_A.json', 'completion.playerSteps.1');
+  });
+
   it('requires every card part and checks the recipe’s scheduled command payloads', () => {
     has(errorsOf(mutate(raw, 'experiments', 'EXP_103.json', (d) => delete d.completion)), 'experiments/EXP_103.json', 'completion');
     for (const part of ['intervention', 'predictedTradeoff', 'confounds'])

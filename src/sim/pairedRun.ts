@@ -34,6 +34,10 @@
  *   founders.SP.GROUP (members at the start) · descendants.SP.GROUP (living members now: founders not
  *   yet divided plus their living descendants) · groupEnergy.SP.GROUP (their mean energy, 0 when none)
  *   groupExtinctAt.SP.GROUP (dish second the group had no living member, −1 if not)
+ *   groupEnergyMedian.SP.GROUP · groupEnergyMin.SP.GROUP · groupEnergyMax.SP.GROUP (the distribution of
+ *   their energy: median, lowest and highest over living members, 0 when none — CT §9.2 "record energy
+ *   distributions"; a card that shows any group energy also lists descendants.SP.GROUP, so an empty
+ *   group always reads "none alive", never as a real zero)
  */
 import type { CommandPayload, CommandResult } from './commands';
 import { ENERGY_CAP_BASE, TICKS_PER_SECOND } from './constants';
@@ -86,7 +90,7 @@ export const SPECIES_MEASURES = [
 export type SpeciesMeasure = (typeof SPECIES_MEASURES)[number];
 
 /** Per founder group (species × module set at the start of the run). */
-export const GROUP_MEASURES = ['founders', 'descendants', 'groupEnergy', 'groupExtinctAt'] as const;
+export const GROUP_MEASURES = ['founders', 'descendants', 'groupEnergy', 'groupExtinctAt', 'groupEnergyMedian', 'groupEnergyMin', 'groupEnergyMax'] as const;
 export type GroupMeasure = (typeof GROUP_MEASURES)[number];
 
 export const ENZYMES = ['starch', 'oil', 'protein'] as const;
@@ -444,6 +448,19 @@ export class ArmObserver {
     return { count, energy };
   }
 
+  /** Living members' energies per founder group, each list ascending (the group's energy distribution). */
+  groupEnergyLists(world: World): number[][] {
+    const out: number[][] = this.groupKeys.map(() => []);
+    const c = world.ents.cols;
+    for (let i = 0; i < world.ents.highWater; i++) {
+      if (c.alive[i] !== 1) continue;
+      const g = this.groupOf[c.birthId[i]!] ?? -1;
+      if (g >= 0) out[g]!.push(c.E[i]!);
+    }
+    for (const list of out) list.sort((x, y) => x - y);
+    return out;
+  }
+
   converted(world: World, enzyme: Enzyme): number {
     return world.conversionTotals[enzyme] - this.conversionStart[enzyme];
   }
@@ -501,6 +518,8 @@ export function measureArm(world: World, obs: ArmObserver, ids: readonly string[
   const getAgg = () => (agg ??= speciesAgg(world));
   let groups: { readonly count: number[]; readonly energy: number[] } | null = null;
   const getGroups = () => (groups ??= obs.groupMembers(world));
+  let dist: number[][] | null = null;
+  const getDist = () => (dist ??= obs.groupEnergyLists(world));
   const spIdx = (id: string) => {
     const i = obs.speciesIds.indexOf(id);
     if (i < 0) throw new MeasureError(`species ${id} is not enabled in world ${world.worldId}`);
@@ -587,6 +606,13 @@ export function measureArm(world: World, obs: ArmObserver, ids: readonly string[
           }
           case 'groupExtinctAt':
             return obs.groupExtinctAt[g]!;
+          case 'groupEnergyMedian':
+          case 'groupEnergyMin':
+          case 'groupEnergyMax': {
+            const list = getDist()[g]!;
+            if (list.length === 0) return 0;
+            return ref.stat === 'groupEnergyMin' ? list[0]! : ref.stat === 'groupEnergyMax' ? list[list.length - 1]! : median(list);
+          }
         }
         break;
       }
@@ -730,7 +756,7 @@ export interface ComparisonResults {
   readonly rows: readonly MeasureRow[];
 }
 
-function median(sorted: readonly number[]): number {
+export function median(sorted: readonly number[]): number {
   const n = sorted.length;
   if (n === 0) return 0;
   const m = n >> 1;

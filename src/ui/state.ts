@@ -148,11 +148,20 @@ export function reducedMotionFollowsDevice(): boolean {
   return savedPrefs.reducedMotion === undefined;
 }
 
+/**
+ * The global error toast, worded by what failed (ARCH §7). An error about a dish (its command, step or
+ * run) leaves that dish paused at its last valid state. An error about no dish (opening a save,
+ * importing a file, listing or deleting saves) paused and changed nothing, so it never says it did.
+ */
+export function errorToastText(e: { readonly dishId: string; readonly message: string }): string {
+  return e.dishId === '' ? `Nothing was paused or changed: ${e.message}` : `Something went wrong and the dish was paused: ${e.message}`;
+}
+
 export function getClient(): SimClient {
   if (!client) {
     client = SimClient.create();
     client.onSnapshot(onSnapshot);
-    client.onError((e) => showToast(`Something went wrong and the dish was paused: ${e.message}`));
+    client.onError((e) => showToast(errorToastText(e)));
     client.onCompare(onCompareState);
     client.onExperiment(onExperimentNotice);
   }

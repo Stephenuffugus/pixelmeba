@@ -16,6 +16,17 @@ export const LIFE_WAKING = 3;
 const num = (v: number | undefined, digits = 2): string => (v === undefined || !Number.isFinite(v) ? '?' : String(Number(v.toFixed(digits))));
 const secs = (v: number | undefined): string => (v === undefined || !Number.isFinite(v) ? 'some' : String(Math.max(0, Math.round(v))));
 
+/**
+ * Chip text for how an organism came into the dish (its lineage origin): 1 = added by the player or
+ * the recipe; 2 = a founder whose genome, with its extra abilities, was seeded when the dish was made
+ * — labelled "present at creation" wherever it is described (UX §3.3); 0 = born here (no chip).
+ */
+export function originChip(origin: number): string | null {
+  if (origin === 2) return 'present at creation';
+  if (origin === 1) return 'added by you or the recipe';
+  return null;
+}
+
 /** Chip text for a life state. */
 export function lifeStateLabel(state: number): string {
   switch (state) {

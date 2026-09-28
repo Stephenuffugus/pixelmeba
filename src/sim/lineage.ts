@@ -5,7 +5,10 @@
  * History is bounded: records older than the most recent RETAIN births are compacted away (the
  * arrays keep a `base` offset). Nothing the simulation needs lives here — living organisms carry
  * their generation, branch and candidate data in entity columns — so compaction never changes
- * outcomes; the UI labels missing individual history as unavailable (SPEC §8.1, §12.4).
+ * outcomes; the UI labels missing individual history as unavailable (SPEC §8.1, §12.4). Pinned
+ * branches keep their birth details (CT §12.10 "birth details 10,000 recent unpinned"): the founder
+ * family of every pinned branch is listed in `keep`, and compaction moves those records to `kept`
+ * instead of dropping them (both absent until something is pinned, so older worlds are unchanged).
  */
 import {
   ancestorGenomeOf,
@@ -21,8 +24,10 @@ import {
   type BranchState,
   type BranchTrait,
 } from './branches';
-import type { Genome } from './genome';
-import { activeLoci } from './phenotype';
+import { MOVE_COST_PER_CELL } from './constants';
+import type { FeedingPolicy, Genome } from './genome';
+import { activeLoci, type Profile } from './phenotype';
+import { profileOfGenome } from './profiles';
 import type { Specimen } from './specimens';
 import type { World } from './world';
 export const INTRODUCED_PARENT = 0;
@@ -49,7 +54,32 @@ export interface Lineage {
   mutModule: number[];
   /** Records ever compacted (for "history incomplete" labels). */
   compacted: number;
+  /** Birth ids retained past compaction (pinned branches' founder families), ascending. */
+  keep?: number[];
+  /** Records retained past compaction, ascending birthId. */
+  kept?: KeptRecord[];
 }
+
+/** One birth record kept after compaction because a pinned branch needs it. */
+export interface KeptRecord {
+  readonly birthId: number;
+  readonly parent: number;
+  readonly genome: number;
+  readonly birthTick: number;
+  readonly generation: number;
+  readonly species: number;
+  readonly entityId: number;
+  deathTick: number;
+  deathCause: number;
+  readonly origin: number;
+  readonly mutFlags: number;
+  readonly mutLocus: number;
+  readonly mutDelta: number;
+  readonly mutModule: number;
+}
+
+type RecordKey = Exclude<keyof Lineage, 'base' | 'compacted' | 'keep' | 'kept'>;
+const RECORD_KEYS = ['parent', 'genome', 'birthTick', 'generation', 'species', 'entityId', 'deathTick', 'deathCause', 'origin', 'mutFlags', 'mutLocus', 'mutDelta', 'mutModule'] as const satisfies readonly RecordKey[];
 
 export function createLineage(): Lineage {
   return {
@@ -108,34 +138,114 @@ export function has(L: Lineage, birthId: number): boolean {
   return birthId >= L.base && birthId < L.base + L.parent.length;
 }
 
-export function field(L: Lineage, key: Exclude<keyof Lineage, 'base' | 'compacted'>, birthId: number): number | undefined {
+export function field(L: Lineage, key: RecordKey, birthId: number): number | undefined {
   return has(L, birthId) ? L[key][birthId - L.base] : undefined;
 }
 
+/** A record kept for a pinned branch after compaction (undefined when none). */
+export function keptRecord(L: Lineage, birthId: number): KeptRecord | undefined {
+  const kept = L.kept;
+  if (!kept || birthId >= L.base) return undefined;
+  for (const r of kept) if (r.birthId === birthId) return r;
+  return undefined;
+}
+
+/** A record value from the retained arrays or, once compacted, from a pinned branch's kept records. */
+export function recordField(L: Lineage, key: RecordKey, birthId: number): number | undefined {
+  return field(L, key, birthId) ?? keptRecord(L, birthId)?.[key];
+}
+
 export function recordDeath(L: Lineage, birthId: number, tick: number, cause: number): void {
-  if (!has(L, birthId)) return;
+  if (!has(L, birthId)) {
+    const r = keptRecord(L, birthId);
+    if (r) {
+      r.deathTick = tick;
+      r.deathCause = cause;
+    }
+    return;
+  }
   L.deathTick[birthId - L.base] = tick;
   L.deathCause[birthId - L.base] = cause;
 }
 
 /** A division ends the parent's individual record (it continues as two new birth records). */
 export function recordDivisionEnd(L: Lineage, birthId: number, tick: number): void {
-  if (!has(L, birthId)) return;
-  L.deathTick[birthId - L.base] = tick;
-  L.deathCause[birthId - L.base] = -1; // -1 = ended by division, not death
+  recordDeath(L, birthId, tick, -1); // -1 = ended by division, not death
 }
 
-/** Drop the oldest records beyond LINEAGE_RETAIN once the arrays reach COMPACT_AT (deterministic). */
+/**
+ * Drop the oldest records beyond LINEAGE_RETAIN once the arrays reach COMPACT_AT (deterministic).
+ * Records listed in `keep` (pinned branches' founder families) move to `kept` instead.
+ */
 export function compactLineage(L: Lineage): number {
   const n = L.parent.length;
   if (n < COMPACT_AT) return 0;
   const drop = n - LINEAGE_RETAIN;
-  for (const key of ['parent', 'genome', 'birthTick', 'generation', 'species', 'entityId', 'deathTick', 'deathCause', 'origin', 'mutFlags', 'mutLocus', 'mutDelta', 'mutModule'] as const) {
-    L[key].splice(0, drop);
+  if (L.keep) {
+    for (const b of L.keep) {
+      if (b < L.base || b >= L.base + drop) continue;
+      const k = b - L.base;
+      const rec: KeptRecord = {
+        birthId: b,
+        parent: L.parent[k]!,
+        genome: L.genome[k]!,
+        birthTick: L.birthTick[k]!,
+        generation: L.generation[k]!,
+        species: L.species[k]!,
+        entityId: L.entityId[k]!,
+        deathTick: L.deathTick[k]!,
+        deathCause: L.deathCause[k]!,
+        origin: L.origin[k]!,
+        mutFlags: L.mutFlags[k]!,
+        mutLocus: L.mutLocus[k]!,
+        mutDelta: L.mutDelta[k]!,
+        mutModule: L.mutModule[k]!,
+      };
+      (L.kept ??= []).push(rec);
+    }
   }
+  for (const key of RECORD_KEYS) L[key].splice(0, drop);
   L.base += drop;
   L.compacted += drop;
   return drop;
+}
+
+/** Children of a record, from the retained arrays and the kept records (at most two per division). */
+function recordChildren(L: Lineage, birthId: number): number[] {
+  const out: number[] = [];
+  for (const r of L.kept ?? []) if (r.parent === birthId && out.length < 2) out.push(r.birthId);
+  for (const b of childrenOf(L, birthId)) if (out.length < 2 && !out.includes(b)) out.push(b);
+  return out;
+}
+
+/** The founder family a pinned branch keeps: its founder, the founder's parent, siblings and children. */
+function familyIds(L: Lineage, root: number): number[] {
+  const ids = [root];
+  const parent = recordField(L, 'parent', root) ?? 0;
+  if (parent > 0) ids.push(parent, ...recordChildren(L, parent));
+  ids.push(...recordChildren(L, root));
+  return ids;
+}
+
+/**
+ * Recompute which birth records outlive compaction: the founder families of every pinned branch
+ * (called after each pin/unpin command). Kept records no pinned branch needs any more are released.
+ */
+export function retainPinnedRecords(world: World): void {
+  const L = world.lineage;
+  const ids: number[] = [];
+  for (const br of world.branches.branches) {
+    if (!br.pinned) continue;
+    for (const b of familyIds(L, br.rootBirthId)) if (!ids.includes(b)) ids.push(b);
+  }
+  ids.sort((a, b) => a - b);
+  if (ids.length > 0) L.keep = ids;
+  else delete L.keep;
+  if (L.kept) {
+    const kept = L.kept.filter((r) => ids.includes(r.birthId));
+    if (kept.length > 0) L.kept = kept;
+    else delete L.kept;
+  }
 }
 
 /** Children of a birth record still retained (at most two per division). */
@@ -194,6 +304,81 @@ export interface LineageModuleCost {
   readonly params: Readonly<Record<string, number>>;
 }
 
+/**
+ * The game-rule numbers of one genome, taken from the shared phenotype function (profileOfGenome), so
+ * what the family tree says a branch does can never diverge from what the simulation does (D06).
+ */
+export interface LineageProfile {
+  /** Cells per second at full motility (0 for non-swimmers). */
+  readonly speed: number;
+  /** Energy per cell moved (MOVE_COST_PER_CELL × motility factor). */
+  readonly moveCostPerCell: number;
+  /** Intake ceiling, carbon per second. */
+  readonly intake: number;
+  /** Maintenance per second, module surcharges included. */
+  readonly maintenance: number;
+  /** Extra upkeep per second paid besides maintenance (e.g. a reserve chamber). */
+  readonly upkeep: number;
+  /** Food sensing radius in cells. */
+  readonly sensing: number;
+  /** Minimum age before it can split, seconds. */
+  readonly minDivisionAge: number;
+  /** Energy one split costs. */
+  readonly divisionCost: number;
+  readonly energyCap: number;
+  readonly ph: readonly [number, number];
+  readonly salinity: readonly [number, number];
+  readonly warmth: readonly [number, number];
+  /** Seconds without usable food before it starts resting (null when it cannot rest). */
+  readonly restAfter: number | null;
+  readonly policy: FeedingPolicy;
+  readonly foods: readonly string[];
+  readonly weights: readonly number[] | null;
+  readonly modules: readonly string[];
+}
+
+/**
+ * Module cost parameters, in the order they are quoted (CT §7.1 "costs beyond 0.02 E/s surcharge").
+ * A test checks that every cost-like parameter in the module content is listed here.
+ */
+export const MODULE_COST_KEYS = [
+  'upkeepPerSecond',
+  'emitCost',
+  'glowCost',
+  'prepareCost',
+  'restMaintenance',
+  'wakeCost',
+  'attachedUpkeep',
+  'moveCostFactor',
+  'energyPerCarbon',
+  'energyPerMineral',
+  'linkCost',
+  'perLinkUpkeep',
+  'settleCost',
+  'adultUpkeep',
+  'bondCost',
+  'bondUpkeep',
+  'creationCost',
+] as const;
+export type ModuleCostKey = (typeof MODULE_COST_KEYS)[number];
+
+/** A module one genome carries and the other does not, with every cost the world's registry records. */
+export interface LineageModuleChange {
+  readonly id: string;
+  readonly name: string;
+  /** true: the branch carries it and its ancestor did not; false: the reverse. */
+  readonly gained: boolean;
+  readonly surchargePerSecond: number;
+  readonly costs: readonly { readonly key: ModuleCostKey; readonly value: number }[];
+}
+
+/** Both profiles and the module differences behind a branch's "Game rule:" lines. */
+export interface LineageRules {
+  readonly ancestor: LineageProfile;
+  readonly branch: LineageProfile;
+  readonly modules: readonly LineageModuleChange[];
+}
+
 export interface LineageBranchRow {
   readonly id: number;
   readonly species: number;
@@ -221,6 +406,8 @@ export interface LineageBranchRow {
   readonly module: LineageModuleCost | null;
   /** Reference values of the named locus: the ancestor's and the branch founder's (null otherwise). */
   readonly locusValues: { readonly ancestor: number; readonly branch: number } | null;
+  /** The two genomes' game-rule numbers (null when the ancestor genome is not recorded). */
+  readonly rules: LineageRules | null;
 }
 
 /** Live candidates ("variation observed"), summarized per ancestral line or branch. */
@@ -307,27 +494,78 @@ export interface LineageAnswer {
 
 function recordRow(world: World, birthId: number): LineageRecordRow | null {
   const L = world.lineage;
-  if (!has(L, birthId)) return null;
-  const k = birthId - L.base;
-  const end = L.deathTick[k]!;
-  const mod = L.mutModule[k]!;
+  // Retained records first, then those kept for a pinned branch after compaction.
+  const get = (key: (typeof RECORD_KEYS)[number]) => recordField(L, key, birthId);
+  const end = get('deathTick');
+  if (end === undefined) return null;
+  const mod = get('mutModule')!;
+  const cause = get('deathCause')!;
   return {
     birthId,
-    birthTick: L.birthTick[k]!,
-    generation: L.generation[k]!,
-    status: end < 0 ? 'alive' : L.deathCause[k] === -1 ? 'divided' : 'died',
+    birthTick: get('birthTick')!,
+    generation: get('generation')!,
+    status: end < 0 ? 'alive' : cause === -1 ? 'divided' : 'died',
     endTick: end,
-    deathCause: L.deathCause[k]!,
-    origin: L.origin[k]!,
-    mutFlags: L.mutFlags[k]!,
-    mutLocus: L.mutLocus[k]!,
-    mutDelta: L.mutDelta[k]!,
+    deathCause: cause,
+    origin: get('origin')!,
+    mutFlags: get('mutFlags')!,
+    mutLocus: get('mutLocus')!,
+    mutDelta: get('mutDelta')!,
     mutModule: mod >= 0 ? (world.content.modules[mod]?.id ?? null) : null,
   };
 }
 
 function ancestorIndex(world: World, br: Branch): number {
   return ancestorGenomeOf(world, br) ?? -1;
+}
+
+function profileSummary(p: Profile): LineageProfile {
+  return {
+    speed: p.speed,
+    moveCostPerCell: p.speed > 0 ? MOVE_COST_PER_CELL * p.motilityFactor : 0,
+    intake: p.q,
+    maintenance: p.m,
+    upkeep: p.upkeep,
+    sensing: p.sensing,
+    minDivisionAge: p.minDivisionAge,
+    divisionCost: p.divisionCost,
+    energyCap: p.energyCap,
+    ph: [p.ph[0], p.ph[1]],
+    salinity: [p.salinity[0], p.salinity[1]],
+    warmth: [p.warmth[0], p.warmth[1]],
+    restAfter: p.dormancy ? p.dormancyTriggerSeconds : null,
+    policy: p.policy,
+    foods: [...p.foods],
+    weights: p.weights ? [...p.weights] : null,
+    modules: [...p.modules],
+  };
+}
+
+function moduleChange(world: World, id: string, gained: boolean): LineageModuleChange {
+  // Numbers from the world's recorded module registry; the name from its recorded content.
+  const rt = world.modules[id];
+  const name = world.content.modules.find((m) => m.id === id)?.name ?? id;
+  const costs: { key: ModuleCostKey; value: number }[] = [];
+  for (const key of MODULE_COST_KEYS) {
+    const v = rt?.params[key];
+    if (v !== undefined && Number.isFinite(v)) costs.push({ key, value: v });
+  }
+  return { id, name, gained, surchargePerSecond: rt?.surcharge ?? 0, costs };
+}
+
+/** Game-rule numbers of the ancestor's and the branch's reference genomes (read-only; profiles are a derived cache). */
+function rulesOf(world: World, br: Branch, anc: number): LineageRules | null {
+  if (anc < 0) return null;
+  try {
+    const a = profileOfGenome(world, anc, br.species);
+    const b = profileOfGenome(world, br.refGenome, br.species);
+    const modules: LineageModuleChange[] = [];
+    for (const m of b.modules) if (!a.modules.includes(m)) modules.push(moduleChange(world, m, true));
+    for (const m of a.modules) if (!b.modules.includes(m)) modules.push(moduleChange(world, m, false));
+    return { ancestor: profileSummary(a), branch: profileSummary(b), modules };
+  } catch {
+    return null;
+  }
 }
 
 function branchRow(world: World, br: Branch): LineageBranchRow {
@@ -366,6 +604,7 @@ function branchRow(world: World, br: Branch): LineageBranchRow {
     descriptor: traitDescriptor(world, br.species, trait),
     module,
     locusValues,
+    rules: rulesOf(world, br, anc),
   };
 }
 
@@ -391,7 +630,7 @@ function detailOf(world: World, br: Branch): LineageDetail {
   const values: number[][] = g.loci.map(() => []);
   let dMin = Infinity;
   let dMax = -Infinity;
-  const rootGen = field(world.lineage, 'generation', br.rootBirthId);
+  const rootGen = recordField(world.lineage, 'generation', br.rootBirthId);
   for (let i = 0; i < world.ents.highWater; i++) {
     if (c.alive[i] !== 1) continue;
     const b = c.branchId[i]!;
@@ -418,16 +657,17 @@ function detailOf(world: World, br: Branch): LineageDetail {
     };
   });
   const L = world.lineage;
-  const parentId = field(L, 'parent', br.rootBirthId) ?? 0;
+  const parentId = recordField(L, 'parent', br.rootBirthId) ?? 0;
   const root = recordRow(world, br.rootBirthId);
   const parent = parentId > 0 ? recordRow(world, parentId) : null;
-  const siblings = parentId > 0 && parent ? childrenOf(L, parentId).filter((b) => b !== br.rootBirthId).map((b) => recordRow(world, b)!) : [];
-  const children = root ? childrenOf(L, br.rootBirthId).map((b) => recordRow(world, b)!) : [];
+  const siblings = parentId > 0 && parent ? recordChildren(L, parentId).filter((b) => b !== br.rootBirthId).map((b) => recordRow(world, b)!) : [];
+  const children = root ? recordChildren(L, br.rootBirthId).map((b) => recordRow(world, b)!) : [];
   const subBranches: number[] = [];
   for (const other of book.branches) if (other.parentBranch === br.id) subBranches.push(other.id);
   return {
     branch: br.id,
-    ancestorLabel: br.parentBranch >= 0 ? displayBranchName(world, book.branches[br.parentBranch]!) : `${sp.def.name} founders`,
+    // On an ancestral line the reference is the one introduced founder genome of that line.
+    ancestorLabel: br.parentBranch >= 0 ? displayBranchName(world, book.branches[br.parentBranch]!) : `The ${sp.def.name} founder of this line`,
     ancestorGenomeId: anc ? anc.id : null,
     branchGenomeId: g.id,
     compare,

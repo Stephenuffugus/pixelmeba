@@ -4,7 +4,7 @@
   "moduleRegistryVersion": 1,
   "phenotypeMappingVersion": 1,
   "contentVersion": 1,
-  "contentHash": "86bd7cde1dc471ef886c8481530da0770c0c9a1cf7fefbd1cd32dd760719fe49",
+  "contentHash": "7472589b6172cba20678ff4db33c6cf010018bf27520416911601149dfac65b7",
   "buildPhase": 2,
   "enabledSpecies": [
     "A01",
@@ -24,12 +24,21 @@
   ],
   "enabledMaterials": [
     "DEBRIS",
+    "GEL",
     "NUTRIENT",
+    "SEDIMENT",
+    "SHADE",
     "STARCH",
-    "SUGAR"
+    "SUGAR",
+    "WATER"
   ],
   "enabledHabitats": [
     "WATER_GARDEN"
+  ],
+  "enabledStructures": [
+    "BEAD",
+    "STONE",
+    "WALL"
   ],
   "developmentalEnabled": false
 }

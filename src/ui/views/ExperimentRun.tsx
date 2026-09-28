@@ -6,7 +6,7 @@
  * paired run", the gate outcome and the journal stamp. Phone: A/B toggle with a synced camera; large
  * screens: both side by side.
  */
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { CompareSpeed, ComparisonExperiment } from '@worker/comparison';
 import type { ExperimentCardView } from '@sim/experiments';
 import { IconBack, IconZoomDish } from '../icons';
@@ -19,6 +19,7 @@ import {
   compareState,
   dishInfo,
   experimentCard,
+  getClient,
   getCompareRenderer,
   loadExperimentCards,
   route,
@@ -30,7 +31,8 @@ import {
   syncCompareCameras,
   toast,
 } from '../state';
-import { clauseText, describeArms, durationText, formatDiff, formatMeasure, measureLabel } from '../strings/experiments';
+import { clauseText, describeArms, durationText, formatDiff, formatMeasure, measureLabel, plural, playerStepText } from '../strings/experiments';
+import type { HistorySample } from '@sim/history';
 import { ExperimentViewport } from './ExperimentViewport';
 
 export const PREDICTION_MAX = 280;
@@ -289,6 +291,117 @@ function GateList({ card, x }: { card: ExperimentCardView; x: ComparisonExperime
   );
 }
 
+/** The player steps the stamp also needs (CT §10.1), each marked when taken on this screen. */
+function StepList({ card, x }: { card: ExperimentCardView; x: ComparisonExperiment }) {
+  if (x.steps.length === 0) return null;
+  return (
+    <>
+      <p>The stamp also needs you to:</p>
+      <ul class="xp-gate" data-testid="experiment-steps">
+        {x.steps.map((st) => (
+          <li key={st.step} data-pass={st.done} data-step={st.step}>
+            <span class="xp-mark" aria-hidden="true">
+              {st.done ? '✓' : '○'}
+            </span>
+            <span>
+              {playerStepText(card, st.step)}
+              <span class="sr-only">{st.done ? ' (done)' : ' (not yet)'}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+/** Species a card measures, in the order its measurements name them. */
+function measuredSpecies(card: ExperimentCardView): string[] {
+  const out: string[] = [];
+  for (const id of card.measurements) {
+    const sp = id.split('.')[1];
+    if (sp && /^[A-Z][0-9]{2}$/.test(sp) && !out.includes(sp)) out.push(sp);
+  }
+  return out;
+}
+
+/**
+ * Population history of both copies over the run (every 10 s of dish time), read from each copy's own
+ * history when the player opens it. Opening it is the card's "read the prey history" step (CT §10.1).
+ */
+function PopulationHistory({ card }: { card: ExperimentCardView }) {
+  const c = compareState.value!;
+  const info = dishInfo.value!;
+  const [hist, setHist] = useState<{ readonly A: readonly HistorySample[]; readonly B: readonly HistorySample[]; readonly compacted: boolean } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const species = measuredSpecies(card)
+    .map((id) => ({ id, i: info.speciesIds.indexOf(id) }))
+    .filter((s) => s.i >= 0);
+  const load = () => {
+    if (hist) return;
+    const client = getClient();
+    Promise.all([client.history(c.aDishId), client.history(c.bDishId)])
+      .then(([a, b]) => setHist({ A: a.seconds as HistorySample[], B: b.seconds as HistorySample[], compacted: a.compacted || b.compacted }))
+      .catch((e: unknown) => setError((e as Error).message));
+  };
+  const from = c.baselineTick / 10;
+  const to = from + c.ticksRun / 10;
+  const bySecond = (list: readonly HistorySample[]) => {
+    const out: Record<number, HistorySample> = {};
+    for (const s of list) out[s.second] = s;
+    return out;
+  };
+  const a = hist ? bySecond(hist.A) : {};
+  const b = hist ? bySecond(hist.B) : {};
+  const seconds: number[] = [];
+  for (let t = from; t <= to; t += 10) if (a[t] && b[t]) seconds.push(t);
+  return (
+    <details
+      class="xp-details"
+      data-testid="experiment-history"
+      onToggle={(e) => {
+        if (e.currentTarget.open) load();
+      }}
+    >
+      <summary>Population history, A and B</summary>
+      {error ? <p>The history could not be read: {error}</p> : null}
+      {!hist && !error ? <p>Reading both copies’ history…</p> : null}
+      {hist ? (
+        <>
+          <p class="xp-note">Organisms alive in each copy every 10 s of dish time, from each copy’s own record. A table shows what happened together, not what caused it.</p>
+          {hist.compacted ? <p class="xp-note">Older seconds were summarized into minutes, so the table starts later than the run.</p> : null}
+          <div class="compare-table-wrap" tabIndex={0} role="region" aria-label="Population history, A and B">
+            <table class="xp-table" data-testid="experiment-history-table">
+              <caption>Organisms alive, this paired run</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Dish time</th>
+                  {species.map((s) => (
+                    <th key={s.id} scope="col">
+                      {plural(card.speciesNames[s.id] ?? s.id)} A · B
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {seconds.map((t) => (
+                  <tr key={t}>
+                    <th scope="row">{clock(t * 10)}</th>
+                    {species.map((s) => (
+                      <td key={s.id}>
+                        {a[t]!.count[s.i] ?? 0} · {b[t]!.count[s.i] ?? 0}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
+    </details>
+  );
+}
+
 function ExperimentRunning({ card, x }: { card: ExperimentCardView; x: ComparisonExperiment }) {
   const c = compareState.value!;
   const text = comparePrediction.value.trim();
@@ -310,6 +423,7 @@ function ExperimentRunning({ card, x }: { card: ExperimentCardView; x: Compariso
       <p class="xp-note">Pace only changes how long you wait. A and B always get the same number of ticks.</p>
       <h3>Observation gate</h3>
       <GateList card={card} x={x} />
+      <StepList card={card} x={x} />
       {x.stamp ? (
         <p class="constraint xp-stamped" role="status" data-testid="experiment-stamped">
           Stamped in your Journal at {clock(x.stamp.reachedAtSecond * 10)}. The run goes on.
@@ -333,6 +447,8 @@ function ExperimentResults({ card, x }: { card: ExperimentCardView; x: Compariso
   const m = x.measured;
   const text = comparePrediction.value.trim();
   const reached = x.gate?.reached === true;
+  const stamped = x.stamp !== null;
+  const waiting = x.steps.filter((st) => !st.done);
   const others = r ? r.rows.filter((row) => row.key !== 'speciesCount' && row.key !== 'speciesBiomass') : [];
   return (
     <div class="compare-body xp-body">
@@ -342,10 +458,13 @@ function ExperimentResults({ card, x }: { card: ExperimentCardView; x: Compariso
       <Labels card={card} />
       <p class={reached ? 'constraint' : 'xp-note'} data-testid="experiment-gate-result" data-reached={reached}>
         {reached && x.gate?.reachedAtSecond !== null && x.gate?.reachedAtSecond !== undefined
-          ? `Observation gate reached at ${clock(x.gate.reachedAtSecond * 10)}. Your Journal has a stamp: “${card.journalStamp}”.`
+          ? stamped
+            ? `Observation gate reached at ${clock(x.gate.reachedAtSecond * 10)}. Your Journal has a stamp: “${card.journalStamp}”.`
+            : `The measured part of the gate held at ${clock(x.gate.reachedAtSecond * 10)}. No stamp yet: it also needs ${waiting.length === 1 ? 'the step' : 'the steps'} below.`
           : `The observation gate was not reached${r?.stoppedEarly ? ' (stopped early)' : ''}, so nothing was stamped. What did not happen is a result too; the numbers below say what did.`}
       </p>
       <GateList card={card} x={x} />
+      {reached ? <StepList card={card} x={x} /> : null}
       <p class="xp-note">
         A and B each ran {clock(c.ticksRun)} from {clock(c.baselineTick)}. These numbers describe this paired run only; another seed or a longer run could turn out differently.
       </p>
@@ -369,9 +488,9 @@ function ExperimentResults({ card, x }: { card: ExperimentCardView; x: Compariso
                 return (
                   <tr key={id}>
                     <th scope="row">{measureLabel(card, id)}</th>
-                    <td>{formatMeasure(id, a)}</td>
-                    <td>{formatMeasure(id, b)}</td>
-                    <td>{formatDiff(id, a, b)}</td>
+                    <td>{formatMeasure(id, a, m.A)}</td>
+                    <td>{formatMeasure(id, b, m.B)}</td>
+                    <td>{formatDiff(id, a, b, m.A, m.B)}</td>
                   </tr>
                 );
               })}
@@ -407,6 +526,7 @@ function ExperimentResults({ card, x }: { card: ExperimentCardView; x: Compariso
           </div>
         </details>
       ) : null}
+      <PopulationHistory card={card} />
       <figure class="compare-prediction">
         <figcaption>Your prediction</figcaption>
         <blockquote>{text || 'No prediction written.'}</blockquote>

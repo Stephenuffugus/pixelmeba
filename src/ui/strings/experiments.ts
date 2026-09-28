@@ -4,8 +4,9 @@
  * biology. Measurement ids follow the grammar in src/sim/pairedRun.ts.
  */
 import type { CommandPayload } from '@sim/commands';
-import type { CardScheduled, ClauseResult, ExperimentCardView, GateClause } from '@sim/experiments';
+import { livingCountFor, type CardScheduled, type ClauseResult, type ExperimentCardView, type GateClause, type PlayerStep } from '@sim/experiments';
 import { REASONS } from '@sim/reasons';
+import type { JournalMeasure } from '../journal';
 import { causeLabel } from '../panels/CompareText';
 
 /** Plain names for the fields a card can measure (fallback: the field id). */
@@ -86,15 +87,21 @@ export function measureLabel(card: ExperimentCardView, id: string): string {
     case 'preyBiomass':
       return `Biomass ${sps(card, a)} can eat`;
     case 'reserveHeld':
-      return `Energy ${sps(card, a)} hold above the normal cap`;
+      return `Energy held above the normal cap, all ${sps(card, a)} together`;
     case 'reservePeak':
-      return `Most energy ${sps(card, a)} held above the normal cap`;
+      return `Most energy held above the normal cap at one moment, all ${sps(card, a)} together`;
     case 'founders':
       return `${sp(card, a)} founders ${groupWords(card, b)}`;
     case 'descendants':
       return `Living family of the founders ${groupWords(card, b)}`;
     case 'groupEnergy':
       return `Mean energy, family of the founders ${groupWords(card, b)}`;
+    case 'groupEnergyMedian':
+      return `Median energy, family of the founders ${groupWords(card, b)}`;
+    case 'groupEnergyMin':
+      return `Lowest energy, family of the founders ${groupWords(card, b)}`;
+    case 'groupEnergyMax':
+      return `Highest energy, family of the founders ${groupWords(card, b)}`;
     case 'groupExtinctAt':
       return `When the family ${groupWords(card, b)} died out`;
     case 'field':
@@ -114,20 +121,42 @@ export function measureLabel(card: ExperimentCardView, id: string): string {
 const COUNT_HEADS = new Set(['aliveTotal', 'speciesAlive', 'interventionAccepted', 'interventionRejected', 'alive', 'births', 'deaths', 'captures', 'founders', 'descendants']);
 const CARBON_HEADS = new Set(['inputCarbon', 'intake', 'capturedCarbon', 'field', 'consumed', 'converted', 'patchInput', 'biomass', 'biomassStart', 'biomassTotal', 'preyBiomass']);
 
-/** A measured value with its unit: counts whole, times in seconds, carbon in C, energy in E. */
-export function formatMeasure(id: string, value: number): string {
+const ENERGY_HEADS = new Set(['meanEnergy', 'groupEnergy', 'groupEnergyMedian', 'groupEnergyMin', 'groupEnergyMax', 'reserveHeld', 'reservePeak']);
+
+/** Shown instead of an energy of nobody (a mean, median, lowest or highest over no living member). */
+export const NONE_ALIVE = 'none alive';
+
+/**
+ * True when `id` is an energy over living members and `rec` (the same arm's record) says none are
+ * alive: the recorded 0 is not a real value (pairedRun.ts; the card also reports the count).
+ */
+export function noneAlive(id: string, rec: Readonly<Record<string, number>> | null | undefined): boolean {
+  const count = livingCountFor(id);
+  return count !== null && rec !== null && rec !== undefined && rec[count] === 0;
+}
+
+/**
+ * A measured value with its unit: counts whole, times in seconds, carbon in C, energy in E. With the
+ * arm's record, an energy over nobody reads "none alive", never "0.00 E".
+ */
+export function formatMeasure(id: string, value: number, rec?: Readonly<Record<string, number>> | null): string {
+  if (noneAlive(id, rec)) return NONE_ALIVE;
   const head = id.split('.')[0]!;
   if (head === 'extinctAt' || head === 'groupExtinctAt') return value < 0 ? 'not died out' : `${value} s`;
   if (head === 'seconds' || head === 'runSeconds') return `${value} s`;
   if (COUNT_HEADS.has(head)) return String(Math.round(value));
   if (head === 'biomassRatio') return `× ${value.toFixed(2)}`;
   if (head === 'oxygenMean') return value.toFixed(3);
-  const unit = CARBON_HEADS.has(head) ? ' C' : head === 'meanEnergy' || head === 'groupEnergy' || head === 'reserveHeld' || head === 'reservePeak' ? ' E' : '';
+  const unit = CARBON_HEADS.has(head) ? ' C' : ENERGY_HEADS.has(head) ? ' E' : '';
   return `${num(value, 2)}${unit}`;
 }
 
-/** B − A for a measured value, signed, in the value's own units ("—" where a difference means nothing). */
-export function formatDiff(id: string, a: number, b: number): string {
+/**
+ * B − A for a measured value, signed, in the value's own units ("—" where a difference means nothing,
+ * including an energy over nobody in either copy when the records are given).
+ */
+export function formatDiff(id: string, a: number, b: number, recA?: Readonly<Record<string, number>> | null, recB?: Readonly<Record<string, number>> | null): string {
+  if (noneAlive(id, recA) || noneAlive(id, recB)) return '—';
   const head = id.split('.')[0]!;
   if (head === 'extinctAt' || head === 'groupExtinctAt') return a < 0 || b < 0 ? '—' : signed(b - a, 0) + ' s';
   if (head === 'seconds' || head === 'runSeconds') return signed(b - a, 1) + ' s';
@@ -220,6 +249,56 @@ export function clauseText(card: ExperimentCardView, c: GateClause | ClauseResul
   return `${measureLabel(card, c.measure)}${where}: ${OPS[c.op]} ${formatMeasure(c.measure, c.value)}`;
 }
 
+/**
+ * What completing the card does (SPEC §13.2 completion behavior), worded for the card's kind: one
+ * dish keeps running; a paired card's two copies run to their stopping point and are copies, so the
+ * player's dish is unchanged.
+ */
+export function completionText(card: ExperimentCardView): string {
+  const steps = card.playerSteps.length > 0 ? ' and you have taken the steps above' : '';
+  const stamp = `When every part holds${steps}, your Journal gets a stamp: “${card.journalStamp}”.`;
+  return card.paired
+    ? `${stamp} Both copies run to their stopping point (${durationText(card.stoppingSeconds)} of dish time) and then stop. They are copies: your dish is unchanged, and closing the run discards them.`
+    : `${stamp} The world keeps running.`;
+}
+
+/**
+ * Why a card's observation stopped without a stamp, for the dish's toast: the player changed the dish,
+ * the dish stopped with an error, or the dish was closed and opened again — the card's observer
+ * history is worker state that is not saved, so a reopened dish cannot resume watching exactly.
+ */
+export function experimentEndedText(reason: 'changed' | 'failed' | 'closed', title: string): string {
+  switch (reason) {
+    case 'changed':
+      return `You changed the dish, so “${title}” stopped observing before its gate. The dish goes on as it is.`;
+    case 'failed':
+      return `The dish stopped with an error, so “${title}” stopped observing. Nothing was stamped.`;
+    case 'closed':
+      return `This dish was made from the card “${title}”. The card’s observation ended when the dish was closed: what it watched is not saved, so it cannot resume. The dish goes on as a dish; start the card again from the Notebook to observe it.`;
+  }
+}
+
+/** The toast when a stamp is recorded: one dish keeps running; a paired run's copies are copies. */
+export function stampToastText(journalStamp: string, paired: boolean, stored: boolean): string {
+  const where = paired ? 'Your dish is unchanged; the copies run to their stopping point.' : 'The dish keeps running.';
+  return `Journal stamp: ${journalStamp}. ${where}${stored ? '' : ' (Kept for this session only: this device did not store it.)'}`;
+}
+
+/** One player step the stamp also needs (CT §10.1), as an instruction. */
+export function playerStepText(card: ExperimentCardView, step: PlayerStep): string {
+  const who = card.stepSpecies.length === 1 ? sp(card, card.stepSpecies[0]!) : 'organism';
+  switch (step) {
+    case 'inspectFoodUse':
+      return `Tap ${/^[aeiou]/i.test(who) ? 'an' : 'a'} ${who} while it is eating: the inspector shows the food it took in.`;
+    case 'openResourceHistory':
+      return 'Open the dish’s history (More → History) to read the totals over time.';
+    case 'viewComparison':
+      return 'Read the results of both copies when the run ends.';
+    case 'viewPreyHistory':
+      return 'Open the population history of both copies on the results.';
+  }
+}
+
 /** Stopping point in words ("3 min", "90 s"). */
 export function durationText(seconds: number): string {
   if (seconds >= 120 && seconds % 60 === 0) return `${seconds / 60} min`;
@@ -230,4 +309,29 @@ export function durationText(seconds: number): string {
 export function recordedText(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+}
+
+/**
+ * A journal stamp's measured values as the Notebook shows them. Energies are re-read from the recorded
+ * raw numbers with the stamp's own living counts, so an energy over nobody reads "none alive" (also in
+ * stamps recorded before that rule); every other cell is shown as recorded.
+ */
+export function journalMeasureCells(measures: readonly JournalMeasure[]): { readonly id: string; readonly label: string; readonly a: string; readonly b: string | null; readonly diff: string | null }[] {
+  const recA: Record<string, number> = {};
+  const recB: Record<string, number> = {};
+  for (const m of measures) {
+    recA[m.id] = m.rawA;
+    if (m.rawB !== null) recB[m.id] = m.rawB;
+  }
+  return measures.map((m) => {
+    const emptyA = noneAlive(m.id, recA);
+    const emptyB = m.rawB !== null && noneAlive(m.id, recB);
+    return {
+      id: m.id,
+      label: m.label,
+      a: emptyA ? NONE_ALIVE : m.a,
+      b: emptyB ? NONE_ALIVE : m.b,
+      diff: m.diff !== null && (emptyA || emptyB) ? '—' : m.diff,
+    };
+  });
 }

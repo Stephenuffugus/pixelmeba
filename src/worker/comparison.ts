@@ -23,7 +23,7 @@
  */
 import { applyNow, type CommandPayload } from '@sim/commands';
 import type { ExperimentChange } from '@sim/content/schema';
-import type { GateStatus, JournalStamp } from '@sim/experiments';
+import type { GateStatus, JournalStamp, PlayerStep } from '@sim/experiments';
 import { PairedRun, type ComparisonResults, type Intervention } from '@sim/pairedRun';
 import { deserializeWorld, serializeWorld, type WorldState } from '@sim/serialize';
 import type { World } from '@sim/world';
@@ -71,9 +71,14 @@ export interface ComparisonExperiment {
   readonly change: ExperimentChange;
   /** Ticks both arms run: the card's stopping point minus the start. */
   readonly horizonTicks: number;
-  /** The gate: reached (with the second and clause values) or the clause values so far. */
+  /** The measured gate: reached (with the second and clause values) or the clause values so far. */
   readonly gate: GateStatus | null;
-  /** The journal stamp recorded when the gate was reached. */
+  /**
+   * The player steps the card lists (completion.playerSteps, CT §10.1) and whether each was taken on
+   * this run's screen. The stamp needs the measured gate and every step.
+   */
+  readonly steps: readonly { readonly step: PlayerStep; readonly done: boolean }[];
+  /** The journal stamp, once the measured gate held and every listed step was taken (null until then). */
   readonly stamp: JournalStamp | null;
   /** The card's measurements in A and B at the latest evaluation (the gate moment, then the end). */
   readonly measured: { readonly A: Readonly<Record<string, number>>; readonly B: Readonly<Record<string, number>> } | null;

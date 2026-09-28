@@ -1,4 +1,5 @@
 import { IconBack } from '../icons';
+import { PauseOnDiscoveriesToggle } from '../panels/DiscoverySetting';
 import { reducedMotionFollowsDevice, route, settings, TEXT_SCALES, updateSettings } from '../state';
 
 export function SimplePage({ title, body, settings: showSettings }: { title: string; body: string; settings?: boolean }) {
@@ -37,6 +38,7 @@ export function SimplePage({ title, body, settings: showSettings }: { title: str
                 <input type="checkbox" checked={s.showPrompts} onChange={(e) => updateSettings({ showPrompts: e.currentTarget.checked })} />
                 Show gentle prompts
               </label>
+              <PauseOnDiscoveriesToggle />
               <label style={{ display: 'grid', gap: '0.25rem' }}>
                 Overlay opacity {Math.round(s.overlayOpacity * 100)} %
                 <input

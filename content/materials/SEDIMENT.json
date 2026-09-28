@@ -10,7 +10,7 @@
     "summary": "Paints cells as muddy sediment on the bottom of the dish.",
     "biology": "Muddy bottoms hold food and hide small microbes, and chemicals and gases move through them very slowly.",
     "rules": "Turns covered cells into sediment without removing any life, deposits or dissolved fields. Dissolved things spread a tenth as fast as in water (0.01 per tick) and gas exchange with the air is ten times slower. Sediment is an attachment surface for Velvet, Rampart and all four fungi; Traplace attaches only on sediment or mesh. Siltworm lives in sediment and can cross up to 2 water cells. Algae and most swimming consumers live only in water, so sediment is unsuitable for them. No additional modeled reaction.",
-    "example": "Paint a sediment bed next to open water, add Siltworms and see where they graze."
+    "example": "Paint a sediment bed next to open water and watch oxygen and sugar creep into it slowly."
   },
   "iconId": "paint_sediment",
   "phase": 2

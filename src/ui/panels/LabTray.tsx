@@ -10,20 +10,22 @@ import type { JSX } from 'preact';
 import { drawFrame, loadAtlas } from '../atlas';
 import { IconClose, IconCopy, IconUndo } from '../icons';
 import { dishInfo, duplicateCurrent, meta, openCompare, sheet, undo } from '../state';
+import type { PlaceableStructure, SubstrateName } from '@sim/grid';
 import {
+  BRUSH_COPY,
   cannotLiveIn,
   CHEMISTRY_MATERIALS,
   COUNTS,
+  ERASE_STRUCTURE,
   FALLBACK_MATERIAL_COPY,
   FOOD_MATERIALS,
-  HABITAT_TOOLS,
   habitatList,
   LAB_CATEGORIES,
   LAB_TEXT,
   LIFE_COPY,
   MATERIAL_COPY,
   RADII,
-  STRUCTURE_TOOLS,
+  SHADE_ERASE,
   type HabitatToolId,
   type ItemCopy,
   type LabCategory,
@@ -57,6 +59,7 @@ import {
   IconWater,
 } from './LabTrayIcons';
 import { OverlayPicker } from './OverlayPicker';
+import { habitatTools, paintRecord, shadeFactorOf, structureRecord, structureTools } from './LabTrayContent';
 
 interface TrayItem {
   readonly id: LabToolId;
@@ -114,14 +117,16 @@ export function trayItems(category: LabCategory): TrayItem[] {
         .map((m) => ({ id: `material:${m.id}` as LabToolId, name: m.name, icon: <Swatch id={m.id} /> }));
     }
     case 'habitat':
-      return (Object.keys(HABITAT_TOOLS) as HabitatToolId[]).map((id) => {
+      // Only the paints this dish's recorded content has (content is data; D-0024).
+      return (habitatTools(info) as HabitatToolId[]).map((id) => {
         const Icon = HABITAT_ICONS[id];
-        return { id, name: HABITAT_TOOLS[id].name, icon: <Icon /> };
+        return { id, name: itemCopy(id)?.name ?? id, icon: <Icon /> };
       });
     case 'tools':
-      return (Object.keys(STRUCTURE_TOOLS) as StructureToolId[]).map((id) => {
+      // Only the structures this dish's recorded manifest enables.
+      return (structureTools(info) as StructureToolId[]).map((id) => {
         const Icon = STRUCTURE_ICONS[id];
-        return { id, name: STRUCTURE_TOOLS[id].name, icon: <Icon /> };
+        return { id, name: itemCopy(id)?.name ?? id, icon: <Icon /> };
       });
     default:
       return [];
@@ -173,17 +178,53 @@ export function itemCopy(id: LabToolId): ItemCopy | null {
       watch: c.watch,
     };
   }
-  if (id in HABITAT_TOOLS) {
-    const base = HABITAT_TOOLS[id as HabitatToolId];
-    if (id === 'paint:gel' || id === 'paint:sediment' || id === 'paint:water') {
-      const sub = id.slice('paint:'.length);
-      const cannot = cannotLiveIn(sub, info.speciesNames, info.speciesHabitats);
-      if (cannot.length > 0)
-        return { ...base, watch: `${base.watch} In this dish, ${cannot.join(', ')} cannot live in ${sub}.` };
-    }
-    return base;
+  if (id.startsWith('paint:')) {
+    const sub = id.slice('paint:'.length) as SubstrateName;
+    const rec = paintRecord(info, sub);
+    if (!rec) return null;
+    const cannot = cannotLiveIn(sub, info.speciesNames, info.speciesHabitats);
+    const also = cannot.length > 0 ? ` In this dish, ${cannot.join(', ')} cannot live in ${sub}.` : '';
+    return {
+      name: rec.name,
+      purpose: rec.summary,
+      habitats: BRUSH_COPY.substrate.habitats,
+      dose: BRUSH_COPY.substrate.dose,
+      changes: rec.rules || rec.summary,
+      unchanged: BRUSH_COPY.substrate.unchanged,
+      watch: `${rec.example}${also}`.trim(),
+    };
   }
-  if (id in STRUCTURE_TOOLS) return STRUCTURE_TOOLS[id as StructureToolId];
+  if (id === 'shade:paint' || id === 'shade:erase') {
+    const rec = paintRecord(info, 'shade');
+    const factor = shadeFactorOf(info);
+    if (!rec || factor === null) return null;
+    if (id === 'shade:erase') return SHADE_ERASE;
+    return {
+      name: rec.name,
+      purpose: rec.summary,
+      habitats: BRUSH_COPY.shade.habitats,
+      dose: BRUSH_COPY.shade.dose(factor),
+      changes: rec.rules || rec.summary,
+      unchanged: BRUSH_COPY.shade.unchanged,
+      watch: rec.example,
+    };
+  }
+  if (id.startsWith('place:')) {
+    const which = id.slice('place:'.length) as PlaceableStructure;
+    const rec = structureRecord(info, which);
+    if (!rec) return null;
+    const p = BRUSH_COPY.place;
+    return {
+      name: rec.name,
+      purpose: rec.summary,
+      habitats: which === 'wall' ? p.wallHabitats : p.habitats,
+      dose: p.dose,
+      changes: rec.rules || rec.summary,
+      unchanged: which === 'bead' ? p.beadUnchanged : p.sealedUnchanged,
+      watch: rec.example,
+    };
+  }
+  if (id === 'erase') return structureTools(info).includes('erase') ? ERASE_STRUCTURE : null;
   return null;
 }
 
@@ -444,6 +485,10 @@ export function LabTray({ category }: { category: LabCategory }) {
               </>
             ) : items.length > 0 ? (
               <p class="lab-sub">{LAB_TEXT.pickItem}</p>
+            ) : category === 'habitat' || category === 'tools' ? (
+              <p class="lab-sub" data-testid="lab-none-in-dish">
+                {category === 'habitat' ? LAB_TEXT.noPaint : LAB_TEXT.noStructures}
+              </p>
             ) : null}
             {category === 'tools' ? <ToolsActions /> : null}
           </>

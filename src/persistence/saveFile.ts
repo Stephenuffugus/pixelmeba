@@ -14,16 +14,59 @@ import { canonicalJson, sha256Hex, base64ToBytes } from '@sim/hash';
 import { moduleSetProblem } from '@sim/content/moduleRules';
 import { deserializeWorld, migrateWorldState, serializeWorld, type EncodedArray, type WorldState } from '@sim/serialize';
 import { SCHEMA_VERSION, type World } from '@sim/world';
+import { variantRecordOf } from '@sim/variants';
 
 export const SAVE_FORMAT = 'pixelmeba-save';
 export const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
 export const APP_VERSION = '0.1.0';
+
+/**
+ * A What if? dish's identity (D09 §4), copied from the world's variant record into the file's meta so
+ * a list or export summary can name it without building the world. Additive: files without it load
+ * as before. The world's provenance stays authoritative (meta is outside the checksum).
+ */
+export interface SaveMetaVariant {
+  readonly variantId: string;
+  readonly variantRevision: number;
+  readonly title: string;
+  readonly sourceId: string;
+  readonly sourceRevision: number;
+  readonly seed: number;
+}
 
 export interface SaveMeta {
   readonly name: string;
   readonly savedAt: string;
   readonly recipeId: string | null;
   readonly note?: string;
+  /** Written by buildSaveFile for a What if? dish (from its variant record); absent otherwise. */
+  readonly variant?: SaveMetaVariant;
+}
+
+/** The variant identity in a file's meta, or null when absent or malformed (meta is untrusted text). */
+export function saveMetaVariant(meta: unknown): SaveMetaVariant | null {
+  const v = (meta as { variant?: unknown } | null)?.variant;
+  if (typeof v !== 'object' || v === null) return null;
+  const r = v as Record<string, unknown>;
+  const str = (k: string) => {
+    const x = r[k];
+    return typeof x === 'string' && x.length > 0 && x.length <= 200;
+  };
+  const int = (k: string) => Number.isInteger(r[k]) && (r[k] as number) >= 0;
+  if (!(str('variantId') && str('title') && str('sourceId') && int('variantRevision') && int('sourceRevision') && int('seed'))) return null;
+  return {
+    variantId: r.variantId as string,
+    variantRevision: r.variantRevision as number,
+    title: r.title as string,
+    sourceId: r.sourceId as string,
+    sourceRevision: r.sourceRevision as number,
+    seed: r.seed as number,
+  };
+}
+
+function metaVariantOf(world: World): SaveMetaVariant | null {
+  const r = variantRecordOf(world);
+  return r ? { variantId: r.variantId, variantRevision: r.variantRevision, title: r.title, sourceId: r.sourceId, sourceRevision: r.sourceRevision, seed: r.seed } : null;
 }
 
 export interface SaveFile {
@@ -61,6 +104,9 @@ export function cleanName(name: string): string {
 export async function buildSaveFile(world: World, meta: SaveMeta, options: { stripNames?: boolean } = {}): Promise<{ text: string; checksum: string; file: SaveFile }> {
   const state = serializeWorld(world);
   const checksum = `sha256:${await sha256Hex(canonicalJson(state))}`;
+  // The variant identity always comes from the world itself (never from the caller's meta).
+  const { variant: _callerVariant, ...given } = meta;
+  const variant = metaVariantOf(world);
   const file: SaveFile = {
     format: SAVE_FORMAT,
     schemaVersion: SCHEMA_VERSION,
@@ -69,7 +115,7 @@ export async function buildSaveFile(world: World, meta: SaveMeta, options: { str
     contentVersion: world.content.manifest.contentVersion,
     contentHash: world.content.manifest.contentHash,
     tick: world.tick,
-    meta: { ...meta, name: options.stripNames ? 'Shared dish' : cleanName(meta.name), ...(options.stripNames ? { note: '' } : {}) },
+    meta: { ...given, name: options.stripNames ? 'Shared dish' : cleanName(meta.name), ...(options.stripNames ? { note: '' } : {}), ...(variant ? { variant } : {}) },
     state,
     checksum,
   };

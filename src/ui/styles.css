@@ -271,7 +271,7 @@ textarea {
   gap: 3px;
   min-height: 64px;
   padding: 6px 4px;
-  font-size: var(--fs-small);
+  font-size: var(--fs-body);
   line-height: 1.15;
   text-align: center;
 }
@@ -367,7 +367,7 @@ textarea {
 }
 .sheet .sub {
   color: var(--text-muted);
-  font-size: var(--fs-small);
+  font-size: var(--fs-body);
 }
 @media (orientation: landscape) and (min-width: 700px) {
   .sheet {
@@ -730,7 +730,8 @@ textarea {
   z-index: 3;
 }
 .compare-toggle .btn {
-  min-width: 0;
+  /* UX §4.1: every touch target at least 48 × 48 CSS px, also the A/B toggle over the viewport. */
+  min-width: var(--target);
   padding: 6px 12px;
 }
 /* Phones stack both views in one place and show one; the hidden one keeps its size (visibility, not

@@ -22,7 +22,7 @@ export function Play() {
             <div>
               <h2 id="garden-title">Little Living Garden</h2>
               <p>Who finds something to eat?</p>
-              <p style={{ fontSize: '0.85rem' }}>
+              <p>
                 Preloaded: 24 Sprinters, 12 Crumbsmiths, 8 Recyclers and 12 Sunbeads, a sugar patch, a starch patch and some debris. Nothing
                 else will appear unless you add it.
               </p>

@@ -7,7 +7,7 @@ import { useEffect } from 'preact/hooks';
 import { IconBack, IconPlay } from '../icons';
 import { journal } from '../journal';
 import { busy, experimentCard, experimentCards, experimentCardsError, loadExperimentCards, route, startExperiment } from '../state';
-import { clauseText, describeArms, durationText, measureLabel } from '../strings/experiments';
+import { clauseText, completionText, describeArms, durationText, measureLabel, playerStepText } from '../strings/experiments';
 
 export function ExperimentCard() {
   const r = route.value;
@@ -103,8 +103,18 @@ export function ExperimentCard() {
               <li key={i}>{clauseText(card, g)}</li>
             ))}
           </ul>
-          <p>
-            When every part holds, your Journal gets a stamp: “{card.journalStamp}”. The world keeps running.
+          {card.playerSteps.length > 0 ? (
+            <>
+              <p>The stamp also needs you to:</p>
+              <ul class="xp-list" data-testid="experiment-card-steps">
+                {card.playerSteps.map((st) => (
+                  <li key={st}>{playerStepText(card, st)}</li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          <p data-testid="experiment-card-completion">
+            {completionText(card)}
             {stamps > 0 ? ` You have ${stamps} stamp${stamps === 1 ? '' : 's'} from this card.` : ''}
           </p>
 

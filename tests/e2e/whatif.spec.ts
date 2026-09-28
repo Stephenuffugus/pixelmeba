@@ -274,3 +274,99 @@ test('What if? at 200 % text: choices, preview, Details and Start reachable, not
   await page.getByTestId('whatif-close').click();
   await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Pause');
 });
+
+// Wave B fix (whatif-verify.md items 0, 4, 5 and the error toast; D-0026).
+test('What if? over a dish is a blocking modal (backdrop and keys never reach the dish), focus returns to More; a custom dish offers no ideas', async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await startGarden(page, { textScale: 2 });
+  await expect(page.getByTestId('sim-time')).toHaveText(/^0:00 · 56 alive/);
+  await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
+
+  // Blocking: while the sheet is open the dish behind is inert (out of focus order and the a11y tree).
+  await openFromMore(page);
+  const heading = page.getByTestId('whatif-sheet').getByRole('heading', { name: 'What if?' });
+  await expect(heading).toBeFocused();
+  expect(await page.getByTestId('run-toggle').evaluate((el) => el.closest('[inert]') !== null)).toBe(true);
+  // An inert control cannot take focus (and so no key can reach it).
+  expect(
+    await page.getByTestId('run-toggle').evaluate((el) => {
+      el.focus();
+      return document.activeElement === el;
+    }),
+  ).toBe(false);
+  await expect(heading).toBeFocused();
+  await expectNoSeriousA11yViolations(page);
+
+  // A click on the backdrop, then the dish's own keys: Space (run), '.' (step), 'u' (undo), '4' (speed).
+  const spot = await page.getByTestId('whatif-modal').evaluate((m) => {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const cands: [number, number][] = [
+      [4, 4],
+      [w - 4, 4],
+      [4, h - 4],
+      [w - 4, h - 4],
+      [w / 2, 4],
+      [4, h / 2],
+    ];
+    return cands.find(([x, y]) => document.elementFromPoint(x, y) === m) ?? null;
+  });
+  expect(spot, 'a point on the backdrop outside the sheet').not.toBeNull();
+  await page.mouse.click(spot![0], spot![1]);
+  await expect(page.getByTestId('whatif-sheet')).toBeVisible();
+  await page.keyboard.press('Space');
+  for (let i = 0; i < 12; i++) await page.keyboard.press('.');
+  await page.keyboard.press('u');
+  await page.keyboard.press('4');
+  await page.waitForTimeout(1500);
+  await expect(page.getByTestId('whatif-sheet')).toBeVisible();
+  await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
+  expect(await simSeconds(page)).toBe(0); // 12 steps or a second of running would show 0:01
+
+  // Escape closes it; focus returns to the dish's More button (the More item that opened it is gone).
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('whatif-sheet')).toHaveCount(0);
+  await expect(page.getByTestId('more')).toBeFocused();
+  expect(await page.getByTestId('run-toggle').evaluate((el) => el.closest('[inert]') === null)).toBe(true);
+  // … and the same through Close.
+  await openFromMore(page);
+  await page.getByTestId('whatif-close').click();
+  await expect(page.getByTestId('whatif-sheet')).toHaveCount(0);
+  await expect(page.getByTestId('more')).toBeFocused();
+  await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
+  expect(await simSeconds(page)).toBe(0);
+
+  // A refused import pauses and changes nothing, and the toast never says the dish was paused.
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as { __toasts: string[] }).__toasts = seen;
+    new MutationObserver(() => {
+      const t = document.querySelector('.toast')?.textContent;
+      if (t && seen[seen.length - 1] !== t) seen.push(t);
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+  await page.getByTestId('more').click();
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'broken.pixelmeba',
+    mimeType: 'application/json',
+    buffer: Buffer.from('this is not a dish'),
+  });
+  await expect(page.locator('.toast')).toContainText('Nothing was changed');
+  const toasts = await page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts);
+  expect(toasts.some((t) => t.startsWith('Nothing was paused or changed:'))).toBe(true);
+  expect(toasts.filter((t) => /dish was paused/i.test(t))).toEqual([]);
+  await expect(title(page)).toHaveText('Little Living Garden');
+
+  // D09 §4: a custom New Dish (Empty Water Garden, its own seed) offers no What if? ideas.
+  await page.getByRole('button', { name: 'Close' }).first().click();
+  await page.getByRole('button', { name: 'Home' }).click();
+  await page.getByTestId('home-new').click();
+  await page.getByRole('radio', { name: 'Empty Water Garden' }).click();
+  await page.getByTestId('new-dish-start').click();
+  await expect(page.getByTestId('sim-time')).toHaveText(/^0:00 · 0 alive/);
+  await page.getByTestId('more').click();
+  await expect(page.getByTestId('more-save')).toBeVisible();
+  await expect(page.getByTestId('more-whatif')).toHaveCount(0);
+});

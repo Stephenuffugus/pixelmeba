@@ -5,7 +5,20 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { experimentCardView, experimentCatalog } from '../../src/sim/experiments';
-import { clauseText, describeArms, formatDiff, formatMeasure, measureLabel } from '../../src/ui/strings/experiments';
+import { realizeRecipe } from '../../src/sim/recipes';
+import { buildInspector } from '../../src/worker/snapshot';
+import type { JournalMeasure } from '../../src/ui/journal';
+import {
+  clauseText,
+  completionText,
+  describeArms,
+  formatDiff,
+  formatMeasure,
+  journalMeasureCells,
+  measureLabel,
+  playerStepText,
+} from '../../src/ui/strings/experiments';
+import { originChip } from '../../src/ui/strings/modules';
 import { registry } from './helpers';
 
 function fakeStorage(): Storage {
@@ -107,10 +120,94 @@ describe('cards in words', () => {
     const card = experimentCardView(reg, reg.experiments.EXP_C!);
     expect(measureLabel(card, 'descendants.B01.E05')).toBe('Living family of the founders with a Reserve chamber');
     expect(measureLabel(card, 'descendants.B01.none')).toBe('Living family of the founders with no extra ability');
-    expect(measureLabel(card, 'reservePeak.B01')).toBe('Most energy Sprinters held above the normal cap');
+    // A population total, summed over living Sprinters at one moment (not one organism's amount).
+    expect(measureLabel(card, 'reservePeak.B01')).toBe('Most energy held above the normal cap at one moment, all Sprinters together');
+    expect(measureLabel(card, 'reserveHeld.B01')).toBe('Energy held above the normal cap, all Sprinters together');
+    expect(measureLabel(card, 'groupEnergyMedian.B01.E05')).toBe('Median energy, family of the founders with a Reserve chamber');
+    expect(measureLabel(card, 'groupEnergyMin.B01.none')).toBe('Lowest energy, family of the founders with no extra ability');
+    expect(measureLabel(card, 'groupEnergyMax.B01.E05')).toBe('Highest energy, family of the founders with a Reserve chamber');
+    expect(formatMeasure('groupEnergyMax.B01.E05', 81.234)).toBe('81.23 E');
     expect(formatMeasure('groupExtinctAt.B01.E05', -1)).toBe('not died out');
     expect(formatMeasure('groupExtinctAt.B01.E05', 473)).toBe('473 s');
     expect(describeArms(card).a).toContain('Sugar, 0.5 per cell within r 6 of (64, 64), at 60, 120, 180, 240 and 300 s');
     expect(describeArms(card).b).toBe('The same start, without those later additions.');
+  });
+});
+
+describe('completion copy says what completing each kind of card does (SPEC §13.2)', () => {
+  it('paired cards: the copies run to their stopping point and the dish is unchanged; one dish: the world keeps running', () => {
+    const reg = registry();
+    const cards = experimentCatalog(reg).map((d) => experimentCardView(reg, d));
+    expect(cards.filter((c) => c.paired).map((c) => c.id)).toEqual(['EXP_102', 'EXP_106', 'EXP_A', 'EXP_B', 'EXP_C']);
+    for (const card of cards) {
+      const text = completionText(card);
+      expect(text, card.id).toContain(`your Journal gets a stamp: “${card.journalStamp}”.`);
+      if (card.paired) {
+        expect(text, card.id).toContain('Both copies run to their stopping point');
+        expect(text, card.id).toContain('your dish is unchanged');
+        expect(text, card.id).not.toMatch(/keeps running/);
+      } else {
+        expect(text, card.id).toMatch(/The world keeps running\.$/);
+        expect(text, card.id).not.toMatch(/cop(y|ies)/);
+      }
+    }
+    expect(completionText(cards.find((c) => c.id === 'EXP_C')!)).toContain('(10 min of dish time)');
+  });
+
+  it('every listed player step is worded as an instruction the player can follow (CT §10.1)', () => {
+    const reg = registry();
+    const card = (id: string) => experimentCardView(reg, reg.experiments[id]!);
+    expect(card('EXP_101').playerSteps).toEqual(['inspectFoodUse']);
+    expect(card('EXP_101').stepSpecies).toEqual(['B01']);
+    expect(playerStepText(card('EXP_101'), 'inspectFoodUse')).toBe('Tap a Sprinter while it is eating: the inspector shows the food it took in.');
+    expect(playerStepText(card('EXP_103'), 'openResourceHistory')).toMatch(/More → History/);
+    expect(playerStepText(card('EXP_106'), 'viewPreyHistory')).toMatch(/population history/);
+    expect(completionText(card('EXP_103'))).toContain('and you have taken the steps above');
+  });
+});
+
+describe('an energy over nobody reads "none alive", never as a real zero', () => {
+  const rec = { 'descendants.B01.E05': 0, 'descendants.B01.none': 5, 'alive.B01': 0 };
+  it('group energies and the species mean, with the same arm’s record', () => {
+    for (const h of ['groupEnergy', 'groupEnergyMedian', 'groupEnergyMin', 'groupEnergyMax']) {
+      expect(formatMeasure(`${h}.B01.E05`, 0, rec)).toBe('none alive');
+      expect(formatMeasure(`${h}.B01.none`, 42.5, rec)).toBe('42.50 E');
+      expect(formatDiff(`${h}.B01.E05`, 0, 42.5, rec, { 'descendants.B01.E05': 5 })).toBe('—');
+    }
+    expect(formatMeasure('meanEnergy.B01', 0, rec)).toBe('none alive');
+    expect(formatMeasure('meanEnergy.B01', 0, { 'alive.B01': 3 })).toBe('0.00 E');
+    // Totals are real zeros: nothing held above the cap is 0 E.
+    expect(formatMeasure('reserveHeld.B01', 0, rec)).toBe('0.00 E');
+  });
+
+  it('the Journal re-reads a stamp’s energies from its raw numbers (also stamps recorded as "0.00 E")', () => {
+    const m = (id: string, rawA: number, rawB: number, a: string, b: string, diff: string): JournalMeasure => ({ id, label: id, a, b, diff, rawA, rawB });
+    const cells = journalMeasureCells([
+      m('descendants.B01.E05', 0, 3, '0', '3', '+3'),
+      m('groupEnergy.B01.E05', 0, 40, '0.00 E', '40.00 E', '+40.00'),
+      m('meanEnergy.B01', 12, 0, '12.00 E', '0.00 E', '−12.00'),
+      m('alive.B01', 4, 0, '4', '0', '−4'),
+    ]);
+    expect(cells.map((c) => [c.a, c.b, c.diff])).toEqual([
+      ['0', '3', '+3'],
+      ['none alive', '40.00 E', '—'],
+      ['12.00 E', 'none alive', '—'],
+      ['4', '0', '−4'],
+    ]);
+  });
+});
+
+describe('seeded founders are labelled "present at creation" in the inspector (UX §3.3)', () => {
+  it('Experiment C: odd founders (a reserve chamber given when the dish was made) vs even founders (added by the recipe)', () => {
+    const w = realizeRecipe(registry(), 'RESERVE_COMPARE_V1');
+    const c = w.ents.cols;
+    const chips: Record<string, string | null> = {};
+    for (let i = 0; i < w.ents.highWater; i++) {
+      if (c.alive[i] !== 1) continue;
+      const e = buildInspector(w, { kind: 'entity', birthId: c.birthId[i]! }).entity!;
+      chips[e.modules.map((x) => x.id).join('+') || 'none'] = originChip(e.origin);
+    }
+    expect(chips).toEqual({ E05: 'present at creation', none: 'added by you or the recipe' });
+    expect(originChip(0)).toBeNull();
   });
 });

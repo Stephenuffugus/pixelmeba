@@ -51,7 +51,7 @@ export function diffJson(actual: unknown, expected: Json, path: string, out: { d
 const sha256 = (v: unknown) => createHash('sha256').update(canonicalJson(v)).digest('hex');
 
 /** Measurement families added after wave A (they may appear in a catalog; nothing else may). */
-const NEW_FAMILIES = /^\.(A|B)\.measurements\.(reserveHeld|reservePeak|founders|descendants|groupEnergy|groupExtinctAt)\./;
+const NEW_FAMILIES = /^\.(A|B)\.measurements\.(reserveHeld|reservePeak|founders|descendants|groupEnergy|groupExtinctAt|groupEnergyMedian|groupEnergyMin|groupEnergyMax)\./;
 
 /** A card's result reproduces wave A's numbers exactly: gate, stamp, both arms' measurements, ledger, timeline. */
 export function expectWaveANumbers(r: ExperimentResult): void {

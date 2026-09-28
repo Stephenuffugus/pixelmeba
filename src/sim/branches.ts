@@ -16,7 +16,8 @@
  * counted. A candidate becomes an established branch when ≥ 5 of its qualifying members are alive
  * and at least one of them lives ≥ 3 parent-to-child generations beyond the root (under division the
  * root itself has split long before, so every counted member is a descendant). The root genome
- * becomes the branch reference for later branches.
+ * becomes the branch reference for later branches; members that already qualify against it become
+ * candidates at once, rooted at their oldest qualifying ancestor (see subCandidates).
  *
  * States: variation observed (a live candidate) → branch established → branch extinct (no living
  * member of the branch or of any branch descended from it). Extinct and renamed branches keep their
@@ -390,6 +391,86 @@ function establish(world: World, cand: Candidate, ev: { members: number; depth: 
     ...(cand.cell !== undefined ? { cell: cand.cell } : {}),
     detail: { branch: id, shortId: branch.shortId, members: branch.alive },
   });
+  subCandidates(world, branch);
+}
+
+/** Retained birth record value (undefined once compacted); read directly to keep this module free of cycles. */
+function recorded(world: World, key: 'parent' | 'genome' | 'generation' | 'birthTick', birthId: number): number | undefined {
+  const L = world.lineage;
+  return birthId >= L.base && birthId < L.base + L.parent.length ? L[key][birthId - L.base] : undefined;
+}
+
+/**
+ * The oldest qualifying ancestor of a member against `ref` (SPEC §8.5 "oldest-qualifying-ancestor
+ * rule"): walk the recorded parent chain while each ancestor's genome still qualifies. The walk stops
+ * at the first ancestor that does not qualify (at the latest the branch founder, whose genome is the
+ * reference itself) or whose record was compacted.
+ */
+function oldestQualifyingAncestor(world: World, species: number, ref: Genome, birthId: number): number {
+  let b = birthId;
+  for (let guard = 0; guard < 1_000_000; guard++) {
+    const parent = recorded(world, 'parent', b);
+    if (parent === undefined || parent <= 0) return b;
+    const pg = recorded(world, 'genome', parent);
+    if (pg === undefined) return b;
+    const g = world.genomes.get(pg);
+    if (!qualifies(ref, g, sharedActiveLoci(world, species, ref, g))) return b;
+    b = parent;
+  }
+  return b;
+}
+
+/**
+ * After a branch is named, its members are compared with the new reference genome at once: a member
+ * that already qualifies starts (or joins) a candidate rooted at its oldest qualifying ancestor, so a
+ * sub-branch whose difference arose before the naming is found by the same rule as any other
+ * (SPEC §8.5 "relative to its nearest named ancestral branch's reference genome"). Candidates are
+ * created and checked in ascending root birthId order (oldest first); no randomness, no key iteration.
+ */
+function subCandidates(world: World, branch: Branch): void {
+  const book = world.branches;
+  const c = world.ents.cols;
+  const ref = world.genomes.get(branch.refGenome);
+  const roots: number[] = [];
+  const members: { slot: number; root: number }[] = [];
+  for (let i = 0; i < world.ents.highWater; i++) {
+    if (c.alive[i] !== 1 || c.branchId[i] !== branch.id || c.candRoot[i] !== 0) continue;
+    const g = world.genomes.get(c.genome[i]!);
+    if (!qualifies(ref, g, sharedActiveLoci(world, branch.species, ref, g))) continue;
+    const root = oldestQualifyingAncestor(world, branch.species, ref, c.birthId[i]!);
+    members.push({ slot: i, root });
+    if (!roots.includes(root)) roots.push(root);
+  }
+  if (roots.length === 0) return;
+  roots.sort((a, b) => a - b);
+  for (const root of roots) {
+    const own = members.find((m) => m.root === root && c.birthId[m.slot] === root);
+    const rootGenome = own ? c.genome[own.slot]! : recorded(world, 'genome', root)!;
+    const rootGeneration = own ? c.generation[own.slot]! : recorded(world, 'generation', root)!;
+    const cand: Candidate = {
+      root,
+      rootGenome,
+      rootGeneration,
+      refGenome: branch.refGenome,
+      parentBranch: branch.id,
+      species: branch.species,
+      firstTick: recorded(world, 'birthTick', root) ?? world.tick,
+      alive: 0,
+      maxDepth: 0,
+    };
+    for (const m of members) {
+      if (m.root !== root) continue;
+      c.candRoot[m.slot] = root;
+      cand.alive++;
+      cand.maxDepth = Math.max(cand.maxDepth, c.generation[m.slot]! - rootGeneration);
+    }
+    book.candidates[root] = cand;
+    emit(world.events, world.counters, { tick: world.tick, type: 'branchCandidate', species: cand.species, birthId: root, detail: { genome: world.genomes.get(rootGenome).id } });
+  }
+  for (const root of roots) {
+    const cand = book.candidates[root];
+    if (cand) maybeEstablish(world, cand);
+  }
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -102,7 +102,7 @@ export interface Grid {
   readonly structure: Uint8Array;
   /** Habitat light baseline 0–1 (not an inventory). */
   readonly lightBase: Float64Array;
-  /** Painted shade multiplier (1.0 or 0.1). */
+  /** Painted shade multiplier: 1.0, or the world's recorded shade paint factor (CT §5.1: 0.1). */
   readonly shade: Float64Array;
   /**
    * Bumped whenever substrate, structure, light baseline or shade changes, so cached transport
@@ -200,12 +200,29 @@ export const PLACEABLE_STRUCTURES = ['stone', 'wall', 'bead'] as const;
 export type PlaceableStructure = (typeof PLACEABLE_STRUCTURES)[number];
 export const STRUCTURE_CODES: Readonly<Record<PlaceableStructure, number>> = { stone: ST_STONE, wall: ST_WALL, bead: ST_BEAD };
 
-/** Painted shade factor (CT §5.1 SHADE: light × 0.1; erasing sets the factor back to 1.0). */
-export const PAINTED_SHADE = 0.1;
+/**
+ * Paint materials the simulation implements, by content `target` (CT §5.1 habitat and shade paint;
+ * content/materials WATER, GEL, SEDIMENT, SHADE). A world offers a paint only when its recorded
+ * content has a `paint` material with that target; the shade factor is that record's dose.
+ */
+export const PAINT_TARGETS = ['water', 'gel', 'sediment', 'shade'] as const;
+export type PaintTarget = (typeof PAINT_TARGETS)[number];
+
+/**
+ * Cell structures the simulation implements, by content ID (CT §4; content/structures). Their
+ * behaviour is the grid's (transportOpen, openForFree, sealsCell, isStoneEdge), keyed by ID like a
+ * module; a world may place one only when its recorded manifest enables that ID.
+ */
+export const STRUCTURE_RECORD_IDS: Readonly<Record<PlaceableStructure, string>> = { stone: 'STONE', wall: 'WALL', bead: 'BEAD' };
 
 /** Lab brush radii (CT §5.1: 1/3/6, default 3). */
 export const LAB_RADII = [1, 3, 6] as const;
 export const LAB_MAX_RADIUS = 6;
+
+/** A habitat edit carries exactly one of the Lab radii (CT §5.1); anything else is malformed. */
+export function isLabRadius(r: unknown): boolean {
+  return r === 1 || r === 3 || r === 6;
+}
 
 /** A stone, wall or porous bead (never the outside). */
 export function isPlacedStructure(st: number): boolean {
@@ -223,12 +240,13 @@ export function sealsCell(st: number): boolean {
  * - 'rim'       outside the dish (never editable; a wall cannot cross the rim);
  * - 'structure' a stone, wall or bead is in the way (paint and placement skip it);
  * - 'organism'  a live organism occupies it (structures never overlap live organisms);
+ * - 'habitat'   the organism being added cannot live on this substrate (Life brush only);
  * - 'noop'      nothing here for this edit (erasing a cell that has no structure).
  */
-export type BrushCellOutcome = 'ok' | 'rim' | 'structure' | 'organism' | 'noop';
+export type BrushCellOutcome = 'ok' | 'rim' | 'structure' | 'organism' | 'habitat' | 'noop';
 export type LabBrushRule = 'material' | 'substrate' | 'shade' | 'place' | 'erase';
 
-export function brushCellOutcome(rule: LabBrushRule, structure: number, occupied: boolean): BrushCellOutcome {
+export function brushCellOutcome(rule: LabBrushRule, structure: number, occupied: boolean): Exclude<BrushCellOutcome, 'habitat'> {
   if (structure === ST_OUTSIDE) return 'rim';
   switch (rule) {
     case 'material':
@@ -276,38 +294,177 @@ export function strokeFootprint(points: ReadonlyArray<readonly [number, number]>
   return out.sort((a, b) => a - b);
 }
 
+/** A species' habitat bits (water 1, gel 2, sediment 4), as the species table builds them. */
+export function habitatMaskOf(habitats: readonly string[]): number {
+  let mask = 0;
+  for (const h of habitats) mask |= h === 'water' ? 1 : h === 'gel' ? 2 : h === 'sediment' ? 4 : 0;
+  return mask;
+}
+
+/** What the Life brush needs to know about the organism it adds (from its recorded species). */
+export interface LifeBrush {
+  readonly habitatMask: number;
+  /** Attached species may sit on porous beads; free swimmers may not. */
+  readonly attached: boolean;
+}
+
 /**
- * Where the contents of a cell go when it is sealed by stone or wall: the nearest cells solutes can
- * occupy, found breadth-first through the cells being sealed in the same edit (`sealing[i] === 1`)
- * but never through an existing structure or the outside, so nothing jumps across a wall. Returns
- * every open cell of the first ring that has any, ascending; empty when the sealed region has no
- * open neighbor at all. `mark`/`stamp` are caller-owned scratch (mark.length === CELL_COUNT).
+ * How one covered cell responds to the Life brush: exactly the inoculate command's cell filter
+ * (canOccupy → habitatCompatible, src/sim/suitability.ts), stated over the grid codes so the
+ * renderer's preview can use it; tests/sim/lab-commands.test.ts ties the two cell by cell.
  */
-export function displacementTargets(g: Grid, start: number, sealing: Uint8Array, mark: Int32Array, stamp: number): number[] {
-  const targets: number[] = [];
-  let ring = [start];
-  mark[start] = stamp;
-  while (ring.length > 0 && targets.length === 0) {
-    const next: number[] = [];
-    for (const i of ring) {
-      const x = cellX(i);
-      const y = cellY(i);
-      const around = [
-        [x + 1, y],
-        [x - 1, y],
-        [x, y + 1],
-        [x, y - 1],
-      ] as const;
-      for (const [nx, ny] of around) {
-        if (!inBounds(nx, ny) || !inMask(nx, ny)) continue;
-        const n = cellIndex(nx, ny);
-        if (mark[n] === stamp) continue;
-        mark[n] = stamp;
-        if (sealing[n] === 1) next.push(n);
-        else if (transportOpen(g, n)) targets.push(n);
+export function lifeCellOutcome(structure: number, substrate: number, life: LifeBrush): BrushCellOutcome {
+  if (structure === ST_OUTSIDE) return 'rim';
+  if (structure !== ST_NONE && !(structure === ST_BEAD && life.attached)) return 'structure';
+  const bit = substrate === SUB_WATER ? 1 : substrate === SUB_GEL ? 2 : substrate === SUB_SEDIMENT ? 4 : 0;
+  return (life.habitatMask & bit) !== 0 ? 'ok' : 'habitat';
+}
+
+/**
+ * Where the contents of newly sealed cells go (stone or wall, SPEC §2.4; D-0024): each sealed cell's
+ * contents go, in equal shares, to its nearest open cells, the distance being counted through cells
+ * sealed by the same edit only, never through an existing structure or the outside, so nothing jumps
+ * across a wall. `targets` of a cell are every open cell at that least distance, ascending. A region
+ * of sealed cells with no open neighbour at all is `enclosed` and cannot be sealed.
+ */
+export interface SealingPlan {
+  /** Cells that can be sealed, ascending (the rest of `cells` is enclosed). */
+  readonly sealed: Int32Array;
+  /** Cell c's targets are `targets[start[c] … start[c] + count[c])` (indexed by cell). */
+  readonly start: Int32Array;
+  readonly count: Int32Array;
+  readonly targets: Int32Array;
+  /** How many of `cells` lie in a region with no open neighbour. */
+  readonly enclosed: number;
+}
+
+/** Up to four in-grid neighbours of cell c (x+1, x−1, y+1, y−1) into `out`; returns how many. */
+function neighbours(c: number, out: Int32Array): number {
+  const x = c % GRID_W;
+  let k = 0;
+  if (x + 1 < GRID_W) out[k++] = c + 1;
+  if (x > 0) out[k++] = c - 1;
+  if (c + GRID_W < CELL_COUNT) out[k++] = c + GRID_W;
+  if (c >= GRID_W) out[k++] = c - GRID_W;
+  return k;
+}
+
+/**
+ * Plan sealing `cells` (ascending, each currently open) in near-linear time: one multi-source
+ * breadth-first search from the open boundary gives every sealed cell its least distance d to an open
+ * cell; a cell at d = 1 sends to its open neighbours, and a cell at d > 1 to the union of the targets
+ * of its sealed neighbours at d − 1 (exactly the open cells at distance d, since every shortest path
+ * steps down one level at a time). Work is proportional to the cells plus the (cell, target) pairs
+ * the moves need anyway; scratch is allocated once per call, never per cell. Pure: reads the grid.
+ */
+export function planSealing(g: Grid, cells: readonly number[]): SealingPlan {
+  const n = cells.length;
+  const sealing = new Uint8Array(CELL_COUNT);
+  for (let k = 0; k < n; k++) sealing[cells[k]!] = 1;
+  const dist = new Int32Array(CELL_COUNT); // 0: not sealing, or not reached from an open cell
+  const queue = new Int32Array(n);
+  const nb = new Int32Array(4);
+  let tail = 0;
+  for (let k = 0; k < n; k++) {
+    const c = cells[k]!;
+    const m = neighbours(c, nb);
+    for (let j = 0; j < m; j++) {
+      const o = nb[j]!;
+      if (sealing[o] !== 1 && transportOpen(g, o)) {
+        dist[c] = 1;
+        queue[tail++] = c;
+        break;
       }
     }
-    ring = next;
   }
-  return targets.sort((a, b) => a - b);
+  for (let head = 0; head < tail; head++) {
+    const c = queue[head]!;
+    const d = dist[c]! + 1;
+    const m = neighbours(c, nb);
+    for (let j = 0; j < m; j++) {
+      const o = nb[j]!;
+      if (sealing[o] === 1 && dist[o] === 0) {
+        dist[o] = d;
+        queue[tail++] = o;
+      }
+    }
+  }
+  // Target sets in search order (every cell at d − 1 is finished before any cell at d).
+  const start = new Int32Array(CELL_COUNT);
+  const count = new Int32Array(CELL_COUNT);
+  let arena = new Int32Array(Math.max(64, tail * 4));
+  let used = 0;
+  let a = new Int32Array(CELL_COUNT);
+  let b = new Int32Array(CELL_COUNT);
+  for (let h = 0; h < tail; h++) {
+    const c = queue[h]!;
+    const d = dist[c]!;
+    const m = neighbours(c, nb);
+    let len = 0;
+    if (d === 1) {
+      for (let j = 0; j < m; j++) {
+        const o = nb[j]!;
+        if (sealing[o] === 1 || !transportOpen(g, o)) continue;
+        // Insertion into the (at most four) sorted open neighbours.
+        let p = len++;
+        while (p > 0 && a[p - 1]! > o) {
+          a[p] = a[p - 1]!;
+          p--;
+        }
+        a[p] = o;
+      }
+    } else {
+      let first = true;
+      for (let j = 0; j < m; j++) {
+        const o = nb[j]!;
+        if (sealing[o] !== 1 || dist[o] !== d - 1) continue;
+        const s0 = start[o]!;
+        const k0 = count[o]!;
+        if (first) {
+          for (let q = 0; q < k0; q++) a[q] = arena[s0 + q]!;
+          len = k0;
+          first = false;
+          continue;
+        }
+        // Sorted union without duplicates of a[0…len) and arena[s0…s0+k0) into b, then swap.
+        let i1 = 0;
+        let i2 = 0;
+        let out = 0;
+        while (i1 < len && i2 < k0) {
+          const x1 = a[i1]!;
+          const x2 = arena[s0 + i2]!;
+          if (x1 < x2) {
+            b[out++] = x1;
+            i1++;
+          } else if (x2 < x1) {
+            b[out++] = x2;
+            i2++;
+          } else {
+            b[out++] = x1;
+            i1++;
+            i2++;
+          }
+        }
+        while (i1 < len) b[out++] = a[i1++]!;
+        while (i2 < k0) b[out++] = arena[s0 + i2++]!;
+        const t = a;
+        a = b;
+        b = t;
+        len = out;
+      }
+    }
+    if (used + len > arena.length) {
+      const grown = new Int32Array(Math.max(arena.length * 2, used + len));
+      grown.set(arena);
+      arena = grown;
+    }
+    for (let q = 0; q < len; q++) arena[used + q] = a[q]!;
+    start[c] = used;
+    count[c] = len;
+    used += len;
+  }
+  const sealed = new Int32Array(tail);
+  let s = 0;
+  for (let k = 0; k < n; k++) if (dist[cells[k]!]! > 0) sealed[s++] = cells[k]!;
+  return { sealed, start, count, targets: arena, enclosed: n - tail };
 }

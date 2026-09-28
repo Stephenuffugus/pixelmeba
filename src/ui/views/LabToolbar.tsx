@@ -11,6 +11,7 @@ import { IconFood, IconLife, IconUndo } from '../icons';
 import { dishInfo, meta, undo } from '../state';
 import { LAB_CATEGORIES, LAB_TEXT, MATERIAL_COPY, RADII, type LabCategory } from '../strings/lab';
 import { LabTray, categoryOf, itemCopy } from '../panels/LabTray';
+import { toolAvailable } from '../panels/LabTrayContent';
 import { IconChemistry, IconHabitat, IconInspect, IconObserve, IconTools } from '../panels/LabTrayIcons';
 import {
   brushInfo,
@@ -172,17 +173,12 @@ export function LabToolbar() {
     if (info) labShowsDish(info.dishId);
   }, [info?.dishId]);
 
-  // A tool that names something this dish does not have (e.g. after opening another dish) falls back
-  // to Inspect instead of sending a command the simulation would refuse.
+  // A tool that names something this dish does not have (e.g. after opening another dish, or an older
+  // dish without habitat paint or structures) falls back to Inspect instead of sending a command the
+  // simulation would refuse.
   useEffect(() => {
     if (!info || id === 'inspect') return;
-    if (id.startsWith('life:') && !info.speciesIds.includes(id.slice('life:'.length)))
-      selectLabTool('inspect');
-    else if (
-      id.startsWith('material:') &&
-      !info.materials.some((mt) => mt.id === id.slice('material:'.length))
-    )
-      selectLabTool('inspect');
+    if (!toolAvailable(info, id)) selectLabTool('inspect');
   }, [info?.dishId, id]);
 
   return (

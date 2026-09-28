@@ -178,7 +178,8 @@ test('Lab edits: paint gel, place and erase a wall, one stroke = one change; swi
   // Tools → Wall.
   await pickTool(page, 'tools', 'place:wall');
   await stroke(page, [22, 92], [36, 92]);
-  await expect(page.locator('.toast')).toContainText(/Placed wall on \d+ cells/);
+  // The tray names the structure from its content record (CT §4 "Impermeable wall").
+  await expect(page.locator('.toast')).toContainText(/Placed impermeable wall on \d+ cells/);
   const h2 = await workerHash(page);
   expect(h2).not.toBe(h1);
 
@@ -191,7 +192,7 @@ test('Lab edits: paint gel, place and erase a wall, one stroke = one change; swi
   await expect(page.getByTestId('action-look')).toBeVisible();
   expect(await workerHash(page)).toBe(h2);
   await openLab(page);
-  await expect(page.getByTestId('lab-tool-name')).toHaveText('Wall');
+  await expect(page.getByTestId('lab-tool-name')).toHaveText('Impermeable wall');
   expect(await workerHash(page)).toBe(h2);
 
   // Tools → Erase structure over the same line: the wall goes, what was underneath is back.

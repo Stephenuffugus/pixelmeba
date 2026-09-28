@@ -4,9 +4,14 @@
  * counted, so colour is never the only way to read it. Also the "tap to place a specimen" hint. Kept
  * compact so the middle of the dish, where Follow keeps its organism, stays uncovered.
  */
-import { TRAIT_BAND_CSS } from '@render/renderer';
+import { TRAIT_BAND_CSS, TRAIT_INACTIVE_CSS, TRAIT_RING_OUTLINE_CSS } from '@render/renderer';
 import { bandLabel, LINEAGE_TEXT as T } from '../strings/lineage';
 import { cancelSpecimenPlacement, followedBranch, lineage, lineageMarks, openLineage, setTraitLocus, specimenPlacement, stopFollowing, traitLocus } from './LineageState';
+
+/** A legend key drawn like the dish's band ring: the band colour between two dark outlines. */
+function ringKey(color: string) {
+  return { background: 'transparent', border: `4px solid ${color}`, borderRadius: '50%', boxShadow: `0 0 0 1px ${TRAIT_RING_OUTLINE_CSS}, inset 0 0 0 1px ${TRAIT_RING_OUTLINE_CSS}` };
+}
 
 export function LineageLegend() {
   const locus = traitLocus.value;
@@ -62,14 +67,14 @@ export function LineageLegend() {
             <ul class="lineage-bands">
               {TRAIT_BAND_CSS.map((color, b) => (
                 <li key={b}>
-                  <span class="lineage-swatch" style={{ background: color }} aria-hidden="true" />
+                  <span class="lineage-swatch" style={ringKey(color)} aria-hidden="true" />
                   {bandLabel(b, loc)}
                   {counts ? `: ${counts[b]}` : ''}
                 </li>
               ))}
               <li>
-                <span class="lineage-swatch dim" aria-hidden="true" />
-                Not active for this kind (grey){marks && marks.locus === locus ? `: ${marks.inactive}` : ''}
+                <span class="lineage-swatch dim" style={ringKey(TRAIT_INACTIVE_CSS)} aria-hidden="true" />
+                Not active for this kind (grey ring){marks && marks.locus === locus ? `: ${marks.inactive}` : ''}
               </li>
             </ul>
             <div class="lineage-legend-row">
