@@ -1,0 +1,108 @@
+export const meta = {
+  name: 'g2-wave-b-fix',
+  description: 'Phase 2 wave B fixes: every verifier BLOCKER/MAJOR/MINOR for lab, lineage, What if? and experiments, each re-verified',
+  phases: [
+    { title: 'Fix', detail: 'four fixers, disjoint owned files, additive edits to shared files' },
+    { title: 'Verify', detail: 'one adversarial re-verifier per fixer' },
+  ],
+}
+
+const R = 'docs/reports/reviews/g2-wave-b'
+
+const PRE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Phase 2 wave B (lineage P2.3, Lab view P2.7, What if? sheet P2.6, experiments UI + EXP_C P2.5) is committed on main. An adversarial verifier reviewed each part; you now FIX the findings for one part. Canonical rules: docs/PIXELMEBA_IMPLEMENTATION_SPEC.md, docs/CONTENT_TABLES.md (every number), docs/ARCHITECTURE.md, docs/UX_SPEC.md, docs/CONFLICT_REGISTER.md, docs/DECISIONS.md (read D-0019…D-0023 and the new wave B entries D-0024 onward if present). Contract (CLAUDE.md): determinism (randomness only via det(seed, stream, ...keys); never Math.random/Date/Map-Set-object-key iteration in src/sim), conservation ledger, no hidden rescue, honest labels ("coincided with" until a mechanism supports "because"; never "superior/advanced/perfect/adapted/immune"; everything shown traces to a measured value), content is validated JSON, the UI changes the world only through commands, saves are sacred (a world schema change needs a version bump + migration by copy + an old-save test through loadSaveFile, see D-0019).
+
+The lead commits: do NOT run git add/commit/stash/checkout/reset/rm and do not delete files you did not create. Three other fixers edit the same working tree right now. Edit ONLY the files your assignment lets you own. SHARED files: additive or minimal targeted edits only, re-read the file immediately before each edit, never reformat/reorder/rename code you did not write. If a change is needed elsewhere, describe it in your report. After changing anything under content/ run "npx tsx tools/content-validate.ts --write".
+
+Browser tests only with your own port and build folder: E2E_PORT=<port> E2E_OUTDIR=tmp/dist-<key> npx playwright test <your specs> --project=phone-portrait --project=desktop --project=phone-landscape, then stop only your port (lsof -t -i :<port> | xargs -r kill; never pkill -f). The machine has 2 CPUs shared by four agents: run targeted vitest files, not the whole suite.
+
+For EVERY numbered item below: fix it (with a test when the item is behavioural: the test must fail on the old code and pass on the new), or, if you judge it wrong or out of scope, say exactly why. Keep every existing test passing (update a test only when the item itself changes the specified behaviour, and say so). Before finishing: npx tsc -p tsconfig.json --noEmit and npx eslint <your files> clean; your touched tests pass; your e2e spec passes on all three projects; no serious/critical axe violations on screens you touched; targets ≥ 48 px, text ≥ 16 px, 200 % text works. Put proposed decisions in your report as "PROPOSED DECISION: …". Final message: a plain report — per item: FIXED (how, which test proves it) / NOT FIXED (why); files changed; commands with results.`
+
+const TASKS = [
+  {
+    key: 'lab',
+    port: 4182,
+    prompt: `PART: Lab view (P2.7). Read ${R}/lab-verify.md (the verifier's findings) and ${R}/lab-build.md (the builder's report) first.
+You own: src/sim/grid.ts, src/sim/structures.ts, src/ui/views/Lab*.tsx, src/ui/panels/LabTray*.tsx, src/ui/panels/Overlay*.tsx, src/ui/strings/lab.ts, src/render/layers.ts, tests/sim/lab-commands.test.ts, tests/sim/view-switch.test.ts, tests/e2e/lab-tools.spec.ts, content/structures/** (new), content/materials/{WATER,GEL,SEDIMENT,SHADE}.json. SHARED (minimal edits): src/render/renderer.ts (brush preview only), src/sim/content/{schema,registry}.ts and tools/content-validate.ts (a Structure record type), content/manifest.json (insert IDs only; keep arrays sorted), src/ui/views/DishScreen.tsx (tap order only), src/ui/panels/LineageState.tsx (only if the specimen-tap fix needs a hook there), src/ui/styles.css (text sizes).
+Items:
+1. MAJOR sealing cost (lab-verify item 0): displacementTargets runs a BFS per sealed cell → seconds of worker stall. Replace it with a near-linear algorithm (e.g. label each connected sealing region, then one multi-source BFS from the open boundary; no per-cell allocations). Keep the existing, tested semantics exactly (contents go in equal shares to the nearest open cells on the same side, never across a structure; exact conservation) unless that is impossible in near-linear time — then choose a deterministic, conservation-exact rule, prove it in tests, and write it as a PROPOSED DECISION. Add a test that the whole-dish radius-6 wall scribble on an empty clear-water dish and the half-Garden scribble finish within a generous bound (< 1.5 s even on this loaded 2-CPU machine; measure and report the actual numbers before and after with the verifier's probe shape).
+2. Content is data (item 1): enable WATER, GEL, SEDIMENT and SHADE in the manifest's enabledMaterials (they are phase 2); add a Structure record type (ARCHITECTURE §2 lists structures/*.json) with records STONE, WALL, BEAD (name, guide text, blocksSwimmers, passesSolutes, holdsMaterial …, whatever the sim actually uses — no field the sim ignores), validated like other packs (unknown IDs are errors); the Lab tray reads names/guide text for these from content (strings file keeps only UI chrome) and offers a paint/structure tool only when the WORLD's manifest enables it; the shade factor comes from content (keep the test that ties it). An old save whose manifest lacks these IDs must still load, and its Lab must not offer the missing tools (test through the registry/world manifest).
+3. Brush radius (item 2): commands must carry radius exactly 1, 3 or 6 (CT §5.1); anything else is refused whole. Update the tests that used 0.5.
+4. Honest copy (item 3): the Mineral nutrients item must not contradict itself (nutrient alone makes no carbon/food, but relieves a nutrient limit where N limits growth).
+5. Life preview (item 4): the life brush preview must mark cells the inoculate command would refuse (canOccupy / habitat compatibility) exactly like the command does; a test ties preview and command cell by cell.
+6. Overlays on beads (item 5): overlay layers must draw on bead cells (beads hold dissolved material); shade painted on a bead must be visible.
+7. Specimen tap vs Lab tool (item 6): while a saved specimen is waiting for its placement tap, the tap places the specimen whatever Lab tool is selected (or the Lab switches to Inspect when placement starts); test it.
+8. Text sizes: the builders reported Explore action labels at 14 px and '.sheet .sub' using --fs-small (14 px), and the Play Garden preload sentence at 0.85rem; UX_SPEC requires text ≥ 16 px. Fix in styles.css / the owning component with minimal edits and check the existing e2e specs that screenshot or measure those areas still pass (run tests/e2e/explore*.spec.ts if present, phone-portrait only).
+Not in scope (report only): keyboard-only painting (P3.11); New Dish opening the Life tray (wave C owns NewDish.tsx).`,
+  },
+  {
+    key: 'lineage',
+    port: 4181,
+    prompt: `PART: lineage and branches (P2.3). Read ${R}/lineage-verify.md and ${R}/lineage-build.md first.
+You own: src/sim/branches.ts, src/sim/lineage.ts, src/sim/specimens.ts, src/ui/panels/Lineage*.tsx, src/ui/panels/Discovery*.tsx, src/ui/strings/lineage.ts, tests/fixtures/branch-evidence.test.ts, tests/sim/lineage-*.test.ts, tests/e2e/lineage.spec.ts, tests/ui/discovery*.test.ts (new). SHARED (minimal edits): src/render/renderer.ts (trait-overlay tint only), src/ui/views/SimplePage.tsx (Settings row only), src/worker/host.ts (lineage/undo parts only), src/sim/phenotype.ts (read-only use; export a helper only if needed).
+Items:
+1. MAJOR sub-branch rule (lineage-verify item 0): after a branch is named, members that already qualify against the new reference genome must become candidate roots (oldest qualifying ancestor first, deterministic order), so the verifier's tree (R22 → A,B; A → A1,A2; B → B1,B2; A1 → A11,A12 with v+E05) names a second branch. Add exactly that tree as a fixture case plus one where the member does not qualify (no second branch).
+2. MAJOR honest cost lines (item 1): the "Game rule:" lines on the discovery card, compare view and detail must be computed from profileOfGenome(ancestor) vs profileOfGenome(branch) (sensing radius, speed, division interval, upkeep …) and state only differences that exist in the profile; a locus change that leaves the radius unchanged must not claim it senses farther. Module loss/gain lines include every cost field the module content defines (e.g. E05 upkeepPerSecond). Test with B01 sensing 60 (radius unchanged) and 75 (radius 3).
+3. Legend matches dish colours (item 2): the zoomed-in tint and the legend swatch must be the same colours, readable on every species sprite (e.g. draw a band ring/marker instead of multiplying the species sprite, or pick tints validated against each species' main colour); do not hide the dormant/resting indication.
+4. Settings (item 3): 'Pause on discoveries' appears in Settings (UX_SPEC line 24) — render the existing toggle there.
+5. Burst coalescing (item 4): unit-test one-card-per-1.5-s-burst and the 60 s gap.
+6. Pinned branches keep their birth details (item 5; CT §12.10 'birth details 10,000 recent unpinned'): compaction must keep pinned branches' records; test it, and the panel must not say older records were summarized for a pinned branch whose records were kept.
+7. Wording (item 6): the Compare reference is the one founder genome of that line (singular wording), and the band label must not say 'near the founders' 50' for Varied/Diverse dishes (say the band range instead).
+8. Command ids and undo (item 7): lineage command ids use the same deterministic counter scheme as state.ts sendCommand (no Date.now()); a rename, pin or saved specimen made after an undoable command must survive Undo of that command (re-apply those label commands after the undo restore, deterministically) — test through the worker host.`,
+  },
+  {
+    key: 'whatif',
+    port: 4183,
+    prompt: `PART: What if? sheet (P2.6 UI). Read ${R}/whatif-verify.md and ${R}/whatif-build.md first.
+You own: src/ui/panels/WhatIf*.tsx, src/ui/strings/whatif.ts, tests/worker/whatif*.test.ts, tests/e2e/whatif.spec.ts. SHARED (minimal edits): src/worker/host.ts (whatIf parts only), src/sim/recipes.ts and src/persistence/saveFile.ts (only to record custom overrides in provenance / variant provenance in save meta — follow D-0019 if the saved shape changes), src/ui/views/DishScreen.tsx (keyboard guard only), src/ui/panels/MoreSheet.tsx, src/ui/state.ts (client.onError wording only), src/ui/views/Play.tsx.
+Items:
+1. MAJOR custom dishes (whatif-verify item 0; D09 §4): offer What if? ideas only for a dish that IS the authored recipe (same recipe id and revision, same seed, no overrides, not empty) or a variant dish; a custom New Dish (own seed, Accelerated/Varied overrides or Empty) must not show the item. If provenance does not record the overrides today, record them (additive field; old saves without it are treated as custom unless seed and settings match the recipe exactly). Worker test with the verifier's repro plus a positive case.
+2. 'Unchanged' claim (item 1): treat a variant dish as 'unchanged, rebuilds exactly' only when the variant revision, both checksums, contentHash and the rules versions all match this build; otherwise keep it through the normal save flow. Test with the verifier's revised-registry repro (the dish must be kept in a slot or autosave, and the sheet must not claim it rebuilds exactly).
+3. Contrast (item 2): every patch drawn in the preview keeps ≥ 3:1 against water (UX §4.1); encode amount another way (e.g. a darker hue ramp or a numeric label) instead of low opacity; unit-test the contrast of every rendered fill against #D6E7E5.
+4. Registry row (item 3): the choice Details show the same Registry/world label row as provenanceDetails (UX §3.3 'wherever a world is described').
+5. Focus return (item 4): opened from the dish's More sheet, closing returns focus to the dish's More button (or the element that opened More); e2e assertion.
+6. Blocking modal (item 5): while the sheet is open, the dish behind is inert (inert attribute or aria-hidden plus pointer blocking) and DishScreen's window key handler ignores keys (Space, '.', 'u' …); clicking the backdrop must not let keys reach the dish. e2e: open over a paused dish, click backdrop, press Space → still paused and tick unchanged.
+7. Variant provenance in the save file's meta (builder 'not done'): include the variant id/revision and source in SaveMeta so the Saved dishes list and Export details show it without loading the world (additive; old files without it still load).
+8. The error toast (builder 'problems elsewhere'): client.onError must not say "the dish was paused" for load/import refusals where nothing was paused — word it per the request kind.`,
+  },
+  {
+    key: 'experiments',
+    port: 4184,
+    prompt: `PART: experiments UI + EXP_C (P2.5). Read ${R}/experiments-verify.md and ${R}/experiments-build.md first.
+You own: src/sim/pairedRun.ts, src/sim/experiments.ts, src/worker/comparison.ts, src/ui/views/Notebook*.tsx, src/ui/views/Experiment*.tsx, src/ui/views/Compare*.tsx (toggle size only), src/ui/strings/experiments.ts, src/ui/journal.ts, content/experiments/**, content/recipes/RESERVE_COMPARE_V1.json, tests/experiments/**, tests/e2e/experiments.spec.ts. SHARED (minimal edits): src/worker/host.ts (experiment parts only), src/ui/styles.css (.compare-toggle only), src/ui/panels/Inspector.tsx (one label), src/ui/strings/*.ts for that label.
+Items:
+1. Card copy (experiments-verify item 0): paired cards must say the copies run to their stopping point and the player's dish is unchanged; single-arm cards may say the world keeps running. Test the copy per card kind.
+2. Energy distributions (item 2; CT §9.2 'Record energy distributions'): EXP_C records per founder group the energy median, min and max (or the comparison's distribution shape) in the measurements and timeline; the wave A golden numbers must stay identical (additions only).
+3. Empty groups (item 3): a group with 0 living descendants shows '—' / 'none alive', never '0.00 E' (also wave A's meanEnergy.SP); test.
+4. Touch targets (item 4): the A/B copy toggle (and .compare-toggle generally) ≥ 48×48 px on phone portrait; e2e measurement on the experiment run and compare screens.
+5. Refused commands (item 5): a command that places nothing (accepted 0) does not end a single-arm card's observation; worker test.
+6. (item 6a) 'present at creation': the Inspector shows 'present at creation' for an organism whose module came from its founder (lineage origin 2 / seeded founders), UX §3.3; test.
+7. (item 6b) Reload: an experiment dish reloaded from a save must say plainly that the card's observation ended when the dish was closed (the gate cannot resume exactly because observer history is not saved) — no silent stop; test.
+8. (item 6c) completion.playerSteps: stamps require the player steps each card lists (e.g. inspector identifies food use; resource history opened); track the needed UI events without touching simulation state; test that a stamp waits for the step and that the measured gate alone does not grant it.
+9. Recipe text (item 7): fix RESERVE_COMPARE_V1 expectedObservationsText ('24 Sprinters with the same neutral traits' …) and label 'Most energy held above the cap' as a population total wherever shown; update docs/reports/experiments-g2.md wording.
+10. Journal and saves (item 1): do NOT move the journal now (P2.8 extends it next wave); instead add a short 'Journal storage' note to docs/reports/experiments-g2.md describing the current device store, so the lead can record the decision.`,
+  },
+]
+
+const VERIFY = (t, built) => `You are an adversarial re-verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). Do NOT edit any repository file and do NOT run git add/commit/stash/checkout/reset. Other agents may still be editing other files. Scratch scripts go in /tmp. 2 CPUs: targeted commands. Playwright: E2E_PORT=${t.port + 10} E2E_OUTDIR=tmp/dist-verify-${t.key}, then stop only that port (lsof -t -i :${t.port + 10} | xargs -r kill).
+
+A fixer was given this assignment:
+---
+${t.prompt}
+---
+The fixer reported:
+---
+${typeof built === 'string' ? built : JSON.stringify(built)}
+---
+For EACH numbered item, try to REFUTE that it is fixed: reproduce the original finding (the verifier's repro in ${R}/${t.key}-verify.md) against the current tree, read the diff (git diff), check the new test would fail on the old behaviour (reason about it or revert the logic in a /tmp copy), and check nothing regressed (re-run the part's unit tests and its e2e spec on at least phone-portrait and desktop). Also check determinism, conservation, honest labels, accessibility and that edits stayed within ownership / minimal on shared files. Return problems with file:line and a repro, most severe first, prefixed BLOCKER / MAJOR / MINOR; "VERIFIED OK — <item> — <evidence>" for items that hold. ok=false if any BLOCKER or MAJOR.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+
+return await pipeline(
+  TASKS,
+  (t) => agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\n${t.prompt}`, { label: `fix:${t.key}`, phase: 'Fix' }),
+  (built, t) => agent(VERIFY(t, built), { label: `reverify:${t.key}`, phase: 'Verify', schema: VERDICT }).then((v) => ({ key: t.key, built, verify: v })),
+)
