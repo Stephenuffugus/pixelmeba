@@ -25,6 +25,6 @@
   ],
   "labels": [],
   "question": "Who cleans up the debris?",
-  "expectedObservationsText": "Ten Recyclers on a patch holding 10 detritus carbon with 1 bound nutrient. Open the resource history to see the debris go down.",
+  "expectedObservationsText": "Ten Recyclers on a patch holding 10 detritus carbon with 1 bound nutrient. The Debris overlay (Lab → Observe) shows how much debris is left in each cell as they eat.",
   "phase": 2
 }

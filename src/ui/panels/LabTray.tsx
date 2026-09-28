@@ -13,7 +13,6 @@ import { dishInfo, duplicateCurrent, meta, openCompare, sheet, undo } from '../s
 import type { PlaceableStructure, SubstrateName } from '@sim/grid';
 import {
   BRUSH_COPY,
-  cannotLiveIn,
   CHEMISTRY_MATERIALS,
   COUNTS,
   ERASE_STRUCTURE,
@@ -23,6 +22,7 @@ import {
   LAB_CATEGORIES,
   LAB_TEXT,
   LIFE_COPY,
+  livesHereText,
   MATERIAL_COPY,
   RADII,
   SHADE_ERASE,
@@ -58,6 +58,7 @@ import {
   IconWall,
   IconWater,
 } from './LabTrayIcons';
+import { inSentence } from './LabTrayNames';
 import { OverlayPicker } from './OverlayPicker';
 import { habitatTools, paintRecord, shadeFactorOf, structureRecord, structureTools } from './LabTrayContent';
 
@@ -182,16 +183,16 @@ export function itemCopy(id: LabToolId): ItemCopy | null {
     const sub = id.slice('paint:'.length) as SubstrateName;
     const rec = paintRecord(info, sub);
     if (!rec) return null;
-    const cannot = cannotLiveIn(sub, info.speciesNames, info.speciesHabitats);
-    const also = cannot.length > 0 ? ` In this dish, ${cannot.join(', ')} cannot live in ${sub}.` : '';
     return {
       name: rec.name,
       purpose: rec.summary,
       habitats: BRUSH_COPY.substrate.habitats,
       dose: BRUSH_COPY.substrate.dose,
+      // The content rules text is true in every dish; who lives here comes from this dish's species.
       changes: rec.rules || rec.summary,
+      lives: livesHereText(sub, info.speciesNames, info.speciesHabitats, inSentence(rec.name)),
       unchanged: BRUSH_COPY.substrate.unchanged,
-      watch: `${rec.example}${also}`.trim(),
+      watch: rec.example,
     };
   }
   if (id === 'shade:paint' || id === 'shade:erase') {
@@ -285,6 +286,12 @@ function ItemDetails({ id }: { id: LabToolId }) {
         <dd>{brush ? `${labRadius.value} cells (choose 1, 3 or 6).` : 'Not a brush.'}</dd>
         <dt>{t.changes}</dt>
         <dd>{copy.changes}</dd>
+        {copy.lives !== undefined ? (
+          <>
+            <dt>{t.lives}</dt>
+            <dd data-testid="lab-lives">{copy.lives}</dd>
+          </>
+        ) : null}
         <dt>{t.unchanged}</dt>
         <dd>{copy.unchanged}</dd>
         <dt>{t.watch}</dt>

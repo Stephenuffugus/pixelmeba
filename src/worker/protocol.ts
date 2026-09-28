@@ -8,7 +8,8 @@ import type { FieldId } from '@sim/fields';
 import type { CompareSpeed, ComparisonState } from './comparison';
 import type { LineageAnswer } from '@sim/lineage';
 import type { VariantErrorCode, VariantPreview, VariantRecord } from '@sim/variants';
-import type { ExperimentCardView, JournalStamp } from '@sim/experiments';
+import type { ExperimentCardView, JournalStamp, PlayerStep } from '@sim/experiments';
+import type { SaveMetaVariant } from '@persist/saveFile';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -134,6 +135,12 @@ export interface SlotSummary {
   readonly savedAt: string;
   readonly recipeId: string | null;
   readonly bytes: number;
+  /**
+   * What if? (P2.6): the idea a What if? dish was made from, copied from its save file's meta into the
+   * slot index when it was written, so the Saved dishes list can name it without loading the world.
+   * Absent for other dishes and for slots written before the index kept it. A display copy only.
+   */
+  readonly variant?: SaveMetaVariant;
 }
 
 /** Per-entity record stride in SnapshotMsg.ents (Float32). */
@@ -214,6 +221,12 @@ export interface DishInfo {
   readonly materialSummaries?: readonly string[];
   /** Fields allocated in this world (the overlays the Lab Observe tray can offer), canonical order. */
   readonly fieldIds?: readonly string[];
+  /**
+   * Lab trays (P2.7, D-0024): the Structure record IDs this world's own recorded manifest enables
+   * (`enabledStructures`; [] for a world recorded before structures were content). The Lab offers a
+   * structure tool only when it is listed here, whatever content this build ships.
+   */
+  readonly structureIds?: readonly string[];
   /** What if? (P2.6): the variant record when this dish was made from a What if? idea (its provenance), else null. */
   readonly variant?: VariantRecord | null;
   /** What if? (P2.6): the recipe whose What if? ideas apply to this dish (its source recipe), or null when none do. */
@@ -466,7 +479,21 @@ export type FromWorker =
   | { readonly type: 'saved'; readonly requestId: number; readonly dishId: string; readonly json: string; readonly hash: string; readonly tick: number }
   | { readonly type: 'hash'; readonly requestId: number; readonly dishId: string; readonly hash: string; readonly tick: number }
   | { readonly type: 'history'; readonly requestId: number; readonly dishId: string; readonly seconds: unknown; readonly minutes: unknown; readonly compacted: boolean }
-  | { readonly type: 'error'; readonly dishId: string; readonly requestId?: number; readonly message: string; readonly lastValidTick: number; readonly kind?: string }
+  /**
+   * A request or a running dish failed. `paused` is true only when the worker paused that dish (at its
+   * last valid state) because of this error; `request` names the request that failed (absent for a
+   * failure while the dish ran). The UI words the error by what really happened (ARCH §7).
+   */
+  | {
+      readonly type: 'error';
+      readonly dishId: string;
+      readonly requestId?: number;
+      readonly message: string;
+      readonly lastValidTick: number;
+      readonly kind?: string;
+      readonly paused?: boolean;
+      readonly request?: ToWorker['type'];
+    }
   | { readonly type: 'slotSaved'; readonly requestId: number; readonly slot: SlotSummary }
   | { readonly type: 'slots'; readonly requestId: number; readonly slots: readonly SlotSummary[]; readonly persistent: boolean }
   | { readonly type: 'loaded'; readonly requestId: number; readonly info: DishInfo; readonly usedPredecessor: boolean }
@@ -489,10 +516,25 @@ export type FromWorker =
   | { readonly type: 'experimentCatalog'; readonly requestId: number; readonly cards: readonly ExperimentCardView[] }
   /** A card started: its new paused dish, and for a paired card its comparison (setup, change on B). */
   | { readonly type: 'experimentStarted'; readonly requestId: number; readonly cardId: string; readonly info: DishInfo; readonly compare: ComparisonState | null }
-  /** Unsolicited: a running card reached its observation gate; the world keeps running. */
+  /** Unsolicited: a running card reached its observation gate and every listed player step was taken. */
   | { readonly type: 'experimentStamp'; readonly dishId: string; readonly stamp: ExperimentStampMsg }
-  /** Unsolicited: a single-arm card's dish was changed by a command, so its observation ended without the gate. */
-  | { readonly type: 'experimentEnded'; readonly dishId: string; readonly cardId: string; readonly reason: 'changed' | 'failed' };
+  /**
+   * Unsolicited: a single-arm card's measured gate held at `reachedAtSecond`, and its Journal stamp
+   * (recorded at that moment) waits for the player steps in `missing` (card order). Posted when the
+   * gate holds and again whenever a step is taken while others remain; the stamp follows the last one.
+   */
+  | { readonly type: 'experimentWaiting'; readonly dishId: string; readonly cardId: string; readonly reachedAtSecond: number; readonly missing: readonly PlayerStep[] }
+  /**
+   * Unsolicited: a card's observation ended without a stamp. A single-arm card's dish was changed by a
+   * command before its gate ('changed'), stopped with an error ('failed'), or rewound with Undo before
+   * its gate ('undone': the observer cannot rewind with it); or a dish made from a card was opened
+   * again from a save or a file ('closed': the observation ended when the dish was closed, because
+   * observer history is worker state and is not saved).
+   */
+  | { readonly type: 'experimentEnded'; readonly dishId: string; readonly cardId: string; readonly reason: ExperimentEndReason };
+
+/** Why a card's observation ended without a stamp (see the experimentEnded packet). */
+export type ExperimentEndReason = 'changed' | 'failed' | 'undone' | 'closed';
 
 /**
  * A journal stamp as the worker reports it (P2.5): the card's stamp record (card, seed, recipe and
@@ -586,4 +628,9 @@ export interface WhatIfAnswer {
   /** "Another idea" for the current variant dish (catalog order), or null. */
   readonly next: { readonly id: string; readonly title: string; readonly question: string; readonly previewDifference: string } | null;
   readonly plan: WhatIfPlan;
+  /**
+   * UX §3.3 registry label of the world a choice would build (this build's manifest), by the same rule
+   * as DishInfo.manifestLabel, for the choice's Details.
+   */
+  readonly registryLabel: string;
 }

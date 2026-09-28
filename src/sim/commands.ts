@@ -4,11 +4,11 @@
  * immediately as edit transactions at the current tick; a replay applies them at the same point
  * (the start of the next step), so both paths produce identical state.
  */
-import { CELL_SOFT_CAPACITY, GRID_W, INITIAL_ENERGY, INITIAL_HEALTH, INITIAL_NUTRIENT_RATIO } from './constants';
+import { CELL_SOFT_CAPACITY, GRID_H, GRID_W, INITIAL_ENERGY, INITIAL_HEALTH, INITIAL_NUTRIENT_RATIO } from './constants';
 import { emit, milestone } from './events';
 import { FLAG } from './entities';
 import { FIELD_DEFS, isFieldId, type FieldId } from './fields';
-import { brushCells, transportOpen } from './grid';
+import { brushCells, strokeSampleCount, transportOpen } from './grid';
 import { recordInput } from './ledger';
 import { recordBirth } from './lineage';
 import { canOccupy, initialDecisionTimer } from './movement';
@@ -19,7 +19,7 @@ import { rebuildIndex } from './spatial';
 import { initFounder } from './branches';
 import { applyLineage, isIntervention, type LineageOp } from './specimens';
 import { detFloat, detPermutation, STREAMS } from './rng';
-import { applyHabitatEdit, type HabitatEditPayload, type HabitatMoved, type HabitatSkips } from './structures';
+import { applyHabitatEdit, LAB_MAX_POINTS, LAB_MAX_STROKE_SAMPLES, type HabitatEditPayload, type HabitatMoved, type HabitatSkips } from './structures';
 import type { World, WorldSettings } from './world';
 import { speciesIndex } from './world';
 
@@ -159,7 +159,35 @@ export function strokeCells(points: ReadonlyArray<readonly [number, number]>, ra
   return out.sort((a, b) => a - b);
 }
 
+/** Largest food-brush radius a deposit may carry (the UI sends 1, 3 or 6; recipes and cards use 0–6). */
+const DEPOSIT_MAX_RADIUS = 6;
+
+/**
+ * Why a deposit stroke is malformed, or null. strokeCells walks every sampled cell of the path, so a
+ * crafted, damaged or replayed command is bounded like a Lab habitat edit (structures.ts
+ * invalidHabitatEdit): a finite radius in 0–6, finite points near the dish, at most LAB_MAX_POINTS
+ * points and LAB_MAX_STROKE_SAMPLES sampled disks. Refused whole; nothing is placed.
+ */
+export function invalidDepositStroke(points: unknown, radius: unknown): string | null {
+  if (typeof radius !== 'number' || !Number.isFinite(radius) || radius < 0 || radius > DEPOSIT_MAX_RADIUS) return 'invalid radius';
+  if (!Array.isArray(points) || points.length === 0) return 'empty stroke';
+  if (points.length > LAB_MAX_POINTS) return 'stroke too long';
+  const margin = DEPOSIT_MAX_RADIUS + 2;
+  for (const pt of points as readonly unknown[]) {
+    if (!Array.isArray(pt) || pt.length !== 2) return 'invalid point';
+    const x: unknown = pt[0];
+    const y: unknown = pt[1];
+    if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) return 'invalid point';
+    if (x < -margin || y < -margin || x > GRID_W + margin || y > GRID_H + margin) return 'point outside the dish area';
+  }
+  const pts = points as ReadonlyArray<readonly [number, number]>;
+  if (strokeSampleCount(pts, LAB_MAX_STROKE_SAMPLES) > LAB_MAX_STROKE_SAMPLES) return 'stroke too long';
+  return null;
+}
+
 function deposit(world: World, p: Extract<CommandPayload, { kind: 'deposit' }>): CommandResult {
+  const bad = invalidDepositStroke(p.points, p.radius);
+  if (bad) return { accepted: 0, rejected: 0, note: bad };
   const mat = world.content.materials.find((m) => m.id === p.materialId);
   if (!mat) return { accepted: 0, rejected: 0, note: `unknown material ${p.materialId}` };
   if (!(p.dose >= 0) || !Number.isFinite(p.dose)) return { accepted: 0, rejected: 0, note: 'invalid dose' };

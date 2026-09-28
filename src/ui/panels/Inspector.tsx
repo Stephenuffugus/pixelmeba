@@ -22,6 +22,16 @@ import { reasonText } from '../strings/reasons';
 import { dietAnswer, familySummary, relationLabel, stopAnswer } from '../strings/shortcuts';
 import { dormancyLines, energyCapText, LIFE_ACTIVE, lifeStateLabel, moduleText, originChip, upkeepText } from '../strings/modules';
 import { openLineage } from './LineageState';
+import { paintName, structureName } from './LabTrayNames';
+import { PAINT_TARGETS, PLACEABLE_STRUCTURES, type PaintTarget, type PlaceableStructure } from '@sim/grid';
+
+/** The cell's ground in content words ("Impermeable wall", "Gel"), never the simulation's codes. */
+function groundName(substrate: string, structure: string): string {
+  if (structure !== 'none') {
+    return (PLACEABLE_STRUCTURES as readonly string[]).includes(structure) ? structureName(structure as PlaceableStructure) : 'Structure';
+  }
+  return (PAINT_TARGETS as readonly string[]).includes(substrate) ? paintName(dishInfo.value, substrate as PaintTarget) : substrate;
+}
 
 const LOCUS_NAMES = [
   'Motility',
@@ -526,7 +536,7 @@ export function InspectorSheet() {
             </header>
             <dl class="kv">
               <dt>Ground</dt>
-              <dd>{p.cell.structure === 'none' ? p.cell.substrate : p.cell.structure}</dd>
+              <dd>{groundName(p.cell.substrate, p.cell.structure)}</dd>
               <dt>pH · light</dt>
               <dd>
                 {p.cell.ph.toFixed(1)} · {p.cell.light.toFixed(2)}

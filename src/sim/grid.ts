@@ -215,6 +215,12 @@ export type PaintTarget = (typeof PAINT_TARGETS)[number];
  */
 export const STRUCTURE_RECORD_IDS: Readonly<Record<PlaceableStructure, string>> = { stone: 'STONE', wall: 'WALL', bead: 'BEAD' };
 
+/**
+ * Every habitat edit refused because the world's recorded content lacks it has a note ending with this
+ * (structures.ts unavailableHabitatEdit); the UI words the refusal with content names instead.
+ */
+export const NOT_IN_DISH = 'not in this dish';
+
 /** Lab brush radii (CT §5.1: 1/3/6, default 3). */
 export const LAB_RADII = [1, 3, 6] as const;
 export const LAB_MAX_RADIUS = 6;
@@ -263,6 +269,21 @@ export function brushCellOutcome(rule: LabBrushRule, structure: number, occupied
     case 'erase':
       return isPlacedStructure(structure) ? 'ok' : 'noop';
   }
+}
+
+/**
+ * How many brush disks strokeFootprint samples for these points: one for the first point, then
+ * max(1, ⌈segment length⌉) per segment (the same count as its loop). Counting stops once it passes
+ * `limit`, so an absurd stroke is measured in time proportional to its point count, never its length.
+ */
+export function strokeSampleCount(points: ReadonlyArray<readonly [number, number]>, limit = Infinity): number {
+  let n = points.length > 0 ? 1 : 0;
+  for (let k = 1; k < points.length && n <= limit; k++) {
+    const [x, y] = points[k]!;
+    const [px, py] = points[k - 1]!;
+    n += Math.max(1, Math.ceil(Math.hypot(x - px, y - py)));
+  }
+  return n;
 }
 
 /**

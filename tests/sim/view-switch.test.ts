@@ -289,6 +289,15 @@ async function withoutLabContent(text: string): Promise<string> {
   return JSON.stringify({ ...file, contentHash: manifest.contentHash, state, checksum });
 }
 
+/** Rewrite a current save as one recorded under other content (another contentHash), manifest otherwise unchanged. */
+async function withContentHash(text: string, contentHash: string): Promise<string> {
+  const file = JSON.parse(text) as { state: { content: { manifest: Record<string, unknown> } }; checksum: string };
+  const content = file.state.content;
+  const state = { ...file.state, content: { ...content, manifest: { ...content.manifest, contentHash } } };
+  const checksum = `sha256:${await sha256Hex(canonicalJson(state))}`;
+  return JSON.stringify({ ...file, contentHash, state, checksum });
+}
+
 describe('Lab: specimen placement takes the tap (P2.3 × P2.7)', () => {
   it('a saved specimen waiting for its tap is placed by that tap whatever Lab tool is selected', async () => {
     const lineage = await import('../../src/ui/panels/LineageState');
@@ -369,14 +378,38 @@ describe('Lab trays offer what the dish records (content is data; D-0024)', () =
     expect(content.lifeBrushFor(info, 'X99')).toBeNull();
   });
 
-  it('when the worker lists the dish manifest structure IDs, that list decides (not this build)', async () => {
+  // Wave B fix round 2 (fix1-lab-verify MAJOR): the world's own manifest decides, never this build's
+  // contentHash. Behaviour changed from round 1, where a dish from other content was offered none.
+  it('the structure tools follow the world’s own manifest: a dish saved under other content keeps them', async () => {
+    const tray = await import('../../src/ui/panels/LabTray');
     const content = await import('../../src/ui/panels/LabTrayContent');
     const info = ui.dishInfo.value!;
-    expect(content.structureTools(info)).toEqual(['place:stone', 'place:wall', 'place:bead', 'erase']);
-    expect(content.structureTools({ ...info, structureIds: ['STONE'] } as typeof info)).toEqual(['place:stone', 'erase']);
-    expect(content.structureTools({ ...info, structureIds: [] } as typeof info)).toEqual([]);
-    // Without the list, another content version's dish is offered none (the simulation would refuse).
-    expect(content.structureTools({ ...info, contentHash: 'b2'.repeat(32) })).toEqual([]);
+    const TOOLS = ['place:stone', 'place:wall', 'place:bead', 'erase'];
+    // The worker sends the world manifest's enabledStructures.
+    expect(info.structureIds).toEqual(['BEAD', 'STONE', 'WALL']);
+    expect(content.structureTools(info)).toEqual(TOOLS);
+    expect(content.structureTools({ ...info, structureIds: ['STONE'] })).toEqual(['place:stone', 'erase']);
+    expect(content.structureTools({ ...info, structureIds: [] })).toEqual([]);
+    // A DishInfo without the list (not from this build's worker) is offered none, as such a world allows.
+    const bare: typeof info = { ...info };
+    delete (bare as { structureIds?: unknown }).structureIds;
+    expect(content.structureTools(bare)).toEqual([]);
+    // A dish recorded under other content (another contentHash) whose manifest lists BEAD, STONE and
+    // WALL gets exactly those tools, and its simulation accepts them.
+    const { text } = await ui.getClient().exportDish(info.dishId, false);
+    await ui.importFile(new File([await withContentHash(text, 'b2'.repeat(32))], 'other-content.pixelmeba'));
+    await flush();
+    const other = ui.dishInfo.value!;
+    expect(other.dishId).not.toBe(info.dishId);
+    expect(other.contentHash).toBe('b2'.repeat(32));
+    expect(other.structureIds).toEqual(['BEAD', 'STONE', 'WALL']);
+    expect(tray.trayItems('tools').map((i) => i.id)).toEqual(TOOLS);
+    lab.setDishView('lab');
+    const res = await lab.sendLabCommand({ kind: 'placeStructure', structure: 'wall', points: STROKE, radius: 3 });
+    expect(res!.accepted).toBeGreaterThan(0);
+    await ui.undo();
+    await flush();
+    lab.setDishView('explore');
   });
 
   it('an older dish without paints or structures still opens, and its Lab offers none of those tools', async () => {
@@ -391,6 +424,8 @@ describe('Lab trays offer what the dish records (content is data; D-0024)', () =
     const older = ui.dishInfo.value!;
     expect(older.dishId).not.toBe(info.dishId);
     expect(older.materials.some((m) => m.kind === 'paint')).toBe(false);
+    // Its manifest has no enabledStructures: the worker lists none, so no structure tool is offered.
+    expect(older.structureIds).toEqual([]);
     expect(tray.trayItems('habitat')).toEqual([]);
     expect(tray.trayItems('tools')).toEqual([]);
     for (const id of ['paint:gel', 'shade:paint', 'shade:erase', 'place:stone', 'place:wall', 'place:bead', 'erase'] as const) {

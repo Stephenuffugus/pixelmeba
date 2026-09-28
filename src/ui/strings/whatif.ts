@@ -249,6 +249,11 @@ export function provenanceDetails(
   ];
 }
 
+/** A saved What if? dish's idea in the Saved dishes list, from the slot index (the world is not loaded). */
+export function savedIdeaLine(v: { readonly title: string; readonly variantId: string; readonly variantRevision: number }): string {
+  return `What if? · ${v.title} (${v.variantId} rev ${v.variantRevision})`;
+}
+
 export function identityLine(r: {
   readonly variantId: string;
   readonly variantRevision: number;

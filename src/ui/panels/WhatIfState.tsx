@@ -29,14 +29,8 @@ export type FullStep =
       readonly slotId: string | null;
     };
 
-/**
- * The worker's answer. It also carries `registryLabel` (UX §3.3 label of the world a choice builds),
- * an additive field the host sends ahead of its declaration in protocol.ts.
- */
-export type WhatIfAnswerView = WhatIfAnswer & { readonly registryLabel?: string };
-
 export const whatIfOpen = signal<WhatIfContext | null>(null);
-export const whatIfAnswer = signal<WhatIfAnswerView | null>(null);
+export const whatIfAnswer = signal<WhatIfAnswer | null>(null);
 export const whatIfLoadError = signal<string | null>(null);
 export const whatIfSelected = signal<string | null>(null);
 /** A readable refusal from the worker (e.g. Again on a revised idea); nothing was changed. */

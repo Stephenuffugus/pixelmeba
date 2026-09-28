@@ -28,6 +28,7 @@ import { INITIAL_NUTRIENT_RATIO } from '../../src/sim/constants';
 import { neutralGenome, type GenomeInput } from '../../src/sim/genome';
 import { checkLedger } from '../../src/sim/ledger';
 import { buildLineage, compactLineage, field, has, LINEAGE_RETAIN, MODULE_COST_KEYS, recordBirth, recordDivisionEnd } from '../../src/sim/lineage';
+import { profileOfGenome } from '../../src/sim/profiles';
 import { killEntity } from '../../src/sim/maintenance';
 import { realizeRecipe } from '../../src/sim/recipes';
 import { R } from '../../src/sim/reasons';
@@ -699,6 +700,28 @@ describe('P2.3 honest "Game rule:" lines: computed from both phenotype profiles'
     expect(text).not.toMatch(/no longer pays|saves|saving/);
   });
 
+  it('the surcharge quoted is what the carrier’s profile charges: E05 with feeding 60 pays 0.021, not 0.02', () => {
+    // deriveProfile multiplies surcharges by the inherited feeding × sensing factor (feeding 60 → 1.05).
+    const d = dish();
+    const v = d.gen({ modules: ['E05'], loci: bump(d.w.genomes.get(d.base).loci, { 1: 10 }) });
+    standardTree(d, v);
+    const { row, text } = lines(d.w);
+    const charged = profileOfGenome(d.w, v, d.w.ents.cols.species[d.founder]!).surcharge;
+    expect(charged).toBeCloseTo(0.021, 12);
+    expect(row.rules!.modules[0]!.surchargePerSecond).toBeCloseTo(charged, 12);
+    expect(text).toMatch(/Game rule: it carries reserve chamber \(E05\), which costs 0\.021 energy per second while carried and 0\.03 energy per second upkeep\./);
+    expect(text).not.toMatch(/0\.02 energy per second while carried/);
+    // Lost: the ancestor (feeding 60, with E05) paid 0.021; the branch (feeding 60, no E05) pays none.
+    const e = dish();
+    const c = e.w.ents.cols;
+    const feed60 = bump(e.w.genomes.get(e.base).loci, { 1: 10 });
+    const withE05 = e.gen({ modules: ['E05'], loci: feed60 });
+    c.genome[e.founder] = withE05;
+    c.refGenome[e.founder] = withE05;
+    standardTree({ ...e, base: withE05 }, e.gen({ loci: feed60 }));
+    expect(lines(e.w).text).toMatch(/its ancestor did, at 0\.021 energy per second while carried and 0\.03 energy per second upkeep\./);
+  });
+
   it('every cost-like parameter in the module content is quoted', () => {
     for (const m of Object.values(registry().modules)) {
       for (const key of Object.keys(m.params)) {
@@ -763,6 +786,56 @@ describe('P2.3 pinned branches keep their birth details through compaction (CT �
     expect(fam.root).toBeNull();
     expect(fam.historyIncomplete).toBe(true);
     expect(w.lineage.kept).toBeUndefined();
+  });
+
+  // Wave B fix 2 (fix1-lineage-verify MINOR): lineage.keep/kept are display records outside the state
+  // hash, so nothing hashed may be computed from them. The verifier's repro: two worlds equal in hash,
+  // one without the kept records, stay equal after the same saveSpecimen.
+  const saveFromBranch0: CommandPayload = { kind: 'lineage', op: 'saveSpecimen', from: 'branch', id: 0 };
+  const withoutKept = (w: World): World => {
+    const copy = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(w))));
+    delete copy.lineage.kept;
+    delete copy.lineage.keep;
+    return copy;
+  };
+
+  it('worlds equal in hash stay equal after the same saveSpecimen, kept records or not (hash coverage)', () => {
+    const { w, t } = pinnedDish(true);
+    expect(has(w.lineage, t.rootBirth)).toBe(false);
+    expect(w.lineage.kept?.some((r) => r.birthId === t.rootBirth)).toBe(true);
+    const copy = withoutKept(w);
+    expect(stateHash(copy)).toBe(stateHash(w));
+    expect(applyNow(w, 'save-a', saveFromBranch0).result!.accepted).toBe(1);
+    expect(applyNow(copy, 'save-b', saveFromBranch0).result!.accepted).toBe(1);
+    expect(stateHash(copy)).toBe(stateHash(w));
+    // The generation is the founder's, recorded on the branch when it was named (R is generation 1).
+    expect(w.branches.branches[0]!.rootGeneration).toBe(1);
+    expect(w.branches.specimens![0]!.generation).toBe(1);
+    expect(copy.branches.specimens![0]!.generation).toBe(1);
+  });
+
+  it('a branch recorded before rootGeneration reads it from hashed birth arrays only, else "not recorded"', () => {
+    const { w } = pinnedDish(true);
+    const older = (x: World) => {
+      const br = x.branches.branches[0]! as { rootGeneration?: number };
+      delete br.rootGeneration;
+      return x;
+    };
+    const a = older(w);
+    const b = older(withoutKept(w));
+    expect(stateHash(b)).toBe(stateHash(a));
+    applyNow(a, 'save-a', saveFromBranch0);
+    applyNow(b, 'save-b', saveFromBranch0);
+    expect(stateHash(b)).toBe(stateHash(a));
+    // Its founder's record was compacted from the hashed arrays: the generation is not recorded.
+    expect(a.branches.specimens![0]!.generation).toBe(-1);
+    // Before compaction the retained (hashed) record gives it.
+    const d = dish();
+    const v = d.gen({ loci: bump(d.w.genomes.get(d.base).loci, { 5: 10 }) });
+    standardTree(d, v);
+    older(d.w);
+    applyNow(d.w, 'save', saveFromBranch0);
+    expect(d.w.branches.specimens![0]!.generation).toBe(1);
   });
 });
 

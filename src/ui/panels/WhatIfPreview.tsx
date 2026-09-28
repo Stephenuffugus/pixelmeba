@@ -6,10 +6,13 @@
  * change keeps the cells and changes the fill along a light-to-dark amber ramp (darker = more), with
  * the direction also written under the After panel; every fill stays ≥ 3:1 on water (UX §4.1
  * "essential graphics"), so nothing is drawn faint. Shapes carry the meaning, not color alone.
+ * The ramp has ONE scale per field for all the choices of a source (the largest amount any of them
+ * draws), so an equal amount is the same fill in every choice, the moved patch included.
  */
 import type { JSX } from 'preact';
 import { GRID_W, MASK_CX, MASK_CY, MASK_R } from '@sim/constants';
 import type { WhatIfChoice, WhatIfLayout } from '@worker/protocol';
+import type { FieldId } from '@sim/fields';
 import { patchName, previewAlt, previewCaption, WHATIF_TEXT } from '../strings/whatif';
 
 /** Colors from the UX §6.1 palette: water, rim, text; the patch is a dark amber for ≥ 3:1 on water. */
@@ -83,7 +86,47 @@ function startsIn(v: View, layout: WhatIfLayout): WhatIfLayout['founders'] {
   });
 }
 
-/** Opaque fill for an amount: the ramp position is the amount's share of the larger of the two amounts. */
+/** Per field, the largest amount the ramp must show: one scale for every choice it is given. */
+export type AmountScale = Readonly<Record<string, number>>;
+
+/**
+ * The ramp's scale over all the choices of a source (its catalog as the sheet lists it): for each
+ * field, the largest per-cell amount any choice draws, before or after, moved patches included.
+ */
+export function amountScale(choices: readonly WhatIfChoice[]): AmountScale {
+  const out: Record<string, number> = {};
+  const add = (field: string, v: number | undefined) => {
+    if (typeof v === 'number' && Number.isFinite(v) && v > (out[field] ?? 0)) out[field] = v;
+  };
+  for (const c of choices) {
+    const ch = c.preview.change;
+    if (ch.kind === 'amount') {
+      add(ch.field, ch.before);
+      add(ch.field, ch.after);
+    } else if (ch.kind === 'moved') {
+      for (const f of Object.keys(ch.amounts).sort()) add(f, ch.amounts[f as FieldId]);
+    }
+  }
+  return out;
+}
+
+/** A moved patch's one field and amount, when it adds exactly one (then it is drawn on the ramp). */
+function movedAmount(amounts: Readonly<Partial<Record<FieldId, number>>>): { field: string; value: number } | null {
+  const pos = Object.keys(amounts)
+    .sort()
+    .map((field) => ({ field, value: amounts[field as FieldId] ?? 0 }))
+    .filter((e) => Number.isFinite(e.value) && e.value > 0);
+  return pos.length === 1 ? pos[0]! : null;
+}
+
+/** The fill of a moved patch: its amount on the shared ramp, or the plain patch colour. */
+function movedFill(amounts: Readonly<Partial<Record<FieldId, number>>>, scale: AmountScale): string {
+  const m = movedAmount(amounts);
+  const max = m ? scale[m.field] : undefined;
+  return m && max !== undefined && max > 0 ? amountFill(m.value, max) : PATCH;
+}
+
+/** Opaque fill for an amount: the ramp position is the amount's share of the scale's largest amount. */
 export function amountFill(value: number, max: number): string {
   const t = max > 0 ? Math.min(1, Math.max(0, value / max)) : 1;
   const a = parseInt(AMOUNT_LEAST.slice(1), 16);
@@ -100,14 +143,15 @@ function Panel(props: {
   readonly layout: WhatIfLayout;
   readonly view: View;
   readonly side: 'before' | 'after';
+  readonly scale: AmountScale;
 }) {
-  const { choice, layout, view, side } = props;
+  const { choice, layout, view, side, scale } = props;
   const change = choice.preview.change;
   const k = view.size / 48; // stroke widths scale with the window so lines look the same size
   const starts = startsIn(view, layout);
   let patch: JSX.Element | null = null;
   if (change.kind === 'amount') {
-    const max = Math.max(change.before, change.after);
+    const max = scale[change.field] ?? Math.max(change.before, change.after);
     const v = side === 'before' ? change.before : change.after;
     const testid = side === 'before' ? 'whatif-before-patch' : 'whatif-new-patch';
     // None at all: an outline where the patch would be, never a pale fill that looks like some food.
@@ -127,7 +171,7 @@ function Panel(props: {
   } else if (change.kind === 'moved') {
     patch =
       side === 'before' ? (
-        <path d={cellsPath(choice.oldCells)} fill={PATCH} data-testid="whatif-before-patch" />
+        <path d={cellsPath(choice.oldCells)} fill={movedFill(change.amounts, scale)} data-testid="whatif-before-patch" />
       ) : (
         <g>
           <path
@@ -138,7 +182,7 @@ function Panel(props: {
             stroke-dasharray={`${1.4 * k} ${1 * k}`}
             data-testid="whatif-old-patch"
           />
-          <path d={cellsPath(choice.newCells)} fill={PATCH} data-testid="whatif-new-patch" />
+          <path d={cellsPath(choice.newCells)} fill={movedFill(change.amounts, scale)} data-testid="whatif-new-patch" />
         </g>
       );
   }
@@ -192,8 +236,14 @@ function Panel(props: {
   );
 }
 
-export function WhatIfPreview(props: { readonly choice: WhatIfChoice; readonly layout: WhatIfLayout }) {
+export function WhatIfPreview(props: {
+  readonly choice: WhatIfChoice;
+  readonly layout: WhatIfLayout;
+  /** The source's shared ramp scale (amountScale over all its choices); this choice alone if absent. */
+  readonly scale?: AmountScale;
+}) {
   const { choice, layout } = props;
+  const scale = props.scale ?? amountScale([choice]);
   const change = choice.preview.change;
   const view = viewFor(choice);
   const starts = startsIn(view, layout);
@@ -206,8 +256,8 @@ export function WhatIfPreview(props: { readonly choice: WhatIfChoice; readonly l
       aria-label={WHATIF_TEXT.previewLabel}
     >
       <div class="whatif-panels">
-        <Panel choice={choice} layout={layout} view={view} side="before" />
-        <Panel choice={choice} layout={layout} view={view} side="after" />
+        <Panel choice={choice} layout={layout} view={view} side="before" scale={scale} />
+        <Panel choice={choice} layout={layout} view={view} side="after" scale={scale} />
       </div>
       <ul class="whatif-legend">
         {change.kind === 'amount' ? (
@@ -221,7 +271,7 @@ export function WhatIfPreview(props: { readonly choice: WhatIfChoice; readonly l
         ) : change.kind === 'moved' ? (
           <li>
             <svg class="whatif-swatch" viewBox="0 0 16 16" aria-hidden="true">
-              <rect x="2" y="2" width="12" height="12" fill={PATCH} />
+              <rect x="2" y="2" width="12" height="12" fill={movedFill(change.amounts, scale)} />
             </svg>
             {capital(name)}
           </li>

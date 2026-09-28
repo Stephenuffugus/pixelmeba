@@ -4,11 +4,11 @@
  * - a paint tool exists only when the dish's recorded content has a `paint` material with that target
  *   (DishInfo.materials is the world's own record), and its name, summary and shade factor are that
  *   record's;
- * - a structure tool exists only when the dish's recorded manifest enables that Structure record. The
- *   world's own list is read from DishInfo when the worker sends it (`structureIds`, the manifest's
- *   enabledStructures); until then it is known exactly when the dish's contentHash is this build's
- *   (the hash covers the whole manifest), and a dish from other content is offered none, which the
- *   simulation would refuse anyway;
+ * - a structure tool exists only when the dish's recorded manifest enables that Structure record: the
+ *   worker sends the world's own list (DishInfo.structureIds, its manifest's enabledStructures), so a
+ *   dish saved under other content keeps the tools its ruleset allows, and an older dish recorded
+ *   before structures were content is offered none. A DishInfo without the list (not sent by this
+ *   build's worker) is offered none too, which is what the simulation of such a dish would allow;
  * - the rules text and example ("Changes", "Watch for") are the content records' guide text, bundled
  *   from content/ (the simulation's own copies are validated by the same schemas).
  * The strings file keeps only UI chrome: what each kind of brush does to the cells it covers.
@@ -28,13 +28,6 @@ import type { LabToolId } from '../views/LabView';
 
 type Glob<T> = Record<string, T>;
 
-const buildManifest = Object.values(
-  import.meta.glob<{ readonly contentHash: string; readonly enabledStructures?: readonly string[] }>(
-    '../../../content/manifest.json',
-    { eager: true, import: 'default' },
-  ),
-)[0];
-
 function byId<T extends { readonly id: string }>(glob: Glob<T>): Readonly<Record<string, T>> {
   const out: Record<string, T> = {};
   for (const path of Object.keys(glob).sort()) {
@@ -50,9 +43,6 @@ const STRUCTURE_RECORDS = byId(
 const MATERIAL_RECORDS = byId(
   import.meta.glob<MaterialDef>('../../../content/materials/*.json', { eager: true, import: 'default' }),
 );
-
-/** DishInfo as the worker may extend it: the world manifest's enabledStructures (see the file header). */
-type DishInfoWithStructures = DishInfo & { readonly structureIds?: readonly string[] };
 
 /** Name and guide text of one tray item, from its content record. */
 export interface LabRecord {
@@ -80,12 +70,9 @@ export function shadeFactorOf(info: DishInfo): number | null {
   return typeof f === 'number' && f > 0 && f <= 1 ? f : null;
 }
 
-/** The Structure record IDs this dish's recorded manifest enables. */
+/** The Structure record IDs this dish's recorded manifest enables (none when the worker sent no list). */
 export function dishStructureIds(info: DishInfo): readonly string[] {
-  const own = (info as DishInfoWithStructures).structureIds;
-  if (own) return own;
-  if (buildManifest && info.contentHash === buildManifest.contentHash) return buildManifest.enabledStructures ?? [];
-  return [];
+  return info.structureIds ?? [];
 }
 
 /** The paint tool for a substrate or shade, when the dish has that paint. */

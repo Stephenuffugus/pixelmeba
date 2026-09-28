@@ -7,6 +7,7 @@ import type { Intervention, MeasureRow } from '@worker/comparison';
 import type { DishInfo } from '@worker/protocol';
 import { reasonName } from '@sim/reasons';
 import { reasonText } from '../strings/reasons';
+import { paintName, structureName } from './LabTrayNames';
 
 /** Simulated time mm:ss (h:mm:ss when needed) from ticks. */
 export function clock(ticks: number): string {
@@ -38,13 +39,15 @@ export function describeChange(info: DishInfo, payload: CommandPayload, result: 
       return `Lid ${payload.lid}`;
     case 'setMutationPreset':
       return `Evolution setting: ${payload.preset}`;
-    // Lab habitat edits (P2.7).
+    // Lab habitat edits (P2.7), named from content ("Impermeable wall"), never by internal code.
     case 'paintSubstrate':
-      return `${payload.substrate[0]!.toUpperCase()}${payload.substrate.slice(1)} painted on ${accepted} cell${accepted === 1 ? '' : 's'}`;
+      return `${paintName(info, payload.substrate)} painted on ${accepted} cell${accepted === 1 ? '' : 's'}`;
     case 'paintShade':
-      return `${payload.erase ? 'Shade removed from' : 'Shade painted on'} ${accepted} cell${accepted === 1 ? '' : 's'}`;
+      return payload.erase
+        ? `Shade removed from ${accepted} cell${accepted === 1 ? '' : 's'}`
+        : `${paintName(info, 'shade')} on ${accepted} cell${accepted === 1 ? '' : 's'}`;
     case 'placeStructure':
-      return `${payload.structure === 'bead' ? 'Porous bead' : payload.structure === 'wall' ? 'Wall' : 'Stone'} placed on ${accepted} cell${accepted === 1 ? '' : 's'}`;
+      return `${structureName(payload.structure)} placed on ${accepted} cell${accepted === 1 ? '' : 's'}`;
     case 'eraseStructure':
       return `Structure removed from ${accepted} cell${accepted === 1 ? '' : 's'}`;
     // Branch notebook and specimens (P2.3).

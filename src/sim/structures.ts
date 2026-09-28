@@ -19,10 +19,12 @@ import {
   brushCellOutcome,
   isLabRadius,
   LAB_MAX_RADIUS,
+  NOT_IN_DISH,
   PLACEABLE_STRUCTURES,
   planSealing,
   sealsCell,
   strokeFootprint,
+  strokeSampleCount,
   STRUCTURE_CODES,
   STRUCTURE_RECORD_IDS,
   ST_NONE,
@@ -169,6 +171,17 @@ export interface HabitatEditResult {
 
 /** Most points one stroke may carry (a long finger stroke is a few hundred; points are ≥ 0.5 cells apart). */
 export const LAB_MAX_POINTS = 20000;
+/**
+ * Most brush disks one stroke may sample (strokeSampleCount: about its length in cells, plus one per
+ * segment). Measured in the app (wave B fix 2, Playwright, 800×360 phone, whole-dish zoom 2.41 px
+ * per cell, the densest view): a scribble sweeping the whole dish at a fast 1,500 px/s for 4.1 s sent
+ * 243 points and sampled 2,663 disks, 0.43 per pixel of finger travel. A 20-second scribble at that
+ * speed is ≈ 13,000; at the smallest zoom (0.9 × whole dish) ≈ 14,400; a full minute ≈ 43,000.
+ * 100,000 is over two minutes of non-stop fast scribbling, so no finger stroke reaches it; a crafted,
+ * damaged or replayed stroke beyond it is refused whole in time proportional to its point count. At
+ * the bound a radius-6 footprint costs about 0.4 s, once.
+ */
+export const LAB_MAX_STROKE_SAMPLES = 100_000;
 /** Points must lie on or near the grid: a stroke far outside it is malformed, not a long stroke. */
 const POINT_MARGIN = LAB_MAX_RADIUS + 2;
 
@@ -210,6 +223,8 @@ export function invalidHabitatEdit(p: HabitatEditPayload): string | null {
     if (x < -POINT_MARGIN || y < -POINT_MARGIN || x > GRID_W + POINT_MARGIN || y > GRID_H + POINT_MARGIN)
       return 'point outside the dish area';
   }
+  // The footprint walks every sampled cell of the path: bound the path, not only the point count.
+  if (strokeSampleCount(p.points, LAB_MAX_STROKE_SAMPLES) > LAB_MAX_STROKE_SAMPLES) return 'stroke too long';
   if (p.kind === 'paintSubstrate' && !Object.prototype.hasOwnProperty.call(SUBSTRATE_CODES, p.substrate))
     return `unknown substrate ${String(p.substrate)}`;
   if (p.kind === 'paintShade' && typeof p.erase !== 'boolean') return 'invalid shade mode';
@@ -239,17 +254,20 @@ export function structureEnabled(world: World, s: PlaceableStructure): boolean {
   return Array.isArray(ids) && ids.includes(STRUCTURE_RECORD_IDS[s]);
 }
 
-/** Why this world cannot make this edit (its recorded content lacks it), or null when it can. */
+/**
+ * Why this world cannot make this edit (its recorded content lacks it), or null when it can. The note
+ * is a log record naming the paint target or the Structure record ID (content IDs, not grid codes).
+ */
 export function unavailableHabitatEdit(world: World, p: HabitatEditPayload): string | null {
   switch (p.kind) {
     case 'paintSubstrate':
-      return paintMaterial(world, p.substrate) ? null : `${p.substrate} paint is not in this dish`;
+      return paintMaterial(world, p.substrate) ? null : `${p.substrate} paint is ${NOT_IN_DISH}`;
     case 'paintShade':
-      return shadeFactor(world) !== null ? null : 'shade paint is not in this dish';
+      return shadeFactor(world) !== null ? null : `shade paint is ${NOT_IN_DISH}`;
     case 'placeStructure':
-      return structureEnabled(world, p.structure) ? null : `${p.structure} is not in this dish`;
+      return structureEnabled(world, p.structure) ? null : `${STRUCTURE_RECORD_IDS[p.structure]} is ${NOT_IN_DISH}`;
     case 'eraseStructure':
-      return PLACEABLE_STRUCTURES.some((s) => structureEnabled(world, s)) ? null : 'structures are not in this dish';
+      return PLACEABLE_STRUCTURES.some((s) => structureEnabled(world, s)) ? null : `structures are ${NOT_IN_DISH}`;
   }
 }
 

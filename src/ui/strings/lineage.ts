@@ -134,9 +134,17 @@ function joinWords(parts: readonly string[]): string {
   return parts.length <= 1 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
-/** Every recorded cost of one module: its surcharge while carried plus each cost parameter. */
+/** A per-second rate as charged (up to 4 decimals, no float noise: 0.021, not 0.020999999999999998). */
+function rate(v: number): string {
+  return String(Number(v.toFixed(4)));
+}
+
+/**
+ * Every recorded cost of one module: the surcharge its carrier's profile charges while carried (the
+ * registry rate after the carrier's inherited multiplier) plus each cost parameter as recorded.
+ */
 export function moduleCostWords(m: LineageModuleChange): string {
-  return joinWords([`${m.surchargePerSecond} energy per second while carried`, ...m.costs.map((c) => COST_WORDS[c.key](String(c.value)))]);
+  return joinWords([`${rate(m.surchargePerSecond)} energy per second while carried`, ...m.costs.map((c) => COST_WORDS[c.key](String(c.value)))]);
 }
 
 function moduleLine(m: LineageModuleChange): string {

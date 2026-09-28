@@ -156,6 +156,13 @@ test('What if?: Garden → R-G3 preview and Details → Start a new paused dish 
     .filter({ has: page.getByText('Dinner farther away', { exact: true }) });
   await expect(row).toHaveCount(1);
   await expect(row).toContainText(`${ran} s simulated`);
+  // Fix round 2 (item 7e): the list names the idea from the slot index, without opening the dish.
+  await expect(row.getByTestId('slot-variant')).toHaveText('What if? · Dinner farther away (R-G3 rev 1)');
+  const size = await row
+    .getByTestId('slot-variant')
+    .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  expect(size).toBeGreaterThanOrEqual(16);
+  await expectNoSeriousA11yViolations(page);
 });
 
 test('What if? with all ten slots used: Cancel changes nothing; export, or deliberately replace a save', async ({

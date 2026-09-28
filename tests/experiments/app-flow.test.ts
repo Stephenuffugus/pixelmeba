@@ -313,12 +313,135 @@ describe('a reopened experiment dish (P2.5 fix wave, item 7)', () => {
     expect(experimentOf(realizeRecipe(registry(), 'CLEANING_CREW_V1'))).toBeNull();
   });
 
+  it('the worker says so when a card’s dish is opened again (never a silent stop); other dishes get no notice', async () => {
+    const h = harness();
+    h.ask('experimentStarted', (requestId) => ({ type: 'experimentStart', requestId, cardId: 'EXP_103', newDishId: 'crew', compare: null }));
+    const { text } = await buildSaveFile(h.world('crew'), { name: 'Cleaning crew', savedAt: '2026-09-28T00:00:00.000Z', recipeId: 'CLEANING_CREW_V1' });
+    const plain = await buildSaveFile(realizeRecipe(registry(), 'CLEANING_CREW_V1'), { name: 'Plain', savedAt: '2026-09-28T00:00:00.000Z', recipeId: 'CLEANING_CREW_V1' });
+    const ended = () => h.out.filter((m): m is Of<'experimentEnded'> => m.type === 'experimentEnded');
+    await h.host.handleAsync({ type: 'importDish', requestId: 5001, text: plain.text, newDishId: 'plain' });
+    expect(ended()).toEqual([]);
+    await h.host.handleAsync({ type: 'importDish', requestId: 5002, text, newDishId: 'crew-again' });
+    expect(ended().map(({ dishId, cardId, reason }) => ({ dishId, cardId, reason }))).toEqual([{ dishId: 'crew-again', cardId: 'EXP_103', reason: 'closed' }]);
+    // The reopened dish has no observer: running it past the gate stamps nothing.
+    h.host.handle({ type: 'setSpeed', dishId: 'crew-again', speed: 4 });
+    h.ask('history', (requestId) => ({ type: 'history', requestId, dishId: 'crew-again' }));
+    while (h.world('crew-again').tick < 200) h.frame(25);
+    expect(h.stamps()).toHaveLength(0);
+  }, 120_000);
+
   it('says plainly why a reopened card no longer observes, and never claims a paired run keeps running', () => {
     const closed = experimentEndedText('closed', 'Cleaning crew');
-    expect(closed).toContain('ended when the dish was closed');
-    expect(closed).toContain('cannot resume');
+    expect(closed).toContain('it is not watching now');
+    expect(closed).toContain('If the card already stamped');
     expect(experimentEndedText('changed', 'Food trail')).toContain('You changed the dish');
     expect(stampToastText('Measured sugar made from starch', true, true)).not.toMatch(/keeps running/);
     expect(stampToastText('Watched a cleaning crew eat debris', false, true)).toContain('The dish keeps running.');
   });
+});
+
+// Wave B fix round 2 (fix1-experiments-verify): a refused command is no undo point; Undo cannot rewind a
+// card's observer; once the measured gate has held, a change keeps the held stamp waiting for its step.
+describe('Undo, refused commands and a held stamp on a single-arm card', () => {
+  const OUTSIDE: CommandPayload = { kind: 'deposit', materialId: 'SUGAR', points: [[1.5, 1.5]], radius: 0, dose: 0.5 };
+  const ended = (h: ReturnType<typeof harness>) => h.out.filter((m): m is Of<'experimentEnded'> => m.type === 'experimentEnded');
+  const waiting = (h: ReturnType<typeof harness>) => h.out.filter((m): m is Of<'experimentWaiting'> => m.type === 'experimentWaiting');
+
+  it('a refused command arms no Undo: the verifier’s refused-command + Undo sequence stamps the headless values (EXP_103)', () => {
+    const headless = runExperiment(registry(), 'EXP_103', { stopAtSecond: 30 });
+    const h = harness();
+    h.ask('experimentStarted', (requestId) => ({ type: 'experimentStart', requestId, cardId: 'EXP_103', newDishId: 'crew', compare: null }));
+    const miss = h.ask('ack', (requestId) => ({ type: 'command', requestId, dishId: 'crew', commandId: 'miss', payload: OUTSIDE, undoable: true }));
+    expect(miss.result).toEqual({ accepted: 0, rejected: 1 });
+    expect(h.out.filter((m): m is Of<'snapshot'> => m.type === 'snapshot').at(-1)!.undoAvailable).toBe(false);
+    h.host.handle({ type: 'setSpeed', dishId: 'crew', speed: 4 });
+    while (h.world('crew').tick < 100) h.frame(25);
+    h.host.handle({ type: 'setSpeed', dishId: 'crew', speed: 0 });
+    const tick = h.world('crew').tick;
+    // Nothing to undo: time is not rewound, so the observer's count stays true.
+    const undo = h.ask('ack', (requestId) => ({ type: 'undo', requestId, dishId: 'crew' }));
+    expect(undo.error).toBe('nothing to undo');
+    expect(h.world('crew').tick).toBe(tick);
+    h.ask('history', (requestId) => ({ type: 'history', requestId, dishId: 'crew' }));
+    h.host.handle({ type: 'setSpeed', dishId: 'crew', speed: 4 });
+    while (h.world('crew').tick < 300) h.frame(25);
+    expect(ended(h)).toEqual([]);
+    expect(h.stamps().map((m) => m.stamp.stamp)).toEqual([headless.stamp]);
+    expect(h.stamps()[0]!.stamp.stamp.reachedAtSecond).toBe(12);
+  }, 120_000);
+
+  it('a refused command leaves an earlier undo point exactly as it was', () => {
+    const h = harness();
+    h.ask('ready', (requestId) => ({ type: 'create', requestId, dishId: 'g', source: { kind: 'recipe', recipeId: 'FIRST_DISH_V1' } }));
+    const start = stateHash(h.world('g'));
+    expect(h.ask('ack', (requestId) => ({ type: 'command', requestId, dishId: 'g', commandId: 'feed', payload: FEED, undoable: true })).result!.accepted).toBeGreaterThan(0);
+    for (let i = 0; i < 20; i++) h.host.handle({ type: 'step', dishId: 'g' });
+    expect(h.ask('ack', (requestId) => ({ type: 'command', requestId, dishId: 'g', commandId: 'miss', payload: OUTSIDE, undoable: true })).result).toEqual({ accepted: 0, rejected: 1 });
+    // Undo goes back to before the feed (the last change), not to before the refused command.
+    expect(h.ask('ack', (requestId) => ({ type: 'undo', requestId, dishId: 'g' })).error).toBeUndefined();
+    expect(h.world('g').tick).toBe(0);
+    expect(stateHash(h.world('g'))).toBe(start);
+  });
+
+  it('Undo that rewinds a card’s observation ends it truthfully (“undone”): the observer cannot rewind', () => {
+    const h = harness();
+    h.ask('experimentStarted', (requestId) => ({ type: 'experimentStart', requestId, cardId: 'EXP_103', newDishId: 'crew', compare: null }));
+    // A notebook label sent as undoable (the protocol allows it) keeps the observation and is an undo point.
+    const w = h.world('crew');
+    let founder = -1;
+    for (let i = 0; i < w.ents.highWater && founder < 0; i++) if (w.ents.cols.alive[i] === 1) founder = w.ents.cols.birthId[i]!;
+    const label = h.ask('ack', (requestId) => ({ type: 'command', requestId, dishId: 'crew', commandId: 'keep', payload: { kind: 'lineage', op: 'saveSpecimen', from: 'organism', id: founder }, undoable: true }));
+    expect(label.result!.accepted).toBe(1);
+    expect(ended(h)).toEqual([]);
+    h.host.handle({ type: 'setSpeed', dishId: 'crew', speed: 4 });
+    while (h.world('crew').tick < 60) h.frame(25);
+    expect(h.ask('ack', (requestId) => ({ type: 'undo', requestId, dishId: 'crew' })).error).toBeUndefined();
+    expect(h.world('crew').tick).toBe(0);
+    expect(ended(h)).toEqual([expect.objectContaining({ dishId: 'crew', cardId: 'EXP_103', reason: 'undone' })]);
+    h.ask('history', (requestId) => ({ type: 'history', requestId, dishId: 'crew' }));
+    h.host.handle({ type: 'setSpeed', dishId: 'crew', speed: 4 });
+    while (h.world('crew').tick < 200) h.frame(25);
+    expect(h.stamps()).toHaveLength(0);
+    expect(experimentEndedText('undone', 'Cleaning crew')).toMatch(/Undo rewound the dish.*cannot be rewound/);
+  }, 120_000);
+
+  it('after the measured gate held, a feed and its Undo keep the held stamp (gate-moment values) waiting for the step (EXP_103)', () => {
+    const headless = runExperiment(registry(), 'EXP_103', { stopAtSecond: 30 });
+    const h = harness();
+    h.ask('experimentStarted', (requestId) => ({ type: 'experimentStart', requestId, cardId: 'EXP_103', newDishId: 'crew', compare: null }));
+    h.host.handle({ type: 'setSpeed', dishId: 'crew', speed: 4 });
+    while (h.world('crew').tick < 200) h.frame(25);
+    h.host.handle({ type: 'setSpeed', dishId: 'crew', speed: 0 });
+    expect(h.stamps()).toHaveLength(0);
+    // The dish is told once which step the held stamp waits for (its notice).
+    expect(waiting(h).map(({ dishId, cardId, reachedAtSecond, missing }) => ({ dishId, cardId, reachedAtSecond, missing }))).toEqual([
+      { dishId: 'crew', cardId: 'EXP_103', reachedAtSecond: 12, missing: ['openResourceHistory'] },
+    ]);
+    const feed = h.ask('ack', (requestId) => ({ type: 'command', requestId, dishId: 'crew', commandId: 'feed', payload: FEED, undoable: true }));
+    expect(feed.result!.accepted).toBe(29);
+    expect(ended(h)).toEqual([]);
+    // Undo returns to tick 200, after the gate moment: the held stamp still stands.
+    expect(h.ask('ack', (requestId) => ({ type: 'undo', requestId, dishId: 'crew' })).error).toBeUndefined();
+    expect(h.world('crew').tick).toBe(200);
+    expect(ended(h)).toEqual([]);
+    h.ask('history', (requestId) => ({ type: 'history', requestId, dishId: 'crew' }));
+    const stamps = h.stamps();
+    expect(stamps).toHaveLength(1);
+    expect(stamps[0]!.stamp.stamp).toEqual(headless.stamp);
+    expect(stamps[0]!.stamp.stamp.reachedAtSecond).toBe(12);
+    expect(waiting(h)).toHaveLength(1);
+  }, 120_000);
+
+  it('a feed after the gate with no Undo also keeps the stamp; opening History then grants it (the verifier’s gate-then-feed repro)', () => {
+    const headless = runExperiment(registry(), 'EXP_103', { stopAtSecond: 30 });
+    const h = harness();
+    h.ask('experimentStarted', (requestId) => ({ type: 'experimentStart', requestId, cardId: 'EXP_103', newDishId: 'crew', compare: null }));
+    h.host.handle({ type: 'setSpeed', dishId: 'crew', speed: 4 });
+    while (h.world('crew').tick < 200) h.frame(25);
+    expect(h.ask('ack', (requestId) => ({ type: 'command', requestId, dishId: 'crew', commandId: 'feed', payload: FEED, undoable: true })).result!.accepted).toBe(29);
+    while (h.world('crew').tick < 260) h.frame(25);
+    expect(ended(h)).toEqual([]);
+    h.ask('history', (requestId) => ({ type: 'history', requestId, dishId: 'crew' }));
+    expect(h.stamps().map((m) => m.stamp.stamp)).toEqual([headless.stamp]);
+  }, 120_000);
 });

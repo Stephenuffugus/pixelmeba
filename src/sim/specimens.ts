@@ -21,7 +21,7 @@ import { displayBranchName, pinBranch, renameBranch } from './branches';
 import type { CommandResult, introduceOrganism } from './commands';
 import { CELL_SOFT_CAPACITY, GRID_W } from './constants';
 import { brushCells } from './grid';
-import { recordField, retainPinnedRecords } from './lineage';
+import { field, retainPinnedRecords } from './lineage';
 import { validateModuleSet } from './modules';
 import { canOccupy } from './movement';
 import type { World } from './world';
@@ -104,7 +104,10 @@ export function saveSpecimen(world: World, from: 'branch' | 'organism', id: numb
     genome = br.refGenome;
     species = br.species;
     sourceBirthId = br.rootBirthId;
-    generation = recordField(world.lineage, 'generation', br.rootBirthId) ?? -1;
+    // The founder's generation from hashed state only: the branch record (named from wave B fix 2 on)
+    // or, for an older record, the retained birth arrays. Never from lineage.kept, which is a display
+    // record outside the state hash (equal hashes must mean equal futures, SPEC §15).
+    generation = br.rootGeneration ?? field(world.lineage, 'generation', br.rootBirthId) ?? -1;
     branch = br.id;
   } else if (from === 'organism') {
     let slot = -1;

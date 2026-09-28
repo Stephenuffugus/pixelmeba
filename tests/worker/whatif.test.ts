@@ -575,10 +575,17 @@ describe('What if? is offered only for the authored recipe or a variant dish (D0
       worldId: 'old-c',
       transform: (r) => ({ ...r, mutationPreset: 'accelerated' }),
     });
+    // Fix round 2 (item 7c): an Empty start of the same recipe, seed and settings is not the recipe.
+    const empty = realizeRecipe(REG, 'FIRST_DISH_V1', {
+      worldId: 'old-d',
+      transform: (r) => ({ ...r, founders: [], fieldPatches: [], scheduledCommands: [] }),
+    });
+    expect(empty.ents.count).toBe(0);
     const cases: [World, string | null][] = [
       [authored, 'FIRST_DISH_V1'],
       [otherSeed, null],
       [accelerated, null],
+      [empty, null],
     ];
     for (const [k, [w, expected]] of cases.entries()) {
       const text = await oldSaveText(w);
@@ -645,9 +652,10 @@ describe('The choice Details describe the world-to-be like provenance does (UX Â
   it('the answer carries the registry label a dish of this build shows', async () => {
     const h = harness();
     const info = await h.create('g');
-    const a = (await h.answer('FIRST_DISH_V1', null)) as { registryLabel?: string };
+    // Declared on WhatIfAnswer (protocol.ts) and computed by the host's one registryLabel helper.
+    const a = await h.answer('FIRST_DISH_V1', null);
     expect(a.registryLabel).toBe(info.manifestLabel);
-    const fromDish = (await h.answer(null, 'g')) as { registryLabel?: string };
+    const fromDish = await h.answer(null, 'g');
     expect(fromDish.registryLabel).toBe(info.manifestLabel);
   });
 });
@@ -690,5 +698,60 @@ describe('A variant dish names itself in the save file meta (item 7)', () => {
     // Meta is untrusted text: a malformed entry reads as absent.
     expect(saveMetaVariant({ variant: { variantId: 7 } })).toBeNull();
     expect(saveMetaVariant(null)).toBeNull();
+  });
+});
+
+// Wave B fix round 2 (item 7e): the idea reaches the slot index, so the Saved dishes list names it
+// without loading the world.
+describe('A What if? dish names its idea in the slot index (SlotSummary.variant)', () => {
+  it('slot and autosave summaries carry the idea; other dishes do not; a malformed index copy is dropped', async () => {
+    const h = harness();
+    await h.create('g');
+    await h.started('v', 'g', { kind: 'variant', variantId: 'R-G3' });
+    h.steps('v', 3);
+    const saved = await h.ask({ type: 'saveSlot', dishId: 'v', slotId: 'slot5', name: 'Far dinner' });
+    expect(saved.type).toBe('slotSaved');
+    const idea = { variantId: 'R-G3', variantRevision: 1, title: 'Dinner farther away', sourceId: 'FIRST_DISH_V1', sourceRevision: 1, seed: 104729 };
+    expect((saved as Of<'slotSaved'>).slot.variant).toEqual(idea);
+    await h.ask({ type: 'autosave', dishId: 'v' });
+    const list = (await h.ask({ type: 'listSlots' })) as Of<'slots'>;
+    const by = (id: string) => list.slots.find((x) => x.slotId === id)!;
+    expect(by('slot5').variant).toEqual(idea);
+    expect(by('autosave').variant).toEqual(idea);
+    // The Garden was kept (slot1) when the What if? dish started: no idea there.
+    expect(by('slot1').variant).toBeUndefined();
+    expect('variant' in by('slot1')).toBe(false);
+    // The index is stored data: a damaged copy is not shown (the save itself still opens).
+    h.backend.slots.slot5 = { ...h.backend.slots.slot5!, variant: { ...idea, variantRevision: -1 } };
+    const again = (await h.ask({ type: 'listSlots' })) as Of<'slots'>;
+    expect(again.slots.find((x) => x.slotId === 'slot5')!.variant).toBeUndefined();
+    expect((await h.ask({ type: 'loadSlot', slotId: 'slot5', newDishId: 'back' })).type).toBe('loaded');
+  });
+});
+
+// Wave B fix round 2 (item 7d): error packets say whether the worker really paused the dish.
+describe('Error packets say what really happened (paused, and which request)', () => {
+  it('a failed create paused nothing; a failed save or export paused nothing; a failed command paused its dish', async () => {
+    const h = harness();
+    const errors = () => h.out.filter((m): m is Of<'error'> => m.type === 'error');
+    h.host.handle({ type: 'create', requestId: 900, dishId: 'bad', source: { kind: 'recipe', recipeId: 'NOPE' } });
+    expect(errors().at(-1)).toMatchObject({ dishId: 'bad', requestId: 900, paused: false, request: 'create' });
+    await h.create('g');
+    h.backend.failNextCommit = true;
+    await h.host.handleAsync({ type: 'saveSlot', requestId: 901, dishId: 'g', slotId: 'slot2', name: 'x' });
+    expect(errors().at(-1)).toMatchObject({ dishId: 'g', requestId: 901, paused: false, request: 'saveSlot', message: 'simulated write failure' });
+    await h.host.handleAsync({ type: 'exportDish', requestId: 902, dishId: 'gone', strip: false });
+    expect(errors().at(-1)).toMatchObject({ requestId: 902, paused: false, request: 'exportDish' });
+    // The dish still runs as before: nothing paused it.
+    h.host.handle({ type: 'setSpeed', dishId: 'g', speed: 1 });
+    h.frame(200);
+    expect(h.world('g').tick).toBeGreaterThan(0);
+    // A command that throws inside the simulation pauses its dish at the last valid state.
+    const tick = h.world('g').tick;
+    h.host.handle({ type: 'command', requestId: 903, dishId: 'g', commandId: 'bad', payload: { kind: 'nonsense' } as never, undoable: false });
+    expect(errors().at(-1)).toMatchObject({ dishId: 'g', requestId: 903, paused: true, request: 'command' });
+    expect(h.world('g').tick).toBe(tick);
+    h.frame(200);
+    expect(h.world('g').tick).toBe(tick);
   });
 });

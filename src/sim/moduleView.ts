@@ -29,15 +29,27 @@ export interface ModuleSummary {
   readonly activeNow: boolean;
 }
 
-/** Carried modules with their recorded numbers from the world's registry (sorted by id). */
+/**
+ * Carried modules with their recorded numbers from the world's registry (sorted by id). The surcharge
+ * is the one this organism is actually charged: the registry rate scaled by its inherited cost
+ * multipliers (the profile's surcharge shared out in proportion to the registry rates), so the module
+ * card, the upkeep line and the lineage "Game rule:" lines quote the same number.
+ */
 export function moduleSummaries(world: World, i: number): ModuleSummary[] {
   const c = world.ents.cols;
   const g = world.genomes.get(c.genome[i]!);
-  return g.modules.map((id) => {
+  const defs = g.modules.map((id) => {
     const def = world.content.modules.find((d) => d.id === id);
     if (!def) throw new Error(`module ${id} is not in this world's registry`);
+    return def;
+  });
+  let raw = 0;
+  for (const def of defs) raw += def.surchargePerSecond;
+  const scale = raw > 0 ? profileOf(world, i).surcharge / raw : 1;
+  return defs.map((def) => {
+    const id = def.id;
     const activeNow = id === 'E01' ? c.secreting[i] === 1 : id === 'E03' ? c.lifeState[i] !== LIFE_ACTIVE : id === 'E05';
-    return { id, name: def.name, surchargePerSecond: def.surchargePerSecond, params: { ...def.params }, activeNow };
+    return { id, name: def.name, surchargePerSecond: def.surchargePerSecond * scale, params: { ...def.params }, activeNow };
   });
 }
 

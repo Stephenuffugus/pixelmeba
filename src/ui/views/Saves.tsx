@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { SlotSummary } from '@worker/protocol';
 import { IconBack } from '../icons';
 import { busy, getClient, importFile, loadSlot, route, showToast } from '../state';
+import { savedIdeaLine } from '../strings/whatif';
 
 function when(iso: string): string {
   const d = new Date(iso);
@@ -41,6 +42,11 @@ export function Saves() {
               <li key={s.slotId} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ flex: '1 1 12rem' }}>
                   <strong>{s.slotId === 'autosave' ? `${s.name} (autosave)` : s.name}</strong>
+                  {s.variant ? (
+                    <div class="sub" data-testid="slot-variant">
+                      {savedIdeaLine(s.variant)}
+                    </div>
+                  ) : null}
                   <div class="sub">
                     {Math.floor(s.tick / 10)} s simulated · {when(s.savedAt)}
                   </div>

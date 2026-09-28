@@ -28,14 +28,26 @@ export interface WorkerLike {
 }
 
 /** Unsolicited experiment packets (P2.5). */
-export type ExperimentNotice = Extract<FromWorker, { type: 'experimentStamp' | 'experimentEnded' }>;
+export type ExperimentNotice = Extract<FromWorker, { type: 'experimentStamp' | 'experimentWaiting' | 'experimentEnded' }>;
+
+/**
+ * An error as the UI words it (ARCH §7): `paused` is true only when the worker paused that dish at its
+ * last valid state because of it; `request` names the request that failed (null for a failure while the
+ * dish ran, or a packet the app could not read).
+ */
+export interface WorkerErrorNotice {
+  readonly dishId: string;
+  readonly message: string;
+  readonly paused: boolean;
+  readonly request: ToWorker['type'] | null;
+}
 
 export class SimClient {
   private nextRequest = 1;
   private readonly pending: Record<number, Pending> = {};
   private readonly lastGen: Record<string, number> = {};
   private readonly snapshotListeners: ((s: SnapshotMsg) => void)[] = [];
-  private readonly errorListeners: ((e: { dishId: string; message: string }) => void)[] = [];
+  private readonly errorListeners: ((e: WorkerErrorNotice) => void)[] = [];
   private readonly compareListeners: ((s: ComparisonState) => void)[] = [];
   private readonly experimentListeners: ((m: ExperimentNotice) => void)[] = [];
 
@@ -56,7 +68,7 @@ export class SimClient {
     };
   }
 
-  onError(fn: (e: { dishId: string; message: string }) => void): void {
+  onError(fn: (e: WorkerErrorNotice) => void): void {
     this.errorListeners.push(fn);
   }
 
@@ -87,7 +99,7 @@ export class SimClient {
     if (msg.protocolVersion !== PROTOCOL_VERSION) {
       // A worker from a different build: refuse its packets rather than misread them.
       const text = `protocol version mismatch: worker ${String(msg.protocolVersion)}, app ${PROTOCOL_VERSION}`;
-      for (const fn of this.errorListeners) fn({ dishId: 'dishId' in msg ? msg.dishId : '', message: text });
+      for (const fn of this.errorListeners) fn({ dishId: 'dishId' in msg ? msg.dishId : '', message: text, paused: false, request: null });
       const id = 'requestId' in msg ? msg.requestId : undefined;
       const pending = id !== undefined ? this.pending[id] : undefined;
       if (id !== undefined && pending) {
@@ -104,15 +116,15 @@ export class SimClient {
       return;
     }
     if (msg.type === 'error') {
-      for (const fn of this.errorListeners) fn({ dishId: msg.dishId, message: msg.message });
+      for (const fn of this.errorListeners) fn({ dishId: msg.dishId, message: msg.message, paused: msg.paused === true, request: msg.request ?? null });
       if (msg.requestId !== undefined) {
         this.pending[msg.requestId]?.reject(new WorkerRequestError(msg.message, msg.kind));
         delete this.pending[msg.requestId];
       }
       return;
     }
-    if (msg.type === 'experimentStamp' || msg.type === 'experimentEnded') {
-      // Unsolicited experiment notices (P2.5): a gate reached, or a single-arm observation ended.
+    if (msg.type === 'experimentStamp' || msg.type === 'experimentWaiting' || msg.type === 'experimentEnded') {
+      // Unsolicited experiment notices (P2.5): a stamp, a held stamp waiting for steps, or an observation ended.
       for (const fn of this.experimentListeners) fn(msg);
       return;
     }

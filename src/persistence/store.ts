@@ -5,6 +5,7 @@
  * save. Records are gzip-compressed save-file text.
  */
 import { gunzipText, gzipText } from './compress';
+import type { SaveMetaVariant } from './saveFile';
 
 export const NAMED_SLOTS = 10;
 export const AUTOSAVE_SLOT = 'autosave';
@@ -19,6 +20,12 @@ export interface SlotInfo {
   readonly previous: string | null;
   readonly bytes: number;
   readonly checksum: string;
+  /**
+   * What if? (P2.6): a copy of the save file's meta.variant, kept in the index so the Saved dishes list
+   * can name the idea without loading the world. Optional: indexes written before it lack it, and it
+   * is re-validated when read (the file's own world record stays authoritative).
+   */
+  readonly variant?: SaveMetaVariant;
 }
 
 export interface StoredRecord {
@@ -43,6 +50,8 @@ export interface SaveRequest {
   readonly tick: number;
   readonly savedAt: string;
   readonly recipeId: string | null;
+  /** The file's meta.variant, when it has one (copied into the slot index). */
+  readonly variant?: SaveMetaVariant;
 }
 
 let recordCounter = 0;
@@ -73,6 +82,7 @@ export class SaveStore {
       previous: old?.current ?? null,
       bytes: data.byteLength,
       checksum: req.checksum,
+      ...(req.variant ? { variant: req.variant } : {}),
     };
     // The record older than the retained predecessor is removed in the same transaction.
     const deleteRecords = old?.previous ? [old.previous] : [];

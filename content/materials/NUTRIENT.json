@@ -9,7 +9,7 @@
   "guide": {
     "summary": "Minerals needed to build new body. Not food by itself.",
     "biology": "Cells need minerals as well as carbon and energy to grow.",
-    "rules": "Adds free nutrient that dissolves and diffuses. Every unit of new body needs nutrient, taken first from what is bound in eaten food and then from this free pool. Adding nutrient alone creates no growth.",
+    "rules": "Adds free nutrient that dissolves and diffuses. Every unit of new body needs nutrient, taken first from what is bound in eaten food and then from this free pool, so where nutrient is what limits growth, adding it lets that growth go on. Nutrient alone is not food: it adds no carbon or energy.",
     "example": "If a colony says growth is limited by minerals, add a little here and compare."
   },
   "iconId": "chem_nutrient",

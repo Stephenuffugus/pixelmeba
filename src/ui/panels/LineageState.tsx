@@ -51,7 +51,7 @@ const pacer = new DiscoveryPacer({
   setTimer: (fn, ms) => setTimeout(fn, ms),
   clearTimer: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
   cardOpen: () => discovery.value !== null,
-  deliver: (ids, newCard) => void showDiscovery(ids, newCard),
+  deliver: (ids, newCard) => showDiscovery(ids, newCard),
 });
 
 function dishId(): string | null {
@@ -239,19 +239,27 @@ export function stopFollowing(): void {
 // a notice is never lost to the event ring; the first snapshot of a dish is the baseline, so opening
 // a dish never announces branches it already had.
 
-async function showDiscovery(newIds: readonly number[], newCard: boolean): Promise<void> {
+/**
+ * Show newly named branches on a card (a new one, or the open one they join). Resolves to the ids the
+ * card really shows now; the pacer keeps every other id waiting (a failed or empty lineage answer, a
+ * dish change, or a card dismissed while joining shows nothing and starts no 60 s gap).
+ */
+async function showDiscovery(newIds: readonly number[], newCard: boolean): Promise<readonly number[]> {
   const id = dishId();
-  if (!id) return;
-  const ids = [...(newCard ? [] : (discovery.value?.branches ?? [])), ...newIds].filter((b, k, a) => a.indexOf(b) === k).sort((a, b) => a - b);
+  if (!id) return [];
   let ans: LineageAnswer;
   try {
     ans = await getClient().lineage(id, null, null);
   } catch {
-    return;
+    return [];
   }
-  if (dishId() !== id) return;
+  if (dishId() !== id) return [];
+  // Joining: the card must still be open (dismissed meanwhile → these wait for the next card).
+  if (!newCard && discovery.value === null) return [];
+  const ids = [...(newCard ? [] : (discovery.value?.branches ?? [])), ...newIds].filter((b, k, a) => a.indexOf(b) === k).sort((a, b) => a - b);
   const rows = ids.map((b) => ans.branches[b]).filter((r): r is LineageBranchRow => r !== undefined);
-  if (rows.length === 0) return;
+  const shown = newIds.filter((b) => ans.branches[b] !== undefined);
+  if (shown.length === 0) return [];
   let paused = discovery.value?.paused ?? false;
   if (discovery.value === null && settings.value.pauseOnDiscoveries === true && (meta.value?.speed ?? 0) > 0) {
     setSpeed(0);
@@ -259,6 +267,7 @@ async function showDiscovery(newIds: readonly number[], newCard: boolean): Promi
   }
   discovery.value = { branches: rows.map((r) => r.id), rows, answer: ans, paused };
   if (sheet.value === 'lineage') lineage.value = ans;
+  return shown;
 }
 
 function onSnapshot(s: SnapshotMsg): void {

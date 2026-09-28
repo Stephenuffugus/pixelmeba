@@ -6,6 +6,8 @@
  * a promised outcome.
  */
 import type { CommandPayload, CommandResult } from '@sim/commands';
+import { NOT_IN_DISH } from '@sim/grid';
+import { inSentence, paintName, structureName, structureNames } from '../panels/LabTrayNames';
 
 export type LabCategory = 'inspect' | 'life' | 'food' | 'chemistry' | 'habitat' | 'tools' | 'observe';
 
@@ -45,6 +47,12 @@ export interface ItemCopy {
   readonly changes: string;
   readonly unchanged: string;
   readonly watch: string;
+  /**
+   * Habitat paints only: which of this dish's organisms can live in the painted substrate, computed
+   * from the world's recorded species habitats (livesHereText), so the content rules text never has to
+   * name organisms.
+   */
+  readonly lives?: string;
 }
 
 export type HabitatToolId = 'paint:water' | 'paint:gel' | 'paint:sediment' | 'shade:paint' | 'shade:erase';
@@ -206,6 +214,26 @@ export function cannotLiveIn(
   return names.filter((_, i) => !(habitats[i] ?? []).includes(substrate));
 }
 
+/**
+ * The "Lives here in this dish" line of a habitat paint: the dish's organisms whose recorded habitats
+ * include `substrate` (the simulation's habitat rule for an open cell, src/sim/suitability.ts
+ * habitatCompatible), then those that cannot live there. Specifics come from the world's species
+ * records, never from the paint's rules text; `label` is the paint's content name in a sentence.
+ */
+export function livesHereText(
+  substrate: string,
+  names: readonly string[],
+  habitats: readonly (readonly string[])[] | undefined,
+  label = substrate,
+): string {
+  if (!habitats || names.length === 0) return 'Not recorded for this dish.';
+  const cannot = cannotLiveIn(substrate, names, habitats);
+  const can = names.filter((n) => !cannot.includes(n));
+  if (can.length === 0) return `None of this dish’s organisms can live in ${label}.`;
+  const rest = cannot.length > 0 ? ` ${listText(cannot)} cannot live in ${label}.` : '';
+  return `${listText(can)}.${rest}`;
+}
+
 // ------------------------------------------------------------------------------------ overlays
 export interface OverlayCopy {
   readonly name: string;
@@ -253,18 +281,36 @@ function movedText(r: CommandResult): string {
   return parts.length > 0 ? ` ${parts.join(' and ')} moved to the nearest open cells.` : '';
 }
 
+/** What an edit refused as "not in this dish" names, in content words ("Impermeable wall is"). */
+function missingText(p: CommandPayload): string {
+  switch (p.kind) {
+    case 'paintSubstrate':
+      return `${paintName(null, p.substrate)} is`;
+    case 'paintShade':
+      return `${paintName(null, 'shade')} is`;
+    case 'placeStructure':
+      return `${structureName(p.structure)} is`;
+    default:
+      return `${listText(structureNames())} are`;
+  }
+}
+
 /**
  * The announcement after a habitat edit, from the counts the simulation returned. `label` is the
  * item's content name in lower case ("gel", "impermeable wall"); `factor` the dish's shade factor.
+ * Names are content names (LabTrayNames), never the simulation's codes or its log notes.
  */
 export function habitatEditOutcome(p: CommandPayload, r: CommandResult, label = '', factor: number | null = null): string {
   // Refused whole (malformed, or not in this dish's recorded content): say why.
-  if (r.accepted === 0 && r.rejected === 0 && r.note && !r.note.startsWith('nothing')) return `Not changed: ${r.note}.`;
+  if (r.accepted === 0 && r.rejected === 0 && r.note && !r.note.startsWith('nothing')) {
+    if (r.note.endsWith(NOT_IN_DISH)) return `Not changed: ${missingText(p)} not in this dish’s recorded content.`;
+    return `Not changed: ${r.note}.`;
+  }
   switch (p.kind) {
     case 'paintSubstrate':
       return r.accepted === 0
         ? `Nothing painted.${skippedText(r)}`
-        : `Painted ${label || p.substrate} on ${r.accepted} cell${s(r.accepted)}.${skippedText(r)}`;
+        : `Painted ${label || inSentence(paintName(null, p.substrate))} on ${r.accepted} cell${s(r.accepted)}.${skippedText(r)}`;
     case 'paintShade':
       if (r.accepted === 0) return `Nothing shaded.${skippedText(r)}`;
       return p.erase
@@ -272,7 +318,7 @@ export function habitatEditOutcome(p: CommandPayload, r: CommandResult, label = 
         : `Shaded ${r.accepted} cell${s(r.accepted)}${factor !== null ? ` (light × ${factor})` : ''}.${skippedText(r)}`;
     case 'placeStructure': {
       if (r.accepted === 0) return `Nothing placed.${skippedText(r)}`;
-      return `Placed ${label || p.structure} on ${r.accepted} cell${s(r.accepted)}.${movedText(r)}${skippedText(r)}`;
+      return `Placed ${label || inSentence(structureName(p.structure))} on ${r.accepted} cell${s(r.accepted)}.${movedText(r)}${skippedText(r)}`;
     }
     case 'eraseStructure':
       return r.accepted === 0
@@ -319,6 +365,7 @@ export const LAB_TEXT = {
     dose: 'Dose',
     radius: 'Radius',
     changes: 'Changes',
+    lives: 'Lives here in this dish',
     unchanged: 'Does not change',
     watch: 'Watch for',
   },

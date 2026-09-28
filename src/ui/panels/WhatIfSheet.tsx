@@ -21,7 +21,7 @@ import {
   type DetailRow,
 } from '../strings/whatif';
 import { IconAgain, IconAnother, WhatIfIcon } from './WhatIfIcons';
-import { WhatIfPreview } from './WhatIfPreview';
+import { amountScale, WhatIfPreview } from './WhatIfPreview';
 import {
   cancelFullStep,
   chooseReplacement,
@@ -40,7 +40,6 @@ import {
   whatIfReturnTarget,
   whatIfSelected,
   type FullStep,
-  type WhatIfAnswerView,
   type WhatIfContext,
 } from './WhatIfState';
 
@@ -238,16 +237,16 @@ function Choices(props: { readonly answer: WhatIfAnswer }) {
   );
 }
 
-function Selected(props: { readonly answer: WhatIfAnswerView; readonly choice: WhatIfChoice }) {
+function Selected(props: { readonly answer: WhatIfAnswer; readonly choice: WhatIfChoice }) {
   const p = props.choice.preview;
   const busy = whatIfBusy.value;
   return (
     <section class="whatif-selected" aria-labelledby="whatif-selected-title" data-testid="whatif-selected">
       <h3 id="whatif-selected-title">{p.title}</h3>
       <p class="whatif-text whatif-question">{p.question}</p>
-      <WhatIfPreview choice={props.choice} layout={props.answer.layout} />
+      <WhatIfPreview choice={props.choice} layout={props.answer.layout} scale={amountScale(props.answer.choices)} />
       <Details
-        rows={choiceDetails(p, props.choice, props.answer.registryLabel ?? null)}
+        rows={choiceDetails(p, props.choice, props.answer.registryLabel)}
         identity={p.identity}
         testid="whatif-choice"
       />

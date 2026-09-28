@@ -69,7 +69,7 @@ export interface ModuleText {
 /** One carried module as words (Passed to offspring). */
 export function moduleText(m: ModuleInspect): ModuleText {
   const p = m.params;
-  const carry = `Carrying it costs ${num(m.surchargePerSecond)} energy/s`;
+  const carry = `Carrying it costs ${num(m.surchargePerSecond, 3)} energy/s`;
   switch (m.id) {
     case 'E01':
       return {

@@ -9,8 +9,8 @@
   "guide": {
     "summary": "Paints cells as soft gel where things spread slowly.",
     "biology": "Jelly-like layers slow the spread of dissolved chemicals and give microbes something to cling to.",
-    "rules": "Turns covered cells into gel without removing any life, deposits or dissolved fields. Dissolved things spread a quarter as fast as in water (0.025 per tick). Gel is an attachment surface for Velvet, Rampart, Threadlace, Cordweaver and Sporeveil. Algae and most swimming consumers live only in water, so gel is unsuitable for them. No additional modeled reaction.",
-    "example": "Paint a gel island in the middle of the water and see which species settle on it."
+    "rules": "Turns covered cells into gel without removing any life, deposits or dissolved fields. Dissolved things spread a quarter as fast as in water (0.025 per tick). Gel is drier than open water, so an organism that needs wetter cells is less suited to it. An attached organism whose record lists gel as a surface can hold on to it. Each organism's recorded habitats decide whether it can live in gel; one that cannot responds through ordinary suitability. No additional modeled reaction.",
+    "example": "Paint a gel island in the middle of the water and see which organisms move onto it."
   },
   "iconId": "paint_gel",
   "phase": 2

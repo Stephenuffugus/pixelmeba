@@ -263,18 +263,21 @@ export function completionText(card: ExperimentCardView): string {
 }
 
 /**
- * Why a card's observation stopped without a stamp, for the dish's toast: the player changed the dish,
- * the dish stopped with an error, or the dish was closed and opened again — the card's observer
- * history is worker state that is not saved, so a reopened dish cannot resume watching exactly.
+ * Why a card's observation stopped without a stamp, for the dish's toast: the player changed the dish
+ * or rewound it with Undo before its gate, the dish stopped with an error, or the dish was closed and
+ * opened again — the card's observer history is worker state that is not saved (and does not rewind),
+ * so the card cannot resume watching exactly.
  */
-export function experimentEndedText(reason: 'changed' | 'failed' | 'closed', title: string): string {
+export function experimentEndedText(reason: 'changed' | 'failed' | 'undone' | 'closed', title: string): string {
   switch (reason) {
     case 'changed':
       return `You changed the dish, so “${title}” stopped observing before its gate. The dish goes on as it is.`;
     case 'failed':
       return `The dish stopped with an error, so “${title}” stopped observing. Nothing was stamped.`;
+    case 'undone':
+      return `Undo rewound the dish, so “${title}” stopped observing: what it had watched cannot be rewound with it. Nothing was stamped. The dish goes on from where you went back to; start the card again from the Notebook to observe it.`;
     case 'closed':
-      return `This dish was made from the card “${title}”. The card’s observation ended when the dish was closed: what it watched is not saved, so it cannot resume. The dish goes on as a dish; start the card again from the Notebook to observe it.`;
+      return `This dish was made from the card “${title}”. A card observes only a dish started from the Notebook in this session: what it watched is not saved, so it is not watching now. If the card already stamped, the stamp is in your Journal. The dish goes on as a dish; start the card again from the Notebook to observe it.`;
   }
 }
 
@@ -282,6 +285,17 @@ export function experimentEndedText(reason: 'changed' | 'failed' | 'closed', tit
 export function stampToastText(journalStamp: string, paired: boolean, stored: boolean): string {
   const where = paired ? 'Your dish is unchanged; the copies run to their stopping point.' : 'The dish keeps running.';
   return `Journal stamp: ${journalStamp}. ${where}${stored ? '' : ' (Kept for this session only: this device did not store it.)'}`;
+}
+
+/**
+ * The dish's notice while a single-arm card's measured gate has held and its Journal stamp waits for
+ * the player steps still missing (CT §10.1). The second is the gate's own; the stamp keeps the values
+ * of that moment.
+ */
+export function waitingStepsText(card: ExperimentCardView, reachedAtSecond: number, missing: readonly PlayerStep[]): string {
+  const steps = missing.map((st) => playerStepText(card, st)).join(' ');
+  const which = missing.length === 1 ? 'one more step' : `${missing.length} more steps`;
+  return `“${card.title}”: every part held at ${reachedAtSecond} s. The Journal stamp needs ${which}: ${steps}`;
 }
 
 /** One player step the stamp also needs (CT §10.1), as an instruction. */

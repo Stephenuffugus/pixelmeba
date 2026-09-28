@@ -1,17 +1,40 @@
 /**
  * P2.3 discovery cards (UX §5.5, CT §12.10 "notifications ≤ 1 per 60 s"): one card per 1.5 s burst,
  * at most one new card per 60 s, later discoveries join an open card, and a dismissal never lets a
- * new card in before the gap. Driven with a hand-run clock (no browser, no real timers).
+ * new card in before the gap. Wave B fix 2: discoveries are dropped only once a card really shows
+ * them; a failed or empty answer, or a dish change while the answer is on its way, keeps them (or
+ * drops only the old dish's) and starts no 60 s gap. Driven with a hand-run clock (no browser, no
+ * real timers); the harness's delivery shows every id it is given, like a lineage answer that has them.
  */
 import { describe, expect, it } from 'vitest';
-import { DISCOVERY_BURST_MS, DISCOVERY_GAP_MS, DISCOVERY_JOIN_MS, DiscoveryPacer } from '../../src/ui/panels/DiscoveryPacer';
+import {
+  DISCOVERY_BURST_MS,
+  DISCOVERY_GAP_MS,
+  DISCOVERY_JOIN_MS,
+  DISCOVERY_RETRY_MS,
+  DiscoveryPacer,
+} from '../../src/ui/panels/DiscoveryPacer';
 
-function harness() {
+/** A delivery still waiting for its lineage answer (the async harness settles it by hand). */
+interface Pending {
+  readonly ids: number[];
+  readonly newCard: boolean;
+  settle(shown: readonly number[] | Error): void;
+}
+
+function harness(opts: { async?: boolean } = {}) {
   let t = 0;
   let seq = 0;
   let timers: { id: number; at: number; fn: () => void }[] = [];
   const cards: { ids: number[]; at: number }[] = [];
+  const inFlight: Pending[] = [];
   let open = false;
+  const show = (ids: readonly number[], newCard: boolean) => {
+    if (newCard) {
+      cards.push({ ids: [...ids], at: t });
+      open = true;
+    } else cards[cards.length - 1]!.ids.push(...ids);
+  };
   const pacer = new DiscoveryPacer({
     now: () => t,
     setTimer: (fn, ms) => {
@@ -24,10 +47,21 @@ function harness() {
     },
     cardOpen: () => open,
     deliver: (ids, newCard) => {
-      if (newCard) {
-        cards.push({ ids: [...ids], at: t });
-        open = true;
-      } else cards[cards.length - 1]!.ids.push(...ids);
+      if (!opts.async) {
+        show(ids, newCard);
+        return ids;
+      }
+      return new Promise<readonly number[]>((resolve, reject) => {
+        inFlight.push({
+          ids: [...ids],
+          newCard,
+          settle: (shown) => {
+            if (shown instanceof Error) return reject(shown);
+            if (shown.length > 0) show(shown, newCard);
+            resolve(shown);
+          },
+        });
+      });
     },
   });
   /** Advance the clock to `to`, running due timers in time order. */
@@ -45,7 +79,12 @@ function harness() {
     open = false;
     pacer.dismissed();
   };
-  return { pacer, cards, advance, dismiss };
+  /** Settle the oldest delivery still waiting, then let its continuation run. */
+  const answer = async (shown: readonly number[] | Error) => {
+    inFlight.shift()!.settle(shown);
+    for (let k = 0; k < 3; k++) await Promise.resolve();
+  };
+  return { pacer, cards, advance, dismiss, inFlight, answer };
 }
 
 describe('P2.3 discovery cards: one per burst, at most one new card per 60 s', () => {
@@ -130,5 +169,89 @@ describe('P2.3 discovery cards: one per burst, at most one new card per 60 s', (
     h.pacer.reset();
     h.advance(DISCOVERY_BURST_MS * 4);
     expect(h.cards).toHaveLength(0);
+  });
+});
+
+describe('Wave B fix 2: discoveries wait until a card really shows them', () => {
+  it('a failed lineage answer keeps them waiting, starts no 60 s gap, and they are shown on the retry', async () => {
+    const h = harness({ async: true });
+    h.pacer.discovered([0, 1]);
+    h.advance(DISCOVERY_BURST_MS);
+    expect(h.inFlight.map((d) => d.ids)).toEqual([[0, 1]]);
+    await h.answer(new Error('worker busy'));
+    expect(h.cards).toHaveLength(0);
+    expect(h.pacer.waiting).toEqual([0, 1]);
+    // No second delivery while nothing was shown before the retry delay …
+    h.advance(DISCOVERY_BURST_MS + DISCOVERY_RETRY_MS - 1);
+    expect(h.inFlight).toHaveLength(0);
+    // … then the retry shows them on a new card, long before a 60 s gap would have allowed.
+    h.advance(DISCOVERY_BURST_MS + DISCOVERY_RETRY_MS);
+    expect(h.inFlight.map((d) => [d.ids, d.newCard])).toEqual([[[0, 1], true]]);
+    await h.answer([0, 1]);
+    expect(h.cards).toEqual([{ ids: [0, 1], at: DISCOVERY_BURST_MS + DISCOVERY_RETRY_MS }]);
+    expect(h.pacer.waiting).toEqual([]);
+  });
+
+  it('an answer without their rows shows nothing: they keep waiting; ids a card did show stop waiting', async () => {
+    const h = harness({ async: true });
+    h.pacer.discovered([0, 1]);
+    h.advance(DISCOVERY_BURST_MS);
+    await h.answer([]);
+    expect(h.cards).toHaveLength(0);
+    expect(h.pacer.waiting).toEqual([0, 1]);
+    h.advance(DISCOVERY_BURST_MS + DISCOVERY_RETRY_MS);
+    await h.answer([0]); // only branch 0's row came back
+    expect(h.cards).toEqual([{ ids: [0], at: DISCOVERY_BURST_MS + DISCOVERY_RETRY_MS }]);
+    expect(h.pacer.waiting).toEqual([1]);
+    // Branch 1 joins the open card on its next try.
+    h.advance(DISCOVERY_BURST_MS + 2 * DISCOVERY_RETRY_MS);
+    expect(h.inFlight.map((d) => [d.ids, d.newCard])).toEqual([[[1], false]]);
+    await h.answer([1]);
+    expect(h.cards).toEqual([{ ids: [0, 1], at: DISCOVERY_BURST_MS + DISCOVERY_RETRY_MS }]);
+    expect(h.pacer.waiting).toEqual([]);
+  });
+
+  it('a dish change while the answer is on its way drops only the old dish’s discoveries and starts no gap', async () => {
+    const h = harness({ async: true });
+    h.pacer.discovered([0]);
+    h.advance(DISCOVERY_BURST_MS);
+    expect(h.inFlight).toHaveLength(1);
+    h.pacer.reset(); // another dish opened
+    await h.answer([]); // the old dish's answer arrives late: it changes nothing here
+    expect(h.pacer.waiting).toEqual([]);
+    h.advance(2000);
+    h.pacer.discovered([0]); // the new dish names its first branch
+    h.advance(2000 + DISCOVERY_BURST_MS);
+    expect(h.inFlight.map((d) => [d.ids, d.newCard])).toEqual([[[0], true]]);
+    await h.answer([0]);
+    expect(h.cards).toEqual([{ ids: [0], at: 2000 + DISCOVERY_BURST_MS }]);
+  });
+
+  it('a late answer for the old dish cannot drop the new dish’s waiting discoveries', async () => {
+    const h = harness({ async: true });
+    h.pacer.discovered([0]);
+    h.advance(DISCOVERY_BURST_MS);
+    h.pacer.reset();
+    h.pacer.discovered([0]);
+    await h.answer([0]); // the old dish's card (if any) is not this dish's branch 0
+    expect(h.pacer.waiting).toEqual([0]);
+    h.advance(2 * DISCOVERY_BURST_MS);
+    expect(h.inFlight.map((d) => d.ids)).toEqual([[0]]);
+  });
+
+  it('discoveries arriving while an answer is on its way wait for it, then join the card it opened', async () => {
+    const h = harness({ async: true });
+    h.pacer.discovered([0]);
+    h.advance(DISCOVERY_BURST_MS);
+    h.pacer.discovered([1]);
+    h.advance(DISCOVERY_BURST_MS + 5000);
+    expect(h.inFlight).toHaveLength(1); // no second delivery while the first is in flight
+    await h.answer([0]);
+    expect(h.pacer.waiting).toEqual([1]);
+    h.advance(DISCOVERY_BURST_MS + 5000 + DISCOVERY_JOIN_MS);
+    expect(h.inFlight.map((d) => [d.ids, d.newCard])).toEqual([[[1], false]]);
+    await h.answer([1]);
+    // The card opened when its answer arrived (the harness shows a card at answer time).
+    expect(h.cards).toEqual([{ ids: [0, 1], at: DISCOVERY_BURST_MS + 5000 }]);
   });
 });

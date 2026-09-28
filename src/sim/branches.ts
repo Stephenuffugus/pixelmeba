@@ -65,6 +65,12 @@ export interface Branch {
   readonly depthAtEstablish?: number;
   /** Largest number of own members alive at once. */
   peak?: number;
+  /**
+   * The founder's generation (its candidate's rootGeneration), recorded when the branch is named
+   * (wave B fix 2; absent in records written before). Hashed with the branch, so a saved specimen's
+   * generation never depends on unhashed display records (lineage.kept).
+   */
+  readonly rootGeneration?: number;
 }
 
 export interface Candidate {
@@ -369,6 +375,7 @@ function establish(world: World, cand: Candidate, ev: { members: number; depth: 
     membersAtEstablish: ev.members,
     depthAtEstablish: ev.depth,
     peak: 0,
+    rootGeneration: cand.rootGeneration,
   };
   book.branches.push(branch);
   book.established++;

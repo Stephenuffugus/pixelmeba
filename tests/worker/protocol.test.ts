@@ -10,7 +10,7 @@ import { queueCommand } from '../../src/sim/commands';
 import { realizeRecipe } from '../../src/sim/recipes';
 import { stateHash } from '../../src/sim/serialize';
 import { run, step } from '../../src/sim/tick';
-import { SimClient, WorkerRequestError, type WorkerLike } from '../../src/worker/client';
+import { SimClient, WorkerRequestError, type WorkerErrorNotice, type WorkerLike } from '../../src/worker/client';
 import { DishHost } from '../../src/worker/host';
 import { PROTOCOL_VERSION, type FromWorker, type ToWorker } from '../../src/worker/protocol';
 import { registry } from '../helpers/world';
@@ -282,6 +282,22 @@ describe('worker protocol (P1.3)', () => {
       // The client stays usable afterwards.
       const info = await c.client.create('d1', RECIPE);
       expect(info.dishId).toBe('d1');
+    });
+
+    // Wave B fix round 2 (item 7d): the UI words an error by what really happened.
+    it('error listeners hear whether the worker really paused the dish, and which request failed', async () => {
+      const c = connected();
+      const errors: WorkerErrorNotice[] = [];
+      c.client.onError((e) => errors.push(e));
+      await expect(c.client.create('bad', { kind: 'recipe', recipeId: 'NOPE' })).rejects.toBeInstanceOf(WorkerRequestError);
+      await expect(c.client.hash('ghost')).rejects.toBeInstanceOf(WorkerRequestError);
+      await c.client.create('d1', RECIPE);
+      await expect(c.client.command('d1', 'bad', BROKEN, false)).rejects.toBeInstanceOf(WorkerRequestError);
+      expect(errors).toEqual([
+        { dishId: 'bad', message: expect.stringMatching(/NOPE/), paused: false, request: 'create' },
+        { dishId: 'ghost', message: 'no dish ghost', paused: false, request: 'hash' },
+        { dishId: 'd1', message: expect.any(String), paused: true, request: 'command' },
+      ]);
     });
 
     it('a throwing command pauses the dish and emits error with the request id and last valid tick', async () => {

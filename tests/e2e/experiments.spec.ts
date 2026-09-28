@@ -203,6 +203,18 @@ test('experiments: Cleaning crew stamps only after the measured gate and the His
   await expect.poll(() => simSeconds(page), { timeout: 90_000 }).toBeGreaterThanOrEqual(16);
   await page.getByTestId('run-toggle').click();
   expect(await journalIds(page)).toEqual([]);
+  // Fix round 2 (item 6): one small, dismissible notice in the dish view names the missing step.
+  const notice = page.getByTestId('experiment-waiting');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('“Cleaning crew”: every part held at 12 s.');
+  await expect(notice).toContainText('More → History');
+  await expect(page.getByTestId('experiment-waiting')).toHaveCount(1);
+  await expectTextAtLeast16px(page, '[data-testid="experiment-waiting"]');
+  await expectNoSeriousA11yViolations(page);
+  const dismiss = notice.getByRole('button', { name: 'Dismiss this notice' });
+  await expectReachable(dismiss);
+  await dismiss.click();
+  await expect(notice).toHaveCount(0);
   await page.getByTestId('more').click();
   await page.getByTestId('more-history').click();
   await expect(page.getByTestId('history')).toBeVisible();

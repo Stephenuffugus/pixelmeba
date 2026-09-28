@@ -368,6 +368,11 @@ export interface LineageModuleChange {
   readonly name: string;
   /** true: the branch carries it and its ancestor did not; false: the reverse. */
   readonly gained: boolean;
+  /**
+   * The surcharge the carrier's profile actually charges for it, energy per second: the registry rate
+   * times the carrier's inherited feeding × sensing multiplier (deriveProfile), so a branch with
+   * feeding 60 pays 0.021 for a 0.02 module. The carrier is the branch when gained, else the ancestor.
+   */
   readonly surchargePerSecond: number;
   readonly costs: readonly { readonly key: ModuleCostKey; readonly value: number }[];
 }
@@ -541,8 +546,21 @@ function profileSummary(p: Profile): LineageProfile {
   };
 }
 
-function moduleChange(world: World, id: string, gained: boolean): LineageModuleChange {
-  // Numbers from the world's recorded module registry; the name from its recorded content.
+/**
+ * What one carried module's surcharge costs under a profile: deriveProfile charges the sum of the
+ * carried modules' registry rates times the profile's multiplier (Profile.surcharge), so each module's
+ * share is its rate times that same multiplier.
+ */
+function chargedSurcharge(world: World, carrier: Profile, id: string): number {
+  const rate = world.modules[id]?.surcharge ?? 0;
+  let raw = 0;
+  for (const m of carrier.modules) raw += world.modules[m]?.surcharge ?? 0;
+  return raw > 0 ? rate * (carrier.surcharge / raw) : rate;
+}
+
+function moduleChange(world: World, id: string, gained: boolean, carrier: Profile): LineageModuleChange {
+  // Numbers from the world's recorded module registry, the surcharge as the carrier's profile charges
+  // it; the name from its recorded content.
   const rt = world.modules[id];
   const name = world.content.modules.find((m) => m.id === id)?.name ?? id;
   const costs: { key: ModuleCostKey; value: number }[] = [];
@@ -550,7 +568,7 @@ function moduleChange(world: World, id: string, gained: boolean): LineageModuleC
     const v = rt?.params[key];
     if (v !== undefined && Number.isFinite(v)) costs.push({ key, value: v });
   }
-  return { id, name, gained, surchargePerSecond: rt?.surcharge ?? 0, costs };
+  return { id, name, gained, surchargePerSecond: chargedSurcharge(world, carrier, id), costs };
 }
 
 /** Game-rule numbers of the ancestor's and the branch's reference genomes (read-only; profiles are a derived cache). */
@@ -560,8 +578,8 @@ function rulesOf(world: World, br: Branch, anc: number): LineageRules | null {
     const a = profileOfGenome(world, anc, br.species);
     const b = profileOfGenome(world, br.refGenome, br.species);
     const modules: LineageModuleChange[] = [];
-    for (const m of b.modules) if (!a.modules.includes(m)) modules.push(moduleChange(world, m, true));
-    for (const m of a.modules) if (!b.modules.includes(m)) modules.push(moduleChange(world, m, false));
+    for (const m of b.modules) if (!a.modules.includes(m)) modules.push(moduleChange(world, m, true, b));
+    for (const m of a.modules) if (!b.modules.includes(m)) modules.push(moduleChange(world, m, false, a));
     return { ancestor: profileSummary(a), branch: profileSummary(b), modules };
   } catch {
     return null;
@@ -630,7 +648,7 @@ function detailOf(world: World, br: Branch): LineageDetail {
   const values: number[][] = g.loci.map(() => []);
   let dMin = Infinity;
   let dMax = -Infinity;
-  const rootGen = recordField(world.lineage, 'generation', br.rootBirthId);
+  const rootGen = br.rootGeneration ?? recordField(world.lineage, 'generation', br.rootBirthId);
   for (let i = 0; i < world.ents.highWater; i++) {
     if (c.alive[i] !== 1) continue;
     const b = c.branchId[i]!;

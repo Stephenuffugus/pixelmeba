@@ -11,7 +11,7 @@
  * save without them loads and refuses those edits; the Life preview marks exactly the cells the
  * inoculate command can use.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildSaveFile, loadSaveFile } from '../../src/persistence/saveFile';
 import { canonicalJson, sha256Hex } from '../../src/sim/hash';
 import {
@@ -35,6 +35,7 @@ import {
   lifeCellOutcome,
   planSealing,
   strokeFootprint,
+  strokeSampleCount,
   ST_BEAD,
   ST_NONE,
   ST_OUTSIDE,
@@ -51,7 +52,7 @@ import { realizeRecipe } from '../../src/sim/recipes';
 import { deserializeWorld, serializeWorld, stateHash } from '../../src/sim/serialize';
 import { canOccupy } from '../../src/sim/movement';
 import type { WorldState } from '../../src/sim/serialize';
-import { occupiedCells, shadeFactor } from '../../src/sim/structures';
+import { LAB_MAX_STROKE_SAMPLES, occupiedCells, shadeFactor } from '../../src/sim/structures';
 import { habitatCompatible } from '../../src/sim/suitability';
 import { run, step } from '../../src/sim/tick';
 import { transportCache } from '../../src/sim/transport';
@@ -60,6 +61,9 @@ import { validateContent, type RawFile, type RawPacks } from '../../src/sim/cont
 import { loadRawPacksFs } from '../../tools/lib/content-fs';
 import { FakeClockHost } from '../helpers/host';
 import { aliveOf, clearWater, place, registry, setField } from '../helpers/world';
+import type { DishInfo } from '../../src/worker/protocol';
+import { describeChange } from '../../src/ui/panels/CompareText';
+import { habitatEditOutcome, livesHereText } from '../../src/ui/strings/lab';
 
 let n = 0;
 function cmd(w: World, payload: CommandPayload): CommandResult {
@@ -987,5 +991,176 @@ describe('Life brush preview (P2.7)', () => {
       expect(ok).toContain(cell);
       expect(w.grid.substrate[cell]).toBe(SUB_WATER);
     }
+  });
+});
+
+// ------------------------------------------------------------------------------------------------
+// Wave B fix 2: honest habitat words. The paints' rules text is true in every dish and phase and names
+// no organism or device; which of the dish's organisms live in a substrate is computed from the
+// world's species records. Every name a player reads is the content name, never an internal code.
+
+/** The DishInfo the worker sends for a new Garden (the Lab trays' only source). */
+function gardenInfo(): DishInfo {
+  const h = new FakeClockHost();
+  h.create('garden-words', { kind: 'recipe', recipeId: 'FIRST_DISH_V1' });
+  const ready = h.out.find((m) => m.type === 'ready');
+  if (!ready || ready.type !== 'ready') throw new Error('no ready');
+  return ready.info;
+}
+
+describe('Lab habitat words (wave B fix 2)', () => {
+  const reg = registry();
+
+  it('the paint and nutrient rules name no organism or device and make no claim about who lives where', () => {
+    const organisms = Object.values(reg.species).map((sp) => sp.name);
+    expect(organisms.length).toBeGreaterThan(30); // every phase's species, not only this build's
+    for (const id of ['WATER', 'GEL', 'SEDIMENT', 'SHADE', 'NUTRIENT']) {
+      const rules = reg.materials[id]!.guide.rules;
+      for (const name of organisms) expect(rules, `${id} names ${name}`).not.toMatch(new RegExp(`\\b${name}`, 'i'));
+      expect(rules, id).not.toMatch(/mesh|fungi|algae|swimming consumers|live only in/i);
+    }
+    expect(reg.materials.NUTRIENT!.guide.rules).toContain('Nutrient alone is not food: it adds no carbon or energy.');
+    expect(reg.materials.NUTRIENT!.guide.rules).not.toMatch(/creates no growth/);
+  });
+
+  it('"Lives here in this dish" comes from the Garden’s own species habitats', async () => {
+    const info = gardenInfo();
+    // Checked against content first: Sunbead and Amoeba are water only; the other three live anywhere.
+    const recorded = Object.fromEntries(info.speciesNames.map((name, i) => [name, info.speciesHabitats![i]]));
+    for (const id of info.speciesIds) expect(recorded[reg.species[id]!.name]).toEqual(reg.species[id]!.habitats);
+    expect(recorded).toEqual({
+      Sunbead: ['water'],
+      Sprinter: ['water', 'gel', 'sediment'],
+      Recycler: ['water', 'gel', 'sediment'],
+      Crumbsmith: ['water', 'gel', 'sediment'],
+      Amoeba: ['water'],
+    });
+    const lives = (sub: string) => livesHereText(sub, info.speciesNames, info.speciesHabitats);
+    expect(lives('gel')).toBe('Sprinter, Recycler and Crumbsmith. Sunbead and Amoeba cannot live in gel.');
+    expect(lives('sediment')).toBe('Sprinter, Recycler and Crumbsmith. Sunbead and Amoeba cannot live in sediment.');
+    expect(lives('water')).toBe('Sunbead, Sprinter, Recycler, Crumbsmith and Amoeba.');
+    expect(livesHereText('gel', ['Amoeba'], [['water']])).toBe('None of this dish’s organisms can live in gel.');
+    expect(livesHereText('gel', info.speciesNames, undefined)).toBe('Not recorded for this dish.');
+    // The tray shows it as its own line; Changes is the content rules text as written. (The UI state
+    // module may reach for its worker client; a silent stand-in answers nothing.)
+    vi.stubGlobal(
+      'Worker',
+      class {
+        onmessage = null;
+        postMessage(): void {}
+        terminate(): void {}
+      },
+    );
+    const ui = await import('../../src/ui/state');
+    const tray = await import('../../src/ui/panels/LabTray');
+    ui.dishInfo.value = info;
+    try {
+      const gel = tray.itemCopy('paint:gel')!;
+      expect(gel.changes).toBe(reg.materials.GEL!.guide.rules);
+      expect(gel.lives).toBe(lives('gel'));
+      expect(gel.watch).toBe(reg.materials.GEL!.guide.example);
+      expect(tray.itemCopy('paint:water')!.lives).toBe(lives('water'));
+      expect(tray.itemCopy('shade:paint')!.lives).toBeUndefined();
+    } finally {
+      ui.dishInfo.value = null;
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('comparison change lines name paints and structures by their content names', () => {
+    const info = gardenInfo();
+    const line = (p: CommandPayload, accepted = 12) => describeChange(info, p, { accepted, rejected: 0 });
+    const pts: [number, number][] = [[64.5, 64.5]];
+    expect(line({ kind: 'placeStructure', structure: 'wall', points: pts, radius: 1 })).toBe(`${reg.structures.WALL!.name} placed on 12 cells`);
+    expect(line({ kind: 'placeStructure', structure: 'wall', points: pts, radius: 1 })).toBe('Impermeable wall placed on 12 cells');
+    expect(line({ kind: 'placeStructure', structure: 'bead', points: pts, radius: 1 }, 1)).toBe('Porous bead placed on 1 cell');
+    expect(line({ kind: 'placeStructure', structure: 'stone', points: pts, radius: 1 })).toBe('Stone placed on 12 cells');
+    expect(line({ kind: 'paintSubstrate', substrate: 'sediment', points: pts, radius: 3 })).toBe(`${reg.materials.SEDIMENT!.name} painted on 12 cells`);
+    expect(line({ kind: 'paintShade', erase: false, points: pts, radius: 3 })).toBe(`${reg.materials.SHADE!.name} on 12 cells`);
+    expect(line({ kind: 'paintShade', erase: true, points: pts, radius: 3 })).toBe('Shade removed from 12 cells');
+  });
+
+  it('a refusal on an older dish names the content item, never the internal code or the log note', async () => {
+    const w = garden();
+    const { text } = await buildSaveFile(w, { name: 'Older dish', savedAt: '2026-09-27T00:00:00Z', recipeId: 'FIRST_DISH_V1' });
+    const { world } = await loadSaveFile(await withoutLabContent(text));
+    const cases: [CommandPayload, string][] = [
+      [{ kind: 'placeStructure', structure: 'wall', points: LINE, radius: 1 }, 'Not changed: Impermeable wall is not in this dish’s recorded content.'],
+      [{ kind: 'placeStructure', structure: 'bead', points: LINE, radius: 1 }, 'Not changed: Porous bead is not in this dish’s recorded content.'],
+      [{ kind: 'paintSubstrate', substrate: 'gel', points: LINE, radius: 3 }, 'Not changed: Gel is not in this dish’s recorded content.'],
+      [{ kind: 'paintShade', erase: false, points: LINE, radius: 3 }, 'Not changed: Shade paint is not in this dish’s recorded content.'],
+      [{ kind: 'eraseStructure', points: LINE, radius: 3 }, 'Not changed: Stone, Impermeable wall and Porous bead are not in this dish’s recorded content.'],
+    ];
+    for (const [p, words] of cases) {
+      const r = cmd(world, p);
+      expect(r.note, p.kind).toMatch(/not in this dish$/);
+      // The older dish's info has no structure names at all: the words still come from content.
+      expect(habitatEditOutcome(p, r, p.kind === 'placeStructure' ? p.structure : ''), p.kind).toBe(words);
+    }
+    // The log note names the Structure record ID, not the grid code.
+    expect(cmd(world, cases[0]![0]).note).toBe('WALL is not in this dish');
+    // Accepted edits read with content names too, even when the caller passes no label.
+    const g = garden();
+    const placed = cmd(g, { kind: 'placeStructure', structure: 'wall', points: [[40.5, 64.5], [44.5, 64.5]], radius: 1 });
+    expect(placed.accepted).toBeGreaterThan(0);
+    expect(habitatEditOutcome({ kind: 'placeStructure', structure: 'wall', points: LINE, radius: 1 }, placed)).toMatch(/^Placed impermeable wall on \d+ cells?\./);
+  });
+});
+
+// ------------------------------------------------------------------------------------------------
+// Wave B fix 2 (fix1-lab-verify MINOR): a habitat edit's footprint walks every sampled cell of its
+// path, so the path is bounded (LAB_MAX_STROKE_SAMPLES), not only the point count: a crafted stroke
+// is refused whole in time proportional to its points, before any footprint is built.
+
+describe('stroke length bound (wave B fix 2)', () => {
+  it('counts the samples exactly as strokeFootprint walks them', () => {
+    expect(strokeSampleCount([])).toBe(0);
+    expect(strokeSampleCount([[64.5, 64.5]])).toBe(1);
+    expect(strokeSampleCount([[0, 0], [3, 4]])).toBe(6); // first point + ⌈5⌉
+    expect(strokeSampleCount([[0, 0], [0, 0.2], [0, 0.4]])).toBe(3); // every segment samples at least once
+    expect(strokeSampleCount([[0, 0], [100, 0], [0, 0]], 50)).toBeGreaterThan(50); // stops early past the limit
+  });
+
+  it('the verifier’s 20,000-point alternating stroke at radius 6 is refused whole, quickly, for every edit', () => {
+    const w = garden();
+    const pts: [number, number][] = [];
+    for (let k = 0; k < 20000; k++) pts.push([k % 2 === 0 ? 1.5 : 126.5, 64.5]);
+    expect(strokeSampleCount(pts)).toBeGreaterThan(2_000_000); // ~10 s of footprint work before the bound
+    const grid = [w.grid.substrate.slice(), w.grid.structure.slice(), w.grid.shade.slice()];
+    const fields = fieldsCopy(w);
+    const edits: CommandPayload[] = [
+      { kind: 'paintSubstrate', substrate: 'gel', points: pts, radius: 6 },
+      { kind: 'paintShade', erase: false, points: pts, radius: 6 },
+      { kind: 'placeStructure', structure: 'wall', points: pts, radius: 6 },
+      { kind: 'eraseStructure', points: pts, radius: 6 },
+    ];
+    for (const p of edits) {
+      const t0 = performance.now();
+      const r = cmd(w, p);
+      const ms = performance.now() - t0;
+      expect(r, p.kind).toEqual({ accepted: 0, rejected: 0, note: 'stroke too long' });
+      expect(ms, `${p.kind} took ${ms.toFixed(0)} ms`).toBeLessThan(250);
+    }
+    expect([w.grid.substrate, w.grid.structure, w.grid.shade]).toEqual(grid);
+    expect(sameFields(w, fields)).toBe(true);
+  });
+
+  it('a stroke of exactly the bound is applied; one more sample is refused', () => {
+    // Back and forth along one row, 100 cells per segment, the last segment 99: 1 + 100 × 999 + 99.
+    const pts: [number, number][] = [[10.5, 64.5]];
+    for (let k = 0; k < 999; k++) pts.push([k % 2 === 0 ? 110.5 : 10.5, 64.5]);
+    pts.push([11.5, 64.5]);
+    expect(strokeSampleCount(pts)).toBe(LAB_MAX_STROKE_SAMPLES);
+    const w = garden();
+    const ok = cmd(w, { kind: 'paintSubstrate', substrate: 'gel', points: pts, radius: 1 });
+    expect(ok.accepted).toBeGreaterThan(0);
+    expect(ok.note).toBeUndefined();
+    const over = [...pts, [11.5, 64.6] as [number, number]];
+    expect(strokeSampleCount(over)).toBe(LAB_MAX_STROKE_SAMPLES + 1);
+    expect(cmd(garden(), { kind: 'paintSubstrate', substrate: 'gel', points: over, radius: 1 })).toEqual({
+      accepted: 0,
+      rejected: 0,
+      note: 'stroke too long',
+    });
   });
 });

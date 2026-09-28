@@ -11,8 +11,8 @@ import { describe, expect, it } from 'vitest';
 import type { VNode } from 'preact';
 import { DishHost } from '../../src/worker/host';
 import type { FromWorker, WhatIfAnswer, WhatIfChoice } from '../../src/worker/protocol';
-import { amountFill, WhatIfPreview } from '../../src/ui/panels/WhatIfPreview';
-import { choiceDetails, previewCaption, provenanceDetails } from '../../src/ui/strings/whatif';
+import { amountFill, amountScale, WhatIfPreview } from '../../src/ui/panels/WhatIfPreview';
+import { choiceDetails, previewCaption, provenanceDetails, savedIdeaLine } from '../../src/ui/strings/whatif';
 import { errorToastText } from '../../src/ui/state';
 import { registry } from '../helpers/world';
 
@@ -20,7 +20,7 @@ const REG = registry();
 /** Water in the preview and the dish (UX §6.1). */
 const WATER = '#D6E7E5';
 
-async function answer(): Promise<WhatIfAnswer & { readonly registryLabel?: string }> {
+async function answer(): Promise<WhatIfAnswer> {
   const out: FromWorker[] = [];
   const host = new DishHost(REG, (m) => out.push(m), { now: () => 0, iso: () => '2026-09-28T00:00:00.000Z' });
   await host.handleAsync({ type: 'whatIf', requestId: 1, sourceId: 'FIRST_DISH_V1', aboutDishId: null });
@@ -93,11 +93,16 @@ describe('The before/after preview keeps every mark ≥ 3:1 on water (UX §4.1; 
   it('every fill and stroke drawn for every choice, blended with its opacity, is ≥ 3:1 against #D6E7E5', async () => {
     const a = await answer();
     expect(a.choices.map((c) => c.preview.id)).toEqual(['R-G1', 'R-G2', 'R-G3']);
+    const scale = amountScale(a.choices);
     for (const choice of a.choices) {
-      const found = marks(WhatIfPreview({ choice, layout: a.layout }));
+      // Alone and with the sheet's shared scale (item 7b, fix round 2).
+      const found = [
+        ...marks(WhatIfPreview({ choice, layout: a.layout })),
+        ...marks(WhatIfPreview({ choice, layout: a.layout, scale })),
+      ];
       expect(
         found.filter((m) => m.testid === 'whatif-before-patch' || m.testid === 'whatif-new-patch').length,
-      ).toBeGreaterThanOrEqual(2);
+      ).toBeGreaterThanOrEqual(4);
       for (const m of found) {
         const c = contrast(over(m.color, m.alpha), rgb(WATER));
         expect(
@@ -142,12 +147,38 @@ describe('The before/after preview keeps every mark ≥ 3:1 on water (UX §4.1; 
   });
 });
 
+// Wave B fix round 2 (fix1-whatif-verify MINOR, item 7b): one ramp scale for all the choices of a source.
+describe('The amount ramp has one scale for every choice of a source: equal amounts, equal fills', () => {
+  it('the unchanged Garden sugar patch (0.4) is the same fill in every Before panel, the moved patch included', async () => {
+    const a = await answer();
+    const scale = amountScale(a.choices);
+    // The largest amount any choice draws: R-G2's 0.8 sugar.
+    expect(scale).toEqual({ sugar: 0.8 });
+    const patches = a.choices.map((choice) => {
+      const found = marks(WhatIfPreview({ choice, layout: a.layout, scale }));
+      const fill = (testid: string) => found.find((m) => m.testid === testid && m.paint === 'fill')!.color;
+      return { id: choice.preview.id, before: fill('whatif-before-patch'), after: fill('whatif-new-patch') };
+    });
+    expect(patches.map((p) => p.id)).toEqual(['R-G1', 'R-G2', 'R-G3']);
+    const garden = amountFill(0.4, 0.8);
+    expect(patches.map((p) => p.before)).toEqual([garden, garden, garden]);
+    // R-G3 moves the same 0.4 sugar: its new place has the same fill; R-G1 (0.2) is lighter, R-G2 (0.8) darker.
+    expect(patches[2]!.after).toBe(garden);
+    expect(patches[0]!.after).toBe(amountFill(0.2, 0.8));
+    expect(patches[1]!.after).toBe(amountFill(0.8, 0.8));
+    expect(lum(rgb(patches[0]!.after))).toBeGreaterThan(lum(rgb(garden)));
+    expect(lum(rgb(patches[1]!.after))).toBeLessThan(lum(rgb(garden)));
+    for (const p of patches)
+      for (const c of [p.before, p.after]) expect(contrast(rgb(c), rgb(WATER))).toBeGreaterThanOrEqual(3);
+  });
+});
+
 describe('Choice Details carry the Evolution and Registry rows provenance shows (UX §3.3; item 4)', () => {
   it('the same labels, in the same rows, for the world-to-be', async () => {
     const a = await answer();
     const c = a.choices[2]!;
     expect(a.registryLabel).toBeTruthy();
-    const rows = choiceDetails(c.preview, c, a.registryLabel ?? null);
+    const rows = choiceDetails(c.preview, c, a.registryLabel);
     const record = {
       variantId: 'R-G3',
       variantRevision: 1,
@@ -167,7 +198,7 @@ describe('Choice Details carry the Evolution and Registry rows provenance shows 
     const prov = provenanceDetails(record, a.sourceName, {
       mutationPreset: c.preview.mutationPreset,
       founderMode: c.preview.founderMode,
-      manifestLabel: a.registryLabel!,
+      manifestLabel: a.registryLabel,
     });
     const row = (rs: readonly { term: string; value: string }[], term: string) =>
       rs.find((r) => r.term === term)?.value;
@@ -185,9 +216,35 @@ describe('The global error toast is worded by what failed (item 8)', () => {
     expect(text).toBe('Nothing was paused or changed: This is not a Pixelmeba save file.');
   });
 
-  it('a failure of a dish itself says it was paused (ARCH §7: the last valid state is kept)', () => {
-    expect(errorToastText({ dishId: 'dish-1', message: 'boom' })).toBe(
+  // Behaviour changed by fix round 2 (item 7d): a dish id alone no longer means the dish was paused;
+  // only the worker's own `paused` does.
+  it('a failure that paused the dish says it was paused (ARCH §7: the last valid state is kept)', () => {
+    expect(errorToastText({ dishId: 'dish-1', message: 'boom', paused: true, request: 'command' })).toBe(
       'Something went wrong and the dish was paused: boom',
+    );
+    expect(errorToastText({ dishId: 'dish-1', message: 'boom', paused: true, request: null })).toBe(
+      'Something went wrong and the dish was paused: boom',
+    );
+  });
+
+  it('a failed start names the start, a failed save or export claims no pause', () => {
+    expect(errorToastText({ dishId: 'new', message: 'unknown recipe NOPE', paused: false, request: 'create' })).toBe(
+      'The new dish could not be started: unknown recipe NOPE',
+    );
+    const save = errorToastText({ dishId: 'dish-1', message: 'simulated write failure', paused: false, request: 'saveSlot' });
+    expect(save).toMatch(/^Saving failed/);
+    expect(save).not.toMatch(/dish was paused/);
+    expect(errorToastText({ dishId: 'dish-1', message: 'x', paused: false, request: 'autosave' })).toMatch(/^Saving failed/);
+    const exp = errorToastText({ dishId: 'dish-1', message: 'no dish dish-1', paused: false, request: 'exportDish' });
+    expect(exp).toMatch(/^The export failed/);
+    expect(exp).not.toMatch(/dish was paused/);
+  });
+});
+
+describe('Saved dishes list names a What if? idea from the slot index (item 7e)', () => {
+  it('reads the idea and its revision', () => {
+    expect(savedIdeaLine({ title: 'Dinner farther away', variantId: 'R-G3', variantRevision: 1 })).toBe(
+      'What if? · Dinner farther away (R-G3 rev 1)',
     );
   });
 });

@@ -2,7 +2,7 @@
  * UI state (Preact signals) and the controller that talks to the worker. Views read signals and call
  * actions; nothing here mutates simulation state except by sending commands.
  */
-import { batch, signal } from '@preact/signals';
+import { batch, effect, signal, untracked } from '@preact/signals';
 import type { CommandPayload, CommandResult } from '@sim/commands';
 import { SimClient } from '@worker/client';
 import type { CompareSpeed, ComparisonState } from '@worker/comparison';
@@ -10,9 +10,9 @@ import type { DishInfo, FamilyAnswer, InspectorPayload, OverlayId, Selection, Sn
 import type { DishRenderer } from '@render/renderer';
 import { clearFeed, pushFeed } from './feed';
 import type { ExperimentCardView } from '@sim/experiments';
-import type { ExperimentNotice } from '@worker/client';
+import type { ExperimentNotice, WorkerErrorNotice } from '@worker/client';
 import { addJournalEntry, journalUnseen, updateJournalEntry, type JournalMeasure } from './journal';
-import { clauseText, formatDiff, formatMeasure, measureLabel } from './strings/experiments';
+import { clauseText, experimentEndedText, formatDiff, formatMeasure, measureLabel, stampToastText, waitingStepsText } from './strings/experiments';
 
 export type Route =
   | { readonly name: 'home' }
@@ -81,6 +81,12 @@ export const settings = signal<Settings>(loadSettings());
 export const familyView = signal<FamilyAnswer | null>(null);
 /** History opened from "What changed?": show "What happened", filtered to one species. */
 export const historyFocus = signal<{ readonly species: number; readonly birthId: number } | null>(null);
+/**
+ * A single-arm experiment card's measured gate held on a dish and its Journal stamp waits for player
+ * steps (P2.5): the dish view's one small notice naming them, until the stamp arrives, the observation
+ * ends, another dish opens or the player dismisses it.
+ */
+export const experimentWaiting = signal<{ readonly dishId: string; readonly cardId: string; readonly text: string } | null>(null);
 
 let client: SimClient | null = null;
 let renderer: DishRenderer | null = null;
@@ -149,12 +155,25 @@ export function reducedMotionFollowsDevice(): boolean {
 }
 
 /**
- * The global error toast, worded by what failed (ARCH §7). An error about a dish (its command, step or
- * run) leaves that dish paused at its last valid state. An error about no dish (opening a save,
- * importing a file, listing or deleting saves) paused and changed nothing, so it never says it did.
+ * The global error toast, worded by what really happened (ARCH §7). Only when the worker paused a dish
+ * at its last valid state (its command, step or run failed) does it say so. A failed start names the
+ * start; a failed save or export says so and claims no pause; anything else (opening a save, importing
+ * a file, listing or deleting saves) paused and changed nothing, and says that.
  */
-export function errorToastText(e: { readonly dishId: string; readonly message: string }): string {
-  return e.dishId === '' ? `Nothing was paused or changed: ${e.message}` : `Something went wrong and the dish was paused: ${e.message}`;
+export function errorToastText(e: Pick<WorkerErrorNotice, 'message'> & Partial<WorkerErrorNotice>): string {
+  if (e.paused === true) return `Something went wrong and the dish was paused: ${e.message}`;
+  switch (e.request) {
+    case 'create':
+    case 'experimentStart':
+      return `The new dish could not be started: ${e.message}`;
+    case 'saveSlot':
+    case 'autosave':
+      return `Saving failed; nothing already saved was changed and the dish was not paused: ${e.message}`;
+    case 'exportDish':
+      return `The export failed; nothing was paused or changed: ${e.message}`;
+    default:
+      return `Nothing was paused or changed: ${e.message}`;
+  }
 }
 
 export function getClient(): SimClient {
@@ -231,6 +250,7 @@ function enterDish(info: DishInfo, promptText: string | null): void {
     sheet.value = 'none';
     overlay.value = null;
     prompt.value = promptText;
+    experimentWaiting.value = null;
     route.value = { name: 'dish' };
   });
   renderer?.setSpecies(info.speciesIds, info.speciesAssets);
@@ -360,8 +380,9 @@ export async function startCustom(opts: {
   try {
     const c = getClient();
     const old = dishInfo.value;
-    if (old) c.dispose(old.dishId);
+    // The new dish first: a failed start leaves the current dish exactly as it was.
     const info = await c.create(newDishId(), { kind: 'recipe', recipeId: opts.recipeId, seed: opts.seed, overrides: { mutationPreset: opts.mutationPreset, founderMode: opts.founderMode, empty: opts.empty } }, opts.name);
+    if (old && old.dishId !== info.dishId) c.dispose(old.dishId);
     enterDish(info, null);
   } finally {
     busy.value = false;
@@ -373,8 +394,9 @@ export async function startRecipe(recipeId: string, name: string): Promise<void>
   try {
     const c = getClient();
     const old = dishInfo.value;
-    if (old) c.dispose(old.dishId);
+    // The new dish first: a failed start leaves the current dish exactly as it was.
     const info = await c.create(newDishId(), { kind: 'recipe', recipeId }, name);
+    if (old && old.dishId !== info.dishId) c.dispose(old.dishId);
     enterDish(info, settings.value.showPrompts ? 'Press play and look closely.' : null);
   } finally {
     busy.value = false;
@@ -408,8 +430,57 @@ export function select(sel: Selection | null): void {
     if (sheet.value === 'inspect') sheet.value = 'none';
   } else sheet.value = 'inspect';
   renderer?.select(sel?.kind === 'entity' ? sel.birthId : null, sel?.kind === 'cell' ? sel.cell : null);
-  if (info) getClient().view(info.dishId, overlay.value, sel);
+  if (info) syncView();
 }
+
+/**
+ * The selection the worker is told about: the organism or cell only while the inspector sheet shows
+ * it. The worker builds the inspector's live data from it and notes a card's "the inspector identifies
+ * food use" step from it (P2.5), so an organism tapped earlier must not earn that step later, off
+ * screen, after the inspector closed (Look, More, History, …). The highlight on the dish stays: it is
+ * the renderer's own and never reaches the worker.
+ */
+export function inspectedSelection(): Selection | null {
+  // Only while the dish screen itself is showing: leaving for Home or the Notebook keeps the sheet
+  // state for the way back, but nothing is being inspected meanwhile.
+  return route.value.name === 'dish' && sheet.value === 'inspect' ? selection.value : null;
+}
+
+let viewSent: { readonly dishId: string; readonly overlay: OverlayId | null; readonly selection: Selection | null } | null = null;
+
+function sameSelection(a: Selection | null, b: Selection | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.kind === 'entity' ? b.kind === 'entity' && a.birthId === b.birthId : b.kind === 'cell' && a.cell === b.cell;
+}
+
+/** Tell the worker what the open dish's view shows (overlay, inspected selection) when that changed. */
+function syncView(): void {
+  const info = dishInfo.value;
+  if (!info) return;
+  const next = { dishId: info.dishId, overlay: overlay.value, selection: inspectedSelection() };
+  const last = viewSent;
+  if (last && last.dishId === next.dishId && last.overlay === next.overlay && sameSelection(last.selection, next.selection)) return;
+  viewSent = next;
+  getClient().view(next.dishId, next.overlay, next.selection);
+}
+
+// The inspector sheet closing (or opening again, e.g. History's "Back to …") changes what the worker
+// inspects; so does another dish or overlay. Nothing is sent before a dish is open.
+effect(() => {
+  void [sheet.value, selection.value, overlay.value, dishInfo.value, route.value];
+  syncView();
+});
+
+// Leaving the dish screen (Home, Notebook, Settings, …) pauses the open dish, so Home's "paused where
+// you left it" is true and nothing grows off screen (as with backgrounding). The comparison and
+// experiment-run screens step their own copies and never run the dish itself.
+effect(() => {
+  const name = route.value.name;
+  const info = dishInfo.value;
+  if (!info || name === 'dish') return;
+  const m = untracked(() => meta.value);
+  if (m && m.speed > 0) getClient().setSpeed(info.dishId, 0);
+});
 
 /** "Where is its family?": ask the worker (read-only) for the organism's living relatives. */
 export async function askFamily(birthId: number): Promise<FamilyAnswer | null> {
@@ -445,8 +516,7 @@ export function showOrganism(birthId: number, x: number, y: number): void {
 
 export function setOverlay(id: OverlayId | null): void {
   overlay.value = id;
-  const info = dishInfo.value;
-  if (info) getClient().view(info.dishId, id, selection.value);
+  syncView();
 }
 
 export async function sendCommand(payload: CommandPayload, undoable = true): Promise<void> {
@@ -828,25 +898,50 @@ function stampMeasures(card: ExperimentCardView | null, measured: { readonly A: 
       return {
         id,
         label: card ? measureLabel(card, id) : id,
-        a: formatMeasure(id, a),
-        b: b === null ? null : formatMeasure(id, b),
-        diff: b === null ? null : formatDiff(id, a, b),
+        a: formatMeasure(id, a, measured.A),
+        b: b === null ? null : formatMeasure(id, b, measured.B),
+        diff: b === null ? null : formatDiff(id, a, b, measured.A, measured.B),
         rawA: a,
         rawB: b,
       };
     });
 }
 
+/** The player closed the dish's "the stamp needs one more step" notice. */
+export function dismissExperimentWaiting(): void {
+  experimentWaiting.value = null;
+}
+
+let experimentNoticeSeq = 0;
+
 function onExperimentNotice(m: ExperimentNotice): void {
+  const seq = ++experimentNoticeSeq;
+  if (m.type === 'experimentWaiting') {
+    // The measured gate held; the stamp waits for the steps named here (worker state, never the world's).
+    const show = () => {
+      if (seq !== experimentNoticeSeq) return; // a later notice (the stamp, or an end) came first
+      const c = experimentCard(m.cardId);
+      const text = c ? waitingStepsText(c, m.reachedAtSecond, m.missing) : `The Journal stamp for “${m.cardId}” waits for a step listed on its card.`;
+      experimentWaiting.value = { dishId: m.dishId, cardId: m.cardId, text };
+    };
+    if (experimentCards.value) show();
+    else void loadExperimentCards().then(show);
+    return;
+  }
+  if (experimentWaiting.value?.dishId === m.dishId) experimentWaiting.value = null;
   const card = experimentCard(m.type === 'experimentEnded' ? m.cardId : m.stamp.stamp.experimentId);
   if (m.type === 'experimentEnded') {
-    const title = card?.title ?? m.cardId;
-    showToast(
-      m.reason === 'changed'
-        ? `You changed the dish, so “${title}” stopped observing before its gate. The dish goes on as it is.`
-        : `The dish stopped with an error, so “${title}” stopped observing. Nothing was stamped.`,
-      5000,
-    );
+    // A dish reopened from a save may arrive before this session has read the cards.
+    // The reason replaces the card's start prompt ("…gets a stamp when the observation is complete") on
+    // the dish it concerns, so a command's own toast arriving in the same frame cannot hide it and the
+    // screen never keeps promising a stamp that will not come.
+    const show = () => {
+      const text = experimentEndedText(m.reason, experimentCard(m.cardId)?.title ?? m.cardId);
+      if (dishInfo.value?.dishId === m.dishId) prompt.value = text;
+      else showToast(text, m.reason === 'closed' ? 8000 : 5000);
+    };
+    if (experimentCards.value) show();
+    else void loadExperimentCards().then(show);
     return;
   }
   const s = m.stamp;
@@ -876,7 +971,7 @@ function onExperimentNotice(m: ExperimentNotice): void {
   });
   journalUnseen.value += 1;
   if (cmp?.experiment?.cardId === s.stamp.experimentId) experimentStampEntry.value = entry.id;
-  showToast(`Journal stamp: ${s.stamp.journalStamp}. The dish keeps running.${stored ? '' : ' (Kept for this session only: this device did not store it.)'}`, 4500);
+  showToast(stampToastText(s.stamp.journalStamp, s.measured.B !== null, stored), 4500);
 }
 
 /**

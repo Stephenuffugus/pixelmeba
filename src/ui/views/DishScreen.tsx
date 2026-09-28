@@ -19,6 +19,8 @@ import {
   attachRenderer,
   candidates,
   dishInfo,
+  dismissExperimentWaiting,
+  experimentWaiting,
   getRenderer,
   meta,
   prompt,
@@ -136,6 +138,8 @@ export function DishScreen() {
 
   const running = (m?.speed ?? 0) > 0;
   const t = tool.value;
+  // A single-arm card's stamp waiting for a player step (P2.5): one small notice, in the prompt's place.
+  const waiting = experimentWaiting.value && experimentWaiting.value.dishId === info?.dishId ? experimentWaiting.value : null;
   const behind = running && m && m.effectiveSpeed > 0 && m.effectiveSpeed < m.speed * 0.8;
 
   return (
@@ -179,7 +183,14 @@ export function DishScreen() {
 
       <div class="viewport" ref={host} data-testid="viewport">
         {!ready ? <p style={{ color: '#c9d6d8', padding: '1rem' }}>Preparing the dish…</p> : null}
-        {prompt.value ? (
+        {waiting ? (
+          <div class="prompt" role="status" data-testid="experiment-waiting">
+            <p>{waiting.text}</p>
+            <button class="btn ghost" onClick={dismissExperimentWaiting} aria-label="Dismiss this notice">
+              ✕
+            </button>
+          </div>
+        ) : prompt.value ? (
           <div class="prompt" role="status">
             <p>{prompt.value}</p>
             <button class="btn ghost" onClick={() => (prompt.value = null)} aria-label="Dismiss">
