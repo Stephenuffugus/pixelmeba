@@ -170,6 +170,7 @@ export function visualEvents(events: readonly SimEvent[], sinceId: number): Visu
       cell: ev.cell ?? -1,
       birthId: ev.birthId ?? 0,
       ...(ev.cause !== undefined ? { cause: ev.cause } : {}),
+      ...(typeof ev.detail?.branch === 'number' ? { branch: ev.detail.branch } : {}),
     });
   }
   return out;

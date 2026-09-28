@@ -13,6 +13,15 @@ export interface GestureHandlers {
   /** Whether the current tool paints on drag (instead of panning). */
   paints(): boolean;
   onCameraMoved(): void;
+  /** Lab (P2.7): a paint stroke began / grew (brush preview before release). */
+  onStrokeStart?(w: [number, number]): void;
+  onStrokeMove?(points: readonly [number, number][]): void;
+  /** The uncommitted stroke was dropped (two fingers, pointer cancel, or an external cancel). */
+  onStrokeCancel?(): void;
+  /** Mouse hovering over the dish (null when it leaves): footprint preview before pressing. */
+  onHover?(w: [number, number] | null): void;
+  /** Receives a function that drops the uncommitted stroke (e.g. on a view switch mid-gesture). */
+  bindCancel?(cancel: (() => void) | null): void;
 }
 
 const TAP_SLOP = 8;
@@ -39,16 +48,19 @@ export function attachGestures(el: HTMLElement, r: DishRenderer, h: GestureHandl
     pointers[e.pointerId] = { x, y, sx: x, sy: y, t: performance.now(), button: e.button };
     moved = false;
     if (ids().length === 2) {
+      if (stroke) h.onStrokeCancel?.();
       stroke = null; // two fingers cancel an uncommitted stroke
       const [a, b] = ids().map((id) => pointers[id]!);
       pinch = { d: Math.hypot(a!.x - b!.x, a!.y - b!.y), mx: (a!.x + b!.x) / 2, my: (a!.y + b!.y) / 2 };
     } else if (ids().length === 1 && e.button === 0 && h.paints()) {
       stroke = [r.camera.screenToWorld(x, y)];
+      h.onStrokeStart?.(stroke[0]!);
     }
   };
 
   const move = (e: PointerEvent) => {
     const p = pointers[e.pointerId];
+    if (!p && h.onHover && e.pointerType === 'mouse') h.onHover(e.target === r.canvas ? r.camera.screenToWorld(...local(e)) : null);
     if (!p) return;
     const [x, y] = local(e);
     const dx = x - p.x;
@@ -71,7 +83,10 @@ export function attachGestures(el: HTMLElement, r: DishRenderer, h: GestureHandl
     if (stroke) {
       const w = r.camera.screenToWorld(x, y);
       const last = stroke[stroke.length - 1]!;
-      if (Math.hypot(w[0] - last[0], w[1] - last[1]) >= 0.5) stroke.push(w);
+      if (Math.hypot(w[0] - last[0], w[1] - last[1]) >= 0.5) {
+        stroke.push(w);
+        h.onStrokeMove?.(stroke);
+      }
       return;
     }
     if (moved || p.button !== 0) {
@@ -87,6 +102,7 @@ export function attachGestures(el: HTMLElement, r: DishRenderer, h: GestureHandl
     const wasPinch = pinch !== null;
     if (ids().length < 2) pinch = null;
     if (wasPinch) {
+      if (stroke) h.onStrokeCancel?.();
       stroke = null;
       return;
     }
@@ -109,6 +125,7 @@ export function attachGestures(el: HTMLElement, r: DishRenderer, h: GestureHandl
 
   const cancel = (e: PointerEvent) => {
     delete pointers[e.pointerId];
+    if (stroke) h.onStrokeCancel?.();
     stroke = null;
     pinch = null;
   };
@@ -122,6 +139,14 @@ export function attachGestures(el: HTMLElement, r: DishRenderer, h: GestureHandl
   };
 
   const context = (e: Event) => e.preventDefault();
+  const leave = () => h.onHover?.(null);
+  h.bindCancel?.(() => {
+    if (stroke) h.onStrokeCancel?.();
+    stroke = null;
+    pinch = null;
+    // Forget the pressed pointers too, so their release is neither a stroke nor a tap.
+    for (const id of ids()) delete pointers[id];
+  });
 
   el.addEventListener('pointerdown', down);
   el.addEventListener('pointermove', move);
@@ -129,7 +154,10 @@ export function attachGestures(el: HTMLElement, r: DishRenderer, h: GestureHandl
   el.addEventListener('pointercancel', cancel);
   el.addEventListener('wheel', wheel, { passive: false });
   el.addEventListener('contextmenu', context);
+  el.addEventListener('pointerleave', leave);
   return () => {
+    el.removeEventListener('pointerleave', leave);
+    h.bindCancel?.(null);
     el.removeEventListener('pointerdown', down);
     el.removeEventListener('pointermove', move);
     el.removeEventListener('pointerup', up);

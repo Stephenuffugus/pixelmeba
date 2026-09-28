@@ -4,6 +4,8 @@
  */
 import type { CommandPayload, CommandResult } from '@sim/commands';
 import type { CompareSpeed, ComparisonState } from './comparison';
+import type { LineageAnswer } from '@sim/lineage';
+import type { LineageView } from './protocol';
 import { PROTOCOL_VERSION, stamp, type DishInfo, type DishSource, type Envelope, type FamilyAnswer, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 
 export class WorkerRequestError extends Error {
@@ -196,6 +198,17 @@ export class SimClient {
   async family(dishId: string, birthId: number): Promise<FamilyAnswer> {
     const msg = await this.request<Extract<FromWorker, { type: 'family' }>>((requestId) => ({ type: 'family', requestId, dishId, birthId }));
     return msg.family;
+  }
+
+  /** Lineage panel data (P2.3): branches, variation, specimens, and one branch's detail; read-only. */
+  async lineage(dishId: string, branch: number | null, birthId: number | null = null): Promise<LineageAnswer> {
+    const msg = await this.request<Extract<FromWorker, { type: 'lineage' }>>((requestId) => ({ type: 'lineage', requestId, dishId, branch, birthId }));
+    return msg.lineage;
+  }
+
+  /** Ask snapshots of this dish to carry trait-band / lineage-highlight marks (null = off). */
+  lineageView(dishId: string, view: LineageView | null): void {
+    this.send({ type: 'lineageView', dishId, view });
   }
 
   /** Start a comparison from a dish: baseline captured once, A and B realized paused (SPEC §13.4). */

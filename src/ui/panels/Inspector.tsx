@@ -21,6 +21,7 @@ import {
 import { reasonText } from '../strings/reasons';
 import { dietAnswer, familySummary, relationLabel, stopAnswer } from '../strings/shortcuts';
 import { dormancyLines, energyCapText, LIFE_ACTIVE, lifeStateLabel, moduleText, upkeepText } from '../strings/modules';
+import { openLineage } from './LineageState';
 
 const LOCUS_NAMES = [
   'Motility',
@@ -128,6 +129,12 @@ function FamilyList({ f, onHide }: { f: FamilyAnswer; onHide: () => void }) {
           </div>
         </>
       ) : null}
+      {/* P2.3: the named branches this family belongs to. */}
+      <div class="answer-actions">
+        <button class="btn" data-testid="open-lineage" onClick={() => void openLineage({ birthId: f.birthId })}>
+          Family tree
+        </button>
+      </div>
     </>
   );
 }

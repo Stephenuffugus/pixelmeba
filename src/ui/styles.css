@@ -1019,3 +1019,567 @@ textarea {
   padding: 0.5rem 0.75rem;
   font-size: var(--fs-small);
 }
+
+/* ---------------------------------------------------------------- Lab view (P2.7, UX §4.4) */
+.view-toggle {
+  padding: 6px 12px;
+}
+@media (max-width: 480px) {
+  /* Phones: icon only; the button keeps its accessible name "Lab". */
+  .view-toggle {
+    padding: 6px;
+  }
+  .view-toggle span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+}
+.dish-screen[data-view='lab'] > .bottombar:not(.lab-bar) {
+  display: none;
+}
+.lab-bar {
+  position: relative;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  font-size: 1rem;
+}
+.lab-cats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.lab-cat {
+  flex-direction: column;
+  gap: 2px;
+  min-height: 56px;
+  padding: 4px 2px;
+  font-size: 1rem;
+  line-height: 1.1;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.lab-cat.holds-tool {
+  box-shadow: inset 0 -4px 0 var(--primary);
+}
+.lab-cat[aria-expanded='true'] {
+  background: var(--text);
+  color: var(--surface);
+  border-color: var(--text);
+}
+/* Larger text: categories become one scrolling row instead of breaking words. */
+html[data-text-scale='1.5'] .lab-cats,
+html[data-text-scale='2'] .lab-cats {
+  display: flex;
+  overflow-x: auto;
+}
+html[data-text-scale='1.5'] .lab-cat,
+html[data-text-scale='2'] .lab-cat {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  overflow-wrap: normal;
+}
+.lab-strip {
+  order: -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.lab-strip-tool {
+  flex: 1 1 6rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lab-strip-label,
+.lab-strip-radius {
+  color: var(--text-muted);
+}
+.lab-strip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.lab-hint,
+.lab-brush-info {
+  flex: 1 1 100%;
+  color: var(--text-muted);
+  order: 3;
+}
+.lab-brush-info {
+  color: var(--text);
+  font-weight: 600;
+}
+@media (orientation: portrait), (max-width: 699px) {
+  /* Phones: the tool strip stays one line; the brush count replaces the hint while previewing. */
+  .lab-hint,
+  .lab-strip-label,
+  .lab-strip-radius {
+    display: none;
+  }
+}
+.lab-tray {
+  /* Portrait: a sheet inside the viewport, like the other panels (never over the top strip). */
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 70%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  background: var(--surface);
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: var(--shadow);
+  padding: 12px 16px 8px;
+  z-index: 6;
+}
+.lab-tray header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.lab-tray h2 {
+  font-size: var(--fs-h2);
+  margin: 0;
+  flex: 1;
+}
+.lab-sub {
+  color: var(--text-muted);
+  font-size: 1rem;
+  margin: 0.25rem 0 0.5rem;
+}
+.lab-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(9rem, 100%), 1fr));
+  gap: 6px;
+  margin: 0.5rem 0;
+}
+.lab-item {
+  justify-content: flex-start;
+  text-align: left;
+  font-size: 1rem;
+}
+.lab-thumb {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  image-rendering: pixelated;
+}
+.lab-swatch {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--text);
+  background: var(--surface-3);
+}
+.sw-sugar {
+  background: #f3c95c;
+}
+.sw-starch {
+  background: #f4efdc;
+}
+.sw-debris {
+  background: #8a6d4b;
+}
+.sw-nutrient {
+  background: #96d278;
+}
+.lab-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0.5rem 0;
+}
+.lab-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.lab-use {
+  width: 100%;
+  margin: 0.25rem 0 0.5rem;
+}
+.lab-details h3 {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 1.1rem;
+}
+.lab-details dl {
+  margin: 0;
+}
+.lab-details dt {
+  font-weight: 700;
+  margin-top: 0.4rem;
+}
+.lab-details dd {
+  margin: 0;
+}
+.lab-actions {
+  display: grid;
+  gap: 6px;
+  margin-top: 0.75rem;
+}
+.lab-actions .btn {
+  justify-content: flex-start;
+  text-align: left;
+}
+.overlay-opacity {
+  display: grid;
+  gap: 4px;
+  margin: 0.5rem 0;
+}
+.overlay-opacity input {
+  width: 100%;
+  min-height: 48px;
+  accent-color: var(--primary);
+}
+.overlay-legend {
+  display: grid;
+  gap: 2px;
+  font-size: 1rem;
+}
+.overlay-legend .ol-name {
+  font-weight: 700;
+}
+.overlay-legend .ol-scale {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.overlay-legend .ol-ramp {
+  flex: 1 1 auto;
+  min-width: 64px;
+  height: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--text-muted);
+}
+.overlay-legend .ol-unit {
+  color: var(--text-muted);
+}
+.overlay-legend.floating {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  width: min(15rem, calc(100% - 80px));
+  background: rgba(245, 244, 239, 0.96);
+  color: var(--text);
+  border-radius: var(--radius-s);
+  padding: 6px 10px;
+  box-shadow: var(--shadow);
+  z-index: 3;
+}
+@media (orientation: landscape) and (min-width: 700px) {
+  /* Side panel: categories, then the tool strip, then the tray inline (it never covers the dish). */
+  .lab-strip {
+    order: 0;
+  }
+  .lab-tray {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    box-shadow: none;
+    border-radius: 0;
+    border-top: 1px solid var(--line);
+    padding: 8px 0 0;
+  }
+  .lab-tray .sheet-scroll {
+    overflow: visible;
+  }
+  html[data-text-scale='1.5'] .lab-cats,
+  html[data-text-scale='2'] .lab-cats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+  html[data-text-scale='1.5'] .lab-cat,
+  html[data-text-scale='2'] .lab-cat {
+    overflow-wrap: anywhere;
+  }
+}
+
+/* ---------------------------------------------------------------- family tree, trait overlay, discovery (P2.3; UX §5.5) */
+.lineage {
+  font-size: 1rem;
+}
+.lineage h3 {
+  font-size: 1.1rem;
+  margin: 0.75rem 0 0.25rem;
+}
+.lineage h4 {
+  font-size: 1rem;
+  margin: 0.75rem 0 0.25rem;
+}
+.lineage p {
+  margin: 0.3rem 0;
+}
+.lineage-hint {
+  color: var(--text-muted);
+}
+.lineage-empty {
+  padding: 0.6rem 0.75rem;
+  background: var(--surface-2);
+  border-radius: var(--radius-s);
+}
+.lineage-control {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.5rem 0;
+}
+.lineage-control label {
+  font-weight: 600;
+}
+.lineage-control select,
+.lineage-rename input {
+  min-height: var(--target);
+  padding: 0 0.75rem;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  min-width: 0;
+}
+.lineage-tree {
+  list-style: none;
+  margin: 0.4rem 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.lineage-row {
+  width: 100%;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  text-align: left;
+  font-weight: 500;
+}
+.lineage-row-name {
+  flex: 1 1 12rem;
+  font-weight: 700;
+  min-width: 0;
+}
+.lineage-row-meta,
+.lineage-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+/* State chips carry words; the border style (solid / dashed) repeats the state without color. */
+.lineage-chip {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  font-weight: 600;
+}
+.lineage-chip.established {
+  border: 2px solid var(--text);
+}
+.lineage-chip.extinct {
+  border: 2px dashed var(--text-muted);
+  color: var(--text-muted);
+  background: var(--surface);
+}
+.lineage-chip.pinned {
+  border: 2px double var(--text);
+}
+.lineage-variation {
+  color: var(--text);
+}
+.lineage-back {
+  padding-left: 0.25rem;
+}
+.lineage-title {
+  overflow-wrap: anywhere;
+}
+.lineage-facts {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 0.25rem 0.75rem;
+  margin: 0.5rem 0;
+}
+.lineage-facts dt {
+  color: var(--text-muted);
+}
+.lineage-facts dd {
+  margin: 0;
+}
+@media (max-width: 420px) {
+  .lineage-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lineage-facts dd {
+    margin-bottom: 0.35rem;
+  }
+}
+.lineage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+.lineage-rename {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+}
+.lineage-rename-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.lineage-rename input {
+  flex: 1 1 10rem;
+}
+.lineage-id {
+  font-weight: 700;
+}
+.lineage-table-wrap {
+  overflow-x: auto;
+}
+.lineage-compare table {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.lineage-compare caption {
+  text-align: left;
+  color: var(--text-muted);
+  padding-bottom: 0.25rem;
+}
+.lineage-compare th,
+.lineage-compare td {
+  text-align: left;
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid var(--line);
+}
+.lineage-compare:focus {
+  outline: none;
+}
+.lineage-family ul,
+.lineage-specimen-list {
+  margin: 0.25rem 0;
+  padding-left: 1.1rem;
+}
+.lineage-specimen-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.lineage-specimen-list li {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0.4rem 0.6rem;
+}
+.lineage-check {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: var(--target);
+  margin: 0.5rem 0;
+  cursor: pointer;
+}
+.lineage-check input {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+.lineage-legend {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  max-width: min(22rem, calc(100% - 1rem));
+  max-height: 60%;
+  overflow: auto;
+  background: rgba(245, 244, 239, 0.96);
+  border-radius: var(--radius-s);
+  box-shadow: var(--shadow);
+  padding: 0.4rem 0.6rem;
+  font-size: 1rem;
+  z-index: 3;
+}
+.lineage-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.2rem 0;
+}
+.lineage-legend-row > span,
+.lineage-legend-row > strong {
+  flex: 1 1 8rem;
+}
+.lineage-bands {
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+.lineage-swatch {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 3px;
+  border: 1px solid var(--text);
+  vertical-align: -0.15rem;
+  margin-right: 0.4rem;
+}
+.lineage-swatch.dim {
+  background: repeating-linear-gradient(45deg, #8a8a8a 0 3px, #d0d0d0 3px 6px);
+}
+.lineage-ring-key {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  border: 3px double var(--text);
+  vertical-align: -0.15rem;
+  margin-right: 0.3rem;
+}
+.discovery-live {
+  position: absolute;
+  inset: 0.5rem;
+  z-index: 7;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.discovery-card {
+  pointer-events: auto;
+  width: min(30rem, 100%);
+  max-height: 100%;
+  overflow: auto;
+  background: var(--surface);
+  border: 2px solid var(--text);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 0.6rem 0.8rem;
+  font-size: 1rem;
+}
+.discovery-card header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.discovery-card h2 {
+  flex: 1;
+  margin: 0.2rem 0;
+  font-size: 1.15rem;
+  overflow-wrap: anywhere;
+}
+.discovery-card p {
+  margin: 0.25rem 0;
+}

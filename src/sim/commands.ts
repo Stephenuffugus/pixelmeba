@@ -18,19 +18,29 @@ import { markField, updateDerived } from './transport';
 import { rebuildIndex } from './spatial';
 import { initFounder } from './branches';
 import { detFloat, detPermutation, STREAMS } from './rng';
+import { applyHabitatEdit, type HabitatEditPayload } from './structures';
+import { applyLineage, isIntervention, type LineageOp } from './specimens';
 import type { World, WorldSettings } from './world';
 import { speciesIndex } from './world';
 
 export type CommandPayload =
+  /** Lab habitat paint, shade and structures (P2.7; semantics in structures.ts applyHabitatEdit). */
+  | HabitatEditPayload
   | { kind: 'inoculate'; speciesId: string; x: number; y: number; radius: number; count: number }
   | { kind: 'deposit'; materialId: string; points: ReadonlyArray<readonly [number, number]>; radius: number; dose: number }
   | { kind: 'setLid'; lid: WorldSettings['lid'] }
-  | { kind: 'setMutationPreset'; preset: WorldSettings['mutationPreset'] };
+  | { kind: 'setMutationPreset'; preset: WorldSettings['mutationPreset'] }
+  /** Branch names and pins, saving and spawning specimens (P2.3; semantics in specimens.ts). */
+  | ({ readonly kind: 'lineage' } & LineageOp);
 
 export interface CommandResult {
   readonly accepted: number;
   readonly rejected: number;
   readonly note?: string;
+  /** Habitat edits (P2.7): why cells were refused (outside the rim, a structure, a live organism, sealed in). */
+  readonly skipped?: { readonly rim: number; readonly structure: number; readonly organism: number; readonly enclosed: number };
+  /** Habitat edits (P2.7): material a new stone or wall moved into neighboring open cells (totals unchanged). */
+  readonly moved?: { readonly c: number; readonly n: number; readonly m: number };
 }
 
 export interface Command {
@@ -96,6 +106,18 @@ function applyCommand(world: World, cmd: Command): void {
     case 'setMutationPreset':
       world.settings.mutationPreset = p.preset;
       result = { accepted: 1, rejected: 0 };
+      break;
+    case 'paintSubstrate':
+    case 'paintShade':
+    case 'placeStructure':
+    case 'eraseStructure':
+      result = applyHabitatEdit(world, p, strokeCells(p.points, p.radius));
+      break;
+    case 'lineage':
+      result = applyLineage(world, p);
+      // Names, pins and saved specimens are notebook labels, not interventions on the dish (the chart
+      // marks below count only changes to the dish; spawning a specimen is one).
+      if (!isIntervention(p)) world.history.pendingInterventions--;
       break;
   }
   cmd.result = result;
@@ -224,7 +246,7 @@ export function introduceOrganism(
   spIdx: number,
   cell: number,
   source: string,
-  opts: { modules?: readonly string[]; exactCenter?: boolean; origin?: number } = {},
+  opts: { modules?: readonly string[]; exactCenter?: boolean; origin?: number; /** An existing genome (specimen spawn, P2.3). */ genome?: number } = {},
 ): number {
   const e = world.ents;
   // An illegal module set is refused before anything is allocated or logged (SPEC §9).
@@ -238,7 +260,7 @@ export function introduceOrganism(
   const sp = world.species[spIdx]!;
   const b0 = sp.def.b0;
   const birthId = world.counters.nextBirthId++;
-  const genome = founderGenome(world, spIdx, birthId, opts.modules ?? []);
+  const genome = opts.genome ?? founderGenome(world, spIdx, birthId, opts.modules ?? []);
   const x = cell % GRID_W;
   const y = Math.floor(cell / GRID_W);
   const jx = opts.exactCenter ? 0.5 : 0.2 + 0.6 * detFloat(world.seed, STREAMS.jitter, birthId, 0);

@@ -41,9 +41,16 @@ import { InspectorSheet } from '../panels/Inspector';
 import { MoreSheet, SaveSheet } from '../panels/MoreSheet';
 import { HistorySheet } from '../panels/HistorySheet';
 import { FamilyMarkers } from '../panels/FamilyMarkers';
+import { LineageSheet } from '../panels/LineageSheet';
+import { LineageLegend } from '../panels/LineageLegend';
+import { DiscoveryCard } from '../panels/DiscoveryCard';
+import { placeSpecimenTap } from '../panels/LineageState';
 import { IconMore } from '../icons';
 import { autosave } from '../state';
 import type { Speed } from '@worker/protocol';
+import { bindGestureCancel, dishView, handleViewKey, labHover, labPaints, labStrokeCancel, labStrokeEnd, labStrokeMove, labStrokeStart, labTap, LabViewToggle } from './LabView';
+import { LabToolbar, LabTrayHost } from './LabToolbar';
+import { OverlayLegend } from '../panels/OverlayLegend';
 
 function formatTime(tick: number): string {
   const s = Math.floor(tick / 10);
@@ -73,13 +80,19 @@ export function DishScreen() {
       }
       attachRenderer(r);
       detach = attachGestures(host.current, r, {
-        paints: () => tool.value.kind === 'feed' && tool.value.paint,
+        paints: () => labPaints() || (tool.value.kind === 'feed' && tool.value.paint),
         onCameraMoved: () => undefined,
         onTap: (sx, sy, wx, wy) => onTap(r!, sx, sy, wx, wy),
         onStroke: (points) => {
+          if (labStrokeEnd(points)) return; // Lab (P2.7), or a stroke dropped by a view switch
           const t = tool.value;
           if (t.kind === 'feed') void sendCommand({ kind: 'deposit', materialId: t.materialId, points, radius: t.radius, dose: t.dose });
         },
+        onStrokeStart: labStrokeStart,
+        onStrokeMove: labStrokeMove,
+        onStrokeCancel: labStrokeCancel,
+        onHover: labHover,
+        bindCancel: bindGestureCancel,
       });
       setReady(true);
     })();
@@ -100,6 +113,7 @@ export function DishScreen() {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
+      if (handleViewKey(e)) return; // I / L / F / Esc per view (UX §4.2; P2.7)
       const r = getRenderer();
       if (e.key === ' ') {
         e.preventDefault();
@@ -127,7 +141,7 @@ export function DishScreen() {
   const behind = running && m && m.effectiveSpeed > 0 && m.effectiveSpeed < m.speed * 0.8;
 
   return (
-    <div class="dish-screen" data-testid="dish-screen">
+    <div class="dish-screen" data-testid="dish-screen" data-view={dishView.value}>
       <header class="topbar">
         <button class="btn ghost" aria-label="Home" onClick={() => (route.value = { name: 'home' })}>
           <IconBack />
@@ -141,6 +155,7 @@ export function DishScreen() {
         <button class={`btn ${running ? '' : 'primary'}`} onClick={togglePause} aria-label={running ? 'Pause' : 'Run'} data-testid="run-toggle">
           {running ? <IconPause /> : <IconPlay />}
         </button>
+        <LabViewToggle />
         <button class="btn" aria-label="More" onClick={() => (sheet.value = sheet.value === 'more' ? 'none' : 'more')} data-testid="more">
           <IconMore />
         </button>
@@ -186,6 +201,10 @@ export function DishScreen() {
           </button>
         </div>
         <FamilyMarkers />
+        <LineageLegend />
+        <DiscoveryCard />
+        {dishView.value === 'lab' ? <OverlayLegend floating /> : null}
+        {dishView.value === 'lab' ? <LabTrayHost /> : null}
         {candidates.value ? <CandidateList /> : null}
         {m?.capacityReached ? <div class="capacity-banner">Simulation capacity reached — a limit of the game, not the ecosystem.</div> : null}
         {toast.value ? (
@@ -199,6 +218,7 @@ export function DishScreen() {
         {sheet.value === 'more' ? <MoreSheet /> : null}
         {sheet.value === 'save' ? <SaveSheet /> : null}
         {sheet.value === 'history' ? <HistorySheet /> : null}
+        {sheet.value === 'lineage' ? <LineageSheet /> : null}
       </div>
 
       <nav class="bottombar" aria-label="Actions">
@@ -225,11 +245,14 @@ export function DishScreen() {
           </button>
         </div>
       </nav>
+      {dishView.value === 'lab' ? <LabToolbar /> : null}
     </div>
   );
 }
 
 function onTap(r: DishRenderer, sx: number, sy: number, wx: number, wy: number): void {
+  if (placeSpecimenTap(wx, wy)) return; // a saved specimen waiting to be placed (P2.3)
+  if (labTap(wx, wy)) return; // Lab tools (P2.7); Lab's Inspect falls through to the inspect path
   const t = tool.value;
   if (t.kind === 'addLife') {
     void sendCommand({ kind: 'inoculate', speciesId: t.speciesId, x: wx, y: wy, radius: t.radius, count: t.count });

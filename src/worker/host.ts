@@ -12,7 +12,10 @@ import { realizeRecipe } from '@sim/recipes';
 import { deserializeWorld, serializeWorld, stateHash, type WorldState } from '@sim/serialize';
 import { step } from '@sim/tick';
 import type { World } from '@sim/world';
+import { allocatedFieldIds } from '@sim/fields';
 import { buildFamily, buildInspector, packDeposits, packEntities, packOverlay, visualEvents } from './snapshot';
+import { buildLineage, packLineageMarks } from '@sim/lineage';
+import type { LineageMarks, LineageView } from './protocol';
 import { stamp, type DishInfo, type DishSource, type Envelope, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 import { captureBaseline, PairedRun, realizeArm, type CompareSpeed, type CompareStatus, type ComparisonResults, type ComparisonState, type Intervention } from './comparison';
 import { buildSaveFile, loadSaveFile, SaveFileError } from '@persist/saveFile';
@@ -48,6 +51,8 @@ interface Dish {
   failed: boolean;
   /** Set on the two worlds of a comparison (SPEC §13.4); their time is driven only by the comparison. */
   arm: { readonly compareId: string; readonly role: 'A' | 'B' } | null;
+  /** Trait overlay / lineage highlight requested by the lineage panel (P2.3; render-only). */
+  lineageView?: LineageView | null;
 }
 
 /**
@@ -370,6 +375,18 @@ export class DishHost {
         this.post({ type: 'family', requestId: msg.requestId, dishId: d.id, family: buildFamily(d.world, msg.birthId) });
         return;
       }
+      case 'lineage': {
+        // Read-only (P2.3): branch records, candidates, specimens and one branch's detail.
+        const d = this.need(msg.dishId);
+        this.post({ type: 'lineage', requestId: msg.requestId, dishId: d.id, lineage: buildLineage(d.world, { branch: msg.branch, birthId: msg.birthId }) });
+        return;
+      }
+      case 'lineageView': {
+        const d = this.need(msg.dishId);
+        d.lineageView = msg.view && (msg.view.locus !== null || msg.view.branch !== null) ? msg.view : null;
+        this.sendSnapshot(d);
+        return;
+      }
       case 'compareStart':
         this.compareStart(msg);
         return;
@@ -661,6 +678,10 @@ export class DishHost {
       recipeId: w.content.provenance.recipeId,
       contentHash: m.contentHash,
       manifestLabel: partial ? 'Core prototype — quantitative evolution' : 'Standard Evolution',
+      speciesHabitats: w.species.map((s) => [...s.def.habitats]),
+      speciesSummaries: w.species.map((s) => s.def.guide.summary),
+      materialSummaries: w.content.materials.map((mat) => mat.guide.summary),
+      fieldIds: allocatedFieldIds(w.fields),
     };
   }
 
@@ -744,6 +765,8 @@ export class DishHost {
     const deposits = packDeposits(w, null);
     const overlay = d.overlay ? packOverlay(w, d.overlay, null) : null;
     const events = visualEvents(w.events.ring, d.lastEventId);
+    const lv = d.lineageView;
+    const lineage: LineageMarks | null = lv ? { locus: lv.locus, branch: lv.branch, ...packLineageMarks(w, lv.locus, lv.branch) } : null;
     d.lastEventId = w.counters.nextEventId - 1;
     let geometry: SnapshotMsg['geometry'] = null;
     if (d.lastGeometryVersion !== w.grid.geometryVersion) {
@@ -773,9 +796,11 @@ export class DishHost {
       capacityReached: w.ents.count >= w.ents.capacity,
       speciesCounts: packed.speciesCounts,
       undoAvailable: d.undo !== null,
+      ...(lineage ? { lineage } : {}),
     };
     const transfer: Transferable[] = [packed.ents.buffer, packed.ids.buffer, deposits.buffer];
     if (overlay) transfer.push(overlay.data.buffer);
+    if (lineage) transfer.push(lineage.marks.buffer as ArrayBuffer);
     if (geometry) transfer.push(geometry.substrate.buffer, geometry.structure.buffer, geometry.shade.buffer);
     this.post(msg, transfer);
   }

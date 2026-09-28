@@ -21,6 +21,7 @@ import {
   E_Y,
   ENT_STRIDE,
   ID_STRIDE,
+  type LineageMarks,
   type SnapshotMsg,
   type VisualEvent,
 } from '@worker/protocol';
@@ -29,8 +30,28 @@ import { DISH_PX_PER_CELL, DISH_TEX, paintAggregation, paintDeposits, paintDish,
 import { speciesRgb } from './speciesColors';
 import { buildLayerAtlas, featureLayers, layerKey, type LayerPick } from './features';
 import { FEATURE_LAYERS, type FeatureLayerId } from '@art/src/layers/modules';
+import { brushCellOutcome, ST_NONE, type LabBrushRule } from '@sim/grid';
 
 const FLAG_MOVING = 1 << 6;
+
+/**
+ * Trait overlay (P2.3): tints for the five locus bands (low → high, see @sim/lineage TRAIT_BANDS);
+ * the middle band keeps the sprite's own colors. Organisms whose locus is not active are dimmed. The
+ * lineage panel's legend uses the same colors (TRAIT_BAND_CSS) and lists counts, so color is never
+ * the only carrier of the meaning.
+ */
+export const TRAIT_BAND_TINTS = [0x3f7fd0, 0x9cc4ec, 0xffffff, 0xf4bf7a, 0xe0663a] as const;
+export const TRAIT_BAND_CSS = ['#3f7fd0', '#9cc4ec', '#9aa7ae', '#f4bf7a', '#e0663a'] as const;
+const TRAIT_BAND_AGG: readonly [number, number, number][] = [
+  [63, 127, 208],
+  [156, 196, 236],
+  [154, 167, 174],
+  [244, 191, 122],
+  [224, 102, 58],
+];
+const TRAIT_INACTIVE_TINT = 0x8a8a8a;
+/** Lineage rings drawn at once (CT §12.10 "descendants highlighted ≤ 200"). */
+const LINEAGE_RINGS_MAX = 200;
 
 export interface AtlasManifestLike {
   readonly width: number;
@@ -192,6 +213,14 @@ export class DishRenderer {
     app.canvas.style.touchAction = 'none';
     const r = new DishRenderer(app);
     await r.init(atlasUrl, manifest);
+    // `resizeTo` follows window resizes only; the host also changes size when the chrome around it
+    // does (Explore ⇄ Lab bars, text size), so follow the element itself (P2.7).
+    if (typeof ResizeObserver === 'function') {
+      r.hostObserver = new ResizeObserver(() => {
+        if (!r.destroyed) app.queueResize();
+      });
+      r.hostObserver.observe(host);
+    }
     return r;
   }
 
@@ -439,10 +468,12 @@ export class DishRenderer {
     this.curAt = now;
     this.handleEvents(s.events, now);
     this.cur = s;
+    this.lineage = s.lineage ?? null;
     this.aggDirty = true;
   }
 
   private paintAggregation(s: SnapshotMsg): void {
+    if (this.paintTraitAggregation(s)) return;
     this.aggDirty = false;
     const nSp = Math.max(1, this.speciesIds.length);
     const dominant = this.aggDominant.fill(-1);
@@ -591,7 +622,7 @@ export class DishRenderer {
         // Newborns fade in over their first snapshot; feeders glow very slightly brighter.
         const born = cue & CUE_JUST_BORN ? 0.75 + 0.25 * alpha : 1;
         if (p.alpha !== born) p.alpha = born;
-        const tint = dormant ? 0xc8c8c8 : cue & CUE_FEEDING ? 0xffffff : 0xf0f0f0;
+        const tint = this.traitTint(k) ?? (dormant ? 0xc8c8c8 : cue & CUE_FEEDING ? 0xffffff : 0xf0f0f0);
         if (this.poolTint[k] !== tint) {
           p.tint = tint;
           this.poolTint[k] = tint;
@@ -681,6 +712,7 @@ export class DishRenderer {
       const y = Math.floor(this.selectedCell / GRID_W);
       g.rect(x, y, 1, 1).stroke({ width: 2 / cam.zoom, color: 0xf2b84b });
     }
+    this.drawLineage(s, alpha);
   }
 
   /** Organisms near a screen point, nearest first (then lower birthId). */
@@ -700,13 +732,165 @@ export class DishRenderer {
     return { candidates: out, cell };
   }
 
+  // -------------------------------------------------------------------------------------------
+  // Lineage view (P2.3): trait-band tints, rings on living members of the followed branch, and a
+  // follow that moves to another living member when the followed one is gone. Cosmetic only.
+
+  private lineage: LineageMarks | null = null;
+  private lineageG: Graphics | null = null;
+  private lineageFollow = false;
+
+  /** Band tint for snapshot entry k while a trait overlay is on (undefined = normal tint). */
+  private traitTint(k: number): number | undefined {
+    const l = this.lineage;
+    if (!l || l.locus === null) return undefined;
+    const band = (l.marks[k] ?? 7) & 7;
+    return band < TRAIT_BAND_TINTS.length ? TRAIT_BAND_TINTS[band] : TRAIT_INACTIVE_TINT;
+  }
+
+  /** Wide zoom with a trait overlay: each cell shows its most common band (ties → lower band). */
+  private paintTraitAggregation(s: SnapshotMsg): boolean {
+    const l = this.lineage;
+    if (!l || l.locus === null) return false;
+    this.aggDirty = false;
+    const nB = TRAIT_BAND_AGG.length;
+    const dominant = this.aggDominant.fill(-1);
+    const density = this.aggDensity.fill(0);
+    if (this.aggPerCell.length < CELL_COUNT * nB) this.aggPerCell = new Uint16Array(CELL_COUNT * nB);
+    const perCell = this.aggPerCell.fill(0);
+    for (let k = 0; k < s.count; k++) {
+      const band = (l.marks[k] ?? 7) & 7;
+      if (band >= nB) continue;
+      const o = k * ENT_STRIDE;
+      const cell = Math.floor(s.ents[o + E_Y]!) * GRID_W + Math.floor(s.ents[o + E_X]!);
+      if (cell < 0 || cell >= CELL_COUNT) continue;
+      const v = ++perCell[cell * nB + band]!;
+      density[cell]!++;
+      const d = dominant[cell]!;
+      if (d < 0 || v > perCell[cell * nB + d]! || (v === perCell[cell * nB + d]! && band < d)) dominant[cell] = band;
+    }
+    const ctx = this.aggCanvas.getContext('2d')!;
+    const img = (this.aggImg ??= ctx.createImageData(GRID_W, GRID_W));
+    paintAggregation(img, dominant, density, TRAIT_BAND_AGG);
+    ctx.putImageData(img, 0, 0);
+    this.aggTex.source.update();
+    return true;
+  }
+
+  /** Follow a branch: keep the camera on `entityId`, moving to another living member if it goes. */
+  followLineage(entityId: number | null): void {
+    this.lineageFollow = entityId !== null;
+    this.camera.followEntityId = entityId;
+  }
+
+  get followingLineage(): boolean {
+    return this.lineageFollow;
+  }
+
+  /** Repaint the wide-zoom layer now (e.g. the trait overlay was switched off). */
+  refreshAggregation(): void {
+    this.aggDirty = true;
+  }
+
+  private drawLineage(s: SnapshotMsg, alpha: number): void {
+    const l = this.lineage;
+    const cam = this.camera;
+    if (!this.lineageG) {
+      this.lineageG = new Graphics();
+      this.world.addChild(this.lineageG);
+    }
+    const g = this.lineageG;
+    g.clear();
+    // Touch or pan cancels following (UX §4.2); then only the rings remain.
+    if (this.lineageFollow && cam.followEntityId === null) this.lineageFollow = false;
+    if (!l || l.branch === null) return;
+    let nearest = -1;
+    let nearestD = Infinity;
+    let rings = 0;
+    const lw = 1.2 / cam.zoom;
+    const halfW = cam.viewW / (2 * cam.zoom) + 1;
+    const halfH = cam.viewH / (2 * cam.zoom) + 1;
+    for (let k = 0; k < s.count; k++) {
+      if (!((l.marks[k] ?? 0) & 8)) continue;
+      const x = this.prevX[k]! + (this.curX[k]! - this.prevX[k]!) * alpha;
+      const y = this.prevY[k]! + (this.curY[k]! - this.prevY[k]!) * alpha;
+      const d = Math.hypot(x - cam.cx, y - cam.cy);
+      if (d < nearestD) {
+        nearestD = d;
+        nearest = k;
+      }
+      if (rings >= LINEAGE_RINGS_MAX || Math.abs(x - cam.cx) > halfW || Math.abs(y - cam.cy) > halfH) continue;
+      rings++;
+      const r = Math.max(1.1, 6 / cam.zoom);
+      g.circle(x, y, r).stroke({ width: lw * 2.2, color: 0x172c35, alpha: 0.85 });
+      g.circle(x, y, r).stroke({ width: lw, color: 0xf5f4ef, alpha: 1 });
+    }
+    if (this.lineageFollow && cam.followEntityId !== null && !this.curIndex.has(cam.followEntityId)) {
+      cam.followEntityId = nearest >= 0 ? s.ids[nearest * ID_STRIDE + 1]! : null;
+      if (cam.followEntityId === null) this.lineageFollow = false;
+    }
+  }
+
   /** Current interpolated position of an entity (for follow / find). */
   positionOf(entityId: number): [number, number] | null {
     const k = this.curIndex.get(entityId);
     return k === undefined ? null : [this.curX[k]!, this.curY[k]!];
   }
 
+  /** Lab brush preview (UX §4.2; P2.7): drawn above everything, cosmetic only. */
+  private brushG: Graphics | null = null;
+  /** Follows the host element's size (see create()). */
+  private hostObserver: ResizeObserver | null = null;
+
+  /**
+   * Show a brush footprint before release: covered cells the edit applies to are tinted; cells it
+   * would refuse (a structure, a live organism, past the rim) are crossed. Uses the same rule as the
+   * simulation (brushCellOutcome) over the latest geometry and snapshot, so it never promises what
+   * the command refuses; the command's own counts stay authoritative. 'life' marks cells an
+   * organism could stand on (no structure). Returns the counts shown to the player; null clears.
+   */
+  setBrushPreview(p: { readonly cells: readonly number[]; readonly rule: LabBrushRule | 'life' } | null): { ok: number; refused: number } {
+    if (!this.brushG) {
+      this.brushG = new Graphics();
+      this.world.addChild(this.brushG);
+    }
+    const g = this.brushG;
+    g.clear();
+    if (!p || this.destroyed) return { ok: 0, refused: 0 };
+    const occupied = new Uint8Array(CELL_COUNT);
+    const s = this.cur;
+    if (s && p.rule === 'place') {
+      for (let k = 0; k < s.count; k++) {
+        const cell = Math.floor(s.ents[k * ENT_STRIDE + E_Y]!) * GRID_W + Math.floor(s.ents[k * ENT_STRIDE + E_X]!);
+        if (cell >= 0 && cell < CELL_COUNT) occupied[cell] = 1;
+      }
+    }
+    const refusedCells: number[] = [];
+    let ok = 0;
+    for (const cell of p.cells) {
+      const st = this.structure ? this.structure[cell]! : ST_NONE;
+      const o = p.rule === 'life' ? (st === ST_NONE ? 'ok' : st === 4 ? 'rim' : 'structure') : brushCellOutcome(p.rule, st, occupied[cell] === 1);
+      if (o === 'ok') {
+        ok++;
+        g.rect(cell % GRID_W, Math.floor(cell / GRID_W), 1, 1);
+      } else if (o !== 'noop') refusedCells.push(cell);
+    }
+    if (ok > 0) g.fill({ color: 0xf2b84b, alpha: 0.45 });
+    if (refusedCells.length > 0) {
+      for (const cell of refusedCells) g.rect(cell % GRID_W, Math.floor(cell / GRID_W), 1, 1);
+      g.fill({ color: 0xb3473f, alpha: 0.35 });
+      for (const cell of refusedCells) {
+        const x = cell % GRID_W;
+        const y = Math.floor(cell / GRID_W);
+        g.moveTo(x + 0.2, y + 0.2).lineTo(x + 0.8, y + 0.8).moveTo(x + 0.8, y + 0.2).lineTo(x + 0.2, y + 0.8);
+      }
+      g.stroke({ width: 0.16, color: 0x172c35, alpha: 0.9 });
+    }
+    return { ok, refused: refusedCells.length };
+  }
+
   destroy(): void {
+    this.hostObserver?.disconnect();
     this.destroyed = true;
     this.app.destroy(true, { children: true, texture: true });
   }

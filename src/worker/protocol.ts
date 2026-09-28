@@ -6,6 +6,7 @@ import type { CommandPayload, CommandResult } from '@sim/commands';
 import type { WorldState } from '@sim/serialize';
 import type { FieldId } from '@sim/fields';
 import type { CompareSpeed, ComparisonState } from './comparison';
+import type { LineageAnswer } from '@sim/lineage';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -61,6 +62,10 @@ export type ToWorker =
   | { readonly type: 'importDish'; readonly requestId: number; readonly text: string; readonly newDishId: string }
   /** Read-only family query for the inspector's "Where is its family?" shortcut (SPEC §12.1, UX §5.3). */
   | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly birthId: number }
+  /** Read-only lineage panel query (SPEC §8.5, UX §5.5): branches, variation, specimens, and detail for one branch or one organism's branch. */
+  | { readonly type: 'lineage'; readonly requestId: number; readonly dishId: string; readonly branch: number | null; readonly birthId: number | null }
+  /** Trait overlay and lineage highlight for this dish's snapshots (render-only; never touches the world). */
+  | { readonly type: 'lineageView'; readonly dishId: string; readonly view: LineageView | null }
   /**
    * Comparison (SPEC §13.4, P2.4): capture the source dish once as the baseline, realize arms A and B
    * (paused), pause the source. Optional interventions are applied to B only, as paused edits.
@@ -145,6 +150,8 @@ export interface VisualEvent {
   readonly cell: number;
   readonly birthId: number;
   readonly cause?: number;
+  /** Branch id for branchEstablished / branchExtinct (P2.3). */
+  readonly branch?: number;
 }
 
 export interface DishInfo {
@@ -162,6 +169,13 @@ export interface DishInfo {
   readonly recipeId: string | null;
   readonly contentHash: string;
   readonly manifestLabel: string;
+  /** Lab trays (P2.7): each species' recorded habitats and one-line summary, in speciesIds order. */
+  readonly speciesHabitats?: readonly (readonly string[])[];
+  readonly speciesSummaries?: readonly string[];
+  /** Lab trays (P2.7): each enabled material's one-line summary, in materials order. */
+  readonly materialSummaries?: readonly string[];
+  /** Fields allocated in this world (the overlays the Observe tray can offer), canonical order. */
+  readonly fieldIds?: readonly string[];
 }
 
 export interface SnapshotMsg {
@@ -183,6 +197,27 @@ export interface SnapshotMsg {
   readonly capacityReached: boolean;
   readonly speciesCounts: readonly number[];
   readonly undoAvailable: boolean;
+  /** Trait overlay bands and lineage highlight per entity, in `ents` order (P2.3); absent when off. */
+  readonly lineage?: LineageMarks | null;
+}
+
+/** What the lineage view asks the worker to mark: a locus to band, and/or a branch to highlight. */
+export interface LineageView {
+  readonly locus: number | null;
+  readonly branch: number | null;
+}
+
+/**
+ * Per-entity lineage marks (see @sim/lineage packLineageMarks): low 3 bits = trait band 0–4 of `locus`
+ * (7 = none or inactive), bit 3 = living member of `branch` or a branch descended from it.
+ */
+export interface LineageMarks {
+  readonly locus: number | null;
+  readonly branch: number | null;
+  readonly marks: Uint8Array;
+  readonly bandCounts: readonly number[];
+  readonly inactive: number;
+  readonly members: number;
 }
 
 /** Inspector data (SPEC §12.1). Built in the worker from authoritative state; no randomness. */
@@ -393,6 +428,7 @@ export type FromWorker =
   | { readonly type: 'loaded'; readonly requestId: number; readonly info: DishInfo; readonly usedPredecessor: boolean }
   | { readonly type: 'exported'; readonly requestId: number; readonly text: string; readonly filename: string }
   | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly family: FamilyAnswer }
+  | { readonly type: 'lineage'; readonly requestId: number; readonly dishId: string; readonly lineage: LineageAnswer }
   | { readonly type: 'done'; readonly requestId: number }
   /** Comparison status; unsolicited (no requestId) while running and when it completes. */
   | { readonly type: 'compareState'; readonly requestId?: number; readonly state: ComparisonState };

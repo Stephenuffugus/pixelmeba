@@ -43,6 +43,8 @@ export interface Settings {
   readonly showPrompts: boolean;
   /** Text size as a multiple of the device's default (UX §2 Settings "text size"; §4.1 up to 200 %). */
   readonly textScale: number;
+  /** Pause the dish when a discovery card opens (UX §2 Settings; D04 §8). Off unless chosen. */
+  readonly pauseOnDiscoveries?: boolean;
 }
 
 /** Text sizes offered in Settings (UX §4.1 acceptance runs at 100 % and 200 %). */
@@ -55,7 +57,7 @@ export const selection = signal<Selection | null>(null);
 export const inspector = signal<InspectorPayload | null>(null);
 export const candidates = signal<{ x: number; y: number; items: { birthId: number; species: number }[] } | null>(null);
 export const tool = signal<Tool>({ kind: 'look' });
-export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | 'save' | 'history'>('none');
+export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | 'save' | 'history' | 'lineage'>('none');
 export const overlay = signal<OverlayId | null>(null);
 export const overlayMax = signal<number>(0);
 export const toast = signal<string | null>(null);
