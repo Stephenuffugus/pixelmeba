@@ -1,0 +1,12 @@
+{
+  "id": "R-G2",
+  "revision": 1,
+  "sourceId": "FIRST_DISH_V1",
+  "sourceRevision": 1,
+  "requiredCapabilities": ["core", "enzymes"],
+  "title": "A bigger meal",
+  "question": "Does more food help every family?",
+  "patch": { "kind": "patchSet", "patchIndex": 0, "field": "sugar", "value": 0.8 },
+  "previewDifference": "The sugar patch starts with twice as much sugar.",
+  "phase": 2
+}

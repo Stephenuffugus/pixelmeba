@@ -26,7 +26,10 @@ import {
   type Species,
   type VariantDef,
 } from './schema';
-import { IMPLEMENTED_NATIVE_ABILITIES } from './implemented';
+import { IMPLEMENTED_MODULES, IMPLEMENTED_NATIVE_ABILITIES } from './implemented';
+import { MODULE_NATIVE_ABILITY, missingModuleParams, moduleSetProblem } from './moduleRules';
+import { MAX_WHAT_IF_CHOICES, variantPatchProblems } from '../variants';
+import { experimentProblems } from '../experiments';
 
 export interface RawFile {
   readonly file: string;
@@ -234,6 +237,13 @@ export function validateContent(raw: RawPacks): ValidationResult {
     [...m.excludes, ...m.requires].forEach((x) => {
       if (!hasModule(x)) err(file, 'excludes/requires', `unknown module "${x}"`);
     });
+    // A species with the native ability this module duplicates can never be eligible (CT §7.2).
+    const native = MODULE_NATIVE_ABILITY[m.id];
+    if (native !== undefined) {
+      m.eligibleAncestors.forEach((a, i) => {
+        if (species.map[a]?.nativeAbilities.includes(native)) err(file, `eligibleAncestors.${i}`, `"${a}" has ${native} natively and cannot be eligible`);
+      });
+    }
   }
   for (const id of habitats.ids) {
     const h = habitats.map[id]!;
@@ -250,11 +260,25 @@ export function validateContent(raw: RawPacks): ValidationResult {
       f.modules.forEach((m, j) => {
         if (!hasModule(m)) err(file, `founders.${i}.modules.${j}`, `unknown module "${m}"`);
       });
+      // Founder module sets obey the same combination rules as mutation (SPEC §9; P2.1).
+      const sp = species.map[f.species];
+      if (sp && f.modules.every(hasModule)) {
+        const set = [...f.modules].sort();
+        const problem = moduleSetProblem(modules.ids.map((id) => modules.map[id]!), sp, set);
+        if (problem) err(file, `founders.${i}.modules`, problem);
+      }
     });
   }
   for (const id of experiments.ids) {
     const e = experiments.map[id]!;
     if (recipes.map[e.recipeId] === undefined) err(experiments.files[id]!, 'recipeId', `unknown recipe "${e.recipeId}"`);
+    // Experiment cards (SPEC §13.2; P2.5): gate clauses, measurements, the declared change and the
+    // recipe's scheduled commands must all be valid; shipped cards may only use enabled content.
+    const expRecipe = recipes.map[e.recipeId];
+    const ctx = { species: species.map, materials: materials.map, manifest: manifestRes.success ? manifestRes.data : null };
+    for (const p of experimentProblems(e, expRecipe, ctx)) {
+      err(p.target === 'recipe' && expRecipe ? recipes.files[expRecipe.id]! : experiments.files[id]!, p.path, `${p.target === 'recipe' ? `(experiment ${id}) ` : ''}${p.message}`);
+    }
   }
   for (const id of variants.ids) {
     const v = variants.map[id]!;
@@ -268,6 +292,12 @@ export function validateContent(raw: RawPacks): ValidationResult {
     }
     if (v.objectiveId !== undefined && objectives.map[v.objectiveId] === undefined)
       err(file, 'objectiveId', `unknown objective "${v.objectiveId}"`);
+    // What if? (SPEC §13.3; D09 §5): the one change must be real and apply exactly, never cropped.
+    if (src !== undefined && src.revision === v.sourceRevision) {
+      for (const p of variantPatchProblems(v, src, habitats.map[src.habitatId])) {
+        if (!issues.some((x) => x.file === file && x.path === p.path)) err(file, p.path, p.message);
+      }
+    }
   }
 
   // Manifest ------------------------------------------------------------------------------------
@@ -300,6 +330,18 @@ export function validateContent(raw: RawPacks): ValidationResult {
       const mod = modules.map[id];
       if (mod === undefined) return err(mf, `enabledModules.${i}`, `unknown module "${id}"`);
       if (mod.phase > m.buildPhase) err(mf, `enabledModules.${i}`, `"${id}" belongs to phase ${mod.phase}`);
+      if (!IMPLEMENTED_MODULES.includes(id)) err(mf, `enabledModules.${i}`, `"${id}" is not implemented by the simulation yet`);
+      const missing = missingModuleParams(mod);
+      if (missing.length > 0) err(modules.files[id]!, 'params', `enabled module ${id} is missing ${missing.join(', ')}`);
+      // The dormancy machine subtracts these costs unconditionally once its energy gates pass, so the
+      // gates must cover them or an organism could be driven below zero energy.
+      const p = mod.params as Record<string, number | undefined>;
+      if (id === 'E03' && p.wakeMinEnergy !== undefined && p.wakeCost !== undefined && p.wakeMinEnergy < p.wakeCost) {
+        err(modules.files[id]!, 'params.wakeMinEnergy', `wakeMinEnergy ${p.wakeMinEnergy} must be at least wakeCost ${p.wakeCost}`);
+      }
+      if (id === 'E03' && p.entryMinEnergy !== undefined && p.prepareCost !== undefined && p.entryMinEnergy < p.prepareCost) {
+        err(modules.files[id]!, 'params.entryMinEnergy', `entryMinEnergy ${p.entryMinEnergy} must be at least prepareCost ${p.prepareCost}`);
+      }
     });
     m.enabledMaterials.forEach((id, i) => {
       if (materials.map[id] === undefined) err(mf, `enabledMaterials.${i}`, `unknown material "${id}"`);
@@ -319,6 +361,26 @@ export function validateContent(raw: RawPacks): ValidationResult {
           if (!m.enabledModules.includes(mod)) err(file, `founders.${i}.modules`, `"${mod}" is not enabled in this build`);
         });
       });
+    }
+    // What if? variants shipped in this build need their capabilities and a shipped source (SPEC §13.3),
+    // and the sheet offers at most three changed choices per source (UX §3.4).
+    const whatIf: Record<string, string[]> = {};
+    for (const id of variants.ids) {
+      const v = variants.map[id]!;
+      if (v.phase > m.buildPhase) continue;
+      const file = variants.files[id]!;
+      v.requiredCapabilities.forEach((c, i) => {
+        if (!m.enabledSystems.includes(c)) err(file, `requiredCapabilities.${i}`, `"${c}" is not enabled in this build`);
+      });
+      const src = recipes.map[v.sourceId];
+      if (src !== undefined && src.phase > m.buildPhase) err(file, 'sourceId', `source recipe "${v.sourceId}" belongs to phase ${src.phase} (build phase ${m.buildPhase})`);
+      if (v.patch.kind !== 'none') (whatIf[v.sourceId] ??= []).push(id);
+    }
+    for (const sourceId of Object.keys(whatIf).sort()) {
+      const list = whatIf[sourceId]!;
+      list.slice(MAX_WHAT_IF_CHOICES).forEach((id) =>
+        err(variants.files[id]!, 'sourceId', `${sourceId} already has ${MAX_WHAT_IF_CHOICES} What if? choices (${list.slice(0, MAX_WHAT_IF_CHOICES).join(', ')})`),
+      );
     }
     if (m.contentHash === '') warn(mf, 'contentHash', 'content hash not written yet (run npm run content:validate -- --write)');
   }

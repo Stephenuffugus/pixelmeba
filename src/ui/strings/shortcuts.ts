@@ -7,6 +7,7 @@
 import { R } from '@sim/reasons';
 import type { EntityInspect, FamilyAnswer, FamilyMember } from '@worker/protocol';
 import { reasonText } from './reasons';
+import { lifeStateWhile } from './modules';
 
 const FOOD_WORDS: Readonly<Record<string, string>> = {
   sugar: 'sugar',
@@ -98,6 +99,8 @@ function blockerDetail(e: EntityInspect, code: number): string {
       return `Health ${Math.floor(e.H)} of ${e.divisionNeeds.health} needed.`;
     case R.DIV_BLOCK_AGE:
       return `Age ${Math.floor(e.age)} s of ${Math.ceil(e.divisionNeeds.age)} s.`;
+    case R.DIV_BLOCK_STATE:
+      return `Can't split while ${lifeStateWhile(e.lifeState)}.`;
     default:
       return reasonText(code, 'lab');
   }

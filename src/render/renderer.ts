@@ -15,6 +15,7 @@ import {
   E_CUE,
   E_FLAGS,
   E_HEADING,
+  E_LIFE,
   E_SPECIES,
   E_X,
   E_Y,
@@ -26,6 +27,8 @@ import {
 import { Camera, ZOOM_CLOSE, ZOOM_NEIGHBORHOOD } from './camera';
 import { DISH_PX_PER_CELL, DISH_TEX, paintAggregation, paintDeposits, paintDish, paintOverlay, repaintDepositCells, type DirtyRect } from './layers';
 import { speciesRgb } from './speciesColors';
+import { buildLayerAtlas, featureLayers, layerKey, type LayerPick } from './features';
+import { FEATURE_LAYERS, type FeatureLayerId } from '@art/src/layers/modules';
 
 const FLAG_MOVING = 1 << 6;
 
@@ -111,6 +114,12 @@ export class DishRenderer {
   private readonly overlaySprite = new Sprite();
   private readonly aggSprite = new Sprite();
   private particles!: ParticleContainer;
+  /** Module feature layers above the bodies (UX §7.3 "feature rims"), from their own small atlas. */
+  private featureParticles!: ParticleContainer;
+  /** [layer][frame][heading] → texture. */
+  private layerTex: Record<string, Texture[][]> = {};
+  private featurePool: Particle[] = [];
+  private readonly picks: LayerPick[] = [];
   private readonly effects = new Container();
   private readonly selectionG = new Graphics();
   private readonly rim = new Graphics();
@@ -226,8 +235,9 @@ export class DishRenderer {
       texture: atlas,
       roundPixels: false,
     });
+    this.buildFeatureLayers();
     this.drawRim();
-    this.world.addChild(this.dishSprite, this.depositSprite, this.overlaySprite, this.aggSprite, this.rim, this.particles, this.effects, this.selectionG);
+    this.world.addChild(this.dishSprite, this.depositSprite, this.overlaySprite, this.aggSprite, this.rim, this.particles, this.featureParticles, this.effects, this.selectionG);
     this.root.addChild(this.world);
     this.app.stage.addChild(this.root);
     this.app.ticker.add(() => this.frame());
@@ -242,6 +252,34 @@ export class DishRenderer {
 
   get canvas(): HTMLCanvasElement {
     return this.app.canvas;
+  }
+
+  /** Upload the module feature-layer frames (art/src/layers) as one nearest-neighbor texture. */
+  private buildFeatureLayers(): void {
+    const la = buildLayerAtlas();
+    const canvas = document.createElement('canvas');
+    canvas.width = la.width;
+    canvas.height = la.height;
+    canvas.getContext('2d')!.putImageData(new ImageData(la.rgba, la.width, la.height), 0, 0);
+    const tex = Texture.from(canvas);
+    tex.source.scaleMode = 'nearest';
+    for (const def of FEATURE_LAYERS) {
+      this.layerTex[def.id] = def.frames.map((_, fi) =>
+        [0, 1, 2, 3].map((h) => {
+          const r = la.rects[layerKey(def.id, fi, h)]!;
+          return new Texture({ source: tex.source, frame: new Rectangle(r[0], r[1], r[2], r[3]) });
+        }),
+      );
+    }
+    this.featureParticles = new ParticleContainer({
+      dynamicProperties: { position: true, uvs: true, color: true, vertex: true, rotation: false },
+      texture: tex,
+      roundPixels: false,
+    });
+  }
+
+  private layerTexture(layer: FeatureLayerId, frame: number, heading: number): Texture | undefined {
+    return this.layerTex[layer]?.[frame]?.[heading];
   }
 
   setSpecies(ids: readonly string[], assets: readonly string[]): void {
@@ -482,6 +520,7 @@ export class DishRenderer {
     const wide = cam.aggregated();
     this.aggSprite.visible = wide;
     this.particles.visible = !wide;
+    this.featureParticles.visible = !wide;
     this.particles.alpha = 1;
     if (!s) return;
     if (wide && this.aggDirty) this.paintAggregation(s);
@@ -493,7 +532,9 @@ export class DishRenderer {
     // Pixi skips an invisible or fully transparent container; so do we (ghosts still expire).
     const draw = this.particles.visible && this.particles.alpha > 0;
     const list = this.particles.particleChildren;
+    const flist = this.featureParticles.particleChildren;
     let n = 0;
+    let nf = 0;
     if (draw) {
       const needed = s.count;
       while (this.pool.length < needed) {
@@ -531,12 +572,16 @@ export class DishRenderer {
         if (x < minX || x > maxX || y < minY || y > maxY) continue;
         const flags = ents[o + E_FLAGS]!;
         const cue = ents[o + E_CUE]!;
-        const a = cue & CUE_STRESSED && d.stress ? d.stress : cue & CUE_FEEDING && d.feed && !(flags & FLAG_MOVING) ? d.feed : (d.move ?? d.idle);
+        // Preparing/Resting/Waking hold a still, folded pose (UX §7.2): no locomotion or feeding frames.
+        const life = ents[o + E_LIFE]!;
+        const dormant = life !== 0;
+        const a = cue & CUE_STRESSED && d.stress ? d.stress : !dormant && cue & CUE_FEEDING && d.feed && !(flags & FLAG_MOVING) ? d.feed : (d.move ?? d.idle);
         if (!a) continue;
         const entityId = ids[k * ID_STRIDE + 1]!;
         const phase = (entityId * 97) % 1000;
-        const idx = reduced ? a.reducedMotionFrame : Math.floor((now + phase) / a.durationMs) % a.frames;
-        const tex = a.tex[headingRow(d.headings, ents[o + E_HEADING]!)]![idx];
+        const idx = reduced || dormant ? a.reducedMotionFrame : Math.floor((now + phase) / a.durationMs) % a.frames;
+        const hRow = headingRow(d.headings, ents[o + E_HEADING]!);
+        const tex = a.tex[hRow]![idx];
         const p = this.pool[k]!;
         if (tex) p.texture = tex;
         p.x = x;
@@ -546,12 +591,31 @@ export class DishRenderer {
         // Newborns fade in over their first snapshot; feeders glow very slightly brighter.
         const born = cue & CUE_JUST_BORN ? 0.75 + 0.25 * alpha : 1;
         if (p.alpha !== born) p.alpha = born;
-        const tint = cue & CUE_FEEDING ? 0xffffff : 0xf0f0f0;
+        const tint = dormant ? 0xc8c8c8 : cue & CUE_FEEDING ? 0xffffff : 0xf0f0f0;
         if (this.poolTint[k] !== tint) {
           p.tint = tint;
           this.poolTint[k] = tint;
         }
         list[n++] = p;
+        // Module feature layers: only marks the snapshot says are real for this organism.
+        const marks = featureLayers(cue, life, ids[k * ID_STRIDE] === this.selectedBirthId, this.picks);
+        for (let m = 0; m < marks; m++) {
+          const pick = this.picks[m]!;
+          const lt = this.layerTexture(pick.layer, pick.frame, hRow);
+          if (!lt) continue;
+          let fp = this.featurePool[nf];
+          if (!fp) {
+            fp = new Particle({ texture: lt, anchorX: 0.5, anchorY: 0.5 });
+            this.featurePool[nf] = fp;
+          }
+          fp.texture = lt;
+          fp.x = x;
+          fp.y = y;
+          fp.scaleX = (scale * d.size) / 16;
+          fp.scaleY = (scale * d.size) / 16;
+          if (fp.alpha !== born) fp.alpha = born;
+          flist[nf++] = fp;
+        }
       }
     }
     // Death dissolves (3–4 frames), then removed.
@@ -574,6 +638,8 @@ export class DishRenderer {
     if (draw) {
       list.length = n;
       this.particles.update();
+      flist.length = nf;
+      this.featureParticles.update();
     }
 
     // Effects.

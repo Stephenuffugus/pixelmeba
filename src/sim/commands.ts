@@ -12,7 +12,8 @@ import { brushCells, transportOpen } from './grid';
 import { recordInput } from './ledger';
 import { recordBirth } from './lineage';
 import { canOccupy, initialDecisionTimer } from './movement';
-import { founderGenome } from './founders';
+import { founderGenome, ModuleSetError } from './founders';
+import { validateModuleSet } from './modules';
 import { markField, updateDerived } from './transport';
 import { rebuildIndex } from './spatial';
 import { initFounder } from './branches';
@@ -226,6 +227,11 @@ export function introduceOrganism(
   opts: { modules?: readonly string[]; exactCenter?: boolean; origin?: number } = {},
 ): number {
   const e = world.ents;
+  // An illegal module set is refused before anything is allocated or logged (SPEC §9).
+  if (opts.modules && opts.modules.length > 0) {
+    const problem = validateModuleSet(world, world.species[spIdx]!.id, [...opts.modules].sort());
+    if (problem) throw new ModuleSetError(`cannot introduce ${world.species[spIdx]!.id}: ${problem}`);
+  }
   const slot = e.allocate();
   if (slot < 0) return -1;
   const c = e.cols;

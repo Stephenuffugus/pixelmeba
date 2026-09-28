@@ -13,7 +13,7 @@ import { base64ToBytes, canonicalJson, StateHasher, typedToBase64 } from './hash
 import type { Command } from './commands';
 import type { EventLog } from './events';
 import type { History } from './history';
-import type { Ledger } from './ledger';
+import { createLedger, type Ledger } from './ledger';
 import type { Lineage } from './lineage';
 import type { BranchBook } from './branches';
 import { rebuildIndex } from './spatial';
@@ -139,9 +139,36 @@ export function serializeWorld(world: World): WorldState {
   };
 }
 
-export function deserializeWorld(state: WorldState): World {
-  if (state.format !== 'pixelmeba-world') throw new Error('not a Pixelmeba world state');
-  if (state.schemaVersion !== SCHEMA_VERSION) throw new Error(`unsupported world schema ${state.schemaVersion}`);
+/** Entity columns added at each world schema version (zero-filled when migrating older states). */
+export const COLUMNS_ADDED_IN: Readonly<Record<number, readonly (typeof ENTITY_COLUMNS)[number][0][]>> = {
+  2: ['dryTimer'],
+};
+
+/**
+ * Bring an older world state up to SCHEMA_VERSION by copy (the input is never modified; CLAUDE.md
+ * "migration by copy"). Each step only adds what that version introduced, with the value an older
+ * world implicitly had: dryTimer 0, because no organism could rest before schema 2.
+ */
+export function migrateWorldState(state: WorldState): WorldState {
+  if (!Number.isInteger(state.schemaVersion) || state.schemaVersion < 1) throw new Error(`unsupported world schema ${String(state.schemaVersion)}`);
+  if (state.schemaVersion > SCHEMA_VERSION) throw new Error(`world schema ${state.schemaVersion} is newer than this build (${SCHEMA_VERSION})`);
+  let s = state;
+  for (let v = state.schemaVersion + 1; v <= SCHEMA_VERSION; v++) {
+    const columns: Record<string, EncodedArray> = { ...s.entities.columns };
+    for (const name of COLUMNS_ADDED_IN[v] ?? []) {
+      if (columns[name]) continue;
+      const dtype = ENTITY_COLUMNS.find(([n]) => n === name)![1];
+      const Ctor = { f64: Float64Array, f32: Float32Array, i32: Int32Array, u32: Uint32Array, u16: Uint16Array, u8: Uint8Array }[dtype];
+      columns[name] = encodeArray(new Ctor(s.entities.highWater));
+    }
+    s = { ...s, schemaVersion: v, entities: { ...s.entities, columns } };
+  }
+  return s;
+}
+
+export function deserializeWorld(input: WorldState): World {
+  if (input.format !== 'pixelmeba-world') throw new Error('not a Pixelmeba world state');
+  const state = migrateWorldState(input);
   const world = createEmptyWorld({ worldId: state.worldId, seed: state.seed, settings: state.settings, content: state.content });
   world.tick = state.tick;
   decodeInto(state.grid.substrate, world.grid.substrate);
@@ -166,6 +193,8 @@ export function deserializeWorld(state: WorldState): World {
   if (world.genomes.size !== state.genomes.length) throw new Error('duplicate genomes in save');
   Object.assign(world.lineage, JSON.parse(JSON.stringify(state.lineage)));
   Object.assign(world.ledger, JSON.parse(JSON.stringify(state.ledger)));
+  // Energy categories added later start at zero in older saves (diagnostics only; never conserved).
+  world.ledger.energy = { ...createLedger().energy, ...world.ledger.energy };
   world.commands.pending = JSON.parse(JSON.stringify(state.commands.pending)) as Command[];
   world.commands.log = JSON.parse(JSON.stringify(state.commands.log)) as Command[];
   world.commands.nextSeq = state.commands.nextSeq;

@@ -21,6 +21,7 @@ import {
   O2_PER_CARBON_AEROBIC,
   PHOTO_O2_PER_CARBON,
   PHOTO_SUGAR_FRACTION,
+  USABLE_INTAKE_FRACTION,
 } from './constants';
 import { FLAG } from './entities';
 import { FIELD_DEFS, FIELD_IDS, type FieldId } from './fields';
@@ -112,7 +113,7 @@ function intakeBody(world: World): void {
     mealReq[i] = 0;
     carbonIn[i] = 0;
     if (c.alive[i] !== 1) continue;
-    c.flags[i] = c.flags[i]! & ~FLAG.feeding;
+    c.flags[i] = c.flags[i]! & ~(FLAG.feeding | FLAG.usableIntake);
     c.limitCode[i] = R.NONE;
     c.limitValue[i] = 0;
     if (!isIntakeEligible(world, i)) continue;
@@ -318,6 +319,7 @@ function intakeBody(world: World): void {
       c.lastIntakeTick[i] = world.tick;
       c.intakeAccum[i]! += Cs;
       c.flags[i] = c.flags[i]! | FLAG.feeding;
+      if (Cs >= USABLE_INTAKE_FRACTION * prof.q * DT) c.flags[i] = c.flags[i]! | FLAG.usableIntake;
       milestone(world.events, 'firstIntake', world.tick);
     }
 

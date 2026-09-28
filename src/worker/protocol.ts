@@ -5,6 +5,7 @@
 import type { CommandPayload, CommandResult } from '@sim/commands';
 import type { WorldState } from '@sim/serialize';
 import type { FieldId } from '@sim/fields';
+import type { CompareSpeed, ComparisonState } from './comparison';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -59,7 +60,30 @@ export type ToWorker =
   | { readonly type: 'exportDish'; readonly requestId: number; readonly dishId: string; readonly strip: boolean }
   | { readonly type: 'importDish'; readonly requestId: number; readonly text: string; readonly newDishId: string }
   /** Read-only family query for the inspector's "Where is its family?" shortcut (SPEC §12.1, UX §5.3). */
-  | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly birthId: number };
+  | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly birthId: number }
+  /**
+   * Comparison (SPEC §13.4, P2.4): capture the source dish once as the baseline, realize arms A and B
+   * (paused), pause the source. Optional interventions are applied to B only, as paused edits.
+   */
+  | {
+      readonly type: 'compareStart';
+      readonly requestId: number;
+      readonly compareId: string;
+      readonly sourceDishId: string;
+      readonly aDishId: string;
+      readonly bDishId: string;
+      readonly interventions?: readonly { readonly commandId: string; readonly payload: CommandPayload }[];
+    }
+  /** Clear B's queued change: rebuild B from the stored baseline (setup only). */
+  | { readonly type: 'compareReset'; readonly requestId: number; readonly compareId: string }
+  /** Advance A and B by equal tick counts: `horizonTicks` each, or until compareStop when null. */
+  | { readonly type: 'compareRun'; readonly requestId: number; readonly compareId: string; readonly horizonTicks: number | null; readonly speed: CompareSpeed }
+  /** Pacing only; never changes how many ticks either arm receives. */
+  | { readonly type: 'compareSpeed'; readonly compareId: string; readonly speed: CompareSpeed }
+  /** End the run now; both arms are at the same tick. */
+  | { readonly type: 'compareStop'; readonly requestId: number; readonly compareId: string }
+  /** Discard A, B and the stored baseline. Never touches the source dish or any save slot. */
+  | { readonly type: 'compareDelete'; readonly requestId: number; readonly compareId: string };
 
 export interface SlotSummary {
   readonly slotId: string;
@@ -91,6 +115,18 @@ export const CUE_HUNTING = 4;
 export const CUE_SECRETING = 8;
 export const CUE_JUST_BORN = 16;
 export const CUE_CAPACITY_BLOCKED = 32;
+/**
+ * Module visual layers (SPEC §9, UX §6.2; P2.1). Set only from the organism's genome and state:
+ * E01 carriers (notched producer marking), E03 carriers (seam; folded pose only while Preparing,
+ * Resting or Waking — see E_LIFE), E05 carriers (interior pocket) with its fill band 0–3 in the two
+ * bits at CUE_RESERVE_BAND_SHIFT: 0 = no energy above the base cap, 1–3 = thirds of the chamber's
+ * extra room in use (actual stored energy, never cosmetic).
+ */
+export const CUE_MOD_E01 = 64;
+export const CUE_MOD_E03 = 128;
+export const CUE_MOD_E05 = 256;
+export const CUE_RESERVE_BAND_SHIFT = 9;
+export const CUE_RESERVE_BAND_MASK = 3 << CUE_RESERVE_BAND_SHIFT;
 
 /** Per-entity id stride in SnapshotMsg.ids (Uint32): birthId, entityId. */
 export const ID_STRIDE = 2;
@@ -222,6 +258,71 @@ export interface EntityInspect {
     readonly abilities: readonly string[];
     readonly digestsFilm: boolean;
   };
+  /** Loci that act for this genome: the template's plus module activations (E03 → dormancy). */
+  readonly lociActiveEffective: readonly boolean[];
+  /** Energy cap without supplementary capacity (energyCap − energyCapBase is reserve-chamber room). */
+  readonly energyCapBase: number;
+  /** Supplementary modules carried (P2.1), each with its recorded costs. */
+  readonly modules: readonly ModuleInspect[];
+  /** Energy spent per second in its current state, by category (the same split stage 7 records). */
+  readonly upkeep: UpkeepInspect;
+  /** Dormancy state machine (SPEC §7.6), or null when it has no resting ability. */
+  readonly dormancy: DormancyInspect | null;
+}
+
+/** One carried supplementary module and its recorded numbers (world's versioned registry). */
+export interface ModuleInspect {
+  readonly id: string;
+  readonly name: string;
+  /** Ordinary-maintenance surcharge while carried, E/s (before inherited multipliers). */
+  readonly surchargePerSecond: number;
+  /** Recorded parameters (e.g. E05 capacityBonus/upkeepPerSecond, E01 emitCost, E03 prepareCost). */
+  readonly params: Readonly<Record<string, number>>;
+  /** Whether the module's action is happening right now (E01 releasing; E03 in a dormancy state). */
+  readonly activeNow: boolean;
+}
+
+export interface UpkeepInspect {
+  /** True while Resting: restMaintenance replaces every other upkeep. */
+  readonly resting: boolean;
+  /** Native maintenance (after inherited multipliers), E/s; the rest rate while Resting. */
+  readonly maintenance: number;
+  /** Module surcharges (after inherited multipliers), E/s; 0 while Resting. */
+  readonly surcharge: number;
+  /** Separate upkeep (E05 chamber), E/s; 0 while Resting. */
+  readonly chamber: number;
+}
+
+export interface DormancyInspect {
+  /** 'native' (B12, F04, P08) or 'E03'. */
+  readonly source: string;
+  /** Life state: 0 Active, 1 Preparing, 2 Resting, 3 Waking. */
+  readonly state: number;
+  /** Reason code for the current rest (RESTING_FOOD_SCARCE / RESTING_DRY), or NONE while Active. */
+  readonly cause: number;
+  /** Seconds elapsed in Preparing/Waking; seconds the wake conditions have held while Resting. */
+  readonly stateSeconds: number;
+  readonly lockoutSeconds: number;
+  /** While Active: seconds without usable intake, and the trigger it must reach. */
+  readonly noIntakeSeconds: number;
+  readonly triggerSeconds: number;
+  /** While Active: seconds with moisture suitability below drySuitability, and the trigger. */
+  readonly drySeconds: number;
+  readonly dryTriggerSeconds: number;
+  /** Current wake conditions (evaluated at its cell now). */
+  readonly wake: { readonly food: boolean; readonly moisture: boolean; readonly environment: boolean };
+  readonly rules: {
+    readonly prepareSeconds: number;
+    readonly prepareCost: number;
+    readonly restMaintenance: number;
+    readonly damageFactor: number;
+    readonly wakeSeconds: number;
+    readonly wakeCost: number;
+    readonly wakeMinEnergy: number;
+    readonly lockoutSeconds: number;
+    readonly entryMinEnergy: number;
+    readonly wakeConditionSeconds: number;
+  };
 }
 
 /** How a living family member is related to the organism asked about. */
@@ -292,4 +393,6 @@ export type FromWorker =
   | { readonly type: 'loaded'; readonly requestId: number; readonly info: DishInfo; readonly usedPredecessor: boolean }
   | { readonly type: 'exported'; readonly requestId: number; readonly text: string; readonly filename: string }
   | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly family: FamilyAnswer }
-  | { readonly type: 'done'; readonly requestId: number };
+  | { readonly type: 'done'; readonly requestId: number }
+  /** Comparison status; unsolicited (no requestId) while running and when it completes. */
+  | { readonly type: 'compareState'; readonly requestId?: number; readonly state: ComparisonState };

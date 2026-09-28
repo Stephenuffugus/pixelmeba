@@ -4,10 +4,11 @@
  * founders in distinct cells ordered by distance, then y, then x (logged inputs) → scheduled commands.
  */
 import type { ContentRegistry } from './content/registry';
-import type { HabitatDef, RecipeDef } from './content/schema';
+import type { GeometryOp, HabitatDef, RecipeDef } from './content/schema';
 import { FIELD_DEFS, FIELD_IDS, isFieldId, type FieldId } from './fields';
 import {
   cellIndex,
+  createGrid,
   diskCells,
   inMask,
   maskCells,
@@ -19,6 +20,7 @@ import {
   SUB_SEDIMENT,
   SUB_WATER,
   transportOpen,
+  type Grid,
 } from './grid';
 import { initializeLedger, recordInput } from './ledger';
 import { canOccupy } from './movement';
@@ -43,7 +45,8 @@ export function worldContentFor(registry: ContentRegistry, habitat: HabitatDef, 
   };
 }
 
-const SUB_CODE = { water: SUB_WATER, gel: SUB_GEL, sediment: SUB_SEDIMENT } as const;
+/** Substrate code for each habitat kind a recipe patch can target. */
+export const SUB_CODE = { water: SUB_WATER, gel: SUB_GEL, sediment: SUB_SEDIMENT } as const;
 
 function setFields(world: World, cell: number, values: Partial<Record<FieldId, number>>): void {
   for (const key of Object.keys(values).sort()) {
@@ -52,6 +55,46 @@ function setFields(world: World, cell: number, values: Partial<Record<FieldId, n
     if (!arr) throw new RecipeError(`field ${key} is not enabled in this world`);
     arr[cell] = values[key]!;
   }
+}
+
+/** Cells covered by one habitat geometry op, row-major and clipped to the grid (not yet to the dish mask). */
+function opCells(op: GeometryOp): number[] {
+  if (op.op === 'disk') return diskCells(op.center[0], op.center[1], op.radius);
+  const out: number[] = [];
+  for (let y = op.y0; y <= op.y1; y++) for (let x = op.x0; x <= op.x1; x++) if (x >= 0 && y >= 0 && x < 128 && y < 128) out.push(cellIndex(x, y));
+  return out;
+}
+
+/** The substrate or structure one habitat op paints into cell i. */
+function applyOpGeometry(g: Grid, op: GeometryOp, i: number, removeStones: boolean): void {
+  if (!op.substrate) return;
+  if (op.substrate === 'stone') {
+    if (!removeStones) g.structure[i] = ST_STONE;
+  } else if (op.substrate === 'wall') g.structure[i] = ST_WALL;
+  else if (op.substrate === 'bead') g.structure[i] = ST_BEAD;
+  else g.substrate[i] = SUB_CODE[op.substrate];
+}
+
+/**
+ * The habitat's substrate and structure layout alone (no fields, light or world): exactly the geometry
+ * applyHabitat() paints. Pure; used to validate and preview patch placement without building a world.
+ */
+export function habitatGrid(h: HabitatDef, opts: { removeStones?: boolean } = {}): Grid {
+  const g = createGrid();
+  const baseSub = SUB_CODE[h.baseSubstrate];
+  const cells = maskCells();
+  for (let k = 0; k < cells.length; k++) {
+    const i = cells[k]!;
+    g.substrate[i] = baseSub;
+    g.structure[i] = ST_NONE;
+  }
+  for (const op of h.ops) {
+    for (const i of opCells(op)) {
+      if (!inMask(i % 128, Math.floor(i / 128))) continue;
+      applyOpGeometry(g, op, i, opts.removeStones === true);
+    }
+  }
+  return g;
 }
 
 export function applyHabitat(world: World, h: HabitatDef, opts: { removeStones?: boolean; baseLight?: number } = {}): void {
@@ -66,23 +109,9 @@ export function applyHabitat(world: World, h: HabitatDef, opts: { removeStones?:
     setFields(world, i, h.baseFields);
   }
   for (const op of h.ops) {
-    const shapeCells =
-      op.op === 'disk'
-        ? diskCells(op.center[0], op.center[1], op.radius)
-        : (() => {
-            const out: number[] = [];
-            for (let y = op.y0; y <= op.y1; y++) for (let x = op.x0; x <= op.x1; x++) if (x >= 0 && y >= 0 && x < 128 && y < 128) out.push(cellIndex(x, y));
-            return out;
-          })();
-    for (const i of shapeCells) {
+    for (const i of opCells(op)) {
       if (!inMask(i % 128, Math.floor(i / 128))) continue;
-      if (op.substrate) {
-        if (op.substrate === 'stone') {
-          if (!opts.removeStones) g.structure[i] = ST_STONE;
-        } else if (op.substrate === 'wall') g.structure[i] = ST_WALL;
-        else if (op.substrate === 'bead') g.structure[i] = ST_BEAD;
-        else g.substrate[i] = SUB_CODE[op.substrate];
-      }
+      applyOpGeometry(g, op, i, opts.removeStones === true);
       if (op.fields) setFields(world, i, op.fields);
       if (op.light !== undefined && opts.baseLight === undefined) g.lightBase[i] = op.light;
     }
@@ -99,11 +128,18 @@ export function applyHabitat(world: World, h: HabitatDef, opts: { removeStones?:
   g.geometryVersion++;
 }
 
-function patchCells(world: World, center: readonly [number, number], radius: number, substrate: number): number[] {
-  const g = world.grid;
+/**
+ * The cells a field patch fills: its disk clipped to open cells (inside the dish, no structure) of the
+ * patch substrate, row-major. Realization and What if? validation share this so they cannot disagree.
+ */
+export function validPatchCells(g: Grid, center: readonly [number, number], radius: number, substrate: number): number[] {
   return diskCells(center[0], center[1], radius).filter(
     (i) => inMask(i % 128, Math.floor(i / 128)) && g.structure[i] === ST_NONE && g.substrate[i] === substrate,
   );
+}
+
+function patchCells(world: World, center: readonly [number, number], radius: number, substrate: number): number[] {
+  return validPatchCells(world.grid, center, radius, substrate);
 }
 
 export interface RealizeOptions {
@@ -111,6 +147,8 @@ export interface RealizeOptions {
   readonly seed?: number;
   /** Apply a variant or experiment modification to the recipe before realization. */
   readonly transform?: (r: RecipeDef) => RecipeDef;
+  /** Provenance recorded in the world (default: this recipe). What if? variants record their identity here. */
+  readonly provenance?: WorldContent['provenance'];
 }
 
 export function realizeRecipe(registry: ContentRegistry, recipeOrId: string | RecipeDef, opts: RealizeOptions = {}): World {
@@ -119,11 +157,15 @@ export function realizeRecipe(registry: ContentRegistry, recipeOrId: string | Re
   const recipe = opts.transform ? opts.transform(base) : base;
   const habitat = registry.habitats[recipe.habitatId];
   if (!habitat) throw new RecipeError(`unknown habitat ${recipe.habitatId}`);
-  const content = worldContentFor(registry, habitat, {
-    recipeId: recipe.id,
-    recipeRevision: recipe.revision,
-    createdFrom: 'recipe',
-  });
+  const content = worldContentFor(
+    registry,
+    habitat,
+    opts.provenance ?? {
+      recipeId: recipe.id,
+      recipeRevision: recipe.revision,
+      createdFrom: 'recipe',
+    },
+  );
   const seed = opts.seed ?? recipe.seed;
   const world = createEmptyWorld({
     worldId: opts.worldId ?? `${recipe.id}-r${recipe.revision}-s${seed}`,

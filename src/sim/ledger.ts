@@ -40,6 +40,12 @@ export interface Ledger {
     secretion: number;
     dissipated: number;
     other: number;
+    /** Module surcharges (0.02 E/s per carried module after the maintenance multipliers; P2.1). */
+    surcharge: number;
+    /** Separate module upkeep (E05 chamber 0.03 E/s). */
+    upkeep: number;
+    /** One-off dormancy costs: 10 E to prepare, 5 E to wake (SPEC §7.6). */
+    dormancy: number;
   };
   /** Most recent external inputs/exports (bounded) for the ledger panel. */
   entries: LedgerEntry[];
@@ -56,7 +62,7 @@ export function createLedger(): Ledger {
     exchangeC: 0,
     exchangeO2: 0,
     roundoff: { c: 0, n: 0, m: 0 },
-    energy: { earned: 0, maintenance: 0, movement: 0, division: 0, secretion: 0, dissipated: 0, other: 0 },
+    energy: { earned: 0, maintenance: 0, movement: 0, division: 0, secretion: 0, dissipated: 0, other: 0, surcharge: 0, upkeep: 0, dormancy: 0 },
     entries: [],
   };
 }

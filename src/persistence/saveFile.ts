@@ -11,7 +11,8 @@ import { HabitatSchema, ManifestSchema, MaterialSchema, ModuleSchema, SpeciesSch
 import { ENTITY_COLUMNS } from '@sim/entities';
 import { FIELD_DEFS, isFieldId } from '@sim/fields';
 import { canonicalJson, sha256Hex, base64ToBytes } from '@sim/hash';
-import { deserializeWorld, serializeWorld, type EncodedArray, type WorldState } from '@sim/serialize';
+import { moduleSetProblem } from '@sim/content/moduleRules';
+import { deserializeWorld, migrateWorldState, serializeWorld, type EncodedArray, type WorldState } from '@sim/serialize';
 import { SCHEMA_VERSION, type World } from '@sim/world';
 
 export const SAVE_FORMAT = 'pixelmeba-save';
@@ -111,9 +112,16 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
   if (typeof f.schemaVersion !== 'number' || f.schemaVersion > SCHEMA_VERSION) {
     fail('version', `This dish needs a newer version of Pixelmeba (save schema ${String(f.schemaVersion)}).`);
   }
-  if (f.schemaVersion !== SCHEMA_VERSION) fail('version', `Save schema ${f.schemaVersion} is not supported by this build.`);
-  const s = f.state;
-  if (!s || s.format !== 'pixelmeba-world') fail('format', 'The file has no world in it.');
+  if (!Number.isInteger(f.schemaVersion) || f.schemaVersion < 1) fail('version', `Save schema ${f.schemaVersion} is not supported by this build.`);
+  const original = f.state;
+  if (!original || original.format !== 'pixelmeba-world') fail('format', 'The file has no world in it.');
+  // Older schemas are migrated by copy; the checksum below is always checked against the original.
+  let s: WorldState;
+  try {
+    s = migrateWorldState(original);
+  } catch (e) {
+    fail('version', `This dish could not be upgraded: ${(e as Error).message}.`);
+  }
 
   // Embedded content must parse with the same schemas as the shipped packs.
   const c = s.content;
@@ -176,6 +184,15 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
     if (g < 0 || g >= genomes.length) fail('integrity', 'An organism refers to a missing genome.');
     if (genomes[g]!.ancestor !== speciesIds[cols.species![i]!]) fail('integrity', "An organism's genome belongs to another species.");
     for (const k of nonneg) if (cols[k]![i]! < 0) fail('integrity', `An organism has a negative ${k}.`);
+    // Life state (SPEC §7.6): 0 Active, 1 Preparing, 2 Resting, 3 Waking; only organisms that can
+    // rest (native DORMANCY or module E03) may be anything but Active.
+    const life = cols.lifeState![i]!;
+    if (!Number.isInteger(life) || life < 0 || life > 3) fail('integrity', 'An organism has an unknown life state.');
+    if (life !== 0) {
+      const spDef = c.species[cols.species![i]!]!;
+      const canRest = spDef.nativeAbilities.includes('DORMANCY') || genomes[g]!.modules.includes('E03');
+      if (!canRest) fail('integrity', 'An organism is resting although it has no resting ability.');
+    }
     for (const k of ['propG0', 'propG1']) {
       const p = cols[k]![i]!;
       if (p < -1 || p >= genomes.length) fail('integrity', 'A pending birth refers to a missing genome.');
@@ -202,13 +219,16 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
     if (!speciesIds.includes(g.ancestor)) fail('integrity', `A genome refers to unknown species ${g.ancestor}.`);
     if (!Array.isArray(g.loci) || g.loci.length !== 8 || g.loci.some((l) => !Number.isInteger(l) || l < 0 || l > 100)) fail('integrity', 'A genome has invalid loci.');
     for (const m of g.modules) if (!moduleIds.includes(m)) fail('integrity', `A genome refers to unknown module ${m}.`);
+    const spDef = c.species.find((x) => x.id === g.ancestor)!;
+    const problem = moduleSetProblem(c.modules, spDef, g.modules);
+    if (problem) fail('integrity', `A genome has an impossible set of abilities (${problem}).`);
   }
   if (!Number.isInteger(s.tick) || s.tick < 0) fail('integrity', 'The tick is invalid.');
   if (!Number.isInteger(s.seed) || s.seed < 0) fail('integrity', 'The seed is invalid.');
 
-  const expected = `sha256:${await sha256Hex(canonicalJson(s))}`;
+  const expected = `sha256:${await sha256Hex(canonicalJson(original))}`;
   if (f.checksum !== expected) fail('checksum', 'The file is damaged or was edited (checksum mismatch).');
-  return f as SaveFile;
+  return { ...(f as SaveFile), schemaVersion: SCHEMA_VERSION, state: s };
 }
 
 /** Validate and build a world. Any failure throws a SaveFileError and builds nothing. */

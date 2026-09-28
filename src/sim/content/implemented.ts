@@ -7,8 +7,8 @@ import type { NativeAbilityId } from './schema';
 
 export const IMPLEMENTED_NATIVE_ABILITIES: readonly NativeAbilityId[] = ['E_STARCH_SECRETION', 'PREDATION'];
 
-/** Supplementary modules the simulation implements (checked the same way). */
-export const IMPLEMENTED_MODULES: readonly string[] = [];
+/** Supplementary modules the simulation implements (checked the same way; P2.1). */
+export const IMPLEMENTED_MODULES: readonly string[] = ['E01', 'E03', 'E05'];
 
 /** Whether stage 6 lets `digestsFilm` species eat biofilm as debris (SPEC §6; P3.3). */
 export const FILM_DIGESTION_IMPLEMENTED = false;

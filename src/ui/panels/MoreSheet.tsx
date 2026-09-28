@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { SlotSummary } from '@worker/protocol';
 import { IconClose, IconCopy, IconGuide, IconSave, IconUndo } from '../icons';
+import { IconCompare } from './CompareIcon';
 import {
   dishInfo,
   duplicateCurrent,
+  openCompare,
   exportCurrent,
   getClient,
   importFile,
@@ -40,6 +42,17 @@ export function MoreSheet() {
             }}
           >
             <IconCopy /> Duplicate dish
+          </button>
+          {/* UX §2.4: Compare lives in More (and in the Lab Tools tray from P2.7). */}
+          <button
+            class="btn"
+            onClick={() => {
+              sheet.value = 'none';
+              void openCompare();
+            }}
+            data-testid="action-compare"
+          >
+            <IconCompare /> Compare: copy this dish and change one thing
           </button>
           <button class="btn" disabled={!meta.value?.undoAvailable} onClick={() => void undo()}>
             <IconUndo /> Undo (rewinds time)

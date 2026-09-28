@@ -20,6 +20,7 @@ import {
 } from '../state';
 import { reasonText } from '../strings/reasons';
 import { dietAnswer, familySummary, relationLabel, stopAnswer } from '../strings/shortcuts';
+import { dormancyLines, energyCapText, LIFE_ACTIVE, lifeStateLabel, moduleText, upkeepText } from '../strings/modules';
 
 const LOCUS_NAMES = [
   'Motility',
@@ -72,11 +73,14 @@ function strongestConstraint(e: EntityInspect): { code: number; value: number } 
 }
 
 function actionOf(e: EntityInspect): string {
+  // A life state other than Active (Preparing, Resting, Waking) is the organism's real state (P2.1).
+  if (e.lifeState !== LIFE_ACTIVE) return lifeStateLabel(e.lifeState);
   if (e.flags & (1 << 2)) return e.predation ? 'Digesting' : 'Eating';
   if (e.flags & (1 << 3)) return 'Hunting';
   if (e.flags & (1 << 1)) return 'Stressed';
   if (e.flags & (1 << 6)) return 'Moving';
-  return 'Resting in place';
+  // Not "resting": that word now names the resting stage.
+  return 'Staying in place';
 }
 
 function FamilyList({ f, onHide }: { f: FamilyAnswer; onHide: () => void }) {
@@ -200,6 +204,9 @@ function EntityView({ e }: { e: EntityInspect }) {
             <span class="chip">age {Math.floor(e.age)} s</span>
             <span class="chip">generation {e.generation}</span>
             {e.origin === 1 ? <span class="chip">added by you or the recipe</span> : null}
+            {e.dormancy && e.dormancy.state === LIFE_ACTIVE && e.dormancy.lockoutSeconds > 0 ? (
+              <span class="chip">just woke up</span>
+            ) : null}
           </div>
         </div>
         <button
@@ -357,6 +364,14 @@ function EntityView({ e }: { e: EntityInspect }) {
                   </ul>
                 ) : null}
               </section>
+              {e.dormancy && (e.dormancy.state !== LIFE_ACTIVE || e.dormancy.lockoutSeconds > 0 || e.dormancy.noIntakeSeconds > 0.05) ? (
+                <section aria-labelledby="rest-title" data-testid="resting-stage">
+                  <h3 id="rest-title">Resting stage</h3>
+                  {dormancyLines(e.dormancy, e.E).map((l) => (
+                    <p key={l}>{l}</p>
+                  ))}
+                </section>
+              ) : null}
               <dl class="kv">
                 <dt>Food here</dt>
                 <dd>
@@ -391,7 +406,7 @@ function EntityView({ e }: { e: EntityInspect }) {
               </p>
               <dl class="kv">
                 {e.genome.loci.map((v, i) =>
-                  e.genome.lociActive[i] ? (
+                  e.lociActiveEffective[i] ? (
                     <>
                       <dt>{LOCUS_NAMES[i]}</dt>
                       <dd>
@@ -408,8 +423,23 @@ function EntityView({ e }: { e: EntityInspect }) {
                     : `weighted: ${e.profile.weights?.map((w) => w.toFixed(2)).join(' / ')}`}
                 </dd>
                 <dt>Extra abilities</dt>
-                <dd>{e.genome.modules.length ? e.genome.modules.join(', ') : 'none'}</dd>
+                <dd>{e.modules.length ? `${e.modules.length} of 3 slots used` : 'none'}</dd>
               </dl>
+              {e.modules.length > 0 ? (
+                <ul class="module-list" aria-label="Extra abilities" data-testid="module-list">
+                  {e.modules.map((m) => {
+                    const t = moduleText(m);
+                    return (
+                      <li key={m.id}>
+                        <strong>{t.name}</strong> <span class="sub">({t.id})</span>
+                        <br />
+                        {t.does} <span class="sub">{t.costs}</span>
+                        {t.now ? <span class="sub"> {t.now}</span> : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
             </div>
           ) : null}
           {tab === 'evidence' ? (
@@ -422,13 +452,11 @@ function EntityView({ e }: { e: EntityInspect }) {
                 <dt>Bound nutrient</dt>
                 <dd>{e.N.toFixed(4)}</dd>
                 <dt>Energy</dt>
-                <dd>
-                  {e.E.toFixed(1)} / {e.energyCap}
-                </dd>
+                <dd>{energyCapText(e)}</dd>
                 <dt>Intake ceiling</dt>
                 <dd>{e.profile.q.toFixed(3)} C/s</dd>
                 <dt>Upkeep</dt>
-                <dd>{e.profile.m.toFixed(3)} energy/s</dd>
+                <dd>{upkeepText(e)}</dd>
                 <dt>Speed · senses</dt>
                 <dd>
                   {e.profile.speed.toFixed(2)} cells/s · {e.profile.sensing} cells

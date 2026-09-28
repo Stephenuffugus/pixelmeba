@@ -697,3 +697,325 @@ textarea {
   transition: none !important;
   animation: none !important;
 }
+
+/* ---------------------------------------------------------------- comparison (UX §5.6) */
+.compare-screen {
+  position: relative;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  background: var(--outside);
+}
+.compare-screen .topbar {
+  grid-row: 1;
+  grid-column: 1;
+}
+.compare-views {
+  grid-row: 2;
+  grid-column: 1;
+  position: relative;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+.compare-toggle {
+  grid-row: 1;
+  grid-column: 1;
+  justify-self: center;
+  margin: 6px;
+  background: var(--surface);
+  z-index: 3;
+}
+.compare-toggle .btn {
+  min-width: 0;
+  padding: 6px 12px;
+}
+/* Phones stack both views in one place and show one; the hidden one keeps its size (visibility, not
+   display) so its camera and canvas stay valid for an instant switch. */
+.cv {
+  grid-row: 2;
+  grid-column: 1;
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+.compare-views[data-show='A'] .cv-B,
+.compare-views[data-show='B'] .cv-A {
+  visibility: hidden;
+}
+.cv-host {
+  position: absolute;
+  inset: 0;
+}
+.cv-host canvas {
+  width: 100%;
+  height: 100%;
+}
+.cv-loading {
+  position: absolute;
+  inset: auto 0 50% 0;
+  text-align: center;
+  color: #c9d6d8;
+  margin: 0;
+}
+/* Shape, not colour, tells the arms apart: A has a solid frame, B a dashed one, and both are labelled. */
+.cv::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 3px solid rgba(245, 244, 239, 0.55);
+}
+.cv-B::after {
+  border-style: dashed;
+}
+.cv-label {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  margin: 0;
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius-s);
+  background: rgba(245, 244, 239, 0.94);
+  color: var(--text);
+  font-size: var(--fs-small);
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  z-index: 2;
+  max-width: calc(100% - 16px);
+}
+.cv-label span {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.compare-panel {
+  grid-row: 3;
+  grid-column: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  padding: 12px calc(16px + var(--safe-right)) calc(16px + var(--safe-bottom)) calc(16px + var(--safe-left));
+  overflow-wrap: break-word;
+}
+.compare-body h2 {
+  font-size: var(--fs-h2);
+  margin: 0 0 0.25rem;
+}
+.compare-body h3 {
+  font-size: 1rem;
+  margin: 0.9rem 0 0.35rem;
+}
+.compare-body .sub {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.compare-change-actions,
+.compare-final-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.compare-change-actions .btn,
+.compare-final-actions .btn {
+  flex: 1 1 8rem;
+}
+.compare-horizons,
+.compare-conclusions {
+  display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+.compare-horizons .btn,
+.compare-conclusions .btn {
+  flex: 1 1 auto;
+  min-width: 56px;
+}
+.compare-horizons .btn[aria-checked='true'],
+.compare-conclusions .btn[aria-checked='true'] {
+  background: var(--text);
+  color: var(--surface);
+  border-color: var(--text);
+}
+.compare-note {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+  background: #fff;
+  resize: vertical;
+}
+.compare-note-label {
+  display: block;
+  margin: 0.6rem 0 0.25rem;
+  font-size: var(--fs-small);
+}
+.compare-go {
+  width: 100%;
+  margin-top: 0.75rem;
+}
+.compare-progress {
+  width: 100%;
+  height: 12px;
+  margin: 0.25rem 0 0.75rem;
+}
+.compare-prediction {
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface-2);
+  border-left: 4px solid var(--text-muted);
+  border-radius: 6px;
+}
+.compare-prediction figcaption {
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.compare-prediction blockquote {
+  margin: 0.2rem 0 0;
+  white-space: pre-wrap;
+}
+.compare-results-grid {
+  display: grid;
+  gap: 0.5rem;
+}
+.compare-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+  font-variant-numeric: tabular-nums;
+}
+.compare-table thead th {
+  white-space: nowrap;
+}
+.compare-table caption {
+  text-align: left;
+  font-weight: 600;
+  padding: 0.25rem 0;
+}
+.compare-table th,
+.compare-table td {
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+}
+.compare-table th[scope='row'],
+.compare-table thead th:first-child {
+  text-align: left;
+  font-weight: 500;
+}
+.compare-details {
+  margin: 0.5rem 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0.25rem 0.6rem;
+}
+.compare-details summary {
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 600;
+}
+.compare-conclusion {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  margin: 0.75rem 0;
+  padding: 0.5rem 0.75rem 0.75rem;
+}
+.compare-conclusion legend {
+  font-weight: 600;
+  padding: 0 0.25rem;
+}
+
+/* Portrait results: give the panel more room than the dish. */
+.compare-screen[data-status='complete'] {
+  grid-template-rows: auto minmax(0, 2fr) minmax(0, 3fr);
+}
+/* Landscape phones and tablets: views beside the panel (still one view at a time). */
+@media (orientation: landscape) and (min-width: 700px) {
+  .compare-screen,
+  .compare-screen[data-status='complete'] {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .compare-screen .topbar {
+    grid-column: 1 / span 2;
+  }
+  .compare-views {
+    grid-row: 2;
+    grid-column: 1;
+  }
+  .compare-panel {
+    grid-row: 2;
+    grid-column: 2;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+}
+/* Large screens: A and B side by side, no toggle. */
+@media (min-width: 900px) and (min-height: 500px) {
+  .compare-screen,
+  .compare-screen[data-status='complete'] {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .compare-screen .topbar {
+    grid-column: 1 / span 2;
+  }
+  .compare-views {
+    grid-row: 2;
+    grid-column: 1;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .compare-toggle {
+    display: none;
+  }
+  .cv {
+    grid-row: 1;
+  }
+  .cv-A {
+    grid-column: 1;
+  }
+  .cv-B {
+    grid-column: 2;
+  }
+  .compare-views[data-show='A'] .cv-B,
+  .compare-views[data-show='B'] .cv-A {
+    visibility: visible;
+  }
+  .compare-panel {
+    grid-row: 2;
+    grid-column: 2;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+}
+
+/* Inspector: carried supplementary modules (P2.1). */
+.module-list {
+  list-style: none;
+  margin: 0.25rem 0 0.5rem;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.module-list > li {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  font-size: var(--fs-small);
+}

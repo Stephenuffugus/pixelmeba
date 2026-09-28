@@ -1,7 +1,7 @@
 import { render } from 'preact';
 import './styles.css';
 import { App } from './app/App';
-import { autosave, dishInfo, initDisplaySettings, meta, setSpeed } from './state';
+import { autosave, compareState, dishInfo, initDisplaySettings, meta, setSpeed } from './state';
 
 initDisplaySettings();
 const root = document.getElementById('app');
@@ -15,6 +15,10 @@ window.addEventListener('pagehide', () => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && dishInfo.value) {
     if ((meta.value?.speed ?? 0) > 0) setSpeed(0);
+    // A comparison paused the dish and will restore its speed on close; backgrounding means it
+    // should come back paused (SPEC §14.2: no running on after the app is left).
+    const cmp = compareState.value;
+    if (cmp && cmp.priorSpeed > 0) compareState.value = { ...cmp, priorSpeed: 0 };
     void autosave();
   }
 });

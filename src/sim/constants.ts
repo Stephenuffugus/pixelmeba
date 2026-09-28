@@ -87,6 +87,29 @@ export const ENZYME_CONVERSION = 0.1;
 export const ENZYME_DECAY_PER_SECOND = 0.02;
 export const BREAKER_DECAY_PER_SECOND = 0.01;
 
+/** Dormancy state machine for native resters (SPEC §7.6, CT §12.7). E03 reads its own recorded params. */
+export const DORMANCY_PREPARE_SECONDS = 5;
+export const DORMANCY_PREPARE_COST = 10;
+export const DORMANCY_REST_MAINTENANCE = 0.01;
+export const DORMANCY_DAMAGE_FACTOR = 0.1;
+export const DORMANCY_WAKE_SECONDS = 5;
+export const DORMANCY_WAKE_COST = 5;
+export const DORMANCY_WAKE_MIN_ENERGY = 5;
+export const DORMANCY_LOCKOUT_SECONDS = 30;
+export const DORMANCY_NO_INTAKE_SECONDS = 20;
+export const DORMANCY_ENTRY_MIN_ENERGY = 15;
+export const DORMANCY_DRY_SUITABILITY = 0.2;
+export const DORMANCY_DRY_SECONDS = 10;
+export const DORMANCY_WAKE_CONDITION_SECONDS = 10;
+/**
+ * "Usable" intake and food for the dormancy trigger and wake rule (DECISIONS, P2.1): diffusion leaves
+ * vanishing but nonzero tails across the dish, which must not count as food. A tick's intake is usable
+ * when it reaches 1 % of the organism's intake ceiling Q'·dt; a food pool is usable from 0.001 C per
+ * cell (where avail(a) = a/(a + 0.10) first reaches ≈ 1 %).
+ */
+export const USABLE_INTAKE_FRACTION = 0.01;
+export const USABLE_FOOD_MIN = 0.001;
+
 /** Numerical hygiene (SPEC §3.5). */
 export const ROUNDOFF_EPSILON = 1e-8;
 export const LEDGER_RELATIVE_TOLERANCE = 1e-5;

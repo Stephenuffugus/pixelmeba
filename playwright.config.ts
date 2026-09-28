@@ -1,9 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 4173;
+// Parallel runs (e.g. several agents) each set their own E2E_PORT and E2E_OUTDIR so builds and
+// servers never collide; the defaults are the single-run setup.
+const PORT = Number(process.env.E2E_PORT ?? 4173);
+const OUTDIR = process.env.E2E_OUTDIR ?? 'dist';
 
 export default defineConfig({
   testDir: 'tests/e2e',
+  outputDir: `test-results/${PORT}`,
   timeout: 90_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,
@@ -15,7 +19,7 @@ export default defineConfig({
     launchOptions: { args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'] },
   },
   webServer: {
-    command: `npx vite build && npx vite preview --port ${PORT} --strictPort --host 127.0.0.1`,
+    command: `npx vite build --outDir ${OUTDIR} --emptyOutDir && npx vite preview --outDir ${OUTDIR} --port ${PORT} --strictPort --host 127.0.0.1`,
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: true,
     timeout: 240_000,

@@ -22,6 +22,7 @@ import { recordBirth, recordDivisionEnd } from './lineage';
 import { canOccupy, initialDecisionTimer } from './movement';
 import { onDaughter, onParentEnds } from './branches';
 import { proposeDaughters } from './mutation';
+import { resetDormancy } from './dormancy';
 import { profileOf } from './profiles';
 import { R } from './reasons';
 import { detFloat, STREAMS } from './rng';
@@ -256,6 +257,19 @@ function commitDivision(world: World, i: number, slot: number, targetCell: numbe
   c.propG1[i] = -1;
   c.divBlockCode[i] = R.NONE;
   c.flags[i] = (c.flags[i]! | FLAG.justBorn) & ~FLAG.capacityBlocked;
+
+  // Birth reconciliation (SPEC §9.19), per daughter, with its own inherited genome: both start
+  // Active with fresh dormancy clocks (E03 loss therefore means Active, with no energy gift); energy
+  // above the daughter's own cap (e.g. after losing E05) dissipates with a ledger record. A module
+  // loss frees no material: modules are rules, not stored carbon, nutrient or mineral.
+  for (const d of [i, slot]) {
+    resetDormancy(world, d);
+    const cap = profileOf(world, d).energyCap;
+    if (c.E[d]! > cap) {
+      world.ledger.energy.dissipated += c.E[d]! - cap;
+      c.E[d] = cap;
+    }
+  }
 
   const tick = world.tick;
   recordDivisionEnd(world.lineage, parentBirth, tick);

@@ -5,6 +5,7 @@ import { DishScreen } from '../views/DishScreen';
 import { SimplePage } from '../views/SimplePage';
 import { Saves } from '../views/Saves';
 import { NewDish } from '../views/NewDish';
+import { CompareScreen } from '../views/CompareScreen';
 
 export function App() {
   const r = route.value;
@@ -23,6 +24,8 @@ export function App() {
       return <Saves />;
     case 'newDish':
       return <NewDish />;
+    case 'compare':
+      return <CompareScreen />;
     case 'about':
       return (
         <SimplePage

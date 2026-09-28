@@ -1,0 +1,24 @@
+{
+  "id": "EXP_101",
+  "seed": 101,
+  "title": "Food trail",
+  "question": "Where does a hungry group go when food lies in a line?",
+  "recipeId": "FOOD_TRAIL_V1",
+  "intervention": "Follow one Sprinter group along the trail and inspect what it eats.",
+  "predictedTradeoff": "Moving costs energy. Sprinters that follow the trail may find more sugar than those that stay, but the trail is finite.",
+  "measurements": ["biomassStart.B01", "biomass.B01", "biomassRatio.B01", "intake.B01", "alive.B01", "births.B01", "deaths.B01", "consumed.sugar", "field.sugar"],
+  "stoppingSeconds": 180,
+  "confounds": "The Water Garden also holds a thin background of sugar (0.02 per cell), so not every bite comes from the trail. Growth is a well-fed group, not an inherited change.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "biomassRatio.B01", "arm": "A", "op": "gte", "value": 1.25, "label": "Sprinter biomass grew by 25 %"},
+        {"measure": "intake.B01", "arm": "A", "op": "gt", "value": 0, "label": "Sprinters took in food"}
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {"journalStamp": "Followed a group along a food trail", "playerSteps": ["inspectFoodUse"]},
+  "phase": 2
+}

@@ -18,7 +18,10 @@ export type EventType =
   | 'branchEstablished'
   | 'branchExtinct'
   | 'secretionStart'
-  | 'firstIntake';
+  | 'firstIntake'
+  /** Dormancy (P2.1): entered Resting (cause = RESTING_FOOD_SCARCE or RESTING_DRY) / finished waking. */
+  | 'rest'
+  | 'wake';
 
 export interface SimEvent {
   readonly id: number;

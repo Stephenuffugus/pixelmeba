@@ -14,6 +14,7 @@ import { step } from '@sim/tick';
 import type { World } from '@sim/world';
 import { buildFamily, buildInspector, packDeposits, packEntities, packOverlay, visualEvents } from './snapshot';
 import { stamp, type DishInfo, type DishSource, type Envelope, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
+import { captureBaseline, PairedRun, realizeArm, type CompareSpeed, type CompareStatus, type ComparisonResults, type ComparisonState, type Intervention } from './comparison';
 import { buildSaveFile, loadSaveFile, SaveFileError } from '@persist/saveFile';
 import { AUTOSAVE_SLOT, type SaveStore, type SlotInfo } from '@persist/store';
 
@@ -45,6 +46,30 @@ interface Dish {
   ticksWindow: number[];
   effectiveSpeed: number;
   failed: boolean;
+  /** Set on the two worlds of a comparison (SPEC §13.4); their time is driven only by the comparison. */
+  arm: { readonly compareId: string; readonly role: 'A' | 'B' } | null;
+}
+
+/**
+ * An open comparison (worker state, never simulation state). The baseline is stored once; A and B
+ * are separate dishes realized from it. Deleting it removes A, B and the baseline only.
+ */
+interface Comparison {
+  readonly id: string;
+  readonly sourceDishId: string;
+  readonly aDishId: string;
+  readonly bDishId: string;
+  readonly baseline: WorldState;
+  readonly priorSpeed: Speed;
+  status: CompareStatus;
+  horizonTicks: number | null;
+  speed: CompareSpeed;
+  acc: number;
+  lastSnapshot: number;
+  interventions: Intervention[];
+  run: PairedRun | null;
+  results: ComparisonResults | null;
+  error: string | null;
 }
 
 const MAX_PUMP_MS = 30;
@@ -54,10 +79,13 @@ const MAX_BACKLOG_TICKS = 20;
 const CHECKPOINT_TICKS = 300;
 /** Requests that change a world and are rolled back if they throw part-way. */
 const MUTATING = new Set<ToWorker['type']>(['command', 'step', 'undo']);
+/** Upper bound on comparison pairs per pump at 'max' pacing (the work budget usually stops sooner). */
+const MAX_COMPARE_PAIRS_PER_PUMP = 400;
 
 export class DishHost {
   private readonly dishes: Record<string, Dish> = {};
   private active: string | null = null;
+  private comparison: Comparison | null = null;
   private lastPump: number;
   private lastSnapshot = 0;
 
@@ -150,7 +178,14 @@ export class DishHost {
   }
 
   private addDish(id: string, world: World, name: string): Dish {
-    const dish: Dish = {
+    const dish = this.makeDish(id, world, name, serializeWorld(world));
+    this.dishes[id] = dish;
+    this.active = id;
+    return dish;
+  }
+
+  private makeDish(id: string, world: World, name: string, checkpoint: WorldState): Dish {
+    return {
       id,
       world,
       name,
@@ -162,15 +197,13 @@ export class DishHost {
       overlay: null,
       selection: null,
       undo: null,
-      checkpoint: serializeWorld(world),
+      checkpoint,
       replay: [],
       ticksWindow: [],
       effectiveSpeed: 0,
       failed: false,
+      arm: null,
     };
-    this.dishes[id] = dish;
-    this.active = id;
-    return dish;
   }
 
   get activeDishId(): string | null {
@@ -215,6 +248,8 @@ export class DishHost {
         return;
       }
       case 'dispose':
+        // Comparison worlds leave only with their comparison (compareDelete).
+        if (this.dishes[msg.dishId]?.arm && this.comparison?.id === this.dishes[msg.dishId]!.arm!.compareId) return;
         delete this.dishes[msg.dishId];
         if (this.active === msg.dishId) this.active = null;
         return;
@@ -227,7 +262,7 @@ export class DishHost {
       }
       case 'setSpeed': {
         const d = this.need(msg.dishId);
-        if (d.failed) return;
+        if (d.failed || d.arm) return; // a comparison arm's time is driven only by the comparison
         d.speed = msg.speed;
         d.acc = 0;
         this.sendSnapshot(d);
@@ -235,7 +270,7 @@ export class DishHost {
       }
       case 'step': {
         const d = this.need(msg.dishId);
-        if (d.failed) return;
+        if (d.failed || d.arm) return;
         d.speed = 0;
         step(d.world);
         this.sendSnapshot(d);
@@ -243,6 +278,10 @@ export class DishHost {
       }
       case 'command': {
         const d = this.need(msg.dishId);
+        if (d.arm) {
+          this.armCommand(d, msg);
+          return;
+        }
         const before = msg.undoable ? serializeWorld(d.world) : null;
         const tick = d.world.tick;
         const cmd = applyNow(d.world, msg.commandId, msg.payload);
@@ -259,6 +298,10 @@ export class DishHost {
       }
       case 'undo': {
         const d = this.need(msg.dishId);
+        if (d.arm) {
+          this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: null, error: 'Comparison copies are not rewound; clear the change on B instead.' });
+          return;
+        }
         if (!d.undo) {
           this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: null, error: 'nothing to undo' });
           return;
@@ -304,6 +347,7 @@ export class DishHost {
           ticksWindow: [],
           lastGeometryVersion: -1,
           selection: null,
+          arm: null,
         };
         this.post({ type: 'ready', requestId: msg.requestId, info: this.info(this.dishes[msg.newDishId]!) });
         return;
@@ -326,10 +370,248 @@ export class DishHost {
         this.post({ type: 'family', requestId: msg.requestId, dishId: d.id, family: buildFamily(d.world, msg.birthId) });
         return;
       }
+      case 'compareStart':
+        this.compareStart(msg);
+        return;
+      case 'compareReset': {
+        const c = this.needCompare(msg.compareId);
+        if (c.status !== 'setup') throw new Error('The change on B can only be cleared before the run starts.');
+        c.interventions = [];
+        this.resetB(c);
+        this.postCompare(c, msg.requestId);
+        return;
+      }
+      case 'compareRun': {
+        const c = this.needCompare(msg.compareId);
+        if (c.status !== 'setup') throw new Error('This comparison has already run.');
+        const a = this.dishes[c.aDishId]!;
+        const b = this.dishes[c.bDishId]!;
+        c.run = new PairedRun(c.baseline, a.world, b.world, msg.horizonTicks);
+        c.horizonTicks = msg.horizonTicks;
+        c.speed = msg.speed;
+        c.acc = 0;
+        c.lastSnapshot = -Infinity;
+        c.status = 'running';
+        this.postCompare(c, msg.requestId);
+        return;
+      }
+      case 'compareSpeed': {
+        const c = this.needCompare(msg.compareId);
+        c.speed = msg.speed;
+        c.acc = 0;
+        this.postCompare(c);
+        return;
+      }
+      case 'compareStop': {
+        const c = this.needCompare(msg.compareId);
+        if (c.status === 'running') this.finishComparison(c);
+        this.postCompare(c, msg.requestId);
+        return;
+      }
+      case 'compareDelete': {
+        const c = this.comparison;
+        if (c && c.id === msg.compareId) {
+          // Only the comparison's own worlds and baseline go. The source dish and every save slot stay.
+          delete this.dishes[c.aDishId];
+          delete this.dishes[c.bDishId];
+          if (this.active === c.aDishId || this.active === c.bDishId) this.active = null;
+          this.comparison = null;
+        }
+        this.post({ type: 'done', requestId: msg.requestId });
+        return;
+      }
       case 'release':
         return;
-      default:
+      case 'saveSlot':
+      case 'autosave':
+      case 'listSlots':
+      case 'loadSlot':
+      case 'deleteSlot':
+      case 'exportDish':
+      case 'importDish':
         void this.handleAsync(msg);
+        return;
+      default:
+        // An unknown request must fail once, not bounce between handle() and handleAsync() forever.
+        throw new Error(`unknown request ${String((msg as { type?: unknown }).type)}`);
+    }
+  }
+
+  private needCompare(compareId: string): Comparison {
+    const c = this.comparison;
+    if (!c || c.id !== compareId) throw new Error('That comparison is no longer open.');
+    return c;
+  }
+
+  private compareStart(msg: Extract<ToWorker, { type: 'compareStart' }>): void {
+    if (this.comparison) throw new Error('A comparison is already open; finish or delete it first.');
+    const src = this.need(msg.sourceDishId);
+    if (src.arm) throw new Error('A comparison copy cannot start another comparison.');
+    if (msg.aDishId === msg.bDishId || this.dishes[msg.aDishId] || this.dishes[msg.bDishId]) throw new Error('comparison dish ids must be new and distinct');
+    // Blocking panel (UX §2): the source pauses; the UI restores its prior speed when the comparison closes.
+    const priorSpeed = src.speed;
+    src.speed = 0;
+    src.acc = 0;
+    const baseline = captureBaseline(src.world);
+    const c: Comparison = {
+      id: msg.compareId,
+      sourceDishId: src.id,
+      aDishId: msg.aDishId,
+      bDishId: msg.bDishId,
+      baseline,
+      priorSpeed,
+      status: 'setup',
+      horizonTicks: null,
+      speed: 4,
+      acc: 0,
+      lastSnapshot: -Infinity,
+      interventions: [],
+      run: null,
+      results: null,
+      error: null,
+    };
+    this.comparison = c;
+    const a = this.addArm(c, 'A', src.name);
+    const b = this.addArm(c, 'B', src.name);
+    if (this.active === src.id) this.active = null;
+    for (const iv of msg.interventions ?? []) {
+      const cmd = applyNow(b.world, iv.commandId, iv.payload);
+      c.interventions.push({ commandId: iv.commandId, payload: iv.payload, result: cmd.result ?? null });
+    }
+    this.postCompare(c, msg.requestId);
+    this.sendSnapshot(a);
+    this.sendSnapshot(b);
+  }
+
+  private armWorldId(c: Comparison, role: 'A' | 'B'): string {
+    return `${c.baseline.worldId}+${c.id}:${role}`;
+  }
+
+  private addArm(c: Comparison, role: 'A' | 'B', sourceName: string): Dish {
+    const id = role === 'A' ? c.aDishId : c.bDishId;
+    const worldId = this.armWorldId(c, role);
+    const dish = this.makeDish(id, realizeArm(c.baseline, worldId), `${sourceName} (${role})`, { ...c.baseline, worldId });
+    dish.arm = { compareId: c.id, role };
+    this.dishes[id] = dish;
+    return dish;
+  }
+
+  /** B returns to the baseline exactly (a fresh realization of the stored baseline). */
+  private resetB(c: Comparison): Dish {
+    const b = this.dishes[c.bDishId]!;
+    const worldId = this.armWorldId(c, 'B');
+    b.world = realizeArm(c.baseline, worldId);
+    b.checkpoint = { ...c.baseline, worldId };
+    b.replay = [];
+    b.undo = null;
+    b.failed = false;
+    b.lastEventId = b.world.counters.nextEventId - 1;
+    b.lastGeometryVersion = -1;
+    this.sendSnapshot(b);
+    return b;
+  }
+
+  /**
+   * A command sent to a comparison arm. Only B receives changes, only before the run, and through the
+   * ordinary paused-edit path (applyNow), exactly as on any dish. A change that places nothing leaves B
+   * identical to A. The baseline arm A never receives a command.
+   */
+  private armCommand(d: Dish, msg: Extract<ToWorker, { type: 'command' }>): void {
+    const c = this.comparison;
+    const refuse = (error: string) => this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: null, error });
+    if (!c || !d.arm || c.id !== d.arm.compareId) return refuse('This comparison has ended.');
+    if (d.arm.role === 'A') return refuse('A is the baseline and never receives changes; queue the change on B.');
+    if (c.status !== 'setup') return refuse('Changes can only be queued on B before the run starts.');
+    let result: Intervention['result'];
+    try {
+      result = applyNow(d.world, msg.commandId, msg.payload).result ?? null;
+    } catch (e) {
+      // Restore B to the baseline plus the changes already queued (deterministic), then report.
+      const b = this.resetB(c);
+      for (const iv of c.interventions) applyNow(b.world, iv.commandId, iv.payload);
+      this.sendSnapshot(b);
+      return refuse(e instanceof Error ? e.message : String(e));
+    }
+    if (!result || result.accepted === 0) {
+      const b = this.resetB(c);
+      for (const iv of c.interventions) applyNow(b.world, iv.commandId, iv.payload);
+      this.sendSnapshot(b);
+    } else {
+      c.interventions.push({ commandId: msg.commandId, payload: msg.payload, result });
+      this.sendSnapshot(d);
+    }
+    this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result });
+    this.postCompare(c);
+  }
+
+  private compareState(c: Comparison): ComparisonState {
+    return {
+      compareId: c.id,
+      sourceDishId: c.sourceDishId,
+      aDishId: c.aDishId,
+      bDishId: c.bDishId,
+      baselineTick: c.baseline.tick,
+      status: c.status,
+      horizonTicks: c.horizonTicks,
+      ticksRun: c.run?.ticksRun ?? 0,
+      speed: c.speed,
+      priorSpeed: c.priorSpeed,
+      interventions: c.interventions,
+      results: c.results,
+      error: c.error,
+    };
+  }
+
+  private postCompare(c: Comparison, requestId?: number): void {
+    this.post({ type: 'compareState', ...(requestId !== undefined ? { requestId } : {}), state: this.compareState(c) });
+  }
+
+  private finishComparison(c: Comparison): void {
+    c.status = 'complete';
+    c.acc = 0;
+    c.results = c.run!.results(c.interventions);
+    this.sendSnapshot(this.dishes[c.aDishId]!);
+    this.sendSnapshot(this.dishes[c.bDishId]!);
+  }
+
+  /**
+   * Advance a running comparison. Wall-clock time only decides how many *pairs* run in this frame;
+   * every pair steps A once and B once, and the run stops exactly at the horizon, so the two arms
+   * always hold equal tick counts.
+   */
+  private pumpComparison(elapsed: number, now: number): void {
+    const c = this.comparison;
+    if (!c || c.status !== 'running' || !c.run) return;
+    const run = c.run;
+    const start = this.clock.now();
+    if (c.speed === 'max') c.acc = MAX_COMPARE_PAIRS_PER_PUMP;
+    else if (c.speed > 0) c.acc = Math.min(MAX_BACKLOG_TICKS, c.acc + (elapsed / 1000) * 10 * c.speed);
+    while (c.acc >= 1 && !run.done) {
+      try {
+        run.stepPair();
+      } catch (e) {
+        c.status = 'failed';
+        c.error = e instanceof Error ? e.message : String(e);
+        this.postCompare(c);
+        return;
+      }
+      c.acc -= 1;
+      if (this.clock.now() - start > MAX_PUMP_MS) {
+        c.acc = Math.min(c.acc, 1); // behind real time: drop the backlog, never a tick of either arm
+        break;
+      }
+    }
+    if (c.speed === 'max') c.acc = 0;
+    if (run.done) {
+      this.finishComparison(c);
+      this.postCompare(c);
+      return;
+    }
+    if (now - c.lastSnapshot >= SNAPSHOT_INTERVAL_MS) {
+      c.lastSnapshot = now;
+      this.sendSnapshot(this.dishes[c.aDishId]!);
+      this.sendSnapshot(this.dishes[c.bDishId]!);
+      this.postCompare(c);
     }
   }
 
@@ -418,6 +700,7 @@ export class DishHost {
     const now = this.clock.now();
     const elapsed = Math.min(250, now - this.lastPump);
     this.lastPump = now;
+    this.pumpComparison(elapsed, now);
     const d = this.active ? this.dishes[this.active] : undefined;
     if (!d) return;
     let ran = 0;

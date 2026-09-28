@@ -4,8 +4,8 @@
   "moduleRegistryVersion": 1,
   "phenotypeMappingVersion": 1,
   "contentVersion": 1,
-  "contentHash": "d795100f14bcd09b82c36e84620dc1e20598c81d5b8bb539632190c125e91920",
-  "buildPhase": 1,
+  "contentHash": "acfa5c9a8d49b0e14120bb399fa7847ee49272f4173d35495220db4f621b62a3",
+  "buildPhase": 2,
   "enabledSpecies": [
     "A01",
     "B01",
@@ -13,7 +13,11 @@
     "B06",
     "P01"
   ],
-  "enabledModules": [],
+  "enabledModules": [
+    "E01",
+    "E03",
+    "E05"
+  ],
   "enabledSystems": [
     "core",
     "enzymes"

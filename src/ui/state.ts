@@ -3,8 +3,9 @@
  * actions; nothing here mutates simulation state except by sending commands.
  */
 import { batch, signal } from '@preact/signals';
-import type { CommandPayload } from '@sim/commands';
+import type { CommandPayload, CommandResult } from '@sim/commands';
 import { SimClient } from '@worker/client';
+import type { CompareSpeed, ComparisonState } from '@worker/comparison';
 import type { DishInfo, FamilyAnswer, InspectorPayload, OverlayId, Selection, SnapshotMsg, Speed } from '@worker/protocol';
 import type { DishRenderer } from '@render/renderer';
 import { clearFeed, pushFeed } from './feed';
@@ -17,7 +18,9 @@ export type Route =
   | { readonly name: 'settings' }
   | { readonly name: 'about' }
   | { readonly name: 'saves' }
-  | { readonly name: 'newDish' };
+  | { readonly name: 'newDish' }
+  /** Paired comparison of two copies of the current dish (SPEC §13.4, UX §5.6). */
+  | { readonly name: 'compare' };
 
 export type Tool =
   | { readonly kind: 'look' }
@@ -138,6 +141,7 @@ export function getClient(): SimClient {
     client = SimClient.create();
     client.onSnapshot(onSnapshot);
     client.onError((e) => showToast(`Something went wrong and the dish was paused: ${e.message}`));
+    client.onCompare(onCompareState);
   }
   return client;
 }
@@ -158,6 +162,11 @@ export function getRenderer(): DishRenderer | null {
 }
 
 function onSnapshot(s: SnapshotMsg): void {
+  const cmp = compareState.value;
+  if (cmp && (s.dishId === cmp.aDishId || s.dishId === cmp.bDishId)) {
+    onCompareSnapshot(s.dishId === cmp.aDishId ? 'A' : 'B', s);
+    return;
+  }
   if (dishInfo.value && s.dishId !== dishInfo.value.dishId) return;
   if (s.geometry) lastGeometrySnapshot = s;
   lastSnapshot = s;
@@ -209,15 +218,17 @@ function enterDish(info: DishInfo, promptText: string | null): void {
 let lastAutosaveTick = -1;
 
 /** Autosave the active dish if it changed since the last autosave (SPEC §14.2). */
-export async function autosave(): Promise<void> {
+export async function autosave(): Promise<boolean> {
   const info = dishInfo.value;
   const m = meta.value;
-  if (!info || !m || m.tick === lastAutosaveTick) return;
+  if (!info || !m || m.tick === lastAutosaveTick) return true;
   try {
     await getClient().autosave(info.dishId);
     lastAutosaveTick = m.tick;
+    return true;
   } catch (e) {
     showToast(`Autosave failed; your previous save is intact. (${(e as Error).message})`, 4000);
+    return false;
   }
 }
 
@@ -227,9 +238,10 @@ export async function saveToSlot(slotId: string, name: string): Promise<boolean>
   try {
     const s = await getClient().saveSlot(info.dishId, slotId, name);
     dishInfo.value = { ...info, name: s.name };
-    showToast(`Saved "${s.name}".`);
-    // A manual save is an autosave event too (SPEC §14.2), so Continue opens this same moment.
-    await autosave();
+    // A manual save is an autosave event too (SPEC §14.2), so Continue opens this same moment. Confirm
+    // only once both writes have landed: leaving the page right after "Saved" must not lose Continue.
+    if (await autosave()) showToast(`Saved "${s.name}".`);
+    else showToast(`Saved "${s.name}", but Continue could not be updated; it still opens your previous autosave.`, 4000);
     return true;
   } catch (e) {
     showToast(`Couldn't save; your previous save is intact. (${(e as Error).message})`, 4000);
@@ -406,18 +418,23 @@ export async function sendCommand(payload: CommandPayload, undoable = true): Pro
   if (!info) return;
   const id = `ui-${++commandCounter}`;
   const res = await getClient().command(info.dishId, id, payload, undoable);
+  reportCommand(info, payload, res, renderer);
+}
+
+/** The player-facing outcome of a placement command (toast + placement ring on the dish it went to). */
+function reportCommand(info: DishInfo, payload: CommandPayload, res: CommandResult | null, ring: DishRenderer | null): void {
   if (!res) return;
   if (payload.kind === 'inoculate') {
     const name = info.speciesNames[info.speciesIds.indexOf(payload.speciesId)] ?? payload.speciesId;
     if (res.accepted === 0) showToast(res.note === 'capacity' ? 'The dish is full.' : `No room here for ${name}.`);
     else showToast(res.rejected > 0 ? `Added ${res.accepted} ${name} (${res.rejected} didn't fit).` : `Added ${res.accepted} ${name}.`);
-    renderer?.placementRing(payload.x, payload.y, payload.radius);
+    ring?.placementRing(payload.x, payload.y, payload.radius);
   } else if (payload.kind === 'deposit') {
     const mat = info.materials.find((m) => m.id === payload.materialId);
     if (res.accepted === 0) showToast("That can't go there.");
     else showToast(`Added ${mat?.name.toLowerCase() ?? 'food'} to ${res.accepted} cells.`);
     const p = payload.points[payload.points.length - 1];
-    if (p) renderer?.placementRing(p[0], p[1], payload.radius);
+    if (p) ring?.placementRing(p[0], p[1], payload.radius);
   }
 }
 
@@ -434,4 +451,305 @@ export function setTool(t: Tool): void {
 
 export function speciesName(idx: number): string {
   return dishInfo.value?.speciesNames[idx] ?? '?';
+}
+
+// ---------------------------------------------------------------------------------------------
+// Comparison (SPEC §13.4, UX §5.6). UI/worker state only: the worker holds the baseline and the two
+// arm worlds; the UI holds the prediction, the conclusion and the two viewports' renderers.
+
+export type CompareArm = 'A' | 'B';
+export type Conclusion = 'supports' | 'contradicts' | 'cantTell';
+
+/** Per-arm facts from the latest snapshot (tick and living count), for the viewport labels. */
+export interface ArmMeta {
+  readonly tick: number;
+  readonly count: number;
+}
+
+/** Offered horizons in simulated seconds; null = "until I stop" (CT §12.10). */
+export const COMPARE_HORIZONS: readonly (number | null)[] = [60, 180, 600, null];
+
+export const compareState = signal<ComparisonState | null>(null);
+export const comparePrediction = signal<string>('');
+export const compareHorizon = signal<number | null>(60);
+export const compareConclusion = signal<Conclusion | null>(null);
+export const compareNote = signal<string>('');
+export const compareCardSaved = signal<boolean>(false);
+export const compareArmMeta = signal<Readonly<Record<CompareArm, ArmMeta | null>>>({ A: null, B: null });
+/** Which arm a phone shows (large screens show both side by side). */
+export const compareShown = signal<CompareArm>('B');
+
+const compareRenderers: Record<CompareArm, DishRenderer | null> = { A: null, B: null };
+const compareLastGeometry: Record<CompareArm, SnapshotMsg | null> = { A: null, B: null };
+const compareLastSnapshot: Record<CompareArm, SnapshotMsg | null> = { A: null, B: null };
+/** The arm whose camera the player moved last; the other follows it (synced cameras). */
+let cameraLeader: CompareArm = 'B';
+let compareCounter = 0;
+
+function onCompareState(s: ComparisonState): void {
+  const cur = compareState.value;
+  if (!cur || cur.compareId !== s.compareId) return; // a closed or foreign comparison
+  compareState.value = s;
+  // SPEC §14.2: autosave on comparison completion (the source dish; comparisons never enter saves).
+  if (s.status === 'complete' && cur.status !== 'complete') void autosave();
+}
+
+function onCompareSnapshot(arm: CompareArm, s: SnapshotMsg): void {
+  if (s.geometry) compareLastGeometry[arm] = s;
+  compareLastSnapshot[arm] = s;
+  compareRenderers[arm]?.applySnapshot(s);
+  compareArmMeta.value = { ...compareArmMeta.value, [arm]: { tick: s.tick, count: s.count } };
+}
+
+/** A comparison viewport's renderer attaches (or detaches with null); replays what it missed. */
+export function attachCompareRenderer(arm: CompareArm, r: DishRenderer | null): void {
+  compareRenderers[arm] = r;
+  if (!r) return;
+  const info = dishInfo.value;
+  r.setOptions({ reducedMotion: settings.value.reducedMotion, overlayOpacity: settings.value.overlayOpacity });
+  if (info) r.setSpecies(info.speciesIds, info.speciesAssets);
+  const geo = compareLastGeometry[arm];
+  const last = compareLastSnapshot[arm];
+  if (geo) r.applyGeometry(geo);
+  if (last) r.applySnapshot(last);
+  const other = compareRenderers[arm === 'A' ? 'B' : 'A'];
+  if (other) copyCamera(other, r);
+}
+
+export function getCompareRenderer(arm: CompareArm): DishRenderer | null {
+  return compareRenderers[arm];
+}
+
+function copyCamera(from: DishRenderer, to: DishRenderer): void {
+  const a = from.camera;
+  const b = to.camera;
+  if (b.cx === a.cx && b.cy === a.cy && b.zoom === a.zoom) return;
+  b.cx = a.cx;
+  b.cy = a.cy;
+  b.zoom = a.zoom;
+  b.followEntityId = null;
+}
+
+/** The player moved this arm's camera: the other viewport follows it. */
+export function leadCamera(arm: CompareArm): void {
+  cameraLeader = arm;
+  syncCompareCameras();
+}
+
+/** Keep the two viewports looking at the same place (called every animation frame). */
+export function syncCompareCameras(): void {
+  const lead = compareRenderers[cameraLeader];
+  const follow = compareRenderers[cameraLeader === 'A' ? 'B' : 'A'];
+  if (lead && follow) copyCamera(lead, follow);
+}
+
+export function showCompareArm(arm: CompareArm): void {
+  compareShown.value = arm;
+  cameraLeader = arm;
+}
+
+/**
+ * "Compare": the worker captures the current dish once as the baseline and realizes A and B from it;
+ * the dish itself is paused and left exactly as it is (a blocking panel, UX §2).
+ */
+export async function openCompare(): Promise<void> {
+  const info = dishInfo.value;
+  if (!info || compareState.value) return;
+  busy.value = true;
+  try {
+    const n = ++compareCounter;
+    const base = `${info.dishId}-cmp${n}`;
+    const ids = { compareId: base, aDishId: `${base}-A`, bDishId: `${base}-B` };
+    compareLastGeometry.A = compareLastGeometry.B = null;
+    compareLastSnapshot.A = compareLastSnapshot.B = null;
+    batch(() => {
+      // Set before the request so the arms' first snapshots are routed to the comparison.
+      compareState.value = {
+        ...ids,
+        sourceDishId: info.dishId,
+        baselineTick: meta.value?.tick ?? 0,
+        status: 'setup',
+        horizonTicks: null,
+        ticksRun: 0,
+        speed: 4,
+        priorSpeed: meta.value?.speed ?? 0,
+        interventions: [],
+        results: null,
+        error: null,
+      };
+      comparePrediction.value = '';
+      compareHorizon.value = 60;
+      compareConclusion.value = null;
+      compareNote.value = '';
+      compareCardSaved.value = false;
+      compareArmMeta.value = { A: null, B: null };
+      compareShown.value = 'B';
+      cameraLeader = 'B';
+    });
+    const state = await getClient().compareStart(info.dishId, ids);
+    batch(() => {
+      compareState.value = state;
+      selection.value = null;
+      inspector.value = null;
+      familyView.value = null;
+      candidates.value = null;
+      tool.value = { kind: 'look' };
+      sheet.value = 'none';
+      route.value = { name: 'compare' };
+    });
+  } catch (e) {
+    compareState.value = null;
+    showToast(`Couldn't start a comparison: ${(e as Error).message}`, 4000);
+  } finally {
+    busy.value = false;
+  }
+}
+
+/** Queue the one change on B through the ordinary command path (a paused edit on B only). */
+export async function queueOnB(payload: CommandPayload): Promise<void> {
+  const info = dishInfo.value;
+  const c = compareState.value;
+  if (!info || !c || c.status !== 'setup') return;
+  const { result, error } = await getClient().commandAck(c.bDishId, `cmp-${++commandCounter}`, payload, true);
+  if (error) {
+    showToast(error, 3500);
+    return;
+  }
+  reportCommand(info, payload, result, compareRenderers.B);
+}
+
+export async function clearCompareChange(): Promise<void> {
+  const c = compareState.value;
+  if (!c) return;
+  try {
+    compareState.value = await getClient().compareReset(c.compareId);
+    showToast('Change cleared: B is an exact copy of A again.');
+  } catch (e) {
+    showToast((e as Error).message, 3500);
+  }
+}
+
+export async function runCompare(): Promise<void> {
+  const c = compareState.value;
+  if (!c || c.status !== 'setup') return;
+  const h = compareHorizon.value;
+  try {
+    compareState.value = await getClient().compareRun(c.compareId, h === null ? null : h * 10, 4);
+    tool.value = { kind: 'look' };
+    sheet.value = 'none';
+  } catch (e) {
+    showToast(`Couldn't run the comparison: ${(e as Error).message}`, 4000);
+  }
+}
+
+/** Pacing only: both copies always receive the same number of ticks. */
+export function setCompareSpeed(speed: CompareSpeed): void {
+  const c = compareState.value;
+  if (!c || c.status !== 'running') return;
+  compareState.value = { ...c, speed };
+  getClient().compareSpeed(c.compareId, speed);
+}
+
+export async function stopCompare(): Promise<void> {
+  const c = compareState.value;
+  if (!c || c.status !== 'running') return;
+  try {
+    compareState.value = await getClient().compareStop(c.compareId);
+  } catch (e) {
+    showToast((e as Error).message, 3500);
+  }
+}
+
+/**
+ * Close (delete) the comparison: the worker discards A, B and the stored baseline. The dish the
+ * comparison started from — and every save — is untouched; it resumes its prior run state.
+ */
+export async function closeCompare(): Promise<void> {
+  const c = compareState.value;
+  if (!c) {
+    route.value = { name: 'dish' };
+    return;
+  }
+  const client = getClient();
+  try {
+    await client.compareDelete(c.compareId);
+  } catch {
+    /* already gone: nothing else to discard */
+  }
+  compareRenderers.A = compareRenderers.B = null;
+  compareLastGeometry.A = compareLastGeometry.B = null;
+  compareLastSnapshot.A = compareLastSnapshot.B = null;
+  batch(() => {
+    compareState.value = null;
+    compareArmMeta.value = { A: null, B: null };
+    tool.value = { kind: 'look' };
+    sheet.value = 'none';
+    route.value = { name: 'dish' };
+  });
+  client.activate(c.sourceDishId);
+  if (c.priorSpeed > 0) client.setSpeed(c.sourceDishId, c.priorSpeed);
+  showToast('Comparison closed. Your dish is exactly as you left it.', 3000);
+}
+
+/** A saved result card (UI state on this device; the Notebook lists them from Phase 4). */
+export interface CompareCard {
+  readonly version: 1;
+  readonly savedAt: string;
+  readonly dishName: string;
+  readonly recipeId: string | null;
+  readonly seed: number;
+  readonly baselineTick: number;
+  readonly ticks: number;
+  readonly change: string;
+  readonly prediction: string;
+  readonly conclusion: Conclusion | null;
+  readonly note: string;
+  readonly label: string;
+  readonly hashes: { readonly a: string; readonly b: string };
+  readonly rows: readonly { readonly key: string; readonly species?: number; readonly a: number; readonly b: number; readonly diff: number }[];
+}
+
+export const COMPARE_CARDS_KEY = 'pixelmeba.compareCards';
+const COMPARE_CARDS_MAX = 50;
+
+export function loadCompareCards(): CompareCard[] {
+  try {
+    const raw = localStorage.getItem(COMPARE_CARDS_KEY);
+    const list = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(list) ? (list as CompareCard[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCompareCard(change: string): boolean {
+  const c = compareState.value;
+  const info = dishInfo.value;
+  const r = c?.results;
+  if (!c || !info || !r) return false;
+  const card: CompareCard = {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    dishName: info.name,
+    recipeId: info.recipeId,
+    seed: info.seed,
+    baselineTick: r.baselineTick,
+    ticks: r.ticks,
+    change,
+    prediction: comparePrediction.value,
+    conclusion: compareConclusion.value,
+    note: compareNote.value,
+    label: r.label,
+    hashes: { a: r.a.hash, b: r.b.hash },
+    rows: r.rows,
+  };
+  try {
+    localStorage.setItem(COMPARE_CARDS_KEY, JSON.stringify([card, ...loadCompareCards()].slice(0, COMPARE_CARDS_MAX)));
+    compareCardSaved.value = true;
+    showToast('Result card saved on this device.');
+    return true;
+  } catch {
+    showToast("Couldn't save the result card on this device.", 3500);
+    return false;
+  }
 }

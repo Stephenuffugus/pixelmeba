@@ -1,0 +1,25 @@
+{
+  "id": "STARCH_UNLOCK_V1",
+  "revision": 1,
+  "name": "What unlocks starch",
+  "habitatId": "WATER_GARDEN",
+  "seed": 104729,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "mutationPreset": "fixed",
+  "founderMode": "identical",
+  "backgroundOverrides": {"sugar": 0},
+  "fieldPatches": [
+    {"center": [64, 64], "radius": 3, "substrate": "water", "add": {"sugar": 0.1}, "label": "Bootstrap sugar"},
+    {"center": [64, 64], "radius": 3, "substrate": "water", "add": {"starch": 0.6}, "label": "Starch"}
+  ],
+  "founders": [
+    {"species": "B06", "count": 12, "center": [64, 64], "radius": 3}
+  ],
+  "labels": ["Experiment A"],
+  "question": "What unlocks starch?",
+  "expectedObservationsText": "Crumbsmiths release enzyme onto the starch and some of it becomes sugar. The small sugar bootstrap is logged as its own input, so sugar made from starch is counted separately. Whether the enzyme pays for itself is not guaranteed.",
+  "phase": 2
+}

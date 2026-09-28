@@ -1,0 +1,25 @@
+{
+  "id": "EXP_102",
+  "seed": 102,
+  "title": "Light and life",
+  "question": "How much does light matter to a Sunbead?",
+  "recipeId": "LIGHT_AND_LIFE_V1",
+  "intervention": "Make a copy of this dish and paint shade over all of copy B (light × 0.1). Run both for 180 seconds and compare how much carbon the Sunbeads fixed.",
+  "predictedTradeoff": "Sunbeads in shade fix less carbon from the same air. With less growth they may also use less nutrient.",
+  "measurements": ["intake.A01", "biomass.A01", "alive.A01", "births.A01", "deaths.A01", "oxygenMean", "field.co2"],
+  "stoppingSeconds": 180,
+  "confounds": "Shade is the only setup difference. Sunbeads also depend on nutrient and CO2, which both copies start with in equal amounts. One paired run with one seed.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "runSeconds", "arm": "A", "op": "gte", "value": 180, "label": "Both copies ran 180 s"},
+        {"measure": "intake.A01", "arm": "absDiff", "op": "gt", "value": 0, "label": "The copies' photosynthetic totals differ"}
+      ]
+    }
+  },
+  "paired": true,
+  "change": {"kind": "shade", "factor": 0.1},
+  "completion": {"journalStamp": "Compared Sunbeads in light and shade", "playerSteps": ["viewComparison"]},
+  "phase": 2
+}

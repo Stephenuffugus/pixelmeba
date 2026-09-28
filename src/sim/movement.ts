@@ -19,7 +19,7 @@ import {
   STRESS_THRESHOLD,
   WANDER_HOLD_TICKS,
 } from './constants';
-import { FLAG, MOVE_NONE, MOVE_PURSUE, MOVE_TARGET, MOVE_WANDER } from './entities';
+import { FLAG, LIFE_ACTIVE, MOVE_NONE, MOVE_PURSUE, MOVE_TARGET, MOVE_WANDER } from './entities';
 import { cellIndex, inBounds, inMask } from './grid';
 import { profileOf } from './profiles';
 import type { Profile } from './phenotype';
@@ -137,7 +137,7 @@ function acquirePrey(world: World, slot: number, sp: SpeciesRT, radius: number):
   return best;
 }
 
-function foodScore(world: World, sp: SpeciesRT, prof: Profile, cell: number, energy: number): number {
+function foodScore(world: World, prof: Profile, cell: number, energy: number): number {
   let best = 0;
   const foods = prof.foods;
   for (let k = 0; k < foods.length; k++) {
@@ -147,8 +147,9 @@ function foodScore(world: World, sp: SpeciesRT, prof: Profile, cell: number, ene
     const s = avail(f[cell]!);
     if (s > best) best = s;
   }
-  // Producers also seek convertible substrate while they can afford secretion (SPEC §6.4).
-  if (sp.secretesStarch && energy > 35 && world.fields.starch) {
+  // Producers (native, or E01 carriers) also seek convertible substrate while they can afford
+  // secretion (SPEC §6.4, §9).
+  if (prof.starch !== null && energy > prof.starch.minEnergy && world.fields.starch) {
     const s = 0.5 * avail(world.fields.starch[cell]!);
     if (s > best) best = s;
   }
@@ -186,7 +187,7 @@ function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile): void 
       const cell = cellIndex(x, y);
       if (!canOccupy(world, sp, cell)) continue;
       if (cell !== own && traceFraction(world, sp, px, py, x + 0.5, y + 0.5) < 1) continue;
-      const F = foodScore(world, sp, prof, cell, c.E[slot]!);
+      const F = foodScore(world, prof, cell, c.E[slot]!);
       const S = suitabilityAt(world, sp, prof, cell).value;
       const others = load[cell]! - (cell === own ? selfLoad : 0);
       const C = Math.min(1, Math.max(0, others) / CELL_SOFT_CAPACITY);
@@ -298,6 +299,11 @@ export function stageSenseAndMove(world: World): void {
       }
     }
 
+    // Preparing, Resting and Waking override voluntary behavior: no decisions, no movement (§6.4, §7.6).
+    if (c.lifeState[i] !== LIFE_ACTIVE) {
+      c.flags[i] = c.flags[i]! & ~(FLAG.moving | FLAG.hunting);
+      continue;
+    }
     if (!sp.selfPropelled || prof.speed <= 0 || (c.flags[i]! & FLAG.attached) !== 0) continue;
 
     const step = prof.speed * DT;

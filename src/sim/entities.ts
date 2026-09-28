@@ -87,6 +87,10 @@ export const ENTITY_COLUMNS = [
   ['propDelta1', 'i32'],
   ['propModule0', 'i32'],
   ['propModule1', 'i32'],
+  // Dormancy (SPEC §7.6; P2.1): seconds of moisture suitability < 0.20 while Active. The other
+  // dormancy clocks reuse stateTimer (no-intake seconds while Active; elapsed seconds while Preparing
+  // or Waking; wake-condition seconds while Resting) and lockoutTimer (lockout after waking).
+  ['dryTimer', 'f64'],
 ] as const satisfies ReadonlyArray<readonly [string, ColType]>;
 
 export type ColumnName = (typeof ENTITY_COLUMNS)[number][0];
@@ -140,8 +144,23 @@ export const FLAG = {
   secreting: 1 << 7,
   justBorn: 1 << 8,
   introduced: 1 << 9,
+  /** Its current dormancy was entered because it was too dry (else because food stayed scarce). */
+  restDry: 1 << 10,
+  /** This tick's intake reached 1 % of its intake ceiling (USABLE_INTAKE_FRACTION; set in stage 6). */
+  usableIntake: 1 << 11,
 } as const;
 
+/** Life states (SPEC §6.1, §7.6). Saved in the lifeState column: append only. */
+export const LIFE_ACTIVE = 0;
+export const LIFE_PREPARING = 1;
+export const LIFE_RESTING = 2;
+export const LIFE_WAKING = 3;
+
+/**
+ * Entity columns appended after the first saved format. A save written before a column existed
+ * loads it with the column's empty value, which is exactly the state those organisms had (the
+ * behavior the column serves did not exist in that world's ruleset).
+ */
 export const MOVE_NONE = 0;
 export const MOVE_TARGET = 1;
 export const MOVE_WANDER = 2;

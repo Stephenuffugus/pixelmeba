@@ -1,0 +1,12 @@
+{
+  "id": "R-G0",
+  "revision": 1,
+  "sourceId": "FIRST_DISH_V1",
+  "sourceRevision": 1,
+  "requiredCapabilities": ["core", "enzymes"],
+  "title": "Garden",
+  "question": "Who finds something to eat?",
+  "patch": { "kind": "none" },
+  "previewDifference": "Nothing is changed: this is the Little Living Garden as designed.",
+  "phase": 2
+}

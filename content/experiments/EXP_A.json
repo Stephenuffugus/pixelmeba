@@ -1,0 +1,36 @@
+{
+  "id": "EXP_A",
+  "seed": 104729,
+  "title": "What unlocks starch",
+  "question": "What turns the starch patch into food?",
+  "recipeId": "STARCH_UNLOCK_V1",
+  "intervention": "Make a copy of this dish without the starch deposit. Everything else stays the same, including the small sugar bootstrap. Run both for 180 seconds.",
+  "predictedTradeoff": "Crumbsmiths spend energy releasing enzyme. The sugar it frees from the starch may or may not repay that cost. Conversion alone does not show the enzyme helps them.",
+  "measurements": [
+    "patchInput.0",
+    "converted.starch",
+    "field.starch",
+    "consumed.sugar",
+    "field.sugar",
+    "intake.B06",
+    "births.B06",
+    "deaths.B06",
+    "alive.B06",
+    "extinctAt.B06"
+  ],
+  "stoppingSeconds": 180,
+  "confounds": "The 0.10 sugar bootstrap is food too. It is logged as its own input, so sugar made from starch is counted separately. No Recycler or Sunbead is in the dish, so nothing else eats starch or makes sugar. Once the copies differ, later encounters differ too: this is one paired run, not proof of a general effect.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "runSeconds", "arm": "A", "op": "gte", "value": 180, "label": "Both copies ran 180 s"},
+        {"measure": "converted.starch", "arm": "A", "op": "gt", "value": 0, "label": "Sugar was made from starch in copy A"}
+      ]
+    }
+  },
+  "paired": true,
+  "change": {"kind": "omitPatch", "patchIndex": 1},
+  "completion": {"journalStamp": "Measured sugar made from starch", "playerSteps": ["viewComparison"]},
+  "phase": 2
+}

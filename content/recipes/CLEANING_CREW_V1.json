@@ -1,0 +1,30 @@
+{
+  "id": "CLEANING_CREW_V1",
+  "revision": 1,
+  "name": "Cleaning crew",
+  "habitatId": "WATER_GARDEN",
+  "seed": 103,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": false,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {
+      "center": [50, 70],
+      "radius": 6,
+      "substrate": "water",
+      "add": {"detritus": 0.08849557522123894, "detritusN": 0.008849557522123894},
+      "label": "Debris (10 C with 1 bound nutrient over 113 cells)"
+    }
+  ],
+  "founders": [
+    {"species": "B04", "count": 10, "center": [50, 70], "radius": 6}
+  ],
+  "labels": [],
+  "question": "Who cleans up the debris?",
+  "expectedObservationsText": "Ten Recyclers on a patch holding 10 detritus carbon with 1 bound nutrient. Open the resource history to see the debris go down.",
+  "phase": 2
+}

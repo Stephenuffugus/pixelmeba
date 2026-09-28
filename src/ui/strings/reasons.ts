@@ -11,6 +11,7 @@ export interface ReasonContext {
   readonly speciesName?: string;
 }
 
+const secs = (v?: number) => (v === undefined || !Number.isFinite(v) ? 'some' : String(Math.max(0, Math.round(v))));
 const pct = (v?: number) => (v === undefined || !Number.isFinite(v) ? 'an unknown share' : `${Math.round(v * 100)} %`);
 
 const EXPLORE: Record<ReasonName, string> = {
@@ -115,6 +116,15 @@ function lab(name: ReasonName, ctx: ReasonContext): string {
       return 'Its cell is over capacity, so births wait.';
     case 'ENERGY_ZERO':
       return 'Energy 0: losing 4 health per second.';
+    case 'RESTING_FOOD_SCARCE':
+      // UX §5.2 wording; the measured value is how long the wake conditions have held so far.
+      return `Resting because food stayed scarce; wakes after 10 s of food and energy ≥ 5 (${secs(ctx.value)} s so far).`;
+    case 'RESTING_DRY':
+      return `Resting because it was too dry; wakes after 10 s of moisture and energy ≥ 5 (${secs(ctx.value)} s so far).`;
+    case 'PREPARING':
+      return `Getting ready to rest: ${secs(ctx.value)} s left.`;
+    case 'WAKING':
+      return `Waking up: ${secs(ctx.value)} s left.`;
     default:
       return EXPLORE[name];
   }

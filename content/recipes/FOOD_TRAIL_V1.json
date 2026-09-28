@@ -1,0 +1,78 @@
+{
+  "id": "FOOD_TRAIL_V1",
+  "revision": 1,
+  "name": "Food trail",
+  "habitatId": "WATER_GARDEN",
+  "seed": 101,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": false,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [],
+  "founders": [
+    {"species": "B01", "count": 30, "center": [36, 64], "radius": 6}
+  ],
+  "scheduledCommands": [
+    {
+      "atSecond": 0,
+      "kind": "deposit",
+      "payload": {
+        "kind": "deposit",
+        "materialId": "SUGAR",
+        "points": [
+          [36.5, 61.5],
+          [80.5, 61.5],
+          [80.5, 62.5],
+          [36.5, 62.5],
+          [36.5, 63.5],
+          [80.5, 63.5],
+          [80.5, 64.5],
+          [36.5, 64.5],
+          [36.5, 65.5],
+          [80.5, 65.5],
+          [80.5, 66.5],
+          [36.5, 66.5],
+          [36.5, 67.5],
+          [80.5, 67.5]
+        ],
+        "radius": 0,
+        "dose": 0.5
+      },
+      "label": "Trail sugar"
+    },
+    {
+      "atSecond": 0,
+      "kind": "deposit",
+      "payload": {
+        "kind": "deposit",
+        "materialId": "NUTRIENT",
+        "points": [
+          [36.5, 61.5],
+          [80.5, 61.5],
+          [80.5, 62.5],
+          [36.5, 62.5],
+          [36.5, 63.5],
+          [80.5, 63.5],
+          [80.5, 64.5],
+          [36.5, 64.5],
+          [36.5, 65.5],
+          [80.5, 65.5],
+          [80.5, 66.5],
+          [36.5, 66.5],
+          [36.5, 67.5],
+          [80.5, 67.5]
+        ],
+        "radius": 0,
+        "dose": 0.2
+      },
+      "label": "Trail nutrient"
+    }
+  ],
+  "labels": [],
+  "question": "Where does a hungry group go when food lies in a line?",
+  "expectedObservationsText": "Sprinters start at the west end of a sugar trail (x 36-80, y 61-67; 0.50 sugar and 0.20 nutrient per trail cell, placed by two strokes at 0 s). Follow the group and inspect what it eats.",
+  "phase": 2
+}

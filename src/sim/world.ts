@@ -20,7 +20,12 @@ import { createHistory, type History } from './history';
 import type { Command } from './commands';
 import { createBranchBook, type BranchBook } from './branches';
 
-export const SCHEMA_VERSION = 1;
+/**
+ * World schema. 1 = Phase 1. 2 = P2.1 adds the dryTimer entity column (dormancy). Older states are
+ * migrated by copy in migrateWorldState (src/sim/serialize.ts); new states are always written at
+ * the current version.
+ */
+export const SCHEMA_VERSION = 2;
 
 export type MutationPreset = 'standard' | 'accelerated' | 'fixed';
 export type FounderMode = 'identical' | 'varied' | 'diverse';

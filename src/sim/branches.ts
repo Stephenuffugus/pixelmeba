@@ -16,6 +16,7 @@
 import { emit } from './events';
 import type { Genome } from './genome';
 import { shortGenomeId } from './genome';
+import { activeLoci } from './phenotype';
 import type { World } from './world';
 
 export interface Branch {
@@ -101,7 +102,8 @@ export function onDaughter(world: World, daughter: number, parent: { refGenome: 
   const ref = world.genomes.get(parent.refGenome);
   const g = world.genomes.get(c.genome[daughter]!);
   const sp = world.species[c.species[daughter]!]!;
-  if (!qualifies(ref, g, sp.def.lociActive)) {
+  // Loci that act for this genome (an E03 carrier's dormancy locus counts; P2.1).
+  if (!qualifies(ref, g, activeLoci(sp, g))) {
     c.candRoot[daughter] = 0;
     return;
   }

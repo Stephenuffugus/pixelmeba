@@ -1,0 +1,23 @@
+{
+  "id": "EXP_103",
+  "seed": 103,
+  "title": "Cleaning crew",
+  "question": "Who cleans up the debris?",
+  "recipeId": "CLEANING_CREW_V1",
+  "intervention": "Watch the Recyclers on the debris patch, then open the resource history to see the debris total.",
+  "predictedTradeoff": "Recyclers turn debris into body and energy. The debris is finite, so a group that grows fast may run out.",
+  "measurements": ["consumed.detritus", "field.detritus", "intake.B04", "biomass.B04", "alive.B04", "births.B04", "deaths.B04"],
+  "stoppingSeconds": 180,
+  "confounds": "Dead organisms add debris of their own, so the debris total can rise as well as fall. Only debris eaten counts toward the goal.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "consumed.detritus", "arm": "A", "op": "gte", "value": 2, "label": "2 debris carbon eaten"}
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {"journalStamp": "Watched a cleaning crew eat debris", "playerSteps": ["openResourceHistory"]},
+  "phase": 2
+}

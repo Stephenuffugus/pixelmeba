@@ -14,11 +14,16 @@ import { profileOf } from '@sim/profiles';
 import { R } from '@sim/reasons';
 import { PREY_NONE } from '@sim/species';
 import { FILM_DIGESTION_IMPLEMENTED } from '@sim/content/implemented';
+import { dormancySummary, moduleSummaries, reserveBand, upkeepNow } from '@sim/moduleView';
 import { entityCell, forEachInCell } from '@sim/spatial';
 import { response, SHOULDER_PH, SHOULDER_SALINITY, SHOULDER_WARMTH, suitabilityAt } from '@sim/suitability';
 import type { World } from '@sim/world';
 import {
   CUE_CAPACITY_BLOCKED,
+  CUE_MOD_E01,
+  CUE_MOD_E03,
+  CUE_MOD_E05,
+  CUE_RESERVE_BAND_SHIFT,
   CUE_FEEDING,
   CUE_HUNTING,
   CUE_JUST_BORN,
@@ -71,6 +76,13 @@ export function packEntities(world: World, ents: Float32Array | null, ids: Uint3
     if (c.secreting[i]) cue |= CUE_SECRETING;
     if (flags & FLAG.justBorn) cue |= CUE_JUST_BORN;
     if (flags & FLAG.capacityBlocked) cue |= CUE_CAPACITY_BLOCKED;
+    // Module visual layers map only from the genome and measured state (P2.1).
+    const mods = prof.modules;
+    if (mods.length > 0) {
+      if (mods.includes('E01')) cue |= CUE_MOD_E01;
+      if (mods.includes('E03')) cue |= CUE_MOD_E03;
+      if (mods.includes('E05')) cue |= CUE_MOD_E05 | (reserveBand(c.E[i]!, prof) << CUE_RESERVE_BAND_SHIFT);
+    }
     outE[o + E_SLOT] = i;
     outE[o + E_SPECIES] = c.species[i]!;
     outE[o + E_X] = c.x[i]!;
@@ -257,6 +269,11 @@ function inspectEntity(world: World, slot: number): EntityInspect {
       // simulation consumes it. Until then the inspector must not describe it (honest labels).
       digestsFilm: sp.def.digestsFilm && world.fields.film !== undefined && FILM_DIGESTION_IMPLEMENTED,
     },
+    lociActiveEffective: prof.lociActive,
+    energyCapBase: prof.baseEnergyCap,
+    modules: moduleSummaries(world, slot),
+    upkeep: upkeepNow(world, slot),
+    dormancy: dormancySummary(world, slot),
   };
 }
 

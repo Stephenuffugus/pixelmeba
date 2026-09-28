@@ -241,6 +241,42 @@ export const PredicateSchema = z.object({
   durationSeconds: nonneg.optional(),
 });
 
+/**
+ * A command an experiment or recipe applies through the ordinary command path (SPEC §3.2, §13.2):
+ * the same payload a player's completed gesture produces (src/sim/commands.ts CommandPayload).
+ */
+export const ExperimentCommandSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('inoculate'), speciesId: SpeciesIdSchema, x: finite, y: finite, radius: nonneg, count: int.min(1) }).strict(),
+  z
+    .object({ kind: z.literal('deposit'), materialId: z.string().min(1), points: z.array(cell).min(1), radius: nonneg, dose: nonneg })
+    .strict(),
+  z.object({ kind: z.literal('setLid'), lid: z.enum(['open', 'closed']) }).strict(),
+  z.object({ kind: z.literal('setMutationPreset'), preset: MutationPreset }).strict(),
+]);
+export type ExperimentCommand = z.infer<typeof ExperimentCommandSchema>;
+
+/**
+ * The one declared difference between the two arms of a paired experiment (SPEC §13.2, §13.4). Arm A
+ * is the recipe as written; arm B receives the change. 'omitPatch' and 'shade' are part of B's setup
+ * before tick 0 (shade paint multiplies light by 0.1 over the whole dish, CT §6 SHADE); 'commands' are
+ * applied to B through the command path at `atSecond`, after both arms were duplicated from one state.
+ */
+export const ExperimentChangeSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('none') }).strict(),
+  z.object({ kind: z.literal('omitPatch'), patchIndex: int.min(0) }).strict(),
+  z.object({ kind: z.literal('shade'), factor: z.literal(0.1) }).strict(),
+  z.object({ kind: z.literal('commands'), atSecond: nonneg, commands: z.array(ExperimentCommandSchema).min(1) }).strict(),
+]);
+export type ExperimentChange = z.infer<typeof ExperimentChangeSchema>;
+
+/** Completion behavior (SPEC §13.2): a journal stamp is recorded and the world keeps running. */
+export const ExperimentCompletionSchema = z.object({
+  journalStamp: z.string().min(1),
+  /** The in-app half of the completion evidence (CT §10.1), checked by the card UI, not by fixtures. */
+  playerSteps: z.array(z.enum(['inspectFoodUse', 'openResourceHistory', 'viewComparison', 'viewPreyHistory'])).default([]),
+  worldKeepsRunning: z.literal(true).default(true),
+});
+
 export const ExperimentSchema = z.object({
   id: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
   seed: int.min(0),
@@ -254,6 +290,9 @@ export const ExperimentSchema = z.object({
   confounds: z.string().default(''),
   gate: PredicateSchema,
   paired: z.boolean().default(false),
+  /** Applied, structured form of the suggested intervention (the `intervention` text describes it). */
+  change: ExperimentChangeSchema.default({ kind: 'none' }),
+  completion: ExperimentCompletionSchema,
   phase: PhaseSchema,
 });
 export type ExperimentDef = z.infer<typeof ExperimentSchema>;

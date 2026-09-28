@@ -1,0 +1,12 @@
+{
+  "id": "R-G1",
+  "revision": 1,
+  "sourceId": "FIRST_DISH_V1",
+  "sourceRevision": 1,
+  "requiredCapabilities": ["core", "enzymes"],
+  "title": "A smaller meal",
+  "question": "What changes with less food?",
+  "patch": { "kind": "patchSet", "patchIndex": 0, "field": "sugar", "value": 0.2 },
+  "previewDifference": "The sugar patch starts with half as much sugar.",
+  "phase": 2
+}

@@ -1,0 +1,12 @@
+{
+  "id": "R-G3",
+  "revision": 1,
+  "sourceId": "FIRST_DISH_V1",
+  "sourceRevision": 1,
+  "requiredCapabilities": ["core", "enzymes"],
+  "title": "Dinner farther away",
+  "question": "Who reaches the food now?",
+  "patch": { "kind": "patchMove", "patchIndex": 0, "center": [48, 82] },
+  "previewDifference": "The same sugar patch starts farther from where the Sprinters begin.",
+  "phase": 2
+}

@@ -33,7 +33,6 @@ export function FeedSheet() {
               class="btn"
               role="radio"
               aria-checked={m.id === materialId}
-              aria-pressed={m.id === materialId}
               onClick={() => setMaterial(m.id)}
             >
               {m.name}

@@ -1,0 +1,24 @@
+{
+  "id": "PREDATOR_BALANCE_V1",
+  "revision": 1,
+  "name": "Predator balance",
+  "habitatId": "WATER_GARDEN",
+  "seed": 106,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": false,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {"center": [50, 70], "radius": 6, "substrate": "water", "add": {"sugar": 0.5, "nutrient": 0.2}, "label": "Sugar and nutrient patch"}
+  ],
+  "founders": [
+    {"species": "B01", "count": 100, "center": [50, 70], "radius": 6}
+  ],
+  "labels": [],
+  "question": "Does grazing steady a population or eat it down?",
+  "expectedObservationsText": "A hundred Sprinters on a sugar patch. The experiment card duplicates this dish and adds five Amoebae to copy B only.",
+  "phase": 2
+}

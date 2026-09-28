@@ -1,0 +1,44 @@
+{
+  "id": "EXP_106",
+  "seed": 106,
+  "title": "Predator balance",
+  "question": "Does grazing steady a population or eat it down?",
+  "recipeId": "PREDATOR_BALANCE_V1",
+  "intervention": "Make a copy of this dish and add five Amoebae to the patch in copy B only. Run both for 180 seconds and compare the Sprinter history.",
+  "predictedTradeoff": "Amoebae remove Sprinters but also leave more sugar for the survivors. They may steady the population or eat it down.",
+  "measurements": [
+    "captures.P01",
+    "capturedCarbon.P01",
+    "alive.P01",
+    "deaths.B01.DEATH_PREDATION",
+    "deaths.B01",
+    "births.B01",
+    "alive.B01",
+    "biomass.B01",
+    "field.sugar",
+    "inputCarbon",
+    "interventionAccepted"
+  ],
+  "stoppingSeconds": 180,
+  "confounds": "After the Amoebae arrive, every encounter can differ between the copies, so one pair is not proof of a general effect. The Amoebae's carbon is logged as an external input.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "runSeconds", "arm": "A", "op": "gte", "value": 180, "label": "Both copies ran 180 s"},
+        {"measure": "interventionAccepted", "arm": "B", "op": "gte", "value": 5, "label": "Five Amoebae arrived in copy B"},
+        {"measure": "captures.P01", "arm": "B", "op": "gte", "value": 1, "label": "The Amoebae caught prey (there is consumption to read)"}
+      ]
+    }
+  },
+  "paired": true,
+  "change": {
+    "kind": "commands",
+    "atSecond": 0,
+    "commands": [
+      {"kind": "inoculate", "speciesId": "P01", "x": 50.5, "y": 70.5, "radius": 6, "count": 5}
+    ]
+  },
+  "completion": {"journalStamp": "Compared Sprinters with and without grazers", "playerSteps": ["viewComparison", "viewPreyHistory"]},
+  "phase": 2
+}

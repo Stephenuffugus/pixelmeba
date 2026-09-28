@@ -1,0 +1,24 @@
+{
+  "id": "LIGHT_AND_LIFE_V1",
+  "revision": 1,
+  "name": "Light and life",
+  "habitatId": "WATER_GARDEN",
+  "seed": 102,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": false,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {"center": [50, 70], "radius": 6, "substrate": "water", "add": {"nutrient": 0.2}, "label": "Nutrient patch"}
+  ],
+  "founders": [
+    {"species": "A01", "count": 30, "center": [50, 70], "radius": 6}
+  ],
+  "labels": [],
+  "question": "How much does light matter to a Sunbead?",
+  "expectedObservationsText": "Thirty Sunbeads on a nutrient patch. The experiment card duplicates this dish and shades copy B (light x 0.1).",
+  "phase": 2
+}

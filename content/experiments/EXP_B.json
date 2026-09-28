@@ -1,0 +1,88 @@
+{
+  "id": "EXP_B",
+  "seed": 104729,
+  "title": "What changes when a grazer arrives",
+  "question": "What changes in the garden when two Amoebae arrive?",
+  "recipeId": "FIRST_DISH_V1",
+  "intervention": "At 120 seconds, copy the garden. In copy B only, add two Amoebae in the nearest open cells to the sugar patch centre (48,64). Run both for another 180 seconds.",
+  "predictedTradeoff": "Amoebae eat Sprinters and other small cells. Fewer grazers of sugar could leave more sugar, or the Amoebae could find little to catch. Either result is possible.",
+  "measurements": [
+    "deaths.B01.DEATH_PREDATION",
+    "deaths.B01.DEATH_STARVATION",
+    "deaths.B01",
+    "births.B01",
+    "biomass.B01",
+    "deaths.A01.DEATH_PREDATION",
+    "deaths.A01",
+    "births.A01",
+    "biomass.A01",
+    "deaths.B04.DEATH_PREDATION",
+    "deaths.B04",
+    "births.B04",
+    "biomass.B04",
+    "deaths.B06.DEATH_PREDATION",
+    "deaths.B06",
+    "births.B06",
+    "biomass.B06",
+    "preyBiomass.P01",
+    "captures.P01",
+    "capturedCarbon.P01",
+    "alive.P01",
+    "field.sugar",
+    "inputCarbon",
+    "interventionAccepted"
+  ],
+  "stoppingSeconds": 300,
+  "confounds": "The copy controls the starting state at 120 s. After the Amoebae arrive, every encounter and random draw can differ between the copies, so one pair is not proof of a general effect. The Amoebae's own carbon is logged as an external input.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {
+          "measure": "runSeconds",
+          "arm": "A",
+          "op": "gte",
+          "value": 180,
+          "label": "Both copies ran 180 s after the copy"
+        },
+        {
+          "measure": "interventionAccepted",
+          "arm": "B",
+          "op": "gte",
+          "value": 2,
+          "label": "Two Amoebae arrived in copy B"
+        }
+      ]
+    }
+  },
+  "paired": true,
+  "change": {
+    "kind": "commands",
+    "atSecond": 120,
+    "commands": [
+      {
+        "kind": "inoculate",
+        "speciesId": "P01",
+        "x": 48.5,
+        "y": 64.5,
+        "radius": 0,
+        "count": 1
+      },
+      {
+        "kind": "inoculate",
+        "speciesId": "P01",
+        "x": 48.5,
+        "y": 63.5,
+        "radius": 0,
+        "count": 1
+      }
+    ]
+  },
+  "completion": {
+    "journalStamp": "Compared a garden with and without grazers",
+    "playerSteps": [
+      "viewComparison"
+    ]
+  },
+  "phase": 2
+}

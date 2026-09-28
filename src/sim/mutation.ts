@@ -7,6 +7,8 @@
  */
 import { detFloat, detInt, STREAMS } from './rng';
 import type { FeedingPolicy, Genome, GenomeInput } from './genome';
+import { eligibleGains, lossOptions } from './modules';
+import { activeLoci } from './phenotype';
 import type { World, MutationPreset } from './world';
 
 export interface MutationRates {
@@ -58,22 +60,23 @@ const DRAW_SIZE = 2;
 const DRAW_SIGN = 3;
 const DRAW_TO = 4;
 
-function eligibleGains(world: World, g: Genome): string[] {
-  if (g.modules.length >= 3) return [];
-  const out: string[] = [];
-  for (const def of world.content.modules) {
-    if (!def.eligibleAncestors.includes(g.ancestor)) continue;
-    if (def.nativeEquivalents.includes(g.ancestor)) continue;
-    if (g.modules.includes(def.id)) continue;
-    if (def.excludes.some((x) => g.modules.includes(x))) continue;
-    if (g.modules.some((m) => world.content.modules.find((d) => d.id === m)?.excludes.includes(def.id))) continue;
-    if (def.requires.some((r) => !g.modules.includes(r))) continue;
-    out.push(def.id);
-  }
-  return out.sort();
+export interface DaughterDraft {
+  readonly input: GenomeInput;
+  readonly flags: number;
+  readonly locus: number;
+  readonly delta: number;
+  readonly module: number;
 }
 
-function mutateDaughter(world: World, parent: Genome, pb: number, d: number): { input: GenomeInput; flags: number; locus: number; delta: number; module: number } {
+/**
+ * One daughter's inherited genome, drawn once from (seed, stream, parentBirthId, 0, daughterIndex).
+ * Pure: the same inputs always give the same draft (exported for fixtures and tuning tools).
+ */
+export function draftDaughter(world: World, parent: Genome, pb: number, d: number): DaughterDraft {
+  return mutateDaughter(world, parent, pb, d);
+}
+
+function mutateDaughter(world: World, parent: Genome, pb: number, d: number): DaughterDraft {
   const seed = world.seed;
   const sp = world.species.find((s) => s.id === parent.ancestor)!;
   const rates = ratesFor(world.settings.mutationPreset, world.content.manifest.developmentalEnabled);
@@ -88,8 +91,9 @@ function mutateDaughter(world: World, parent: Genome, pb: number, d: number): { 
 
   // 1. Quantitative: one active locus, ±2 (80 %) or ±5, clamped to 0–100.
   if (rates.quantitative > 0 && detFloat(seed, STREAMS.mutQuant, pb, 0, d, DRAW_ROLL) < rates.quantitative) {
+    // Loci that act for the parent genome (E03 carriers also vary their dormancy threshold).
     const active: number[] = [];
-    sp.def.lociActive.forEach((on, l) => {
+    activeLoci(sp, parent).forEach((on, l) => {
       if (on) active.push(l);
     });
     if (active.length > 0) {
@@ -130,23 +134,17 @@ function mutateDaughter(world: World, parent: Genome, pb: number, d: number): { 
     flags |= MUT_PREF;
   }
 
-  // 3. Module change: gain or loss with equal probability; uniform among legal options; no reroll.
+  // 3. Module change: gain or loss with equal probability; uniform among the legal options of the
+  // world's recorded registry (combinations validated here, at proposal time); no reroll. A draw with
+  // no legal option changes nothing.
   if (rates.module > 0 && detFloat(seed, STREAMS.mutModule, pb, 0, d, DRAW_ROLL) < rates.module) {
     const gain = detFloat(seed, STREAMS.mutModule, pb, 0, d, DRAW_SIZE) < 0.5;
-    const parentGenome: Genome = { ...parent, loci, policy, weights, modules };
-    if (gain) {
-      const options = eligibleGains(world, parentGenome);
-      if (options.length > 0) {
-        const id = options[detInt(seed, STREAMS.mutModule, options.length, pb, 0, d, DRAW_PICK)]!;
-        modules = [...modules, id].sort();
-        module = world.content.modules.findIndex((m) => m.id === id);
-        flags |= MUT_MODULE_GAIN;
-      }
-    } else if (modules.length > 0) {
-      const id = modules[detInt(seed, STREAMS.mutModule, modules.length, pb, 0, d, DRAW_PICK)]!;
-      modules = modules.filter((m) => m !== id);
+    const options = gain ? eligibleGains(world, { ancestor: parent.ancestor, modules }) : lossOptions(world, { ancestor: parent.ancestor, modules });
+    if (options.length > 0) {
+      const id = options[detInt(seed, STREAMS.mutModule, options.length, pb, 0, d, DRAW_PICK)]!;
+      modules = gain ? [...modules, id].sort() : modules.filter((m) => m !== id);
       module = world.content.modules.findIndex((m) => m.id === id);
-      flags |= MUT_MODULE_LOSS;
+      flags |= gain ? MUT_MODULE_GAIN : MUT_MODULE_LOSS;
     }
   }
 

@@ -3,6 +3,7 @@
  * listeners, and stale snapshots (older generation for the same dish) are discarded.
  */
 import type { CommandPayload, CommandResult } from '@sim/commands';
+import type { CompareSpeed, ComparisonState } from './comparison';
 import { PROTOCOL_VERSION, stamp, type DishInfo, type DishSource, type Envelope, type FamilyAnswer, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 
 export class WorkerRequestError extends Error {
@@ -28,6 +29,7 @@ export class SimClient {
   private readonly lastGen: Record<string, number> = {};
   private readonly snapshotListeners: ((s: SnapshotMsg) => void)[] = [];
   private readonly errorListeners: ((e: { dishId: string; message: string }) => void)[] = [];
+  private readonly compareListeners: ((s: ComparisonState) => void)[] = [];
 
   constructor(private readonly worker: WorkerLike) {
     worker.onmessage = (ev) => this.receive(ev.data);
@@ -48,6 +50,15 @@ export class SimClient {
 
   onError(fn: (e: { dishId: string; message: string }) => void): void {
     this.errorListeners.push(fn);
+  }
+
+  /** Every comparison status packet, solicited or not (progress while running, completion). */
+  onCompare(fn: (s: ComparisonState) => void): () => void {
+    this.compareListeners.push(fn);
+    return () => {
+      const i = this.compareListeners.indexOf(fn);
+      if (i >= 0) this.compareListeners.splice(i, 1);
+    };
   }
 
   /** Every packet leaves stamped with the protocol version. */
@@ -83,9 +94,12 @@ export class SimClient {
       }
       return;
     }
-    const p = this.pending[msg.requestId];
+    if (msg.type === 'compareState') for (const fn of this.compareListeners) fn(msg.state);
+    const id = msg.requestId;
+    if (id === undefined) return; // unsolicited status (e.g. comparison progress)
+    const p = this.pending[id];
     if (p) {
-      delete this.pending[msg.requestId];
+      delete this.pending[id];
       p.resolve(msg);
     }
   }
@@ -112,6 +126,12 @@ export class SimClient {
   async command(dishId: string, commandId: string, payload: CommandPayload, undoable = true): Promise<CommandResult | null> {
     const msg = await this.request<Extract<FromWorker, { type: 'ack' }>>((requestId) => ({ type: 'command', requestId, dishId, commandId, payload, undoable }));
     return msg.result;
+  }
+
+  /** Like command(), but also returns the worker's refusal text (e.g. a comparison arm that takes no changes). */
+  async commandAck(dishId: string, commandId: string, payload: CommandPayload, undoable = true): Promise<{ result: CommandResult | null; error: string | null }> {
+    const msg = await this.request<Extract<FromWorker, { type: 'ack' }>>((requestId) => ({ type: 'command', requestId, dishId, commandId, payload, undoable }));
+    return { result: msg.result, error: msg.error ?? null };
   }
 
   async undo(dishId: string): Promise<boolean> {
@@ -176,6 +196,36 @@ export class SimClient {
   async family(dishId: string, birthId: number): Promise<FamilyAnswer> {
     const msg = await this.request<Extract<FromWorker, { type: 'family' }>>((requestId) => ({ type: 'family', requestId, dishId, birthId }));
     return msg.family;
+  }
+
+  /** Start a comparison from a dish: baseline captured once, A and B realized paused (SPEC §13.4). */
+  async compareStart(sourceDishId: string, ids: { compareId: string; aDishId: string; bDishId: string }): Promise<ComparisonState> {
+    const msg = await this.request<Extract<FromWorker, { type: 'compareState' }>>((requestId) => ({ type: 'compareStart', requestId, sourceDishId, ...ids }));
+    return msg.state;
+  }
+
+  async compareReset(compareId: string): Promise<ComparisonState> {
+    const msg = await this.request<Extract<FromWorker, { type: 'compareState' }>>((requestId) => ({ type: 'compareReset', requestId, compareId }));
+    return msg.state;
+  }
+
+  async compareRun(compareId: string, horizonTicks: number | null, speed: CompareSpeed): Promise<ComparisonState> {
+    const msg = await this.request<Extract<FromWorker, { type: 'compareState' }>>((requestId) => ({ type: 'compareRun', requestId, compareId, horizonTicks, speed }));
+    return msg.state;
+  }
+
+  compareSpeed(compareId: string, speed: CompareSpeed): void {
+    this.send({ type: 'compareSpeed', compareId, speed });
+  }
+
+  async compareStop(compareId: string): Promise<ComparisonState> {
+    const msg = await this.request<Extract<FromWorker, { type: 'compareState' }>>((requestId) => ({ type: 'compareStop', requestId, compareId }));
+    return msg.state;
+  }
+
+  /** Discard a comparison's two worlds and baseline; the source dish and saves are never touched. */
+  async compareDelete(compareId: string): Promise<void> {
+    await this.request((requestId) => ({ type: 'compareDelete', requestId, compareId }));
   }
 
   setSpeed(dishId: string, speed: Speed): void {
