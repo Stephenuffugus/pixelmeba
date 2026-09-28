@@ -1,5 +1,13 @@
 # Resume point — read this first after a restart
 
+> **Update 2026‑09‑28 afternoon (after the codespace closed at ≈ 14:35 UTC):** wave C builders
+> (founders, observe) were cut off during their final regression runs; art‑marks never started. Their
+> uncommitted work is kept locally at branch `wip/g2-wave-c-found` (`ecb52d9`, not pushed). The lead
+> launched `docs/agent/g2-wave-c-resume.workflow.js.txt` (finish founders + observe from the tree, build
+> art‑marks, two‑lens verify, ≤ 2 fix rounds). Reports land in `docs/reports/reviews/g2-wave-c/`. If this
+> session dies again: read those reports, rerun the resume script (the Workflow tool can resume a run by
+> id only within the same session), then integrate → P2.9 → G2 (steps 5–7).
+
 > **Update 2026‑09‑28 (night session):** wave B and both fix rounds are committed (`d085a65`, `b17aa5b`,
 > `4804a91`, `87204e7`; check 501/501; Playwright 93/93 after the landscape sheet fix), decisions
 > D‑0024…D‑0028. Wave C (`docs/agent/g2-wave-c.workflow.js.txt`) was launched after `87204e7`. If this

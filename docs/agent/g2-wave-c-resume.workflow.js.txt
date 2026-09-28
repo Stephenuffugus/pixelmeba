@@ -1,0 +1,155 @@
+export const meta = {
+  name: 'g2-wave-c-resume',
+  description: 'Phase 2 wave C after a codespace restart: finish founders (P2.2) and observe (P2.8) from the interrupted work in the tree, build art-marks fresh; two-lens adversarial verification; fix and re-verify until clean (max 2 rounds)',
+  phases: [
+    { title: 'Build', detail: 'two finishers (interrupted work in the tree) + one fresh builder' },
+    { title: 'Verify', detail: 'adversarial verifiers: rules/tests lens and player/UX lens' },
+    { title: 'Fix', detail: 'fix every BLOCKER/MAJOR and cheap MINOR, then re-verify (≤ 2 rounds)' },
+  ],
+}
+
+const R = 'docs/reports/reviews/g2-wave-c'
+
+const PRE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Phase 1 is tagged g1; Phase 2 waves A and B (plus two fix rounds) are committed on main (HEAD 5a7a667: modules E01/E03/E05, comparison, What if?, experiments + Notebook, lineage/branches, Lab view). You work on another part of Phase 2 (docs/BUILD_DIRECTIVE.md "Phase 2"). Canonical rules: docs/PIXELMEBA_IMPLEMENTATION_SPEC.md, docs/CONTENT_TABLES.md (every number), docs/ARCHITECTURE.md, docs/UX_SPEC.md, docs/CONFLICT_REGISTER.md; docs/DECISIONS.md holds rulings through D-0028 (read the titles; D-0019 = schema bump + migration by copy + old-save test; D-0014 = charts are small multiples in one validated ink). Contract (CLAUDE.md): determinism (randomness only via det(seed, stream, ...keys); add a NEW stream id if needed, never reuse one; never Math.random/Date/Map-Set-object-key iteration in src/sim), conservation ledger, no hidden rescue, honest labels, content is validated JSON, the UI changes the world only through commands, saves are sacred (atomic, checksummed, predecessor kept, old saves keep their recorded ruleset; world schema changes need a version bump + migration by copy + an old-save test through loadSaveFile).
+
+The lead commits: do NOT run git add/commit/stash/checkout/reset/rm/restore and do not delete files you did not create. Other agents edit the same working tree right now. Edit ONLY the files your assignment lets you own. SHARED files: additive edits only, re-read immediately before each edit, never reformat/reorder/rename code you did not write. After changing content/ run "npx tsx tools/content-validate.ts --write". Never run "npm run format" or prettier on files you do not own.
+
+Browser tests only with your own port and build folder: E2E_PORT=<port> E2E_OUTDIR=tmp/dist-<key> npx playwright test <specs> (all three projects: phone-portrait, desktop, phone-landscape), then stop only your port (lsof -t -i :<port> | xargs -r kill; never pkill -f). The machine has 2 CPUs shared by several agents: targeted vitest files only (never the whole suite), generous timeouts (Playwright runs of one spec take 5–15 min; long commands: run_in_background and wait with an until-loop, never a bare sleep). Before finishing: npx tsc -p tsconfig.json --noEmit and npx eslint <your files> clean; your tests pass; no serious/critical axe violations on screens you touched; touch targets ≥ 48 px, text ≥ 16 px; 200 % text works in phone portrait and phone landscape. Put proposed decisions in the report as "PROPOSED DECISION: …".`
+
+const FINISH_NOTE = (what) => `IMPORTANT — RESUMING INTERRUPTED WORK. A previous builder with exactly this assignment was cut off by a machine restart near its end; its uncommitted work is in the working tree (git status / git diff show it; the lead keeps a local backup at branch wip/g2-wave-c-found — do not check it out). ${what} Do NOT start over and do not discard its work. First audit the existing work against EVERY item of the assignment's Build list and "Done when" list: write a checklist with, per item, DONE (file:line + the test that proves it, re-run now) / PARTIAL / MISSING / WRONG. Then complete everything PARTIAL/MISSING/WRONG, review the whole diff of your files for determinism leaks, honest copy and accessibility, and re-run all your tests plus the existing tests and e2e specs your changes can affect.`
+
+const TASKS = [
+  {
+    key: 'founders',
+    port: 4191,
+    finish: `Its last state: tests/e2e/new-dish.spec.ts passed 6/6 across the three projects; tests/fixtures/registry-imports.test.ts, tests/sim/founders*.test.ts existed and passed in targeted runs (one intermediate failure it may or may not have fixed); it was running tests/e2e/{lab-tools,inspector,save-reload}.spec.ts for regressions and had just noticed tests/e2e/whatif.spec.ts (around line 372) drives the New Dish flow — the new 'enter paused with the Life tray open' behaviour may break it. You may edit tests/e2e/whatif.spec.ts ONLY in the steps that drive New Dish, and only to follow the specified new behaviour (say so in the report).`,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P2.2 "Founder modes and mutation presets" end to end. Read SPEC §8.6, UX_SPEC §3.3 (mode labels) and the New Dish flow (UX §2/§3; src/ui/views/NewDish.tsx), CT §6–§7 and §12.8, and src/sim/founders.ts and src/sim/mutation.ts.
+You own: src/sim/founders.ts, src/sim/mutation.ts, src/ui/views/NewDish.tsx, src/ui/panels/Advanced*.tsx, src/ui/strings/modes.ts, tests/fixtures/registry-imports.test.ts, tests/sim/founders*.test.ts, tests/e2e/new-dish.spec.ts. SHARED (additive): src/sim/commands.ts (a timestamped preset-change command), src/sim/recipes.ts, src/worker/{protocol,host,client,snapshot}.ts, src/persistence/saveFile.ts (export metadata), src/ui/{state.ts,app/App.tsx,views/DishScreen.tsx,views/SimplePage.tsx,styles.css}, src/ui/panels/{MoreSheet.tsx,Inspector.tsx}.
+Build: founder modes Identical (loci 50, no modules) / Varied (each active locus from 45–55 drawn from a seeded init stream) / Diverse (10 % of eligible founders get one legal module, labelled "present at creation" in the inspector and lineage); presets Standard / Accelerated / Fixed with an Advanced panel that shows the per-birth rates; changing the preset during play is a timestamped intervention in the command log (undoable like other commands; shows on the History timeline); faster playback never changes per-birth rates (prove it); the world label "Core prototype — quantitative evolution" wherever the world is described while the module registry is partial (manifest enables fewer modules than the full catalog); "Accelerated Evolution (game setting, not realism)" and "Fixed Traits" labels per UX §3.3; export metadata shows the enabled registry (module ids and registry version).
+Done when: tests/fixtures/registry-imports.test.ts: a save that references a module this build does not have fails import clearly (readable message, nothing built); changing the active registry (content) never mutates an existing save's candidates, genomes or recorded registry (load an old save under a changed registry and compare); founder-mode fixtures: Identical/Varied/Diverse distributions exactly as specified and deterministic per seed; preset change recorded with its tick and the per-birth rates identical at 1× and 4×; tests/e2e/new-dish.spec.ts: New Dish → Varied + Accelerated → labels visible → Advanced shows rates → change preset during play → History shows the intervention. Also (UX §2.3): New Dish must 'Enter paused with the Life tray open (Lab)' — call openLabWith('life') from src/ui/views/LabView.tsx when the new dish opens; reuse the Inspector's existing 'present at creation' label for Diverse founders. Descendants that carry a module their founder had at creation need an honest label too (e.g. 'inherited from a founder that had it at creation') — a founder-origin field in the inspect data (snapshot/protocol, additive), tested.
+Regression specs to run on all three projects before finishing: tests/e2e/{new-dish,whatif,lab-tools,inspector,save-reload}.spec.ts. Targeted vitest: your tests plus tests/worker, tests/persistence, tests/sim/view-switch.test.ts, tests/sim/mutation*.test.ts (whichever exist).`,
+  },
+  {
+    key: 'observe',
+    port: 4192,
+    finish: `Its last state: regional trait graphs (src/ui/panels/TraitGraphs.tsx, TraitData.ts), history trait samples in src/sim/history.ts (it measured buildTraitSample ≈ 1.6 ms, ≈ 890 bytes per sample, ≈ 140 KB history JSON at 433 alive), checkpoint ring (src/persistence/checkpoints.ts + store.ts), journal (src/ui/journal.ts, src/ui/views/NotebookJournal.tsx), debris history series and content text edits exist; tests/e2e/observe.spec.ts passed 6/6 across the three projects after a fix; it had just edited styles.css (History tab targets) and the TraitGraphs axis label, checked UI consumers of listSlots() (Saves.tsx, MoreSheet.tsx, WhatIfState.tsx chooseReplacement, Home.tsx — automatic checkpoints must not appear as or be counted against the ten player slots unless the SPEC says so, and What if?'s "Replace a saved dish" must never offer an automatic checkpoint as a player's slot without saying so) and was running targeted vitest regressions (tests/worker, tests/persistence, tests/sim/history*, tests/content, tests/ui, tests/experiments/journal-and-words.test.ts, tests/sim/view-switch.test.ts, tests/sim/smoke.test.ts). A scratch file tmp/bench-traits.ts may exist — keep scratch out of the repo (tmp/ is ignored? check .gitignore; delete your own scratch if not ignored).`,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P2.8 "Regional trait graphs, checkpoint ring, journal". Read SPEC §12.4–§12.5 (history, charts), the checkpoint-ring paragraph near SPEC line 772 ("Optional automatic checkpoint ring: 10 snapshots at …"), D4 §12 in docs/source, UX_SPEC §1 (Notebook: Journal), §5.4 (charts), D-0014, D-0027, D-0028, and src/sim/history.ts, src/ui/panels/HistorySheet.tsx, src/persistence/store.ts, src/ui/journal.ts.
+You own: src/sim/history.ts, src/ui/panels/HistorySheet.tsx, src/ui/panels/Trait*.tsx / Trait*.ts / Region*.tsx, src/persistence/store.ts, src/persistence/checkpoints.ts, src/ui/journal.ts (keep its existing API), src/ui/views/Notebook*.tsx (the Journal tab only), content/experiments/EXP_103.json, content/recipes/CLEANING_CREW_V1.json, content/materials/DEBRIS.json (text only), tests/sim/history*.test.ts, tests/persistence/checkpoints.test.ts, tests/persistence/migration.test.ts (additive), tests/content/debris-text.test.ts, tests/ui/journal*.test.ts, tests/e2e/observe.spec.ts. SHARED (additive): src/sim/serialize.ts (only if history's saved shape changes — then D-0019: schema bump + migration + old-save test), src/sim/world.ts, src/sim/publish.ts, src/persistence/saveFile.ts, src/worker/{protocol,host,client,sim.worker,snapshot}.ts, src/ui/{state.ts,main.tsx,views/SimplePage.tsx (Settings toggle),views/Saves.tsx,views/Home.tsx,panels/MoreSheet.tsx,styles.css}.
+Build: (1) Regional trait graphs: population and median/range of a SELECTED trait (locus) per region — whole dish plus the four quadrants (P4.8 adds real regions later) — as small multiples in the validated ink with crosshair tooltip, text summary and table view (D-0014, dataviz rules); data from recorded history (bounded cadence, documented; compacted like the rest of history), never from the renderer. (2) Automatic checkpoint ring (Settings toggle, off by default unless the SPEC says otherwise): 10 checkpoints at the SPEC's interval of simulated time, labelled "automatic", stored with the same atomic, checksummed, predecessor-safe path as slots, evicting only the oldest automatic checkpoint, never a named/pinned save, respecting storage limits (if the store refuses, keep the older ones and say so); openable from Saved dishes. (3) Journal of observed relationships: the player records "I saw X coincide with Y" entries (time, dish, optional link to an experiment stamp or a comparison result card), shown in Notebook → Journal alongside experiment stamps; honest wording ("coincided with").
+Done when: charts update from history (test: after N seconds the regional series and the table match an independent recomputation from world state at the sample ticks); ring respects storage limits and never evicts named saves (tests with MemoryBackend including a failing commit and a full store); journal entries persist and list; tests/e2e/observe.spec.ts: pick a trait → regional charts show → table view → turn on the ring → a checkpoint appears after the interval (run at 4×) → open it → add a journal entry and see it in the Notebook. Journal storage (D-0027): SPEC §14.1 lists the journal as save content — journal entries and experiment stamps that belong to a dish are also written with that dish's save (outside the state hash, checksummed with the file, exported and imported with it; old saves without them still load), while the device store stays the Notebook's index; test save → export → import keeps the dish's entries. Debris in History (D-0028 follow-up, decided): the dish's debris total (detritus carbon) is a recorded history series in the History resource small multiples (D-0019 if the saved history shape changes; old saves without it load and show no debris line); the EXP_103, CLEANING_CREW_V1 and DEBRIS texts point at History as well as the Debris overlay (content-validate --write); test the series against an independent recomputation.
+Regression specs to run on all three projects before finishing: tests/e2e/{observe,save-reload,experiments,whatif}.spec.ts (whichever exist) plus any spec that opens History or Saved dishes. Also measure and report: history JSON size and per-tick cost of trait sampling for a dense dish after 30 simulated minutes (the ring and history must stay bounded).`,
+  },
+  {
+    key: 'art-marks',
+    port: 4193,
+    finish: null,
+    prompt: `ASSIGNMENT: three follow-ups from wave A (D-0019), all small but exact.
+(1) Module marks through the art pipeline (ARCH §3 and §10.1): src/render/features.ts currently imports art/src/layers/modules.ts, the palette and the sprite helper and builds a texture at runtime; ARCH §3 limits src/render to snapshot types and the atlas manifest, and ARCH §10.1 lists the dormancy prepare/rest/wake and reserve four-band frames as atlas frames that tools/art-build.ts packs and checks. Pack the feature-layer frames (starch notch, reserve pocket bands 0–3, resting seam frames 0–2, all four headings) into the atlas build (either the organism atlas or a second atlas file with its own manifest section), make the renderer load them from the atlas like sprites (keep featureLayers() mapping and its tests), extend tools/art-build.ts --check and tools/content-validate.ts atlas completeness for them, and extend tools/asset-preview.html to show them. The output must stay deterministic (same hash twice). Remove the now-unused palette constant reserveRim if nothing uses it.
+(2) DORMANCY_LOCKOUT reason code (SPEC §12.2 lists it under States): set it for an E03 carrier during the post-wake lockout when rest would otherwise have been triggered (or as the organism's state reason — read SPEC §7.6/§12.2 and choose the reading most consistent with "everything the inspector says traces to a reason code"), with Explore/Lab copy per UX §5.2 style and a test; keep every existing reason test passing. It must not change simulation outcomes or hashes (a reason is a label, not behaviour) — prove with a hash comparison before/after on a dish with E03 carriers.
+(3) tools/sim-tune.ts counts secretion only for native producers; E01 carriers are left out. Count from the organism's profile producer rules so E01 carriers are included, with a test in tests/tools/sim-tune.test.ts.
+You own: art/src/**, public/atlas/** (via npm run art:build only), tools/art-build.ts, tools/art-preview.ts, tools/asset-preview.{html,ts}, tools/content-validate.ts, tools/sim-tune.ts, src/render/features.ts, src/render/renderer.ts (feature-layer texture loading only), src/render/atlas*.ts (if it exists, additive), src/sim/dormancy.ts, src/sim/reasons.ts (append the code only if missing; never renumber), src/ui/strings/reasons.ts, tests/sim/module-visuals.test.ts, tests/sim/dormancy.test.ts, tests/content/atlas.test.ts, tests/tools/sim-tune.test.ts, tests/ui/reasons.test.ts. Do not edit src/ui views/panels other than strings. Other agents are editing src/worker/*, src/sim/{history,founders,mutation,commands,world,publish,serialize}.ts and src/ui/** — do not touch those.
+Done when: npm run art:build twice gives the same hash and --check passes; content:validate checks the new frames (a missing mark frame fails with a precise message; test); the renderer draws marks from the atlas (no runtime texture building; grep proves src/render imports nothing from art/src); reason and dormancy tests pass including the new lockout case; sim-tune counts E01 secretion (test). Run npx vitest run for every test file you touched plus tests/render, and E2E_PORT=4193 E2E_OUTDIR=tmp/dist-art-marks npx playwright test for any spec that renders module carriers (grep tests/e2e for E01/E03/dormancy/rest) on all three projects. Also take one headless screenshot of a dish with E03 carriers resting and E01 carriers at 4× zoom and look at it (Read the png) to confirm the marks draw correctly from the atlas.`,
+  },
+]
+
+const REPORT = (key, suffix) => `When you finish, write your final report ALSO to ${R}/${key}-${suffix}.md (create the folder if needed; this is the only docs file you may create), then return the same report as your final message.`
+
+const BUILD_FINAL = `Final message: a plain report — the audit checklist (item → DONE/…, evidence), files changed, what each test proves, commands + results (paste the pass/fail summary lines), anything not done + why, bugs noticed elsewhere, proposed decisions.`
+
+const LENSES = [
+  {
+    key: 'rules',
+    text: `LENS: rules, data and tests. Check every number and rule against the cited canonical docs (quote the lines); determinism (new det streams are new ids, no Math.random/Date/unordered iteration in src/sim, per-birth rates independent of speed); conservation/ledger (no unledgered material moves); saves (schema bump + migration by copy + old-save test where the saved shape changed; checksums; predecessor safety; import refusal leaves the current world untouched); tests that are vacuous, weaker proxies, or would pass on the old behaviour (mentally revert the fix — would the test fail?); edits outside ownership or non-additive edits to shared files (git diff). Re-run the key unit tests yourself.`,
+  },
+  {
+    key: 'player',
+    text: `LENS: player-facing truth and usability. Build and drive the app yourself (Playwright via your port; write a small throwaway spec under /tmp or tmp/ that screenshots the new screens on phone-portrait and desktop, then Read the PNGs). Check copy against UX_SPEC tone and the honest-label rule (every visible claim traces to a measured value / reason code; "coincided with" not "because"; no "superior/advanced"); labels exactly as specified; accessibility (axe serious/critical, keyboard reachability, focus order, ARIA roles/names, 48 px targets, 16 px text, 200 % text in phone portrait and landscape, contrast ≥ 4.5:1 text / 3:1 graphics, reduced motion); every visible feature maps to real state; the e2e spec really exercises what the "Done when" list says (not a weaker proxy). Re-run the task's e2e spec on all three projects.`,
+  },
+]
+
+const VERIFY = (t, built, lens) => `You are an adversarial verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). Do NOT edit any repository file (except your own report file named below) and do NOT run git add/commit/stash/checkout/reset/restore. Other agents may still be editing other files. Scratch goes in /tmp or tmp/verify-${t.key}-${lens.key}/. 2 CPUs shared: targeted commands, generous timeouts, background + until-loop for long runs. Playwright: E2E_PORT=${t.port + (lens.key === 'rules' ? 10 : 20)} E2E_OUTDIR=tmp/dist-verify-${t.key}-${lens.key} (config may need a --config or testDir override for a throwaway spec — check playwright.config.ts), then stop only that port.
+
+A builder was given this assignment:
+---
+${t.prompt}
+---
+The builder reported:
+---
+${typeof built === 'string' ? built : JSON.stringify(built)}
+---
+${lens.text}
+Try to REFUTE that the assignment is done correctly, completely and honestly — every item of its Build and "Done when" lists. Return problems with file:line and a concrete repro, most severe first, each prefixed BLOCKER / MAJOR / MINOR; add "VERIFIED OK — <item> — <evidence>" entries for parts that hold. ok=false if any BLOCKER or MAJOR. Write the same list to ${R}/${t.key}-verify-${lens.key}.md.`
+
+const REVERIFY = (t, fixReport, problems, round) => `You are an adversarial re-verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). Do NOT edit any repository file (except your report file) and do NOT run git add/commit/stash/checkout/reset/restore. Other agents may still be editing other files. Scratch in /tmp. 2 CPUs: targeted commands. Playwright: E2E_PORT=${t.port + 30} E2E_OUTDIR=tmp/dist-reverify-${t.key}, then stop only that port.
+
+Original assignment:
+---
+${t.prompt}
+---
+Verifiers found these problems:
+---
+${problems.join('\n')}
+---
+A fixer (round ${round}) reported:
+---
+${fixReport}
+---
+For EACH problem try to REFUTE that it is fixed: reproduce the original finding against the current tree, read the diff, check the new test fails on the old behaviour, and check nothing regressed (re-run the touched unit tests and the task's e2e spec on phone-portrait and desktop, and phone-landscape if layout changed). Also check determinism, conservation, honest labels, accessibility and ownership. Return remaining/new problems with file:line and repro, prefixed BLOCKER / MAJOR / MINOR, and "VERIFIED OK — <problem> — <evidence>" for fixed ones. ok=false if any BLOCKER or MAJOR remains. Write the same list to ${R}/${t.key}-reverify${round}.md.`
+
+const FIX = (t, problems, round) => `${PRE}
+
+Your Playwright port is ${t.port}.
+
+You are the round-${round} fixer for this assignment (the work is in the tree; do not start over):
+---
+${t.prompt}
+---
+Adversarial verifiers found these problems (reports in ${R}/${t.key}-verify-*.md${round > 1 ? ` and ${R}/${t.key}-reverify${round - 1}.md` : ''}):
+---
+${problems.join('\n')}
+---
+Fix EVERY BLOCKER and MAJOR, and every MINOR that is cheap and within your files. For each behavioural problem add or tighten a test that fails on the old behaviour and passes now. If a problem is wrong (the verifier misread a rule), say why with quotes from the canonical docs instead of changing code. If a fix needs a file outside your ownership, make it only if it is small and additive, or describe it precisely for the lead. Re-run your unit tests and the task's e2e specs (all three projects) before finishing. ${REPORT(t.key, `fix${round}`)} Final message: per problem FIXED (how, which test) / NOT A PROBLEM (why, quotes) / NOT FIXED (why); files changed; commands + results.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+
+const serious = (v) => (v && Array.isArray(v.problems) ? v.problems.filter((p) => /^(BLOCKER|MAJOR|MINOR)/.test(p.trim())) : [])
+
+return await pipeline(
+  TASKS,
+  (t) =>
+    agent(
+      `${PRE}\n\nYour Playwright port is ${t.port}.\n\n${t.finish ? FINISH_NOTE(t.finish) + '\n\n' : ''}${t.prompt}\n\n${REPORT(t.key, 'build')} ${BUILD_FINAL}`,
+      { label: `${t.finish ? 'finish' : 'build'}:${t.key}`, phase: 'Build' },
+    ),
+  async (built, t) => {
+    const lenses = t.key === 'art-marks' ? [LENSES[0]] : LENSES
+    const verdicts = await parallel(
+      lenses.map((l) => () => agent(VERIFY(t, built, l), { label: `verify:${t.key}:${l.key}`, phase: 'Verify', schema: VERDICT })),
+    )
+    return { built, verdicts: verdicts.filter(Boolean) }
+  },
+  async (v, t) => {
+    const rounds = []
+    let problems = v.verdicts.flatMap(serious)
+    let ok = v.verdicts.length > 0 && v.verdicts.every((x) => x.ok) && problems.filter((p) => !/^MINOR/.test(p.trim())).length === 0
+    for (let round = 1; round <= 2 && problems.length > 0; round++) {
+      const fixReport = await agent(FIX(t, problems, round), { label: `fix${round}:${t.key}`, phase: 'Fix' })
+      const rv = await agent(REVERIFY(t, String(fixReport), problems, round), { label: `reverify${round}:${t.key}`, phase: 'Fix', schema: VERDICT })
+      rounds.push({ round, fixReport, reverify: rv })
+      if (!rv) break
+      const remaining = serious(rv)
+      ok = rv.ok
+      if (rv.ok && remaining.filter((p) => !/^MINOR/.test(p.trim())).length === 0) {
+        problems = remaining
+        break
+      }
+      problems = remaining
+    }
+    log(`${t.key}: ${ok ? 'clean' : 'problems remain'} after ${rounds.length} fix round(s)`)
+    return { key: t.key, built: v.built, verdicts: v.verdicts, rounds, ok, remaining: problems }
+  },
+)
