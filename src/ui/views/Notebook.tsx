@@ -3,10 +3,12 @@
  * experiment card's observation gate was reached (P2.8 adds observed relationships); Experiments lists
  * the cards this build ships (SPEC §13.2). Opening the Notebook never pauses or changes a dish.
  */
-import { useEffect, useRef } from 'preact/hooks';
+import { Component, type ComponentChildren } from 'preact';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ExperimentCardView } from '@sim/experiments';
 import { IconBack } from '../icons';
-import { journal, journalUnseen, type JournalEntry } from '../journal';
+import { journal, journalUnseen, type JournalStampEntry } from '../journal';
+import { JournalComposer, ObservationCard } from './NotebookJournal';
 import { CONCLUSIONS } from '../panels/CompareText';
 import { experimentCards, experimentCardsError, loadExperimentCards, route } from '../state';
 import { durationText, journalMeasureCells, recordedText } from '../strings/experiments';
@@ -84,7 +86,7 @@ export function Notebook() {
 }
 
 function stampedIds(): Set<string> {
-  return new Set(journal.value.map((e) => e.experimentId));
+  return new Set(journal.value.flatMap((e) => (e.kind === 'experimentStamp' ? [e.experimentId] : [])));
 }
 
 function ExperimentsTab() {
@@ -137,27 +139,71 @@ function conclusionText(id: string | undefined): string | null {
   return CONCLUSIONS.find((k) => k.id === id)?.label ?? null;
 }
 
+/**
+ * Journal (P2.8): experiment stamps and the player's observed relationships, newest first, with a form
+ * to record "I saw X coincide with Y" (about the open dish when there is one).
+ */
+/**
+ * One Journal entry that fails to render shows a short line instead, so it can never hide the others
+ * (entries are validated when read and merged; this is the last guard).
+ */
+class EntryBoundary extends Component<{ readonly children: ComponentChildren }, { readonly failed: boolean }> {
+  override state = { failed: false };
+  override componentDidCatch(): void {
+    this.setState({ failed: true });
+  }
+  override render() {
+    return this.state.failed ? <p class="nb-empty">This Journal entry could not be shown.</p> : this.props.children;
+  }
+}
+
 function JournalTab() {
   const list = journal.value;
-  if (list.length === 0) {
-    return (
-      <p class="nb-empty" data-testid="journal-empty">
-        No stamps yet. Start an experiment card: when its observation is complete, a stamp appears here with what was measured.
-      </p>
-    );
-  }
+  const [composing, setComposing] = useState(false);
+  // Keyboard and screen reader users land back on the button that opened the form when it closes.
+  const recordRef = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef(false);
+  useEffect(() => {
+    if (!composing && returnFocus.current) {
+      returnFocus.current = false;
+      recordRef.current?.focus();
+    }
+  }, [composing]);
   return (
-    <ul class="nb-journal" aria-label="Journal stamps">
-      {list.map((e) => (
-        <li key={e.id}>
-          <JournalStamp entry={e} />
-        </li>
-      ))}
-    </ul>
+    <>
+      <p class="nb-intro">
+        Stamps from experiment cards and notes of what you saw happen together. A note records that two things coincided; it never says one caused the other.
+      </p>
+      {composing ? (
+        <JournalComposer
+          onDone={() => {
+            returnFocus.current = true;
+            setComposing(false);
+          }}
+        />
+      ) : (
+        <button ref={recordRef} class="btn primary nb-open nb-record" onClick={() => setComposing(true)} data-testid="journal-record">
+          Record what you saw
+        </button>
+      )}
+      {list.length === 0 ? (
+        <p class="nb-empty" data-testid="journal-empty">
+          No stamps or notes yet. Record something you saw, or start an experiment card: when its observation is complete, a stamp appears here with what was measured.
+        </p>
+      ) : (
+        <ul class="nb-journal" aria-label="Journal entries">
+          {list.map((e) => (
+            <li key={e.id}>
+              <EntryBoundary>{e.kind === 'experimentStamp' ? <JournalStamp entry={e} /> : <ObservationCard entry={e} />}</EntryBoundary>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
 
-function JournalStamp({ entry: e }: { entry: JournalEntry }) {
+function JournalStamp({ entry: e }: { entry: JournalStampEntry }) {
   const paired = e.measures.some((m) => m.b !== null);
   const conclusion = conclusionText(e.conclusion);
   return (

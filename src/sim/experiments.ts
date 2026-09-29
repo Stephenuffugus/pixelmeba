@@ -54,6 +54,8 @@ import {
   type Intervention,
 } from './pairedRun';
 import { realizeRecipe } from './recipes';
+import { LIFE_ACTIVE } from './entities';
+import { profileOf } from './profiles';
 import { reasonName } from './reasons';
 import { deserializeWorld, serializeWorld, stateHash } from './serialize';
 import { step } from './tick';
@@ -314,7 +316,7 @@ export interface SpeciesSample {
   readonly centroid: readonly [number, number] | null;
   /** Share of living members by leading limit code (reason names). */
   readonly limits: Readonly<Record<string, number>>;
-  /** Share by secretion code (only species that secrete). */
+  /** Share by secretion code (only producers: native or E01 carriers; not Active → its state reason). */
   readonly secretion: Readonly<Record<string, number>>;
   /** Share by first failing division gate ('NONE' = may divide). */
   readonly divisionBlocks: Readonly<Record<string, number>>;
@@ -371,7 +373,8 @@ function shares(counts: Record<string, number>, n: number): Record<string, numbe
   return out;
 }
 
-function sampleArm(world: World, obs: ArmObserver): TimelineSample {
+/** One timeline sample of an arm (exported for tests). */
+export function sampleArm(world: World, obs: Pick<ArmObserver, 'everPresent'>): TimelineSample {
   const c = world.ents.cols;
   const species: SpeciesSample[] = [];
   world.species.forEach((sp, s) => {
@@ -394,8 +397,10 @@ function sampleArm(world: World, obs: ArmObserver): TimelineSample {
       Y += c.y[i]!;
       const lim = reasonName(c.limitCode[i]!);
       limits[lim] = (limits[lim] ?? 0) + 1;
-      if (sp.secretesStarch) {
-        const sec = reasonName(c.secretionCode[i]!);
+      // Producer rules come from the organism's profile (native producer or E01 carrier), never the
+      // species alone; one that is not Active is counted under its state reason (as tools/sim-tune.ts).
+      if (profileOf(world, i).starch !== null) {
+        const sec = reasonName(c.lifeState[i] === LIFE_ACTIVE ? c.secretionCode[i]! : c.limitCode[i]!);
         secretion[sec] = (secretion[sec] ?? 0) + 1;
       }
       const blk = reasonName(divisionBlocker(world, i));

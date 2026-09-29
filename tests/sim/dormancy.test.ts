@@ -8,11 +8,12 @@ import { describe, expect, it } from 'vitest';
 import { introduceOrganism } from '../../src/sim/commands';
 import { DT } from '../../src/sim/constants';
 import type { ContentRegistry } from '../../src/sim/content/registry';
-import { LIFE_ACTIVE, LIFE_PREPARING, LIFE_RESTING } from '../../src/sim/entities';
+import { dormancyReason, restDue } from '../../src/sim/dormancy';
+import { LIFE_ACTIVE, LIFE_PREPARING, LIFE_RESTING, LIFE_WAKING } from '../../src/sim/entities';
 import { neutralGenome } from '../../src/sim/genome';
 import { cellIndex, SUB_GEL } from '../../src/sim/grid';
 import { field } from '../../src/sim/lineage';
-import { profileOfGenome } from '../../src/sim/profiles';
+import { profileOf, profileOfGenome } from '../../src/sim/profiles';
 import { R } from '../../src/sim/reasons';
 import { realizeRecipe } from '../../src/sim/recipes';
 import { deserializeWorld, serializeWorld, stateHash } from '../../src/sim/serialize';
@@ -96,6 +97,157 @@ describe('P2.1 dormancy (E03)', () => {
     }
     // The trigger (20 s) was met during the lockout; the attempt waits for the lockout (30 s).
     expect(preparedAt - wokeAt).toBe(300);
+  });
+
+  it('DORMANCY_LOCKOUT: read from the saved clocks through the lockout, restHeld exactly while a due rest waits', () => {
+    // Two carriers rest, wake on sugar, then lose all food: one with entry energy, one without.
+    const w = clearWater();
+    const a = placeWith(w, 'B01', 60.5, 64.5, ['E03']);
+    const b = placeWith(w, 'B01', 70.5, 64.5, ['E03']);
+    run(w, 250);
+    const c = w.ents.cols;
+    expect([c.lifeState[a], c.lifeState[b]]).toEqual([LIFE_RESTING, LIFE_RESTING]);
+    sugarAround(w, 60, 64, 0.5);
+    sugarAround(w, 70, 64, 0.5);
+    // Preparing / Resting / Waking: the derived reason is exactly what the machine records.
+    const seen = new Set<number>();
+    let wokeAt = -1;
+    for (let t = 0; t < 200 && wokeAt < 0; t++) {
+      step(w);
+      if (c.lifeState[a] !== LIFE_ACTIVE) {
+        const r = dormancyReason(w, a);
+        expect([r.code, r.value, r.restHeld]).toEqual([c.limitCode[a], c.limitValue[a], false]);
+        seen.add(c.lifeState[a]!);
+      } else wokeAt = w.tick;
+    }
+    expect([...seen].sort()).toEqual([LIFE_RESTING, LIFE_WAKING]);
+    expect(c.lifeState[b]).toBe(LIFE_ACTIVE);
+    // Just woke: the lockout reason with its seconds left; no rest is due yet.
+    expect(dormancyReason(w, a)).toEqual({ code: R.DORMANCY_LOCKOUT, value: 30, restHeld: false });
+    fillField(w, 'sugar', 0);
+    fillField(w, 'sugarN', 0);
+    c.E[a] = 60; // labelled test state: enough energy (≥ 15) to prepare again
+    c.E[b] = 12; // labelled test state: below the 15 E entry energy, so no rest is ever due
+    const prof = profileOf(w, a);
+    let firstHeld = -1;
+    let held = 0;
+    let preparedAt = -1;
+    for (let t = 0; t < 400 && preparedAt < 0; t++) {
+      step(w);
+      if (c.lifeState[a] === LIFE_PREPARING) {
+        preparedAt = w.tick;
+        break;
+      }
+      const r = dormancyReason(w, a);
+      expect(r.code).toBe(R.DORMANCY_LOCKOUT);
+      expect(r.value).toBe(c.lockoutTimer[a]);
+      expect(r.value).toBeGreaterThan(0);
+      expect(r.restHeld).toBe(restDue(c, a, prof, prof.dormancy!));
+      if (r.restHeld) {
+        if (firstHeld < 0) firstHeld = w.tick;
+        held++;
+      }
+      // The low-energy carrier is in the same lockout, but no rest is waiting for it.
+      expect(dormancyReason(w, b)).toMatchObject({ code: R.DORMANCY_LOCKOUT, restHeld: false });
+      // A label only: the saved limit column never carries it (it keeps the intake reason).
+      expect(c.limitCode[a]).not.toBe(R.DORMANCY_LOCKOUT);
+      expect(c.limitCode[b]).not.toBe(R.DORMANCY_LOCKOUT);
+    }
+    // The 20 s trigger is met 20 s after waking; the lockout holds that rest for its last 10 s, and the
+    // very next tick the carrier starts Preparing — the label named exactly the rest being held.
+    expect(firstHeld - wokeAt).toBe(200);
+    expect(held).toBe(100);
+    expect(preparedAt - wokeAt).toBe(300);
+    // After the lockout the low-energy carrier has no dormancy reason; it stays Active (E < 15).
+    expect(c.lifeState[b]).toBe(LIFE_ACTIVE);
+    expect(dormancyReason(w, b)).toEqual({ code: R.NONE, value: 0, restHeld: false });
+    // An organism that cannot rest has none.
+    const plain = placeWith(w, 'B01', 40.5, 64.5, []);
+    expect(dormancyReason(w, plain)).toEqual({ code: R.NONE, value: 0, restHeld: false });
+  });
+
+  it('the lockout reason refactor changes no outcome: the transition timeline is the one HEAD dormancy.ts produced', () => {
+    // Pinned from the dormancy.ts before DORMANCY_LOCKOUT was added (git HEAD 0ac0477, run on a tree copy
+    // that differed only in that file; the new code gives the identical list and identical state hashes).
+    // A one-tick slip in either trigger, the lockout or the entry energy moves an entry below.
+    const w = clearWater();
+    const slots = [0, 1, 2, 3, 4, 5].map((k) => placeWith(w, 'B01', 56.5 + 3 * k, 64.5, k % 2 === 0 ? ['E03'] : ['E01', 'E03']));
+    const c = w.ents.cols;
+    const last = slots.map((s) => c.lifeState[s]!);
+    const seen: string[] = [];
+    const go = (n: number) => {
+      for (let t = 0; t < n; t++) {
+        step(w);
+        slots.forEach((s, k) => {
+          if (c.lifeState[s] === last[k]) return;
+          last[k] = c.lifeState[s]!;
+          seen.push(c.lifeState[s] === LIFE_ACTIVE ? `${w.tick} #${k} active, lockout ${c.lockoutTimer[s]}` : `${w.tick} #${k} state ${c.lifeState[s]} code ${c.limitCode[s]} value ${Number(c.limitValue[s]!.toFixed(6))}`);
+        });
+      }
+    };
+    go(260); // starve: 20 s trigger, 5 s preparing
+    for (let k = 0; k < 6; k++) sugarAround(w, 56 + 3 * k, 64, 0.5);
+    go(170); // 10 s of wake conditions, 5 s waking
+    fillField(w, 'sugar', 0);
+    fillField(w, 'sugarN', 0);
+    slots.forEach((s, k) => (c.E[s] = k === 5 ? 12 : 60)); // labelled test state; #5 is below the 15 E entry energy
+    go(400); // trigger met 20 s after waking, held by the lockout until 30 s
+    const all = (tick: number, text: (k: number) => string, n = 6) => Array.from({ length: n }, (_, k) => `${tick} #${k} ${text(k)}`);
+    expect(seen).toEqual([
+      ...all(200, () => `state ${LIFE_PREPARING} code ${R.PREPARING} value 5`),
+      ...all(250, () => `state ${LIFE_RESTING} code ${R.RESTING_FOOD_SCARCE} value 0`),
+      ...all(360, () => `state ${LIFE_WAKING} code ${R.WAKING} value 5`),
+      ...all(410, () => 'active, lockout 30'),
+      ...all(710, () => `state ${LIFE_PREPARING} code ${R.PREPARING} value 5`, 5),
+      ...all(760, () => `state ${LIFE_RESTING} code ${R.RESTING_FOOD_SCARCE} value 0`, 5),
+    ]);
+    // The codes pinned above are the numbers HEAD recorded (reasons.ts was not renumbered).
+    expect([R.RESTING_FOOD_SCARCE, R.PREPARING, R.WAKING, R.DORMANCY_LOCKOUT]).toEqual([44, 46, 47, 48]);
+  });
+
+  it('reading DORMANCY_LOCKOUT has no side effects: paired runs with and without the reads hash the same', () => {
+    const make = () => {
+      const w = clearWater();
+      const slots = [0, 1, 2, 3, 4, 5].map((k) => placeWith(w, 'B01', 56.5 + 3 * k, 64.5, k % 2 === 0 ? ['E03'] : ['E01', 'E03']));
+      return { w, slots };
+    };
+    const read = make();
+    const plain = make();
+    let lockoutReads = 0;
+    let heldReads = 0;
+    const hashes = (x: { w: World; slots: number[] }, observe: boolean, ticks: number, out: string[]) => {
+      for (let t = 0; t < ticks; t++) {
+        step(x.w);
+        if (observe) {
+          for (const s of x.slots) {
+            const r = dormancyReason(x.w, s);
+            if (r.code === R.DORMANCY_LOCKOUT) lockoutReads++;
+            if (r.restHeld) heldReads++;
+          }
+        }
+        if (x.w.tick % 50 === 0) out.push(stateHash(x.w));
+      }
+    };
+    const ha: string[] = [];
+    const hb: string[] = [];
+    // Rest (25 s), wake on sugar, lose the food again, rest again: every dormancy state and the lockout.
+    hashes(read, true, 260, ha);
+    hashes(plain, false, 260, hb);
+    for (const x of [read, plain]) for (let k = 0; k < 6; k++) sugarAround(x.w, 56 + 3 * k, 64, 0.5);
+    hashes(read, true, 170, ha);
+    hashes(plain, false, 170, hb);
+    for (const x of [read, plain]) {
+      fillField(x.w, 'sugar', 0);
+      fillField(x.w, 'sugarN', 0);
+      for (const s of x.slots) x.w.ents.cols.E[s] = 60; // labelled test state, identical in both runs
+    }
+    hashes(read, true, 400, ha);
+    hashes(plain, false, 400, hb);
+    expect(lockoutReads).toBeGreaterThan(0);
+    expect(heldReads).toBeGreaterThan(0);
+    expect(ha).toEqual(hb);
+    expect(stateHash(read.w)).toBe(stateHash(plain.w));
+    expect(read.slots.every((s) => read.w.ents.cols.lifeState[s] !== LIFE_ACTIVE)).toBe(true);
   });
 
   it('rests without moving, feeding or secreting; stress and inhibitor damage × 0.10', () => {

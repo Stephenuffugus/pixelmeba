@@ -5,7 +5,7 @@
  "width": 512,
  "height": 256,
  "padding": 2,
- "exportHash": "0da0be41a1275ca8ab00a93ad1ac375d05cc0829f2a18a2171464756231b3494",
+ "exportHash": "5c232dad4319dc39e24e8831816caa1164f448ece8ce4523d9bfdb4da7399db2",
  "sprites": {
   "a01_sunbead": {
    "speciesId": "A01",
@@ -187,6 +187,49 @@
      "reducedMotionFrame": 0
     }
    }
+  }
+ },
+ "features": {
+  "starch_notch": {
+   "size": 16,
+   "headings": 4,
+   "anchor": [
+    8,
+    8
+   ],
+   "frames": 1,
+   "frameNames": [
+    "notch"
+   ]
+  },
+  "reserve_pocket": {
+   "size": 16,
+   "headings": 4,
+   "anchor": [
+    8,
+    8
+   ],
+   "frames": 4,
+   "frameNames": [
+    "band 0 (extra room empty)",
+    "band 1 (up to a third)",
+    "band 2 (up to two thirds)",
+    "band 3 (more than two thirds)"
+   ]
+  },
+  "resting_seam": {
+   "size": 16,
+   "headings": 4,
+   "anchor": [
+    8,
+    8
+   ],
+   "frames": 3,
+   "frameNames": [
+    "prepare (also the idle carrier seam)",
+    "rest",
+    "wake"
+   ]
   }
  },
  "frames": [
@@ -2455,6 +2498,326 @@
    "index": 1,
    "x": 82,
    "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/starch_notch/e/0",
+   "layer": "starch_notch",
+   "heading": 0,
+   "index": 0,
+   "x": 102,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/starch_notch/s/0",
+   "layer": "starch_notch",
+   "heading": 1,
+   "index": 0,
+   "x": 122,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/starch_notch/w/0",
+   "layer": "starch_notch",
+   "heading": 2,
+   "index": 0,
+   "x": 142,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/starch_notch/n/0",
+   "layer": "starch_notch",
+   "heading": 3,
+   "index": 0,
+   "x": 162,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/e/0",
+   "layer": "reserve_pocket",
+   "heading": 0,
+   "index": 0,
+   "x": 182,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/s/0",
+   "layer": "reserve_pocket",
+   "heading": 1,
+   "index": 0,
+   "x": 202,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/w/0",
+   "layer": "reserve_pocket",
+   "heading": 2,
+   "index": 0,
+   "x": 222,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/n/0",
+   "layer": "reserve_pocket",
+   "heading": 3,
+   "index": 0,
+   "x": 242,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/e/1",
+   "layer": "reserve_pocket",
+   "heading": 0,
+   "index": 1,
+   "x": 262,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/s/1",
+   "layer": "reserve_pocket",
+   "heading": 1,
+   "index": 1,
+   "x": 282,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/w/1",
+   "layer": "reserve_pocket",
+   "heading": 2,
+   "index": 1,
+   "x": 302,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/n/1",
+   "layer": "reserve_pocket",
+   "heading": 3,
+   "index": 1,
+   "x": 322,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/e/2",
+   "layer": "reserve_pocket",
+   "heading": 0,
+   "index": 2,
+   "x": 342,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/s/2",
+   "layer": "reserve_pocket",
+   "heading": 1,
+   "index": 2,
+   "x": 362,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/w/2",
+   "layer": "reserve_pocket",
+   "heading": 2,
+   "index": 2,
+   "x": 382,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/n/2",
+   "layer": "reserve_pocket",
+   "heading": 3,
+   "index": 2,
+   "x": 402,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/e/3",
+   "layer": "reserve_pocket",
+   "heading": 0,
+   "index": 3,
+   "x": 422,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/s/3",
+   "layer": "reserve_pocket",
+   "heading": 1,
+   "index": 3,
+   "x": 442,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/w/3",
+   "layer": "reserve_pocket",
+   "heading": 2,
+   "index": 3,
+   "x": 462,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/reserve_pocket/n/3",
+   "layer": "reserve_pocket",
+   "heading": 3,
+   "index": 3,
+   "x": 482,
+   "y": 194,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/resting_seam/e/0",
+   "layer": "resting_seam",
+   "heading": 0,
+   "index": 0,
+   "x": 2,
+   "y": 214,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/resting_seam/s/0",
+   "layer": "resting_seam",
+   "heading": 1,
+   "index": 0,
+   "x": 22,
+   "y": 214,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/resting_seam/w/0",
+   "layer": "resting_seam",
+   "heading": 2,
+   "index": 0,
+   "x": 42,
+   "y": 214,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/resting_seam/n/0",
+   "layer": "resting_seam",
+   "heading": 3,
+   "index": 0,
+   "x": 62,
+   "y": 214,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/resting_seam/e/1",
+   "layer": "resting_seam",
+   "heading": 0,
+   "index": 1,
+   "x": 82,
+   "y": 214,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/resting_seam/s/1",
+   "layer": "resting_seam",
+   "heading": 1,
+   "index": 1,
+   "x": 102,
+   "y": 214,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/resting_seam/w/1",
+   "layer": "resting_seam",
+   "heading": 2,
+   "index": 1,
+   "x": 122,
+   "y": 214,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/resting_seam/n/1",
+   "layer": "resting_seam",
+   "heading": 3,
+   "index": 1,
+   "x": 142,
+   "y": 214,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/resting_seam/e/2",
+   "layer": "resting_seam",
+   "heading": 0,
+   "index": 2,
+   "x": 162,
+   "y": 214,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/resting_seam/s/2",
+   "layer": "resting_seam",
+   "heading": 1,
+   "index": 2,
+   "x": 182,
+   "y": 214,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/resting_seam/w/2",
+   "layer": "resting_seam",
+   "heading": 2,
+   "index": 2,
+   "x": 202,
+   "y": 214,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/resting_seam/n/2",
+   "layer": "resting_seam",
+   "heading": 3,
+   "index": 2,
+   "x": 222,
+   "y": 214,
    "w": 16,
    "h": 16
   }

@@ -8,6 +8,7 @@ import { livingCountFor, type CardScheduled, type ClauseResult, type ExperimentC
 import { REASONS } from '@sim/reasons';
 import type { JournalMeasure } from '../journal';
 import { causeLabel } from '../panels/CompareText';
+import { evolutionLabel } from './whatif';
 
 /** Plain names for the fields a card can measure (fallback: the field id). */
 const FIELD_NAMES: Readonly<Record<string, string>> = {
@@ -190,7 +191,7 @@ export function describeCommand(card: ExperimentCardView, p: CommandPayload): st
     case 'setLid':
       return `lid ${p.lid}`;
     case 'setMutationPreset':
-      return `evolution setting ${p.preset}`;
+      return `evolution setting ${evolutionLabel(p.preset)}`;
     default:
       return p.kind;
   }

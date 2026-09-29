@@ -15,6 +15,7 @@ import { R } from '@sim/reasons';
 import { PREY_NONE } from '@sim/species';
 import { FILM_DIGESTION_IMPLEMENTED } from '@sim/content/implemented';
 import { dormancySummary, moduleSummaries, reserveBand, upkeepNow } from '@sim/moduleView';
+import { founderOriginOf } from '@sim/founders';
 import { entityCell, forEachInCell } from '@sim/spatial';
 import { response, SHOULDER_PH, SHOULDER_SALINITY, SHOULDER_WARMTH, suitabilityAt } from '@sim/suitability';
 import type { World } from '@sim/world';
@@ -275,6 +276,8 @@ function inspectEntity(world: World, slot: number): EntityInspect {
     modules: moduleSummaries(world, slot),
     upkeep: upkeepNow(world, slot),
     dormancy: dormancySummary(world, slot),
+    // P2.2: from recorded lineage only (a module seeded at creation vs inherited vs gained here).
+    founderOrigin: founderOriginOf(world, birthId),
   };
 }
 

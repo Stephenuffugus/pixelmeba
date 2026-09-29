@@ -19,6 +19,7 @@ import {
   tool,
 } from '../state';
 import { clock, describeChanges, horizonLabel } from './CompareText';
+import { worldModesLine } from '../strings/modes';
 
 export const PREDICTION_MAX = 280;
 
@@ -34,6 +35,10 @@ export function CompareSetup() {
       <h2 id="compare-heading">Compare two copies</h2>
       <p class="sub" data-testid="compare-baseline">
         A and B are exact copies of “{info.name}” at {clock(c.baselineTick)}. A stays as it is. Change one thing on B, then both run for exactly the same time.
+      </p>
+      {/* P2.2: mode labels wherever a world is described (UX §3.3); both copies share them. */}
+      <p class="world-modes" data-testid="compare-world-modes">
+        Both copies: {worldModesLine(info.mutationPreset, info.founderMode, info.registry)}
       </p>
 
       <h3>1 · Change one thing on B</h3>

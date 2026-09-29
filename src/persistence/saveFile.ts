@@ -15,6 +15,11 @@ import { moduleSetProblem } from '@sim/content/moduleRules';
 import { deserializeWorld, migrateWorldState, serializeWorld, type EncodedArray, type WorldState } from '@sim/serialize';
 import { SCHEMA_VERSION, type World } from '@sim/world';
 import { variantRecordOf } from '@sim/variants';
+import { IMPLEMENTED_MODULES } from '@sim/content/implemented';
+import { isMutationPreset } from '@sim/mutation';
+import { historyProblem, journalProblem } from '@sim/history';
+import { generatedBranchName } from '@sim/branches';
+import type { Command } from '@sim/commands';
 
 export const SAVE_FORMAT = 'pixelmeba-save';
 export const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
@@ -41,6 +46,57 @@ export interface SaveMeta {
   readonly note?: string;
   /** Written by buildSaveFile for a What if? dish (from its variant record); absent otherwise. */
   readonly variant?: SaveMetaVariant;
+  /** P2.2: the module registry the world recorded (always from the world; absent in older files). */
+  readonly registry?: SaveMetaRegistry;
+  /** P2.2: the world's evolution setting and founder mode when it was written (always from the world). */
+  readonly evolution?: SaveMetaEvolution;
+}
+
+/**
+ * The enabled module registry a dish recorded (P2.2 "export metadata shows the enabled registry"),
+ * copied from the world's own manifest into the file's meta. A display copy: the embedded content in
+ * the checksummed state stays authoritative, and a newer build never rewrites it.
+ */
+export interface SaveMetaRegistry {
+  readonly moduleRegistryVersion: number;
+  readonly evolutionRulesVersion: number;
+  readonly enabledModules: readonly string[];
+}
+
+export interface SaveMetaEvolution {
+  readonly mutationPreset: string;
+  readonly founderMode: string;
+}
+
+function metaRegistryOf(world: World): SaveMetaRegistry {
+  const m = world.content.manifest;
+  return { moduleRegistryVersion: m.moduleRegistryVersion, evolutionRulesVersion: m.evolutionRulesVersion, enabledModules: [...m.enabledModules] };
+}
+
+/** The registry in a file's meta, or null when absent or malformed (meta is untrusted text). */
+export function saveMetaRegistry(meta: unknown): SaveMetaRegistry | null {
+  const r = (meta as { registry?: unknown } | null)?.registry;
+  if (typeof r !== 'object' || r === null) return null;
+  const o = r as Record<string, unknown>;
+  const ints = Number.isInteger(o.moduleRegistryVersion) && Number.isInteger(o.evolutionRulesVersion);
+  const mods = Array.isArray(o.enabledModules) && o.enabledModules.length <= 64 && o.enabledModules.every((x) => typeof x === 'string' && /^E[0-9]{2}$/.test(x));
+  if (!ints || !mods) return null;
+  return { moduleRegistryVersion: o.moduleRegistryVersion as number, evolutionRulesVersion: o.evolutionRulesVersion as number, enabledModules: [...(o.enabledModules as string[])] };
+}
+
+const FOUNDER_MODES: readonly string[] = ['identical', 'varied', 'diverse'];
+
+/**
+ * The evolution setting and founder mode in a file's meta (or a slot index's copy of it), or null when
+ * absent or malformed (meta is untrusted text; P2.2 mode labels on Saved dishes and Continue).
+ */
+export function saveMetaEvolution(meta: unknown): SaveMetaEvolution | null {
+  const e = (meta as { evolution?: unknown } | null)?.evolution;
+  if (typeof e !== 'object' || e === null) return null;
+  const o = e as Record<string, unknown>;
+  if (!isMutationPreset(o.mutationPreset)) return null;
+  if (typeof o.founderMode !== 'string' || !FOUNDER_MODES.includes(o.founderMode)) return null;
+  return { mutationPreset: o.mutationPreset, founderMode: o.founderMode };
 }
 
 /** The variant identity in a file's meta, or null when absent or malformed (meta is untrusted text). */
@@ -101,12 +157,44 @@ export function cleanName(name: string): string {
   return clipped.length > 0 ? clipped : 'Untitled dish';
 }
 
+/**
+ * "Export without names or notes" (D-0029): the player's branch names leave the file too. Branch records
+ * carry no player name, a specimen's label is its branch's generated name, and the command log keeps
+ * each rename without its text. Names are notebook labels that nothing in the simulation reads, so the
+ * dish runs on exactly as before; branch records are hashed, so the stripped dish has its own state
+ * hash, and the checksum is computed over what is written (SPEC §14.4).
+ */
+function withoutPlayerNames(world: World, state: WorldState): WorldState {
+  const unname = (c: Command): Command =>
+    c.payload.kind === 'lineage' && c.payload.op === 'rename' && c.payload.name !== null ? { ...c, payload: { ...c.payload, name: null } } : c;
+  const commands = { ...state.commands, pending: state.commands.pending.map(unname), log: state.commands.log.map(unname) };
+  const book = state.branches;
+  if (!book) return { ...state, commands };
+  const label = (branch: number, shown: string): string => {
+    const br = branch >= 0 ? world.branches.branches[branch] : undefined;
+    return br ? generatedBranchName(world, br) : shown; // -1: the species' founders, never a player name
+  };
+  const branches = {
+    ...book,
+    branches: book.branches.map((b) => (b.name === null ? b : { ...b, name: null })),
+    ...(book.specimens ? { specimens: book.specimens.map((s) => ({ ...s, branchLabel: label(s.branch, s.branchLabel) })) } : {}),
+  };
+  return { ...state, commands, branches };
+}
+
 export async function buildSaveFile(world: World, meta: SaveMeta, options: { stripNames?: boolean } = {}): Promise<{ text: string; checksum: string; file: SaveFile }> {
-  const state = serializeWorld(world);
-  const checksum = `sha256:${await sha256Hex(canonicalJson(state))}`;
-  // The variant identity always comes from the world itself (never from the caller's meta).
+  const serialized = serializeWorld(world);
+  // P2.8: "Export without names or notes" carries none of the player's journal entries (their notes,
+  // dish names and times; D-0027 put them in the save). The checksum is computed over what is written
+  // (SPEC §14.4 "Metadata-stripped export recomputes the hash"); the state hash never reads history.
+  const state = options.stripNames ? withoutPlayerNames(world, { ...serialized, history: { ...serialized.history, journal: [] } }) : serialized;
+  // The variant identity and the mode labels always come from the world itself (never from the caller's
+  // meta), read with the state, before the await: a running dish can change its setting meanwhile.
   const { variant: _callerVariant, ...given } = meta;
   const variant = metaVariantOf(world);
+  const registry = metaRegistryOf(world);
+  const evolution = { mutationPreset: world.settings.mutationPreset, founderMode: world.settings.founderMode };
+  const checksum = `sha256:${await sha256Hex(canonicalJson(state))}`;
   const file: SaveFile = {
     format: SAVE_FORMAT,
     schemaVersion: SCHEMA_VERSION,
@@ -114,8 +202,9 @@ export async function buildSaveFile(world: World, meta: SaveMeta, options: { str
     simulationVersion: world.content.manifest.simulationVersion,
     contentVersion: world.content.manifest.contentVersion,
     contentHash: world.content.manifest.contentHash,
-    tick: world.tick,
-    meta: { ...given, name: options.stripNames ? 'Shared dish' : cleanName(meta.name), ...(options.stripNames ? { note: '' } : {}), ...(variant ? { variant } : {}) },
+    // The serialized tick: a running dish (an automatic checkpoint, an autosave) keeps stepping during the await above.
+    tick: state.tick,
+    meta: { ...given, name: options.stripNames ? 'Shared dish' : cleanName(meta.name), ...(options.stripNames ? { note: '' } : {}), ...(variant ? { variant } : {}), registry, evolution },
     state,
     checksum,
   };
@@ -176,12 +265,31 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
   if (!man.success) fail('content', `Manifest: ${man.error.issues[0]?.message ?? 'invalid'}`);
   if (man.data.simulationVersion !== 3) fail('version', 'Unsupported simulation version.');
   for (const sp of c.species) if (!SpeciesSchema.safeParse(sp).success) fail('content', `Species definition ${String((sp as { id?: string }).id)} is invalid.`);
+  // P2.2: an ability this build cannot simulate is refused by name before its definition is checked, so
+  // a newer build's module whose definition this build's schema does not know is still named.
+  if (Array.isArray(c.modules)) {
+    for (const m of c.modules as unknown[]) {
+      const id = (m as { id?: unknown } | null)?.id;
+      if (typeof id !== 'string' || IMPLEMENTED_MODULES.includes(id)) continue;
+      const name = (m as { name?: unknown }).name;
+      const named = typeof name === 'string' && name.length > 0 ? `"${cleanName(name)}" (${cleanName(id)})` : `"${cleanName(id)}"`;
+      fail('content', `This dish uses the extra ability ${named}, which this version of Pixelmeba cannot simulate. Nothing was loaded.`);
+    }
+  }
   for (const m of c.modules) if (!ModuleSchema.safeParse(m).success) fail('content', 'A module definition is invalid.');
   for (const m of c.materials) if (!MaterialSchema.safeParse(m).success) fail('content', 'A material definition is invalid.');
   if (!HabitatSchema.safeParse(c.habitat).success) fail('content', 'The habitat definition is invalid.');
   const speciesIds = c.species.map((x) => x.id);
   if (speciesIds.join() !== man.data.enabledSpecies.join()) fail('content', 'Species list does not match the manifest.');
   const moduleIds = c.modules.map((m) => m.id);
+  // P2.2: a dish can only run with abilities this build simulates. A module from a newer build (or a
+  // made-up one) is refused before anything is built, by name, so the player knows why.
+  if (moduleIds.join() !== man.data.enabledModules.join()) fail('content', "The dish's list of extra abilities does not match its manifest.");
+  for (const m of c.modules) {
+    if (!IMPLEMENTED_MODULES.includes(m.id)) {
+      fail('content', `This dish uses the extra ability "${cleanName(m.name)}" (${m.id}), which this version of Pixelmeba cannot simulate. Nothing was loaded.`);
+    }
+  }
 
   // Grid and fields.
   checkArray('grid.substrate', s.grid?.substrate, 'u8', CELL_COUNT);
@@ -269,6 +377,12 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
     const problem = moduleSetProblem(c.modules, spDef, g.modules);
     if (problem) fail('integrity', `A genome has an impossible set of abilities (${problem}).`);
   }
+  // P2.8: the recorded history and the dish's journal are shown on screen, so every value they hold is
+  // checked like the rest of the state (SPEC §14.3 "finite values … malformed ⇒ clear message and no change").
+  const historyError = historyProblem(s.history, speciesIds.length);
+  if (historyError) fail('integrity', `The dish's recorded history cannot be read (${historyError}). Nothing was loaded.`);
+  const journalError = journalProblem((s.history as { journal?: unknown } | undefined)?.journal);
+  if (journalError) fail('integrity', `The dish's journal has an entry this version of Pixelmeba cannot read (${journalError}). Nothing was loaded.`);
   if (!Number.isInteger(s.tick) || s.tick < 0) fail('integrity', 'The tick is invalid.');
   if (!Number.isInteger(s.seed) || s.seed < 0) fail('integrity', 'The seed is invalid.');
 

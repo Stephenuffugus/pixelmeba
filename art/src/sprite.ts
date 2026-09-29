@@ -46,13 +46,18 @@ export function orient(frame: Px, heading: number): Px {
 
 /** RGBA pixels of a frame using the sprite palette. */
 export function frameRgba(def: SpriteDef, frame: Px): Uint8Array {
+  return paletteRgba(def.palette, frame, def.assetId);
+}
+
+/** RGBA pixels of a frame through a palette (index 0 transparent); `owner` names it in errors. */
+export function paletteRgba(palette: readonly string[], frame: Px, owner: string): Uint8Array {
   const out = new Uint8Array(frame.w * frame.h * 4);
-  const cache = def.palette.map((hex, i) => (i === 0 ? [0, 0, 0, 0] : hexToRgba(hex)));
+  const cache = palette.map((hex, i) => (i === 0 ? [0, 0, 0, 0] : hexToRgba(hex)));
   for (let i = 0; i < frame.data.length; i++) {
     const idx = frame.data[i]!;
     if (idx === 0) continue;
     const c = cache[idx];
-    if (!c) throw new Error(`${def.assetId}: palette index ${idx} missing`);
+    if (!c) throw new Error(`${owner}: palette index ${idx} missing`);
     out.set(c, i * 4);
   }
   return out;

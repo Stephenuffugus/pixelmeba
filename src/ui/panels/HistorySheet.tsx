@@ -10,6 +10,8 @@ import { drawFrame, loadAtlas } from '../atlas';
 import { feed } from '../feed';
 import { IconClose } from '../icons';
 import { dishInfo, getClient, historyFocus, inspector, meta, sheet } from '../state';
+import { TraitGraphs } from './TraitGraphs';
+import { JournalComposer } from '../views/NotebookJournal';
 
 const INK = '#256E9E';
 const GRID = '#D9D6CC';
@@ -48,9 +50,14 @@ function Spark({ title, values, seconds, marks, unit, digits = 0, height = 56 }:
     const fx = (e.clientX - r.left) / r.width;
     setHover(Math.max(0, Math.min(n - 1, Math.round(fx * (n - 1)))));
   };
+  // A tap reads the sample under the finger and keeps it (labelled with its time) after the finger
+  // lifts; only a mouse leaving the chart returns the readout to the latest sample.
+  const onLeave = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse') setHover(null);
+  };
   return (
     <figure style={{ margin: '0.25rem 0 0.75rem' }}>
-      <figcaption style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+      <figcaption style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '0 0.5rem', fontSize: 'var(--fs-body)' }}>
         <span>{title}</span>
         <span style={{ color: MUTED, fontVariantNumeric: 'tabular-nums' }}>
           {hover !== null ? `${Math.floor(seconds[hk] ?? 0)} s: ` : 'now: '}
@@ -66,15 +73,17 @@ function Spark({ title, values, seconds, marks, unit, digits = 0, height = 56 }:
           height={H}
           role="img"
           aria-label={`${title}: now ${fmt(last, digits)} ${unit}, highest ${fmt(max, digits)} ${unit} over the last ${Math.round((seconds[n - 1] ?? 0) - (seconds[0] ?? 0))} seconds`}
+          onPointerDown={onMove}
           onPointerMove={onMove}
-          onPointerLeave={() => setHover(null)}
+          onPointerLeave={onLeave}
           style={{ touchAction: 'pan-y', display: 'block' }}
         >
           <line x1={pad} x2={W - pad} y1={H - pad} y2={H - pad} stroke={GRID} stroke-width="1" />
+          {/* Changes to the dish: dashed in the muted ink (6:1 on the surface), apart from the solid crosshair. */}
           {marks.map((m) => {
             const k = seconds.findIndex((s) => s >= m);
             return k >= 0 ? (
-              <line key={m} x1={x(k)} x2={x(k)} y1={pad} y2={H - pad} stroke={GRID} stroke-width="1" />
+              <line key={m} x1={x(k)} x2={x(k)} y1={pad} y2={H - pad} stroke={MUTED} stroke-width="1" stroke-dasharray="3 3" />
             ) : null;
           })}
           <path d={area} fill={INK} opacity="0.1" />
@@ -116,12 +125,46 @@ function SpeciesThumb({ asset }: { asset: string }) {
 
 const CELL = { textAlign: 'right', padding: '0.2rem 0.4rem' } as const;
 
+type HistoryTab = 'charts' | 'regions' | 'table' | 'events';
+/** History's views (a tabs widget: arrow keys, Home/End, one tab stop). */
+const HISTORY_TABS: readonly { readonly id: HistoryTab; readonly label: string }[] = [
+  { id: 'charts', label: 'Charts' },
+  { id: 'regions', label: 'Regions' },
+  { id: 'table', label: 'Table' },
+  { id: 'events', label: 'What happened' },
+];
+
 export function HistorySheet() {
   const info = dishInfo.value;
   const focus = historyFocus.value;
   const [samples, setSamples] = useState<readonly HistorySample[]>([]);
   const [compacted, setCompacted] = useState(false);
-  const [tab, setTab] = useState<'charts' | 'table' | 'events'>(focus ? 'events' : 'charts');
+  const [tab, setTab] = useState<HistoryTab>(focus ? 'events' : 'charts');
+  const [composing, setComposing] = useState(false);
+  // Focus returns to "Record what you saw…" when the form closes (the form focuses its first field).
+  const recordRef = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef(false);
+  useEffect(() => {
+    if (!composing && returnFocus.current) {
+      returnFocus.current = false;
+      recordRef.current?.focus();
+    }
+  }, [composing]);
+  const tabRefs = useRef<Partial<Record<HistoryTab, HTMLButtonElement | null>>>({});
+  const onTabKey = (e: KeyboardEvent) => {
+    const i = HISTORY_TABS.findIndex((t) => t.id === tab);
+    let next: HistoryTab | null = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft')
+      next = HISTORY_TABS[(i + (e.key === 'ArrowRight' ? 1 : HISTORY_TABS.length - 1)) % HISTORY_TABS.length]!.id;
+    else if (e.key === 'Home') next = HISTORY_TABS[0]!.id;
+    else if (e.key === 'End') next = HISTORY_TABS[HISTORY_TABS.length - 1]!.id;
+    if (next === null) return;
+    e.preventDefault();
+    // The dish's own arrow keys (camera pan) do not act behind the sheet.
+    e.stopPropagation();
+    setTab(next);
+    tabRefs.current[next]?.focus();
+  };
   // "What changed?" opens "What happened" filtered to the organism's kind (UX §5.3).
   const [filter, setFilter] = useState<number | null>(focus?.species ?? null);
   const tick = meta.value?.tick ?? 0;
@@ -165,6 +208,8 @@ export function HistorySheet() {
     asset: info.speciesAssets[i]!,
   }));
   const births = samples.map((s) => s.births.reduce((a, b) => a + b, 0));
+  // P2.8: the recorded debris total (samples from older saves have none, and draw no line).
+  const debris = samples.filter((s) => s.debrisTotal !== undefined);
   const deaths = samples.map((s) => s.deaths.reduce((a, b) => a + b, 0));
   const lines =
     filter === null ? feed.value : feed.value.filter((l) => l.species === filter || l.species < 0);
@@ -185,19 +230,49 @@ export function HistorySheet() {
             Back to {info.speciesNames[focus.species] ?? ''} #{focus.birthId}
           </button>
         ) : null}
-        <p class="sub">
-          Last {samples.length} simulated seconds. Vertical lines mark your changes. A chart shows what
-          happened together, not what caused it.
-        </p>
-        <div class="tabs" role="tablist">
-          {(['charts', 'table', 'events'] as const).map((t) => (
-            <button key={t} class="btn" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-              {t === 'charts' ? 'Charts' : t === 'table' ? 'Table' : 'What happened'}
+        {composing ? (
+          <JournalComposer
+            onDone={() => {
+              returnFocus.current = true;
+              setComposing(false);
+            }}
+            testId="history-journal-compose"
+            headingLevel={3}
+          />
+        ) : (
+          <button ref={recordRef} class="btn history-record" onClick={() => setComposing(true)} data-testid="history-record">
+            Record what you saw…
+          </button>
+        )}
+        <div class="tabs" role="tablist" aria-label="History views" onKeyDown={onTabKey}>
+          {HISTORY_TABS.map((t) => (
+            <button
+              key={t.id}
+              ref={(el) => {
+                tabRefs.current[t.id] = el;
+              }}
+              class="btn"
+              role="tab"
+              id={`history-tab-${t.id}`}
+              aria-selected={tab === t.id}
+              aria-controls={`history-panel-${t.id}`}
+              tabIndex={tab === t.id ? 0 : -1}
+              onClick={() => setTab(t.id)}
+              data-testid={`history-tab-${t.id}`}
+            >
+              {t.label}
             </button>
           ))}
         </div>
+        {tab === 'charts' || tab === 'table' ? (
+          // The per-second window these two views show (Regions states its own time span).
+          <p class="sub">
+            Last {samples.length} simulated seconds. Dashed vertical lines mark changes made to the dish. A chart shows
+            what happened together, not what caused it.
+          </p>
+        ) : null}
         {tab === 'charts' ? (
-          <div role="tabpanel">
+          <div role="tabpanel" id="history-panel-charts" aria-labelledby="history-tab-charts">
             <h3 class="chart-group">Organisms alive</h3>
             {species.map((s) => (
               <div key={s.id} class="spark-row">
@@ -250,16 +325,43 @@ export function HistorySheet() {
               unit="carbon"
               digits={2}
             />
+            {debris.length > 0 ? (
+              <Spark
+                title="Debris (total)"
+                values={debris.map((x) => x.debrisTotal!)}
+                seconds={debris.map((x) => x.second)}
+                marks={marks}
+                unit="carbon"
+                digits={2}
+              />
+            ) : null}
+            {debris.length > 0 && debris.length < samples.length ? (
+              <p class="sub" data-testid="history-debris-partial">
+                Debris (total) is recorded from {Math.floor(debris[0]!.second)} s on; this dish&apos;s earlier
+                seconds were recorded by an older version of Pixelmeba without it.
+              </p>
+            ) : debris.length === 0 && samples.length > 0 ? (
+              <p class="sub" data-testid="history-no-debris">
+                Debris (total): these seconds were recorded by an older version of Pixelmeba without it.
+              </p>
+            ) : null}
             <Spark title="Births per second" values={births} seconds={seconds} marks={marks} unit="" />
             <Spark title="Deaths per second" values={deaths} seconds={seconds} marks={marks} unit="" />
-            {compacted ? <p class="sub">Older history was summarized into one-minute steps.</p> : null}
+            {compacted ? (
+              <p class="sub">Older history is incomplete: past the last 30 simulated minutes it keeps one-minute summaries.</p>
+            ) : null}
+          </div>
+        ) : null}
+        {tab === 'regions' ? (
+          <div role="tabpanel" id="history-panel-regions" aria-labelledby="history-tab-regions">
+            <TraitGraphs dishId={info.dishId} speciesNames={info.speciesNames} />
           </div>
         ) : null}
         {tab === 'table' ? (
           // Focusable so keyboard users can scroll the wide table (axe: scrollable-region-focusable).
-          <div role="tabpanel" tabIndex={0} aria-label="History table" style={{ overflowX: 'auto' }}>
+          <div role="tabpanel" id="history-panel-table" aria-labelledby="history-tab-table" tabIndex={0} style={{ overflowX: 'auto' }}>
             <table
-              style={{ borderCollapse: 'collapse', fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums' }}
+              style={{ borderCollapse: 'collapse', fontSize: 'var(--fs-body)', fontVariantNumeric: 'tabular-nums' }}
               data-testid="history-table"
             >
               <caption class="sub" style={{ textAlign: 'left' }}>
@@ -278,6 +380,9 @@ export function HistorySheet() {
                   </th>
                   <th rowSpan={2} scope="col" style={CELL}>
                     Oxygen
+                  </th>
+                  <th rowSpan={2} scope="col" style={CELL}>
+                    Debris
                   </th>
                 </tr>
                 <tr>
@@ -316,6 +421,7 @@ export function HistorySheet() {
                         </td>
                       ))}
                       <td style={CELL}>{row.oxygenMean.toFixed(3)}</td>
+                      <td style={CELL}>{row.debrisTotal !== undefined ? row.debrisTotal.toFixed(2) : '—'}</td>
                     </tr>
                   ))}
               </tbody>
@@ -323,7 +429,7 @@ export function HistorySheet() {
           </div>
         ) : null}
         {tab === 'events' ? (
-          <div role="tabpanel" data-testid="history-events">
+          <div role="tabpanel" id="history-panel-events" aria-labelledby="history-tab-events" data-testid="history-events">
             {focused ? (
               <p data-testid="history-organism">
                 <strong>
@@ -358,7 +464,7 @@ export function HistorySheet() {
               {lines.map((l) => (
                 <li
                   key={`${l.key}:${l.tick}`}
-                  style={{ display: 'flex', gap: '0.5rem', fontSize: '0.875rem' }}
+                  style={{ display: 'flex', gap: '0.5rem', fontSize: 'var(--fs-body)' }}
                 >
                   <span class="sub" style={{ minWidth: '3.5rem', fontVariantNumeric: 'tabular-nums' }}>
                     {Math.floor(l.tick / 10)} s

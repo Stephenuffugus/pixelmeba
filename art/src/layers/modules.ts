@@ -9,9 +9,11 @@
  *   resting_seam   E03 carrier in a dormancy state — frame 0 Preparing (seam forming), 1 Resting
  *                  (full seam and fold tucks: the folded pose), 2 Waking (seam fading).
  *
- * Frames are authored 16×16 facing East, centered on the body, like the sprites; the renderer
- * derives the other headings with the same lossless orient() and scales by the body's frame size.
- * Silhouette and value (not hue alone) carry each mark, so they read in grayscale.
+ * Frames are authored 16×16 facing East, centered on the body, like the sprites. tools/art-build.ts
+ * derives the other three headings with the same lossless orient() and packs every frame into the
+ * organism atlas as `feature/<layer>/<heading>/<frame>` (ARCH §10.1); the renderer looks them up in
+ * the manifest and scales them by the body's frame size. Silhouette and value (not hue alone) carry
+ * each mark, so they read in grayscale.
  */
 import { P } from '../palette';
 import { Px } from '../px';
@@ -23,6 +25,8 @@ export interface FeatureLayerDef {
   /** Index 0 is transparent. */
   readonly palette: readonly string[];
   readonly frames: readonly Px[];
+  /** One short name per frame (the state it shows), for the manifest and the asset preview. */
+  readonly frameNames: readonly string[];
 }
 
 const K = { d: 1, l: 2 } as const;
@@ -44,6 +48,7 @@ function grid(marks: Readonly<Record<number, string>>): string[] {
 const STARCH_NOTCH: FeatureLayerDef = {
   id: 'starch_notch',
   palette: ['', P.starchNotch, P.starchNotchLight],
+  frameNames: ['notch'],
   frames: [
     frame(
       grid({
@@ -70,12 +75,19 @@ function pocket(filled: number): Px {
 const RESERVE_POCKET: FeatureLayerDef = {
   id: 'reserve_pocket',
   palette: ['', P.reserveAmber, P.reserveEmpty],
+  frameNames: [
+    'band 0 (extra room empty)',
+    'band 1 (up to a third)',
+    'band 2 (up to two thirds)',
+    'band 3 (more than two thirds)',
+  ],
   frames: [pocket(0), pocket(1), pocket(2), pocket(3)],
 };
 
 const RESTING_SEAM: FeatureLayerDef = {
   id: 'resting_seam',
   palette: ['', P.restingSeam, P.restingSeamLight],
+  frameNames: ['prepare (also the idle carrier seam)', 'rest', 'wake'],
   frames: [
     // Preparing: the seam starts to form at the middle.
     frame(grid({ 7: '........l.......', 8: '........d.......', 9: '........l.......' })),
@@ -94,5 +106,5 @@ const RESTING_SEAM: FeatureLayerDef = {
   ],
 };
 
-/** Canonical order (layer atlas layout). */
+/** Canonical order (atlas layout and manifest order). */
 export const FEATURE_LAYERS: readonly FeatureLayerDef[] = [STARCH_NOTCH, RESERVE_POCKET, RESTING_SEAM];

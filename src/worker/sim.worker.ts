@@ -46,7 +46,10 @@ async function boot(): Promise<void> {
     store = new SaveStore(new MemoryBackend());
     persistent = false;
   }
-  host = new DishHost(registry, (msg, transfer) => scope.postMessage(msg, transfer ?? []), { now: () => performance.now(), iso: () => new Date().toISOString() }, store, persistent);
+  // P2.8: the automatic checkpoint ring checks the browser's storage estimate before each write.
+  const storage = (self as unknown as { navigator?: { storage?: { estimate?: () => Promise<{ usage?: number; quota?: number }> } } }).navigator?.storage;
+  const estimate = persistent && storage?.estimate ? () => storage.estimate!() : undefined;
+  host = new DishHost(registry, (msg, transfer) => scope.postMessage(msg, transfer ?? []), { now: () => performance.now(), iso: () => new Date().toISOString() }, store, persistent, estimate);
   for (const m of queued.splice(0)) host.handle(m);
   loop();
 }

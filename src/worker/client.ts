@@ -8,6 +8,7 @@ import type { LineageAnswer } from '@sim/lineage';
 import type { LineageView } from './protocol';
 import type { WhatIfAnswer, WhatIfKeep, WhatIfKept, WhatIfPick, WhatIfRefusalCode } from './protocol';
 import type { ExperimentCardView } from '@sim/experiments';
+import type { NewDishPreview, RecipeOverrides } from './protocol';
 import { PROTOCOL_VERSION, stamp, type DishInfo, type DishSource, type Envelope, type FamilyAnswer, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 
 export class WorkerRequestError extends Error {
@@ -26,6 +27,9 @@ export interface WorkerLike {
   onmessage: ((ev: MessageEvent<FromWorker & Partial<Envelope>>) => void) | null;
   terminate?(): void;
 }
+
+/** Unsolicited automatic checkpoint outcomes (P2.8). */
+export type CheckpointNotice = Extract<FromWorker, { type: 'checkpoint' }>;
 
 /** Unsolicited experiment packets (P2.5). */
 export type ExperimentNotice = Extract<FromWorker, { type: 'experimentStamp' | 'experimentWaiting' | 'experimentEnded' }>;
@@ -50,6 +54,7 @@ export class SimClient {
   private readonly errorListeners: ((e: WorkerErrorNotice) => void)[] = [];
   private readonly compareListeners: ((s: ComparisonState) => void)[] = [];
   private readonly experimentListeners: ((m: ExperimentNotice) => void)[] = [];
+  private readonly checkpointListeners: ((m: CheckpointNotice) => void)[] = [];
 
   constructor(private readonly worker: WorkerLike) {
     worker.onmessage = (ev) => this.receive(ev.data);
@@ -128,6 +133,11 @@ export class SimClient {
       for (const fn of this.experimentListeners) fn(msg);
       return;
     }
+    if (msg.type === 'checkpoint') {
+      // Unsolicited (P2.8): an automatic checkpoint was written or refused.
+      for (const fn of this.checkpointListeners) fn(msg);
+      return;
+    }
     if (msg.type === 'compareState') for (const fn of this.compareListeners) fn(msg.state);
     const id = msg.requestId;
     if (id === undefined) return; // unsolicited status (e.g. comparison progress)
@@ -192,6 +202,37 @@ export class SimClient {
     return this.request((requestId) => (lastSeconds === undefined ? { type: 'history', requestId, dishId } : { type: 'history', requestId, dishId, lastSeconds }));
   }
 
+  /** Automatic checkpoint outcomes (P2.8). */
+  onCheckpoint(fn: (m: CheckpointNotice) => void): () => void {
+    this.checkpointListeners.push(fn);
+    return () => {
+      const i = this.checkpointListeners.indexOf(fn);
+      if (i >= 0) this.checkpointListeners.splice(i, 1);
+    };
+  }
+
+  /** P2.8: turn the automatic checkpoint ring on or off. */
+  setCheckpointRing(enabled: boolean): void {
+    this.send({ type: 'checkpointRing', enabled });
+  }
+
+  /** P2.8: the recorded regional series of one species' locus, and the loci with records per species (read-only). */
+  async traitHistory(dishId: string, species: number, locus: number): Promise<Extract<FromWorker, { type: 'traitHistory' }>> {
+    return this.request((requestId) => ({ type: 'traitHistory', requestId, dishId, species, locus }));
+  }
+
+  /** P2.8: keep a Notebook entry with a dish (written with its saves); resolves whether the dish kept it. */
+  async journalPut(dishId: string, entry: unknown): Promise<boolean> {
+    const msg = await this.request<Extract<FromWorker, { type: 'journal' }>>((requestId) => ({ type: 'journalPut', requestId, dishId, entry }));
+    return msg.stored === true;
+  }
+
+  /** P2.8: the Notebook entries kept with a dish. */
+  async journalGet(dishId: string): Promise<Extract<FromWorker, { type: 'journal' }>['entries']> {
+    const msg = await this.request<Extract<FromWorker, { type: 'journal' }>>((requestId) => ({ type: 'journalGet', requestId, dishId }));
+    return msg.entries;
+  }
+
   async saveSlot(dishId: string, slotId: string, name: string): Promise<SlotSummary> {
     const msg = await this.request<Extract<FromWorker, { type: 'slotSaved' }>>((requestId) => ({ type: 'saveSlot', requestId, dishId, slotId, name }));
     return msg.slot;
@@ -207,9 +248,10 @@ export class SimClient {
     return { slots: msg.slots, persistent: msg.persistent };
   }
 
-  async loadSlot(slotId: string, newDishId: string): Promise<{ info: DishInfo; usedPredecessor: boolean }> {
+  async loadSlot(slotId: string, newDishId: string): Promise<{ info: DishInfo; usedPredecessor: boolean; branch?: { readonly fromName: string; readonly tick: number } }> {
     const msg = await this.request<Extract<FromWorker, { type: 'loaded' }>>((requestId) => ({ type: 'loadSlot', requestId, slotId, newDishId }));
-    return { info: msg.info, usedPredecessor: msg.usedPredecessor };
+    // P2.8: an automatic checkpoint opens as a new branch; the reply names where it came from.
+    return { info: msg.info, usedPredecessor: msg.usedPredecessor, ...(msg.branch ? { branch: msg.branch } : {}) };
   }
 
   async deleteSlot(slotId: string): Promise<void> {
@@ -296,6 +338,12 @@ export class SimClient {
     const msg = await this.request<Extract<FromWorker, { type: 'whatIfStarted' | 'whatIfRefused' }>>((requestId) => ({ type: 'whatIfStart', requestId, ...args }));
     if (msg.type === 'whatIfRefused') return { ok: false, code: msg.code, message: msg.message };
     return { ok: true, info: msg.info, kept: msg.kept };
+  }
+
+  /** New Dish (P2.2): exactly what a dish with these choices would start with. Read-only; creates nothing. */
+  async newDishPreview(recipeId: string, seed: number, overrides: RecipeOverrides): Promise<NewDishPreview> {
+    const msg = await this.request<Extract<FromWorker, { type: 'newDishPreview' }>>((requestId) => ({ type: 'newDishPreview', requestId, recipeId, seed, overrides }));
+    return msg.preview;
   }
 
   /** The experiment cards this build ships (P2.5), as the Notebook shows them. */

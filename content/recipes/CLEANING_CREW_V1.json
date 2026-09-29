@@ -25,6 +25,6 @@
   ],
   "labels": [],
   "question": "Who cleans up the debris?",
-  "expectedObservationsText": "Ten Recyclers on a patch holding 10 detritus carbon with 1 bound nutrient. The Debris overlay (Lab → Observe) shows how much debris is left in each cell as they eat.",
+  "expectedObservationsText": "Ten Recyclers on a patch holding 10 detritus carbon with 1 bound nutrient. The Debris overlay (Lab → Observe) shows how much debris is left in each cell as they eat, and the “Debris (total)” chart in History shows the dish’s total.",
   "phase": 2
 }

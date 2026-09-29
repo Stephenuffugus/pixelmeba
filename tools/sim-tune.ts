@@ -22,7 +22,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { ContentRegistry } from '../src/sim/content/registry';
 import { TICKS_PER_SECOND } from '../src/sim/constants';
-import { FLAG } from '../src/sim/entities';
+import { FLAG, LIFE_ACTIVE } from '../src/sim/entities';
 import { diskCells, inMask, maskCells } from '../src/sim/grid';
 import { FIELD_DEFS, isFieldId } from '../src/sim/fields';
 import { checkLedger } from '../src/sim/ledger';
@@ -33,6 +33,7 @@ import {
   MUT_QUANT,
   MUT_QUANT_NEUTRAL,
 } from '../src/sim/mutation';
+import { profileOf } from '../src/sim/profiles';
 import { realizeRecipe } from '../src/sim/recipes';
 import { reasonName } from '../src/sim/reasons';
 import { stateHash } from '../src/sim/serialize';
@@ -86,6 +87,12 @@ export interface SpeciesSample {
   /** Sum of the measured value recorded with each limit code (limitValue), for per-code means. */
   limitValueSum: Tally;
   divBlock: Tally;
+  /**
+   * Starch-enzyme outcomes (secretionCode) of every organism whose profile has producer rules —
+   * native producers and E01 carriers alike. The secretion stage writes a code only for Active
+   * organisms, so a producer that is Preparing, Resting or Waking is tallied under its recorded
+   * state reason (limitCode) instead of a stale secretion outcome.
+   */
   secretion: Tally;
 }
 
@@ -226,7 +233,11 @@ function allHistory(world: World): HistorySample[] {
   return [...world.history.minutes, ...world.history.seconds];
 }
 
-function sampleReasons(world: World, second: number, probes: readonly PatchProbe[]): ReasonSample {
+export function sampleReasons(
+  world: World,
+  second: number,
+  probes: readonly PatchProbe[] = [],
+): ReasonSample {
   const c = world.ents.cols;
   const nutrient = world.fields.nutrient;
   const oxygen = world.fields.oxygen;
@@ -268,7 +279,12 @@ function sampleReasons(world: World, second: number, probes: readonly PatchProbe
     inc(s.limit, limitName, 1);
     inc(s.limitValueSum, limitName, c.limitValue[i]!);
     inc(s.divBlock, reasonName(c.divBlockCode[i]!), 1);
-    if (sp.secretesStarch) inc(s.secretion, reasonName(c.secretionCode[i]!), 1);
+    // Producer rules come from the organism's profile (native producer or E01 carrier), never the
+    // species alone.
+    if (profileOf(world, i).starch !== null) {
+      const code = c.lifeState[i] === LIFE_ACTIVE ? c.secretionCode[i]! : c.limitCode[i]!;
+      inc(s.secretion, reasonName(code), 1);
+    }
   }
   for (const id of Object.keys(acc)) {
     const s = acc[id]!;
@@ -925,7 +941,7 @@ export function renderReport(runs: readonly SeedRun[], meta: ReportMeta, analysi
     out.push('### Recorded reasons of living organisms, pooled over seeds');
     out.push('');
     out.push(
-      "Sampled at the end of the listed ticks. `limit` = leading intake constraint (limitCode), `division` = first failing division gate or placement block (divBlockCode), `secretion` = starch-enzyme outcome (secretionCode, secretors only). Means are per organism; cell values are the free field in the organism's cell.",
+      "Sampled at the end of the listed ticks. `limit` = leading intake constraint (limitCode), `division` = first failing division gate or placement block (divBlockCode), `secretion` = starch-enzyme outcome (secretionCode) of every organism with producer rules, native or gained through E01 (a producer that is preparing, resting or waking is counted under its state reason). Means are per organism; cell values are the free field in the organism's cell.",
     );
     out.push('');
     out.push(

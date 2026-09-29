@@ -1,8 +1,16 @@
 /** tools/sim-tune.ts: report fields exist, the tuner only observes, censoring is never an event. */
 import { describe, expect, it } from 'vitest';
+import { introduceOrganism } from '../../src/sim/commands';
+import type { ContentRegistry } from '../../src/sim/content/registry';
+import { LIFE_ACTIVE, LIFE_RESTING } from '../../src/sim/entities';
+import { cellIndex } from '../../src/sim/grid';
+import { profileOf } from '../../src/sim/profiles';
+import { R } from '../../src/sim/reasons';
 import { realizeRecipe } from '../../src/sim/recipes';
 import { stateHash } from '../../src/sim/serialize';
-import { step } from '../../src/sim/tick';
+import { rebuildIndex } from '../../src/sim/spatial';
+import { run as runTicks, step } from '../../src/sim/tick';
+import { speciesIndex, type World } from '../../src/sim/world';
 import { loadRegistryFs } from '../../tools/lib/content-fs';
 import {
   ANALYSIS_END,
@@ -10,9 +18,11 @@ import {
   censoredStats,
   extractAnalysis,
   renderReport,
+  sampleReasons,
   tuneSeed,
   withinTarget,
 } from '../../tools/sim-tune';
+import { clearWater, setField } from '../helpers/world';
 
 describe('sim-tune', () => {
   const registry = loadRegistryFs();
@@ -104,6 +114,86 @@ describe('sim-tune', () => {
     expect(withinTarget(null, 120, 20)).toBe('unknown');
     expect(withinTarget(null, 120, 600)).toBe('no');
     expect(withinTarget(null, 120, 120)).toBe('no');
+  });
+
+  it('counts secretion from the profile producer rules: E01 carriers as well as native producers', () => {
+    const w = clearWater();
+    const put = (id: string, x: number, modules: readonly string[]): number => {
+      const s = introduceOrganism(w, speciesIndex(w, id), cellIndex(x, 64), 'test', {
+        modules,
+        exactCenter: true,
+      });
+      rebuildIndex(w);
+      return s;
+    };
+    const plain = put('B01', 40, []);
+    const carriers = [44, 48, 52].map((x) => put('B01', x, ['E01']));
+    const native = put('B06', 80, []);
+    // Starch beside two of the carriers and the native producer; the third carrier has none nearby.
+    for (const x of [44, 48, 80]) setField(w, 'starch', cellIndex(x, 64), 0.6);
+    step(w);
+    const c = w.ents.cols;
+    expect(profileOf(w, plain).starch).toBeNull();
+    expect(carriers.map((s) => profileOf(w, s).starch?.source)).toEqual(['E01', 'E01', 'E01']);
+    expect(profileOf(w, native).starch?.source).toBe('native');
+    expect(carriers.map((s) => c.secretionCode[s])).toEqual([
+      R.SECRETING,
+      R.SECRETING,
+      R.SECRETION_NO_SUBSTRATE,
+    ]);
+    const sample = sampleReasons(w, w.tick / 10);
+    // Three E01 carriers among four Sprinters: the plain one has no producer rules and is not counted.
+    expect(sample.species.B01!.alive).toBe(4);
+    expect(sample.species.B01!.secretion).toEqual({ SECRETING: 2, SECRETION_NO_SUBSTRATE: 1 });
+    expect(sample.species.B06!.secretion).toEqual({ SECRETING: 1 });
+  });
+
+  it('a producer that is resting is tallied under its state reason, not a stale secretion outcome', () => {
+    const w: World = clearWater();
+    const s = introduceOrganism(w, speciesIndex(w, 'B01'), cellIndex(64, 64), 'test', {
+      modules: ['E01', 'E03'],
+      exactCenter: true,
+    });
+    rebuildIndex(w);
+    const c = w.ents.cols;
+    expect(c.lifeState[s]).toBe(LIFE_ACTIVE);
+    runTicks(w, 250); // no food: 20 s trigger, 5 s preparing
+    expect(c.lifeState[s]).toBe(LIFE_RESTING);
+    expect(sampleReasons(w, w.tick / 10).species.B01!.secretion).toEqual({ RESTING_FOOD_SCARCE: 1 });
+  });
+
+  it("tuneSeed reports E01 carriers' secretion (founders given E01 at creation)", () => {
+    const base = registry.recipes.RESERVE_COMPARE_V1!;
+    const starchDish: ContentRegistry = {
+      ...registry,
+      recipes: {
+        ...registry.recipes,
+        TUNE_E01_TEST: {
+          ...base,
+          id: 'TUNE_E01_TEST',
+          fieldPatches: [
+            ...base.fieldPatches,
+            { ...base.fieldPatches[0]!, radius: 5, add: { starch: 0.6 }, label: 'Starch' },
+          ],
+          founders: base.founders.map((f) => ({ ...f, modules: ['E01'] })),
+          scheduledCommands: [],
+        },
+      },
+    };
+    const r = tuneSeed(starchDish, {
+      recipe: 'TUNE_E01_TEST',
+      seed: 104729,
+      preset: 'standard',
+      seconds: 2,
+      extendSeconds: 2,
+      sampleSeconds: [1],
+    });
+    const b01 = r.samples[0]!.species.B01!;
+    const counted = Object.values(b01.secretion).reduce((a, b) => a + b, 0);
+    // Half the 24 founders carry E01 (alternate-odd); every one is counted, the others are not.
+    expect(b01.alive).toBe(24);
+    expect(counted).toBe(12);
+    expect(b01.secretion.SECRETING).toBeGreaterThan(0);
   });
 
   it('renders the report tables and keeps a hand-written analysis block', () => {

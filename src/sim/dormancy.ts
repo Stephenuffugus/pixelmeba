@@ -16,13 +16,19 @@
  * Age continues in every state. Nothing grants energy: a resting organism without waking energy
  * stays resting until it starves. Clocks live in entity columns (see entities.ts), so saving and
  * reloading never changes a transition.
+ *
+ * Reasons (SPEC §12.2 States): Preparing/Resting/Waking record PREPARING, RESTING_DRY or
+ * RESTING_FOOD_SCARCE, and WAKING as the leading limit. DORMANCY_LOCKOUT (Active during the post-wake
+ * lockout) is read from the saved clocks by dormancyReason() and never written to an entity column:
+ * every column is part of stateHash, and a label must not change a hash.
  */
 import { DT, GRID_H, GRID_W, STRESS_THRESHOLD, USABLE_FOOD_MIN } from './constants';
-import { FLAG, LIFE_ACTIVE, LIFE_PREPARING, LIFE_RESTING, LIFE_WAKING, MOVE_NONE } from './entities';
+import { FLAG, LIFE_ACTIVE, LIFE_PREPARING, LIFE_RESTING, LIFE_WAKING, MOVE_NONE, type EntityColumns } from './entities';
 import { emit, milestone } from './events';
 import { cellIndex } from './grid';
 import { preyAllowed } from './movement';
 import type { DormancyRules, Profile } from './phenotype';
+import { profileOf } from './profiles';
 import { R } from './reasons';
 import { entityCell, forEachInCell } from './spatial';
 import { responseBelowOnly, SHOULDER_MOISTURE } from './suitability';
@@ -99,23 +105,84 @@ function haltMotion(world: World, i: number): void {
   c.preyBirthId[i] = 0;
 }
 
-/** Record the inspector's leading state for a non-Active organism (observation only). */
-function stateReason(world: World, i: number, rules: DormancyRules): void {
-  const c = world.ents.cols;
+/** Active: the no-usable-intake clock has reached the profile's trigger (SPEC §7.6). */
+function foodTriggerMet(c: EntityColumns, i: number, prof: Profile): boolean {
+  return c.stateTimer[i]! >= prof.dormancyTriggerSeconds - EPS;
+}
+
+/** Active: the too-dry clock has reached the rule's seconds (SPEC §7.6). */
+function dryTriggerMet(c: EntityColumns, i: number, rules: DormancyRules): boolean {
+  return c.dryTimer[i]! >= rules.drySeconds - EPS;
+}
+
+/**
+ * Whether an Active organism would start Preparing now if no lockout were running: a trigger has
+ * persisted and it has the entry energy. The same tests, on the same clocks, as dormancyStep's entry.
+ */
+export function restDue(c: EntityColumns, i: number, prof: Profile, rules: DormancyRules): boolean {
+  return (foodTriggerMet(c, i, prof) || dryTriggerMet(c, i, rules)) && c.E[i]! >= rules.entryMinEnergy;
+}
+
+/** A dormancy state reason (SPEC §12.2 States) with its measured value. */
+export interface DormancyReason {
+  code: number;
+  /**
+   * PREPARING / WAKING: seconds left in the state; RESTING_*: seconds the wake conditions have held;
+   * DORMANCY_LOCKOUT: seconds of lockout left; NONE: 0.
+   */
+  value: number;
+  /** DORMANCY_LOCKOUT only: a rest is due now (trigger held, entry energy) and waits for the lockout. */
+  restHeld: boolean;
+}
+
+function readReason(c: EntityColumns, i: number, prof: Profile, rules: DormancyRules, out: DormancyReason): DormancyReason {
+  out.restHeld = false;
   switch (c.lifeState[i]) {
     case LIFE_PREPARING:
-      c.limitCode[i] = R.PREPARING;
-      c.limitValue[i] = Math.max(0, rules.prepareSeconds - c.stateTimer[i]!);
+      out.code = R.PREPARING;
+      out.value = Math.max(0, rules.prepareSeconds - c.stateTimer[i]!);
       break;
     case LIFE_RESTING:
-      c.limitCode[i] = (c.flags[i]! & FLAG.restDry) !== 0 ? R.RESTING_DRY : R.RESTING_FOOD_SCARCE;
-      c.limitValue[i] = c.stateTimer[i]!;
+      out.code = (c.flags[i]! & FLAG.restDry) !== 0 ? R.RESTING_DRY : R.RESTING_FOOD_SCARCE;
+      out.value = c.stateTimer[i]!;
       break;
     case LIFE_WAKING:
-      c.limitCode[i] = R.WAKING;
-      c.limitValue[i] = Math.max(0, rules.wakeSeconds - c.stateTimer[i]!);
+      out.code = R.WAKING;
+      out.value = Math.max(0, rules.wakeSeconds - c.stateTimer[i]!);
       break;
+    default:
+      if (c.lockoutTimer[i]! > 0) {
+        out.code = R.DORMANCY_LOCKOUT;
+        out.value = c.lockoutTimer[i]!;
+        out.restHeld = restDue(c, i, prof, rules);
+      } else {
+        out.code = R.NONE;
+        out.value = 0;
+      }
   }
+  return out;
+}
+
+/**
+ * The dormancy state reason of organism `i` from its saved clocks (observation only; nothing here is
+ * written or read back by the simulation). Organisms that cannot rest have none (NONE). Active
+ * organisms in the post-wake lockout read DORMANCY_LOCKOUT with the lockout seconds left, and
+ * `restHeld` says whether the lockout is what keeps a due rest from starting right now.
+ */
+export function dormancyReason(world: World, i: number, prof: Profile = profileOf(world, i)): DormancyReason {
+  const out: DormancyReason = { code: R.NONE, value: 0, restHeld: false };
+  const rules = prof.dormancy;
+  return rules === null ? out : readReason(world.ents.cols, i, prof, rules, out);
+}
+
+const scratchReason: DormancyReason = { code: R.NONE, value: 0, restHeld: false };
+
+/** Record the inspector's leading state for a non-Active organism (observation only). */
+function stateReason(world: World, i: number, prof: Profile, rules: DormancyRules): void {
+  const c = world.ents.cols;
+  const r = readReason(c, i, prof, rules, scratchReason);
+  c.limitCode[i] = r.code;
+  c.limitValue[i] = r.value;
 }
 
 /**
@@ -142,8 +209,8 @@ export function dormancyStep(world: World, i: number, prof: Profile): void {
       const cell = entityCell(c.x[i]!, c.y[i]!);
       c.dryTimer[i] = moistureSuitability(world, prof, cell) < rules.drySuitability ? c.dryTimer[i]! + DT : 0;
       if (c.lockoutTimer[i]! > 0) return;
-      const foodTrigger = c.stateTimer[i] >= prof.dormancyTriggerSeconds - EPS;
-      const dryTrigger = c.dryTimer[i] >= rules.drySeconds - EPS;
+      const foodTrigger = foodTriggerMet(c, i, prof);
+      const dryTrigger = dryTriggerMet(c, i, rules);
       if (!foodTrigger && !dryTrigger) return;
       if (c.E[i]! < rules.entryMinEnergy) return;
       c.E[i]! -= rules.prepareCost;
@@ -207,7 +274,7 @@ export function dormancyStep(world: World, i: number, prof: Profile): void {
     default:
       throw new Error(`organism ${c.birthId[i]!} has unknown life state ${c.lifeState[i]!}`);
   }
-  if (c.lifeState[i] !== LIFE_ACTIVE) stateReason(world, i, rules);
+  if (c.lifeState[i] !== LIFE_ACTIVE) stateReason(world, i, prof, rules);
 }
 
 /** Reset an organism's dormancy clocks (a new individual starts Active with no lockout). */

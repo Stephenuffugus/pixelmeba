@@ -10,6 +10,7 @@ import type { FeedingPolicy, Genome, GenomeInput } from './genome';
 import { eligibleGains, lossOptions } from './modules';
 import { activeLoci } from './phenotype';
 import type { World, MutationPreset } from './world';
+import type { CreationFounders } from './founders';
 
 export interface MutationRates {
   readonly quantitative: number;
@@ -18,6 +19,18 @@ export interface MutationRates {
   readonly developmental: number;
 }
 
+/** The three evolution presets (SPEC §8.6), in the order the New Dish flow offers them. */
+export const MUTATION_PRESETS: readonly MutationPreset[] = ['standard', 'accelerated', 'fixed'];
+
+export function isMutationPreset(x: unknown): x is MutationPreset {
+  return typeof x === 'string' && (MUTATION_PRESETS as readonly string[]).includes(x);
+}
+
+/**
+ * Per-daughter chances for a preset (SPEC §8.3/§8.6, CT §12.8). The only inputs are the preset and
+ * whether developmental changes exist yet (Phase 7): playback speed, frame rate, tick cost and the
+ * environment can never reach a rate (P2.2 "faster playback never changes per-birth rates").
+ */
 export function ratesFor(preset: MutationPreset, developmentalEnabled: boolean): MutationRates {
   switch (preset) {
     case 'standard':
@@ -169,4 +182,70 @@ export function proposeDaughters(world: World, parentSlot: number): DaughterProp
     return { genome, flags: m.flags, locus: m.locus, delta: m.delta, module: m.module };
   }) as [DaughterDraw, DaughterDraw];
   return { genomes: [draws[0].genome, draws[1].genome], draws };
+}
+
+// ------------------------------------------------------------------ preset changes (P2.2)
+
+/**
+ * One recorded change of the evolution setting: a timestamped intervention in the command log
+ * (SPEC §8.6 "Rate changes are timestamped interventions"). `tick` is the tick it took effect: every
+ * daughter proposal created from that tick on uses the new rates; proposals made earlier keep their
+ * recorded draws (a proposal is never redrawn).
+ */
+export interface PresetChange {
+  readonly tick: number;
+  readonly seq: number;
+  readonly commandId: string;
+  /** The setting before the change (absent in a command recorded without it). */
+  readonly from: MutationPreset | null;
+  readonly to: MutationPreset;
+}
+
+/** Accepted evolution-setting changes still in the command log, oldest first. */
+export function presetChanges(world: World): PresetChange[] {
+  const out: PresetChange[] = [];
+  for (const cmd of world.commands.log) {
+    const p = cmd.payload;
+    if (p.kind !== 'setMutationPreset' || !cmd.result || cmd.result.accepted <= 0 || !isMutationPreset(p.preset)) continue;
+    const from = cmd.result.presetFrom;
+    out.push({ tick: cmd.targetTick, seq: cmd.seq, commandId: cmd.commandId, from: isMutationPreset(from) ? from : null, to: p.preset });
+  }
+  return out;
+}
+
+/** The world's evolution setting as the UI shows it (Advanced panel; read-only, from recorded state). */
+export interface EvolutionState {
+  readonly preset: MutationPreset;
+  readonly founderMode: World['settings']['founderMode'];
+  /** Per-daughter chances in effect now. */
+  readonly rates: MutationRates;
+  readonly developmentalEnabled: boolean;
+  /** Recorded changes during play (bounded by the command log), oldest first. */
+  readonly changes: readonly PresetChange[];
+  /**
+   * The founders the dish was made with and the modules present at creation (founders.ts
+   * creationFounders; the host adds it, so the Evolution sheet never states a founder mode's rule as a
+   * fact about this dish's founders).
+   */
+  readonly creation?: CreationFounders;
+}
+
+export function evolutionState(world: World): EvolutionState {
+  const dev = world.content.manifest.developmentalEnabled;
+  return {
+    preset: world.settings.mutationPreset,
+    founderMode: world.settings.founderMode,
+    rates: ratesFor(world.settings.mutationPreset, dev),
+    developmentalEnabled: dev,
+    changes: presetChanges(world),
+  };
+}
+
+/**
+ * SPEC §8.7 pacing statement: the chance of at least one module-gain attempt in `births` eligible
+ * daughter births (a module draw is a gain or a loss with equal probability). An attempt is not a
+ * surviving branch.
+ */
+export function moduleGainAttemptChance(rates: MutationRates, births: number): number {
+  return 1 - Math.pow(1 - rates.module / 2, births);
 }

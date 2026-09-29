@@ -5,6 +5,10 @@
  * runPairedComparison, recorded with the code as it was before the two observers were merged.
  * State hashes are not in the file (they cover the content hash); replay identity is proven by the
  * card fixtures themselves.
+ *
+ * One recorded change (D-0029): EXP_101 arm A's timeline hash. Samples now tally secretion by the
+ * organism's producer rules, so a Sprinter that gained E01 by mutation is counted (from 60 s on). With
+ * that Sprinter tally removed the timeline hashes to wave A's value 5345c782…4bf527 exactly.
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';

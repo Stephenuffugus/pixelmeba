@@ -4,7 +4,7 @@
  * read back by the simulation, and every value maps to a recorded rule or a measured column.
  */
 import { FLAG, LIFE_ACTIVE, LIFE_RESTING } from './entities';
-import { wakeConditions } from './dormancy';
+import { dormancyReason, wakeConditions, type DormancyReason } from './dormancy';
 import type { Profile } from './phenotype';
 import { profileOf } from './profiles';
 import { R } from './reasons';
@@ -91,6 +91,8 @@ export interface DormancySummary {
     readonly entryMinEnergy: number;
     readonly wakeConditionSeconds: number;
   };
+  /** The dormancy state reason (SPEC §12.2 States) from the saved clocks: DORMANCY_LOCKOUT after waking. */
+  readonly reason: Readonly<DormancyReason>;
 }
 
 /** The dormancy machine as recorded for this organism, or null when it cannot rest. */
@@ -124,5 +126,6 @@ export function dormancySummary(world: World, i: number): DormancySummary | null
       entryMinEnergy: rules.entryMinEnergy,
       wakeConditionSeconds: rules.wakeConditionSeconds,
     },
+    reason: dormancyReason(world, i, prof),
   };
 }

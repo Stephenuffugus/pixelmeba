@@ -62,7 +62,6 @@ export const P = {
   // Feature layers
   reserveAmber: '#E0A53A',
   reserveEmpty: '#F6E3B0',
-  reserveRim: '#8A5F1C',
   restingSeam: '#4E5620',
   restingSeamLight: '#A9B46A',
   starchNotchLight: '#E8C27A',

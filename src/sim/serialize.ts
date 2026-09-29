@@ -13,6 +13,7 @@ import { base64ToBytes, canonicalJson, StateHasher, typedToBase64 } from './hash
 import type { Command } from './commands';
 import type { EventLog } from './events';
 import type { History } from './history';
+import { historyForSchema3, sanitizeHistoryRecords } from './history';
 import { createLedger, type Ledger } from './ledger';
 import type { Lineage } from './lineage';
 import type { BranchBook } from './branches';
@@ -147,7 +148,8 @@ export const COLUMNS_ADDED_IN: Readonly<Record<number, readonly (typeof ENTITY_C
 /**
  * Bring an older world state up to SCHEMA_VERSION by copy (the input is never modified; CLAUDE.md
  * "migration by copy"). Each step only adds what that version introduced, with the value an older
- * world implicitly had: dryTimer 0, because no organism could rest before schema 2.
+ * world implicitly had: dryTimer 0, because no organism could rest before schema 2; at schema 3 an
+ * empty trait record and journal, because nothing of either was recorded before it.
  */
 export function migrateWorldState(state: WorldState): WorldState {
   if (!Number.isInteger(state.schemaVersion) || state.schemaVersion < 1) throw new Error(`unsupported world schema ${String(state.schemaVersion)}`);
@@ -162,6 +164,13 @@ export function migrateWorldState(state: WorldState): WorldState {
       columns[name] = encodeArray(new Ctor(s.entities.highWater));
     }
     s = { ...s, schemaVersion: v, entities: { ...s.entities, columns } };
+    // Schema 3 (P2.8): history gains trait samples and the dish's journal, both empty for an older world.
+    if (v === 3) s = { ...s, history: historyForSchema3(s.history, s.tick) };
+  }
+  // SPEC §14.5: a migration tags provenance. Not in the state hash (stateHash never reads provenance).
+  if (state.schemaVersion < SCHEMA_VERSION) {
+    const p = s.content.provenance;
+    s = { ...s, content: { ...s.content, provenance: { ...p, migratedFrom: [...(p.migratedFrom ?? []), state.schemaVersion] } } };
   }
   return s;
 }
@@ -201,6 +210,8 @@ export function deserializeWorld(input: WorldState): World {
   Object.assign(world.counters, state.counters);
   Object.assign(world.events, JSON.parse(JSON.stringify(state.events)));
   Object.assign(world.history, JSON.parse(JSON.stringify(state.history)));
+  // Journal entries and trait samples are display records: malformed ones are dropped, never fatal (P2.8).
+  sanitizeHistoryRecords(world.history);
   world.capacityLimitedTicks = state.capacityLimitedTicks;
   world.capacityHitThisTick = false;
   if (state.conversionTotals) Object.assign(world.conversionTotals, state.conversionTotals);

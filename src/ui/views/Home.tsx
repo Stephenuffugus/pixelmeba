@@ -2,6 +2,8 @@ import { useEffect, useState } from 'preact/hooks';
 import type { SlotSummary } from '@worker/protocol';
 import { IconGuide, IconLab, IconNotebook, IconPlay, IconSave, IconSettings } from '../icons';
 import { dishInfo, getClient, loadSlot, route } from '../state';
+import { evolution } from '../state';
+import { slotModesLine, worldModesLine } from '../strings/modes';
 import { journalUnseen } from '../journal';
 
 export function Home() {
@@ -25,6 +27,10 @@ export function Home() {
           <section class="card" aria-label="Continue">
             <h2>Continue</h2>
             <p>{dishInfo.value!.name} — paused where you left it.</p>
+            {/* P2.2: mode labels wherever a world is described (UX §3.3). */}
+            <p class="world-modes" data-testid="home-continue-modes">
+              {worldModesLine(evolution.value?.preset ?? dishInfo.value!.mutationPreset, dishInfo.value!.founderMode, dishInfo.value!.registry)}
+            </p>
             <button class="btn primary" onClick={() => (route.value = { name: 'dish' })}>
               <IconPlay /> Continue
             </button>
@@ -35,6 +41,11 @@ export function Home() {
             <p>
               {auto.name} — {Math.floor(auto.tick / 10)} s simulated. Opens paused.
             </p>
+            {slotModesLine(auto.modes) ? (
+              <p class="world-modes" data-testid="home-continue-modes">
+                {slotModesLine(auto.modes)}
+              </p>
+            ) : null}
             <button class="btn primary" onClick={() => void loadSlot('autosave')} data-testid="home-continue">
               <IconPlay /> Continue
             </button>

@@ -6,6 +6,7 @@
  */
 import { R } from '@sim/reasons';
 import type { DormancyInspect, EntityInspect, ModuleInspect } from '@worker/protocol';
+import { reasonText, secondsLeft } from './reasons';
 
 /** Life states (saved lifeState column; see src/sim/entities.ts). */
 export const LIFE_ACTIVE = 0;
@@ -25,6 +26,40 @@ export function originChip(origin: number): string | null {
   if (origin === 2) return 'present at creation';
   if (origin === 1) return 'added by you or the recipe';
   return null;
+}
+
+/**
+ * Chip text while the engine's dormancy reason is DORMANCY_LOCKOUT (SPEC §12.2 States: Active in the
+ * 30 s after waking), else null. The chip shows only from the reason code, never from art or timing.
+ */
+export function dormancyChip(d: Pick<DormancyInspect, 'reason'> | null | undefined): string | null {
+  return d && d.reason.code === R.DORMANCY_LOCKOUT ? 'just woke up' : null;
+}
+
+/** Entity flag bits the inspector's action chip reads (src/sim/entities.ts FLAG; stage 6 sets feeding/usableIntake). */
+const FLAG_STRESSED = 1 << 1;
+const FLAG_FEEDING = 1 << 2;
+const FLAG_HUNTING = 1 << 3;
+const FLAG_MOVING = 1 << 6;
+const FLAG_USABLE_INTAKE = 1 << 11;
+
+/**
+ * The inspector's action chip, from recorded state only. "Eating" needs this tick's intake to reach the
+ * usable share of its intake ceiling (FLAG.usableIntake, USABLE_INTAKE_FRACTION); a smaller intake is
+ * named as traces, so the chip never says "Eating" beside "No usable food" and "Food access: 0 %".
+ */
+export function actionLabel(e: Pick<EntityInspect, 'flags' | 'lifeState' | 'predation'>): string {
+  // A life state other than Active (Preparing, Resting, Waking) is the organism's real state (P2.1).
+  if (e.lifeState !== LIFE_ACTIVE) return lifeStateLabel(e.lifeState);
+  if (e.flags & FLAG_FEEDING) {
+    if (e.predation) return 'Digesting';
+    return e.flags & FLAG_USABLE_INTAKE ? 'Eating' : 'Finding only traces of food';
+  }
+  if (e.flags & FLAG_HUNTING) return 'Hunting';
+  if (e.flags & FLAG_STRESSED) return 'Stressed';
+  if (e.flags & FLAG_MOVING) return 'Moving';
+  // Not "resting": that word now names the resting stage.
+  return 'Staying in place';
 }
 
 /** Chip text for a life state. */
@@ -122,7 +157,7 @@ export function dormancyLines(d: DormancyInspect, E: number): string[] {
   const lines: string[] = [];
   switch (d.state) {
     case LIFE_PREPARING:
-      lines.push(`Getting ready to rest: ${secs(r.prepareSeconds - d.stateSeconds)} s left. It paid ${num(r.prepareCost, 0)} energy to start, and gets none back.`);
+      lines.push(`Getting ready to rest: ${secondsLeft(r.prepareSeconds - d.stateSeconds)} s left. It paid ${num(r.prepareCost, 0)} energy to start, and gets none back.`);
       lines.push('It does not feed, move or split while getting ready.');
       break;
     case LIFE_RESTING: {
@@ -139,10 +174,11 @@ export function dormancyLines(d: DormancyInspect, E: number): string[] {
       break;
     }
     case LIFE_WAKING:
-      lines.push(`Waking up: ${secs(r.wakeSeconds - d.stateSeconds)} s left. It paid ${num(r.wakeCost, 0)} energy; it cannot feed until it is awake.`);
+      lines.push(`Waking up: ${secondsLeft(r.wakeSeconds - d.stateSeconds)} s left. It paid ${num(r.wakeCost, 0)} energy; it cannot feed until it is awake.`);
       break;
     default:
-      if (d.lockoutSeconds > 0) lines.push(`Just woke up: it cannot rest again for ${secs(d.lockoutSeconds)} s.`);
+      // The engine's reason code (DORMANCY_LOCKOUT) and its measured value, in the Lab wording.
+      if (d.reason.code === R.DORMANCY_LOCKOUT) lines.push(reasonText(R.DORMANCY_LOCKOUT, 'lab', { value: d.reason.value, restHeld: d.reason.restHeld }));
       if (d.noIntakeSeconds > 0.05)
         lines.push(`No usable food for ${secs(d.noIntakeSeconds)} s; it starts to rest after ${secs(d.triggerSeconds)} s without food if it has at least ${num(r.entryMinEnergy, 0)} energy.`);
       if (d.drySeconds > 0.05) lines.push(`Too dry for ${secs(d.drySeconds)} s; it starts to rest after ${secs(d.dryTriggerSeconds)} s.`);

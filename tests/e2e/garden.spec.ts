@@ -29,6 +29,34 @@ test('keyboard: Space runs and pauses, Escape returns to Look', async ({ page })
   await expect(page.getByTestId('action-look')).toHaveAttribute('aria-pressed', 'true');
 });
 
+// D-0029: Space activates a control reached with the keyboard (Tab), but after a mouse press leaves focus
+// on a dish button Space is still pause/run: it never presses that button again, cycles the speed, or
+// steps the dish when the paused bar shows Step where the speed control was.
+test('keyboard: Space after a mouse click is pause/run; Space on a keyboard-focused control activates it', async ({ page }) => {
+  await startGarden(page);
+  await page.getByTestId('run-toggle').click(); // run, focus stays on the button
+  await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Pause');
+  await changeSpeedTo2x(page); // a mouse click leaves focus on a speed button
+  await page.keyboard.press('Space');
+  await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run'); // paused
+  const t = await simSeconds(page);
+  await page.waitForTimeout(1200);
+  expect(await simSeconds(page)).toBe(t); // not stepped either
+  // Had Space pressed the focused speed button instead, the dish would still be running (at 2× or 4×).
+  await page.keyboard.press('Space'); // runs again (focus may now sit on Step), at 1× like the Run button
+  await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Pause');
+  await page.keyboard.press('Space');
+  await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
+
+  // Keyboard navigation: Tab to Feed, Space activates it and does not run the dish.
+  await page.getByTestId('action-addlife').focus();
+  await page.keyboard.press('Tab');
+  await expect(page.getByTestId('action-feed')).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(page.getByTestId('action-feed')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
+});
+
 /** Change speed with whichever control this layout shows (phone: one cycling button; wider: 1×/2×/4×). */
 async function changeSpeedTo2x(page: Page): Promise<void> {
   const cycle = page.getByRole('button', { name: /^Speed 1×/ });

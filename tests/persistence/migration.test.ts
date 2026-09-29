@@ -31,7 +31,8 @@ async function resave(text: string, edit: (s: { entities: { columns: Record<stri
 
 describe('save migration', () => {
   it('a schema 1 save loads through the import path and continues identically', async () => {
-    expect(SCHEMA_VERSION).toBe(2);
+    // Schema 3 (P2.8) added history records only; this test still exercises the schema 1 column path.
+    expect(SCHEMA_VERSION).toBe(3);
     const w = realizeRecipe(registry(), 'FIRST_DISH_V1');
     run(w, 300);
     const { text } = await buildSaveFile(w, { name: 'Old dish', savedAt: '2026-09-27T00:00:00Z', recipeId: 'FIRST_DISH_V1' });
@@ -41,9 +42,15 @@ describe('save migration', () => {
     expect(file.schemaVersion).toBe(SCHEMA_VERSION);
     expect(world.schemaVersion).toBe(SCHEMA_VERSION);
     expect(stateHash(world)).toBe(stateHash(w));
+    // SPEC §14.5: the migrated copy records where it came from; a save made today records nothing.
+    expect(world.content.provenance.migratedFrom).toEqual([1]);
+    expect(w.content.provenance.migratedFrom).toBeUndefined();
     run(w, 200);
     run(world, 200);
     expect(stateHash(world)).toBe(stateHash(w));
+    // Saved again and reloaded, the tag stays (a current save is not migrated again).
+    const again = await loadSaveFile((await buildSaveFile(world, { name: 'Old dish', savedAt: '2026-09-28T00:00:00Z', recipeId: 'FIRST_DISH_V1' })).text);
+    expect(again.world.content.provenance.migratedFrom).toEqual([1]);
   });
 
   it('migration is by copy and refuses a newer schema', () => {

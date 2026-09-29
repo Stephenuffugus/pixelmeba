@@ -34,6 +34,7 @@ import {
 import { clauseText, describeArms, durationText, formatDiff, formatMeasure, measureLabel, plural, playerStepText } from '../strings/experiments';
 import type { HistorySample } from '@sim/history';
 import { ExperimentViewport } from './ExperimentViewport';
+import { worldModesLine } from '../strings/modes';
 
 export const PREDICTION_MAX = 280;
 
@@ -211,6 +212,10 @@ function ExperimentSetup({ card, x }: { card: ExperimentCardView; x: ComparisonE
     <div class="compare-body xp-body">
       <h2 id="xp-heading">{card.title}</h2>
       <Labels card={card} />
+      {/* P2.2: mode labels wherever a world is described (UX §3.3); both copies share them. */}
+      <p class="world-modes" data-testid="experiment-world-modes">
+        Both copies: {worldModesLine(info.mutationPreset, info.founderMode, info.registry)}
+      </p>
       <p class="xp-question">{card.question}</p>
       <h3>The two copies</h3>
       <dl class="xp-arms">

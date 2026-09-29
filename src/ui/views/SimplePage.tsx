@@ -1,6 +1,7 @@
 import { IconBack } from '../icons';
 import { PauseOnDiscoveriesToggle } from '../panels/DiscoverySetting';
 import { reducedMotionFollowsDevice, route, settings, TEXT_SCALES, updateSettings } from '../state';
+import { checkpointSettingText, lastCheckpoint } from '../state';
 
 export function SimplePage({ title, body, settings: showSettings }: { title: string; body: string; settings?: boolean }) {
   const s = settings.value;
@@ -39,6 +40,15 @@ export function SimplePage({ title, body, settings: showSettings }: { title: str
                 Show gentle prompts
               </label>
               <PauseOnDiscoveriesToggle />
+              {/* P2.8 (UX §2 Settings "checkpoint ring"; SPEC §10.7): off unless the player turns it on. */}
+              <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', minHeight: '48px' }}>
+                <input type="checkbox" checked={s.checkpointRing === true} onChange={(e) => updateSettings({ checkpointRing: e.currentTarget.checked })} aria-describedby="checkpoint-ring-note" data-testid="setting-checkpoint-ring" />
+                Automatic checkpoints
+              </label>
+              <p class="setting-note ring-note" id="checkpoint-ring-note">
+                Every minute of dish time, keep an automatic copy of the dish you are playing (not the copies of a comparison), up to the last 10 across all your dishes; the oldest automatic one is replaced. Your named saves are never removed. Open them from Saved dishes: each opens as a new branch.
+                {checkpointSettingText(lastCheckpoint.value)}
+              </p>
               <label style={{ display: 'grid', gap: '0.25rem' }}>
                 Overlay opacity {Math.round(s.overlayOpacity * 100)} %
                 <input

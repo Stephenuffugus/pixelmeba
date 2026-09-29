@@ -44,6 +44,7 @@ import { MoreSheet, SaveSheet } from '../panels/MoreSheet';
 import { HistorySheet } from '../panels/HistorySheet';
 import { FamilyMarkers } from '../panels/FamilyMarkers';
 import { LineageSheet } from '../panels/LineageSheet';
+import { EvolutionSheet } from '../panels/AdvancedEvolution';
 import { WhatIfHost } from '../panels/WhatIfSheet';
 import { whatIfOpen } from '../panels/WhatIfState';
 import { LineageLegend } from '../panels/LineageLegend';
@@ -52,6 +53,7 @@ import { placeSpecimenTap } from '../panels/LineageState';
 import { IconMore } from '../icons';
 import { autosave } from '../state';
 import { dishView, handleViewKey, labGestures, LabViewToggle } from './LabView';
+import { labTray } from './LabView';
 import { LabToolbar, LabTrayHost } from './LabToolbar';
 import { OverlayLegend } from '../panels/OverlayLegend';
 import type { Speed } from '@worker/protocol';
@@ -63,6 +65,10 @@ function formatTime(tick: number): string {
   const sec = s % 60;
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
 }
+
+/** Controls that Space activates when the player reached them with the keyboard (UX §4.2; D-0029). */
+const SPACE_CONTROLS =
+  'button, [role="button"], [role="radio"], [role="tab"], [role="checkbox"], [role="switch"], a[href], summary';
 
 export function DishScreen() {
   const host = useRef<HTMLDivElement>(null);
@@ -103,6 +109,14 @@ export function DishScreen() {
     };
   }, []);
 
+  // A sheet opened from the top strip (More and what it opens) takes the Lab tray's place, as Lab's
+  // Inspect tap and the Tools tray's buttons do: on phones the tray would cover it. (P2.2: a new dish
+  // opens with the Life tray open, so More must still reach the player.)
+  const openSheet = sheet.value;
+  useEffect(() => {
+    if (openSheet !== 'none' && dishView.value === 'lab') labTray.value = null;
+  }, [openSheet]);
+
   // Autosave every 30 real seconds while this dish is open (SPEC §14.2).
   useEffect(() => {
     const t = setInterval(() => void autosave(), 30000);
@@ -110,9 +124,19 @@ export function DishScreen() {
   }, []);
 
   useEffect(() => {
+    // UX §4.2 lists both "Space pause/run" and "Enter/Space activate" (D-0029): Space activates the
+    // focused control while the player is navigating with the keyboard (Tab), as :focus-visible does;
+    // after a pointer press, Space is pause/run wherever focus was left (it must not press that button
+    // again, cycle the speed, or step the dish when the paused bar puts Step where Speed was).
+    let modality: 'pointer' | 'keyboard' = 'keyboard';
+    const pointer = () => {
+      modality = 'pointer';
+    };
     const key = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') modality = 'keyboard';
       if (whatIfOpen.value !== null) return; // What if? is a blocking modal (D-0026): no dish key acts behind it
       if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
+      if (e.key === ' ' && modality === 'keyboard' && (e.target as HTMLElement | null)?.closest(SPACE_CONTROLS)) return;
       if (handleViewKey(e)) return; // I / L / F / Esc per view (UX §4.2; P2.7)
       const r = getRenderer();
       if (e.key === ' ') {
@@ -132,8 +156,12 @@ export function DishScreen() {
         r.camera.panBy(e.key === 'ArrowLeft' ? d : e.key === 'ArrowRight' ? -d : 0, e.key === 'ArrowUp' ? d : e.key === 'ArrowDown' ? -d : 0);
       }
     };
+    window.addEventListener('pointerdown', pointer, true);
     window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
+    return () => {
+      window.removeEventListener('pointerdown', pointer, true);
+      window.removeEventListener('keydown', key);
+    };
   }, []);
 
   const running = (m?.speed ?? 0) > 0;
@@ -228,6 +256,7 @@ export function DishScreen() {
         {sheet.value === 'save' ? <SaveSheet /> : null}
         {sheet.value === 'history' ? <HistorySheet /> : null}
         {sheet.value === 'lineage' ? <LineageSheet /> : null}
+        {sheet.value === 'evolution' ? <EvolutionSheet /> : null}
         <WhatIfHost context="dish" />
       </div>
 

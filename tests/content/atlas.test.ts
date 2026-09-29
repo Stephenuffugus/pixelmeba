@@ -1,14 +1,17 @@
 /**
  * P1.4 done-when: "validator finds no missing required frames for enabled species". The atlas
  * check in tools/content-validate.ts is pure (checkAtlas); these tests feed it the committed atlas
- * and deliberately broken copies, then prove the CLI exits non-zero naming the missing frame.
+ * and deliberately broken copies, then prove the CLI exits non-zero naming the missing frame. The
+ * same holds for the enabled modules' feature marks (ARCH §10.1: prepare/rest/wake, reserve bands),
+ * and tools/art-build.ts packs them deterministically.
  */
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { checkAtlas, pngSize, requiredFrames, type AtlasSpeciesRef } from '../../tools/content-validate';
+import { buildAtlas } from '../../tools/art-build';
+import { checkAtlas, enabledMarks, FEATURE_FRAMES, featureFrameKey, pngSize, requiredFrames, type AtlasSpeciesRef } from '../../tools/content-validate';
 import { loadRegistryFs, REPO_ROOT } from '../../tools/lib/content-fs';
 
 interface Frame {
@@ -23,6 +26,7 @@ interface Atlas {
   height: number;
   exportHash: string;
   sprites: Record<string, { speciesId: string; size: number; headings: number; animations: Record<string, { frames: number; durationMs: number; reducedMotionFrame: number }> }>;
+  features: Record<string, { size: number; headings: number; frames: number; frameNames: string[] }>;
   frames: Frame[];
 }
 
@@ -38,6 +42,8 @@ const enabled: AtlasSpeciesRef[] = reg.manifest.enabledSpecies.map((id) => {
 const atlas = (): Atlas => JSON.parse(manifestText) as Atlas;
 const without = (a: Atlas, key: string): Atlas => ({ ...a, frames: a.frames.filter((f) => f.key !== key) });
 const messages = (a: unknown, opts: Parameters<typeof checkAtlas>[2] = {}) => checkAtlas(a, enabled, opts).map((i) => i.message);
+const marks = enabledMarks(reg);
+const markMessages = (a: unknown) => checkAtlas(a, enabled, { marks }).map((i) => i.message);
 
 describe('atlas completeness (P1.4)', () => {
   it('the committed atlas has every required frame for every enabled species, and its image matches', () => {
@@ -123,6 +129,91 @@ describe('atlas completeness (P1.4)', () => {
     expect(messages({ format: 'something-else' })).toEqual(['not a pixelmeba-atlas version 1 manifest (run npm run art:build)']);
   });
 
+  describe('module feature marks (ARCH §10.1)', () => {
+    it('the committed atlas carries every frame of every enabled module mark, in all four headings', () => {
+      expect(marks).toEqual([
+        { moduleId: 'E01', layer: 'starch_notch' },
+        { moduleId: 'E03', layer: 'resting_seam' },
+        { moduleId: 'E05', layer: 'reserve_pocket' },
+      ]);
+      expect(checkAtlas(atlas(), enabled, { png, marks })).toEqual([]);
+      const a = atlas();
+      for (const m of marks) {
+        expect(a.features[m.layer]!.frames).toBe(FEATURE_FRAMES[m.layer]!.frames);
+        for (let h = 0; h < 4; h++) for (let i = 0; i < a.features[m.layer]!.frames; i++) expect(a.frames.some((f) => f.key === featureFrameKey(m.layer, i, h))).toBe(true);
+      }
+      // ARCH §10.1: dormancy prepare/rest/wake, reserve four bands.
+      expect(FEATURE_FRAMES.resting_seam!.frames).toBe(3);
+      expect(FEATURE_FRAMES.reserve_pocket!.frames).toBe(4);
+    });
+
+    it('reports exactly one precise error when one mark frame is missing', () => {
+      const issues = checkAtlas(without(atlas(), 'feature/resting_seam/n/2'), enabled, { marks });
+      expect(issues).toHaveLength(1);
+      expect(issues[0]).toMatchObject({ severity: 'error', file: 'public/atlas/manifest.json', path: 'frames[feature/resting_seam/n/2]' });
+      expect(issues[0]!.message).toBe('E03 (resting_seam): missing frame "feature/resting_seam/n/2"');
+      expect(markMessages(without(atlas(), 'feature/reserve_pocket/e/0'))).toEqual(['E05 (reserve_pocket): missing frame "feature/reserve_pocket/e/0"']);
+    });
+
+    it('later-phase marks carry their ARCH §10.1 frame counts: a one-frame jacket, cache or glow mark fails when its module is enabled', () => {
+      // Every listed layer is a real content visualLayer (a typo would silently never apply).
+      const layers = new Set(Object.values(reg.modules).map((m) => m.visualLayer));
+      for (const layer of Object.keys(FEATURE_FRAMES)) expect(layers.has(layer), layer).toBe(true);
+      // ARCH §10.1 "jacket 4 levels", "cache 4 fills", "Lantern dim/glow"; UX §6.2 "jacket rim (4)", "cache icon (4 fills)".
+      expect([FEATURE_FRAMES.jacket_rim?.frames, FEATURE_FRAMES.cache_marker?.frames, FEATURE_FRAMES.glow_center?.frames]).toEqual([4, 4, 2]);
+      // A later module turned on with a one-frame mark (all four headings packed) is refused, by name.
+      const oneFrame = (layer: string): Atlas => {
+        const a = atlas();
+        const src = a.frames.find((f) => f.key === 'feature/starch_notch/e/0')!;
+        a.features[layer] = { size: 16, headings: 4, frames: 1, frameNames: ['only'] };
+        for (const h of ['e', 's', 'w', 'n']) a.frames.push({ ...src, key: `feature/${layer}/${h}/0` });
+        return a;
+      };
+      const later = (moduleId: string, layer: string) => checkAtlas(oneFrame(layer), enabled, { marks: [{ moduleId, layer }] }).map((i) => `${i.path}: ${i.message}`);
+      expect(later('E11', 'jacket_rim')).toEqual(['features.jacket_rim.frames: E11 (jacket_rim): mark has 1 frame(s), needs 4 (jacket levels 0–3)']);
+      expect(later('E17', 'cache_marker')).toEqual(['features.cache_marker.frames: E17 (cache_marker): mark has 1 frame(s), needs 4 (cache fill bands 0–3)']);
+      expect(later('E02', 'glow_center')).toEqual(['features.glow_center.frames: E02 (glow_center): mark has 1 frame(s), needs 2 (dim, glow)']);
+      // A layer the docs give no count for still needs one frame, and one is enough.
+      expect(later('E12', 'adhesion_link')).toEqual([]);
+    });
+
+    it('reports a mark missing from the table, a short frame count, and a wrong size or heading count', () => {
+      const a = atlas();
+      delete (a.features as Record<string, unknown>).starch_notch;
+      expect(markMessages(a)).toEqual(['enabled module E01 (starch_notch) has no feature mark in the atlas (run npm run art:build)']);
+      const b = atlas();
+      b.features.resting_seam!.frames = 2;
+      expect(markMessages(b)).toEqual(['E03 (resting_seam): mark has 2 frame(s), needs 3 (prepare, rest, wake)']);
+      const c = atlas();
+      c.features.reserve_pocket!.size = 32;
+      c.features.reserve_pocket!.headings = 1;
+      expect(markMessages(c)).toEqual(['E05 (reserve_pocket): mark frame size 32, expected 16', 'E05 (reserve_pocket): mark has 1 heading(s), needs 4']);
+      const d = atlas();
+      d.frames.find((f) => f.key === 'feature/starch_notch/w/0')!.w = 15;
+      expect(markMessages(d)).toEqual(['E01 (starch_notch): frame "feature/starch_notch/w/0" is 15×16, expected 16×16']);
+      // An atlas from before marks were packed fails for every enabled module.
+      const old = atlas() as Partial<Atlas>;
+      delete old.features;
+      expect(markMessages(old)).toHaveLength(3);
+      // Without marks to check (species-only callers), the sprite check is unchanged.
+      expect(messages(old)).toEqual([]);
+    });
+
+    it('art:build is deterministic and the committed atlas is its output (art:build --check)', () => {
+      const a = buildAtlas();
+      const b = buildAtlas();
+      expect(a.errors).toEqual([]);
+      expect(Buffer.compare(a.png, b.png)).toBe(0);
+      expect(JSON.stringify(a.manifest)).toBe(JSON.stringify(b.manifest));
+      expect(Buffer.compare(a.png, Buffer.from(png))).toBe(0);
+      expect(JSON.stringify(a.manifest, null, 1) + '\n').toBe(manifestText);
+      // Sprite frames come first; the 32 mark frames follow them.
+      const firstMark = a.manifest.frames.findIndex((f) => 'layer' in f);
+      expect(a.manifest.frames.slice(firstMark).every((f) => 'layer' in f)).toBe(true);
+      expect(a.manifest.frames.length - firstMark).toBe(32);
+    });
+  });
+
   describe('CLI', () => {
     const dir = mkdtempSync(join(tmpdir(), 'pixelmeba-atlas-'));
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -137,6 +228,17 @@ describe('atlas completeness (P1.4)', () => {
       expect(res.stderr).toContain('missing frame "p01_amoeba/death/e/3"');
       // Only the atlas error is asserted: other content errors (e.g. a stale contentHash mid-edit) are
       // reported by their own checks and must not make this test fail for an unrelated reason.
+      expect(res.stderr).toMatch(/content: \d+ error\(s\)/);
+    });
+
+    it('npm run content:validate exits non-zero and names the mark frame when one is missing', () => {
+      const manifestPath = join(dir, 'manifest.json');
+      writeFileSync(manifestPath, JSON.stringify(without(atlas(), 'feature/resting_seam/w/1'), null, 1) + '\n');
+      copyFileSync(join(ATLAS_DIR, 'organisms.png'), join(dir, 'organisms.png'));
+      const tsx = join(REPO_ROOT, 'node_modules', '.bin', 'tsx');
+      const res = spawnSync(tsx, [join(REPO_ROOT, 'tools', 'content-validate.ts'), '--atlas', manifestPath], { cwd: REPO_ROOT, encoding: 'utf8' });
+      expect(res.status).toBe(1);
+      expect(res.stderr).toContain('→ frames[feature/resting_seam/w/1]: E03 (resting_seam): missing frame "feature/resting_seam/w/1"');
       expect(res.stderr).toMatch(/content: \d+ error\(s\)/);
     });
   });

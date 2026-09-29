@@ -12,7 +12,8 @@ import { brushCells, strokeSampleCount, transportOpen } from './grid';
 import { recordInput } from './ledger';
 import { recordBirth } from './lineage';
 import { canOccupy, initialDecisionTimer } from './movement';
-import { founderGenome, ModuleSetError } from './founders';
+import { founderDraw, ModuleSetError } from './founders';
+import { isMutationPreset } from './mutation';
 import { validateModuleSet } from './modules';
 import { markField, updateDerived } from './transport';
 import { rebuildIndex } from './spatial';
@@ -41,6 +42,8 @@ export interface CommandResult {
   readonly skipped?: HabitatSkips;
   /** Habitat edits (P2.7): material a new stone or wall moved into neighboring open cells (totals unchanged). */
   readonly moved?: HabitatMoved;
+  /** Evolution-setting change (P2.2): the setting it replaced, so the log alone says what changed and when. */
+  readonly presetFrom?: WorldSettings['mutationPreset'];
 }
 
 export interface Command {
@@ -91,6 +94,7 @@ export function applyNow(world: World, commandId: string, payload: CommandPayloa
 
 function applyCommand(world: World, cmd: Command): void {
   const p = cmd.payload;
+  const interventionsBefore = world.history.pendingInterventions;
   let result: CommandResult;
   switch (p.kind) {
     case 'inoculate':
@@ -104,8 +108,10 @@ function applyCommand(world: World, cmd: Command): void {
       result = { accepted: 1, rejected: 0 };
       break;
     case 'setMutationPreset':
-      world.settings.mutationPreset = p.preset;
-      result = { accepted: 1, rejected: 0 };
+      result = setMutationPreset(world, p.preset);
+      // P2.2: a choice that changed nothing (the setting already in effect, or an unknown one) is no
+      // intervention, so the History charts never mark a second where nothing changed.
+      if (result.accepted === 0) world.history.pendingInterventions--;
       break;
     case 'lineage':
       result = applyLineage(world, p, introduceOrganism);
@@ -124,12 +130,30 @@ function applyCommand(world: World, cmd: Command): void {
   world.commands.log.push(cmd);
   if (world.commands.log.length > 10000) world.commands.log.splice(0, world.commands.log.length - 10000);
   world.history.pendingInterventions++;
+  // P2.8: a command that placed or changed nothing (accepted 0) is no change to the dish, so History and
+  // the regional trait charts never mark it (like D-0028: it is no undo point either). The cases above
+  // that already took their count back are left as they are.
+  if (result.accepted === 0 && world.history.pendingInterventions > interventionsBefore) world.history.pendingInterventions--;
   emit(world.events, world.counters, {
     tick: world.tick,
     type: 'command',
     amount: result.accepted,
     detail: { kind: p.kind, accepted: result.accepted, rejected: result.rejected, seq: cmd.seq },
   });
+}
+
+/**
+ * Change the evolution setting (SPEC §8.6, P2.2): a timestamped intervention. The command log records
+ * the tick it took effect (targetTick) and the setting it replaced (presetFrom); it is undoable like any
+ * other command. Rates are per daughter at proposal time, so nothing already drawn is redrawn. An
+ * unknown setting is refused; choosing the current one changes nothing (accepted 0: no undo point).
+ */
+function setMutationPreset(world: World, preset: unknown): CommandResult {
+  if (!isMutationPreset(preset)) return { accepted: 0, rejected: 1, note: 'unknown evolution setting' };
+  const from = world.settings.mutationPreset;
+  if (preset === from) return { accepted: 0, rejected: 0, note: 'unchanged' };
+  world.settings.mutationPreset = preset;
+  return { accepted: 1, rejected: 0, presetFrom: from };
 }
 
 /** Cells covered by a stroke: disks at points sampled ≤ 1 cell apart, each cell once, row-major. */
@@ -288,7 +312,9 @@ export function introduceOrganism(
   const sp = world.species[spIdx]!;
   const b0 = sp.def.b0;
   const birthId = world.counters.nextBirthId++;
-  const genome = opts.genome ?? founderGenome(world, spIdx, birthId, opts.modules ?? []);
+  // A Diverse founder's seeded module is present at creation (lineage origin 2, SPEC §8.6; P2.2).
+  const draw = opts.genome === undefined ? founderDraw(world, spIdx, birthId, opts.modules ?? []) : null;
+  const genome = opts.genome ?? draw!.genome;
   const x = cell % GRID_W;
   const y = Math.floor(cell / GRID_W);
   const jx = opts.exactCenter ? 0.5 : 0.2 + 0.6 * detFloat(world.seed, STREAMS.jitter, birthId, 0);
@@ -323,7 +349,7 @@ export function introduceOrganism(
     generation: 0,
     species: spIdx,
     entityId: c.entityId[slot],
-    origin: opts.origin ?? 1,
+    origin: draw?.seededModule ? 2 : (opts.origin ?? 1),
   });
   emit(world.events, world.counters, { tick: world.tick, type: 'introduce', species: spIdx, birthId, cell, detail: { source } });
   milestone(world.events, 'firstIntroduce', world.tick);

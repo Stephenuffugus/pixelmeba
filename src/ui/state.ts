@@ -7,11 +7,18 @@ import type { CommandPayload, CommandResult } from '@sim/commands';
 import { SimClient } from '@worker/client';
 import type { CompareSpeed, ComparisonState } from '@worker/comparison';
 import type { DishInfo, FamilyAnswer, InspectorPayload, OverlayId, Selection, SnapshotMsg, Speed } from '@worker/protocol';
+import type { NewDishPreview, RecipeOverrides } from '@worker/protocol';
+import type { EvolutionState } from '@sim/mutation';
+import { presetChangedToast, presetChangeText, type PresetId } from './strings/modes';
 import type { DishRenderer } from '@render/renderer';
 import { clearFeed, pushFeed } from './feed';
+import { feed } from './feed';
 import type { ExperimentCardView } from '@sim/experiments';
 import type { ExperimentNotice, WorkerErrorNotice } from '@worker/client';
 import { addJournalEntry, journalUnseen, updateJournalEntry, type JournalMeasure } from './journal';
+import { JOURNAL_MAX, mergeJournal, setJournalSink, type JournalEntry } from './journal';
+import { journalRemovedText } from './journal';
+import type { CheckpointNotice } from '@worker/client';
 import { clauseText, experimentEndedText, formatDiff, formatMeasure, measureLabel, stampToastText, waitingStepsText } from './strings/experiments';
 
 export type Route =
@@ -55,6 +62,8 @@ export interface Settings {
   readonly textScale: number;
   /** Pause the dish when a discovery card opens (UX §2 Settings "pause on discoveries"; P2.3). Off unless chosen. */
   readonly pauseOnDiscoveries?: boolean;
+  /** Automatic checkpoint ring (UX §2 Settings "checkpoint ring"; SPEC §10.7; P2.8). Off unless chosen. */
+  readonly checkpointRing?: boolean;
 }
 
 /** Text sizes offered in Settings (UX §4.1 acceptance runs at 100 % and 200 %). */
@@ -67,7 +76,9 @@ export const selection = signal<Selection | null>(null);
 export const inspector = signal<InspectorPayload | null>(null);
 export const candidates = signal<{ x: number; y: number; items: { birthId: number; species: number }[] } | null>(null);
 export const tool = signal<Tool>({ kind: 'look' });
-export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | 'save' | 'history' | 'lineage'>('none');
+export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | 'save' | 'history' | 'lineage' | 'evolution'>('none');
+/** P2.2: the open dish's evolution setting, rates and recorded changes (from its snapshots). */
+export const evolution = signal<EvolutionState | null>(null);
 export const overlay = signal<OverlayId | null>(null);
 export const overlayMax = signal<number>(0);
 export const toast = signal<string | null>(null);
@@ -136,6 +147,7 @@ export function updateSettings(patch: Partial<Settings>): void {
     /* storage unavailable: settings last for this session only */
   }
   applyDisplaySettings();
+  if (patch.checkpointRing !== undefined) getClient().setCheckpointRing(patch.checkpointRing === true);
 }
 
 /** Follow the device's reduced-motion preference until the player sets it in Settings. */
@@ -183,6 +195,10 @@ export function getClient(): SimClient {
     client.onError((e) => showToast(errorToastText(e)));
     client.onCompare(onCompareState);
     client.onExperiment(onExperimentNotice);
+    // P2.8: automatic checkpoints follow the Settings choice; journal entries of the open dish are kept with it.
+    client.onCheckpoint(onCheckpointNotice);
+    client.setCheckpointRing(settings.value.checkpointRing === true);
+    setJournalSink(keepJournalWithDish);
   }
   return client;
 }
@@ -213,6 +229,13 @@ function onSnapshot(s: SnapshotMsg): void {
   lastSnapshot = s;
   renderer?.applySnapshot(s);
   if (dishInfo.value) pushFeed(s.events, dishInfo.value.speciesNames);
+  if (s.evolution) {
+    evolution.value = s.evolution;
+    syncEvolutionFeed(s.evolution);
+    // The dish's description follows the setting in effect (What if? Details, More), not the one it opened with.
+    const info = dishInfo.value;
+    if (info && info.mutationPreset !== s.evolution.preset) dishInfo.value = { ...info, mutationPreset: s.evolution.preset };
+  }
   batch(() => {
     meta.value = {
       tick: s.tick,
@@ -228,6 +251,44 @@ function onSnapshot(s: SnapshotMsg): void {
   });
 }
 
+/**
+ * History's "What happened" lists every recorded evolution-setting change (P2.2): one line per
+ * accepted command still in the dish's command log, at the tick it took effect (newest first, like the
+ * feed). Undo removes the command from the log, so its line goes too; a reopened dish lists the changes
+ * it recorded. The event feed drops its oldest lines as new events arrive; a recorded change is put
+ * back at its time, so it stays listed as long as the dish records it.
+ */
+function syncEvolutionFeed(e: EvolutionState): void {
+  const want = e.changes.map((c) => `evolution:${c.commandId}`);
+  const have = feed.value.filter((l) => l.key.startsWith('evolution:')).map((l) => l.key);
+  if (have.length === want.length && want.every((k) => have.includes(k))) return;
+  let lines = feed.value.filter((l) => !l.key.startsWith('evolution:'));
+  for (const c of e.changes) {
+    const line = { key: `evolution:${c.commandId}`, tick: c.tick, text: presetChangeText(c), species: -1, count: 1 };
+    // Oldest change first: each later one goes above the earlier ones and above older events.
+    const at = lines.findIndex((l) => l.tick < c.tick || (l.tick === c.tick && l.key.startsWith('evolution:')));
+    lines = at < 0 ? [...lines, line] : [...lines.slice(0, at), line, ...lines.slice(at)];
+  }
+  feed.value = lines;
+}
+
+/** New Dish (P2.2): exactly what a dish with these choices would start with (the worker builds and discards it). */
+export async function newDishPreview(recipeId: string, seed: number, overrides: RecipeOverrides): Promise<NewDishPreview> {
+  return getClient().newDishPreview(recipeId, seed, overrides);
+}
+
+/** Change the open dish's evolution setting during play (P2.2): one undoable, timestamped command. */
+export async function setEvolutionPreset(preset: PresetId): Promise<boolean> {
+  const info = dishInfo.value;
+  if (!info) return false;
+  const res = await getClient().command(info.dishId, `ui-${++commandCounter}`, { kind: 'setMutationPreset', preset }, true);
+  if (res && res.accepted > 0) {
+    showToast(presetChangedToast(preset), 3500);
+    return true;
+  }
+  return false;
+}
+
 export function showToast(text: string, ms = 2600): void {
   toast.value = text;
   if (toastTimer) clearTimeout(toastTimer);
@@ -240,6 +301,7 @@ function newDishId(): string {
 
 function enterDish(info: DishInfo, promptText: string | null): void {
   clearFeed();
+  evolution.value = null;
   batch(() => {
     dishInfo.value = info;
     selection.value = null;
@@ -255,6 +317,8 @@ function enterDish(info: DishInfo, promptText: string | null): void {
   });
   renderer?.setSpecies(info.speciesIds, info.speciesAssets);
   lastAutosaveTick = info.tick;
+  // P2.8: a dish opened from a save or a file brings its journal entries into this device's Notebook.
+  void syncDishJournal(info.dishId);
 }
 
 let lastAutosaveTick = -1;
@@ -296,10 +360,19 @@ export async function loadSlot(slotId: string): Promise<void> {
   try {
     const c = getClient();
     const old = dishInfo.value;
-    const { info, usedPredecessor } = await c.loadSlot(slotId, newDishId());
+    const { info, usedPredecessor, branch } = await c.loadSlot(slotId, newDishId());
     if (old && old.dishId !== info.dishId) c.dispose(old.dishId);
     enterDish(info, null);
-    showToast(usedPredecessor ? 'The latest save was damaged, so the previous copy was opened.' : `Opened "${info.name}" — paused where you left it.`, 3500);
+    // P2.8: an automatic checkpoint is not where the player left a dish: it opens as a new branch.
+    if (branch) {
+      // P2.8 fix round 2: Continue follows the branch from the moment it opens, as the confirm and the
+      // toast say (autosave() alone would skip the unchanged tick until the branch runs).
+      const followed = await c.autosave(info.dishId).then(
+        () => true,
+        () => false,
+      );
+      showToast(checkpointOpenedText(branch, info.name, followed), 6000);
+    } else showToast(usedPredecessor ? 'The latest save was damaged, so the previous copy was opened.' : `Opened "${info.name}" — paused where you left it.`, 3500);
   } catch (e) {
     showToast(`That save could not be opened: ${(e as Error).message}`, 5000);
   } finally {
@@ -373,7 +446,7 @@ export async function startCustom(opts: {
   name: string;
   seed: number;
   mutationPreset: 'standard' | 'accelerated' | 'fixed';
-  founderMode: 'identical' | 'varied';
+  founderMode: 'identical' | 'varied' | 'diverse';
   empty: boolean;
 }): Promise<void> {
   busy.value = true;
@@ -950,7 +1023,7 @@ function onExperimentNotice(m: ExperimentNotice): void {
   const gate = card
     ? card.gate.map((c) => ({ text: clauseText(card, c), value: formatMeasure(c.measure, s.stamp.values[`${c.arm}:${c.measure}`] ?? Number.NaN) }))
     : Object.keys(s.stamp.values).map((k) => ({ text: k, value: String(s.stamp.values[k]) }));
-  const { entry, stored } = addJournalEntry({
+  const { entry, stored, removed, problem } = addJournalEntry({
     kind: 'experimentStamp',
     experimentId: s.stamp.experimentId,
     title: s.title,
@@ -968,10 +1041,20 @@ function onExperimentNotice(m: ExperimentNotice): void {
     gate,
     measures: stampMeasures(card, s.measured),
     prediction,
+    // P2.8: the stamp belongs to the dish it was measured on, and is kept with that dish's saves.
+    ...(dishInfo.value?.dishId === m.dishId ? { worldId: dishInfo.value.worldId } : {}),
   });
+  // P2.8 fix round 2: a stamp the Journal cannot keep is refused with its reason (never listed, then lost).
+  if (problem) {
+    showToast(`Journal stamp: ${s.stamp.journalStamp}. It could not be added to your Journal (${problem}).`, 6000);
+    return;
+  }
   journalUnseen.value += 1;
   if (cmp?.experiment?.cardId === s.stamp.experimentId) experimentStampEntry.value = entry.id;
-  showToast(stampToastText(s.stamp.journalStamp, s.measured.B !== null, stored), 4500);
+  showToast(
+    `${stampToastText(s.stamp.journalStamp, s.measured.B !== null, stored)}${removed ? ` ${journalRemovedText(removed)}` : ''}`,
+    removed ? 9000 : 4500,
+  );
 }
 
 /**
@@ -1061,4 +1144,99 @@ export async function runExperimentPair(): Promise<void> {
 export async function closeExperimentRun(to: 'dish' | 'journal'): Promise<void> {
   await closeCompare();
   if (to === 'journal') route.value = { name: 'notebook', tab: 'journal' };
+}
+
+// ---------------------------------------------------------------------------------------------
+// P2.8: automatic checkpoints and the dish's journal. The ring itself lives in the worker (same
+// atomic store as the slots); Settings only turns it on or off. Journal entries of the open dish are
+// sent to the worker so its saves carry them (SPEC §14.1; D-0027).
+
+/** The latest automatic checkpoint outcome of this session (Settings shows it), or null. */
+export const lastCheckpoint = signal<CheckpointNotice | null>(null);
+let lastCheckpointProblem: string | null = null;
+
+/** Dish time as the dish clock shows it (m:ss; h:mm:ss past an hour). */
+export function dishClock(tick: number): string {
+  const s = Math.max(0, Math.floor(tick / 10));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+}
+
+/**
+ * Settings' line about this session's latest automatic checkpoint (empty before the first). After a
+ * refused or failed one it says what is still kept, and never claims earlier ones when there are none
+ * (fix round 2).
+ */
+export function checkpointSettingText(n: CheckpointNotice | null): string {
+  if (!n) return '';
+  if (n.ok) return ` Latest: at ${dishClock(n.tick)} dish time (${n.kept} kept).`;
+  const why = n.reason === 'storage-full' ? 'storage is nearly full' : n.reason === 'busy' ? 'the previous one was still being written' : 'the write failed';
+  const kept = n.kept === 0 ? 'nothing was removed' : n.kept === 1 ? 'the earlier one is kept' : `the ${n.kept} earlier ones are kept`;
+  return ` The latest one was not written (${why}); ${kept}.`;
+}
+
+/** Quiet on success (every simulated minute); a refused or failed checkpoint says so once per reason. */
+export function onCheckpointNotice(n: CheckpointNotice): void {
+  lastCheckpoint.value = n;
+  if (n.ok) {
+    lastCheckpointProblem = null;
+    return;
+  }
+  const reason = n.reason ?? 'write-failed';
+  if (reason === lastCheckpointProblem) return;
+  lastCheckpointProblem = reason;
+  const kept = n.kept === 1 ? 'Your earlier checkpoint is kept' : n.kept > 1 ? `Your ${n.kept} earlier checkpoints are kept` : 'Nothing was removed';
+  showToast(
+    reason === 'storage-full'
+      ? `No automatic checkpoint at ${dishClock(n.tick)}: storage is nearly full. ${kept}, and your saves are untouched.`
+      : reason === 'busy'
+        ? `No automatic checkpoint at ${dishClock(n.tick)}: the previous one was still being written. ${kept}.`
+        : `The automatic checkpoint at ${dishClock(n.tick)} could not be written. ${kept}, and your saves are untouched.`,
+    6000,
+  );
+}
+
+/**
+ * Keep a journal entry with the open dish when it belongs to it (same world id): the worker stores it
+ * with the dish and Continue is updated so the entry is in the dish's latest save. Best effort: the
+ * device Notebook already has it.
+ */
+export function keepJournalWithDish(entry: JournalEntry): void {
+  const info = dishInfo.value;
+  if (!info || !entry.worldId || entry.worldId !== info.worldId) return;
+  const c = getClient();
+  void c
+    .journalPut(info.dishId, entry)
+    .then((kept) => (kept ? c.autosave(info.dishId) : null))
+    .catch(() => undefined);
+}
+
+/** What opening an automatic checkpoint did, in words (Saved dishes → Open). */
+export function checkpointOpenedText(branch: { readonly fromName: string; readonly tick: number }, name: string, followed = true): string {
+  return `Opened the automatic checkpoint of "${branch.fromName}" at ${dishClock(branch.tick)} as a new branch, "${name}", paused. ${
+    followed ? 'Continue now follows this branch.' : 'Continue could not be updated, so it still opens the dish it held before.'
+  }`;
+}
+
+/**
+ * Merge the journal entries kept with a dish into this device's Notebook (after opening it). Merging
+ * never removes an entry already on this device; entries that do not fit stay with the dish, and the
+ * player is told.
+ */
+export async function syncDishJournal(dishId: string): Promise<void> {
+  let entries: readonly unknown[];
+  try {
+    entries = await getClient().journalGet(dishId);
+  } catch {
+    return; // The dish is gone already; nothing to merge.
+  }
+  if (entries.length === 0) return;
+  const { notListed } = mergeJournal(entries);
+  if (notListed > 0)
+    showToast(
+      `Your Notebook is full (${JOURNAL_MAX} entries), so ${notListed === 1 ? 'one Journal entry' : `${notListed} Journal entries`} of this dish ${notListed === 1 ? 'is' : 'are'} not listed. ${notListed === 1 ? 'It stays' : 'They stay'} with the dish's save; nothing on this device was removed.`,
+      7000,
+    );
 }

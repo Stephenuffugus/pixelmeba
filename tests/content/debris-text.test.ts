@@ -1,11 +1,13 @@
 /**
  * Wave B fix 2 (fix1-experiments-verify MINOR): the Cleaning crew card, its recipe and the Debris
- * material used to send players to the resource history "to see the debris total", but History
- * charts only what its samples record (src/sim/history.ts HistorySample), and no sample records
- * debris. The texts now point at something that shows debris — the Debris overlay in the Lab's
- * Observe tray — and still send players to the history for what it does chart (the card's player
- * step, CT §10 row 103 "resource history opened").
+ * material used to send players to the resource history "to see the debris total", but no History
+ * sample recorded debris then. The texts pointed at the Debris overlay in the Lab's Observe tray.
+ * P2.8 (D-0028 follow-up): History now records the dish's debris total on every sample
+ * (HistorySample.debrisTotal) and charts it ("Debris (total)"), so the texts point at History's Debris
+ * chart as well — and still at the overlay, and still at the history for the Recyclers' numbers (the
+ * card's player step, CT §10 row 103 "resource history opened").
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { realizeRecipe } from '../../src/sim/recipes';
 import { run } from '../../src/sim/tick';
@@ -35,14 +37,19 @@ function sentences(): { where: string; text: string }[] {
 }
 
 describe('debris texts point at what really shows debris (wave B fix 2)', () => {
-  it('History records no debris, so no sentence sends players to the history for debris', () => {
+  it('History records the debris total, and every sentence that sends players to History for debris names its Debris chart', () => {
     const w = realizeRecipe(reg, 'CLEANING_CREW_V1', { worldId: 'debris-text', seed: 103 });
     run(w, 30);
     const sample = w.history.seconds[w.history.seconds.length - 1]!;
-    expect(Object.keys(sample).filter((k) => /detrit|debris/i.test(k))).toEqual([]);
-    const history = sentences().filter((s) => /history/i.test(s.text));
-    expect(history.length).toBeGreaterThan(0);
-    for (const s of history) expect(s.text, s.where).not.toMatch(/debris|detritus/i);
+    expect(Object.keys(sample).filter((k) => /detrit|debris/i.test(k))).toEqual(['debrisTotal']);
+    expect(sample.debrisTotal).toBeGreaterThan(0);
+    const history = sentences().filter((s) => /history/i.test(s.text) && /debris|detritus/i.test(s.text));
+    expect(history.map((s) => s.where).sort()).toEqual(['CLEANING_CREW_V1.expectedObservationsText', 'DEBRIS.guide.example', 'EXP_103.intervention']);
+    // Named as History shows it (the chart title "Debris (total)"; fix round 1: "resource history" alone was not a label the player can find).
+    for (const s of history) expect(s.text, s.where).toMatch(/“Debris \(total\)” chart/);
+    // …and those are the labels the player sees: the More button and the chart's title.
+    expect(readFileSync('src/ui/panels/MoreSheet.tsx', 'utf8')).toMatch(/\n\s*History and what happened\n/);
+    expect(readFileSync('src/ui/panels/HistorySheet.tsx', 'utf8')).toContain('title="Debris (total)"');
   });
 
   it('the Cleaning crew card, its recipe and the Debris material name the Debris overlay, which the dish offers', () => {
@@ -52,7 +59,9 @@ describe('debris texts point at what really shows debris (wave B fix 2)', () => 
     expect(reg.materials.DEBRIS!.guide.example).toContain(where);
     // The card still asks for the resource history: its stamp needs that step (CT §10 row 103).
     expect(reg.experiments.EXP_103!.completion.playerSteps).toEqual(['openResourceHistory']);
-    expect(reg.experiments.EXP_103!.intervention).toMatch(/open the resource history to see how the Recyclers’ numbers and living biomass change/);
+    expect(reg.experiments.EXP_103!.intervention).toMatch(
+      /open the resource history \(More → History and what happened\) to see how the Recyclers’ numbers and living biomass change/,
+    );
     // The route exists: the Lab toggle, its Observe tray, and a Debris overlay for a field the dish has.
     expect(LAB_TEXT.toggle).toBe('Lab');
     expect(LAB_CATEGORIES.find((c) => c.id === 'observe')?.label).toBe('Observe');

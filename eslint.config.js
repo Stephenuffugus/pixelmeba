@@ -95,7 +95,17 @@ export default tseslint.config(
     rules: {
       'no-restricted-imports': [
         'error',
-        { patterns: [{ group: ['preact', 'preact/*', '@preact/*', '@ui/*'], message: 'The renderer does not depend on UI components.' }] },
+        {
+          patterns: [
+            { group: ['preact', 'preact/*', '@preact/*', '@ui/*'], message: 'The renderer does not depend on UI components.' },
+            { group: ['@art/*', '**/art/src/*', '**/art/src/**'], message: 'ARCH §3: the renderer reads the atlas manifest, never art/src (tools/art-build.ts packs the frames).' },
+          ],
+        },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        { selector: 'ImportExpression[source.value=/^@art\\/|art\\/src\\//]', message: 'ARCH §3: the renderer reads the atlas manifest, never art/src (no dynamic import either).' },
+        { selector: 'ImportExpression[source.type="TemplateLiteral"]', message: 'ARCH §3: no computed dynamic import in the renderer (it could reach art/src).' },
       ],
     },
   },

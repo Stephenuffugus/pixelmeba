@@ -6,6 +6,7 @@
  */
 import { gunzipText, gzipText } from './compress';
 import type { SaveMetaVariant } from './saveFile';
+import type { SaveMetaEvolution, SaveMetaRegistry } from './saveFile';
 
 export const NAMED_SLOTS = 10;
 export const AUTOSAVE_SLOT = 'autosave';
@@ -26,6 +27,20 @@ export interface SlotInfo {
    * is re-validated when read (the file's own world record stays authoritative).
    */
   readonly variant?: SaveMetaVariant;
+  /**
+   * P2.8: an automatic checkpoint of the checkpoint ring (src/persistence/checkpoints.ts), never a named
+   * slot or the autosave. Absent on every other slot.
+   */
+  readonly automatic?: true;
+  /** P2.8: the world id of the dish a checkpoint holds (automatic checkpoints only). */
+  readonly worldId?: string;
+  /**
+   * P2.2: copies of the save file's meta.evolution and meta.registry, so Saved dishes and Continue can
+   * state the world's mode labels (UX §3.3) without loading it. Optional (indexes written before lack
+   * them) and re-validated when read; the file's own world record stays authoritative.
+   */
+  readonly evolution?: SaveMetaEvolution;
+  readonly registry?: SaveMetaRegistry;
 }
 
 export interface StoredRecord {
@@ -40,6 +55,16 @@ export interface StorageBackend {
   listSlots(): Promise<SlotInfo[]>;
   getRecord(recordId: string): Promise<StoredRecord | null>;
   commit(ops: { putRecords: StoredRecord[]; putSlots: SlotInfo[]; deleteRecords: string[]; deleteSlots: string[] }): Promise<void>;
+  /** Bytes used and the limit, when the backend knows them (P2.8: checked before an automatic checkpoint). */
+  usage?(): Promise<{ readonly bytes: number; readonly quota: number | null }>;
+}
+
+/** Slot ids of automatic checkpoints start with this (src/persistence/checkpoints.ts). */
+export const CHECKPOINT_SLOT_PREFIX = 'checkpoint-';
+
+/** Whether a slot id belongs to the automatic checkpoint ring (never a named slot or the autosave). */
+export function isCheckpointSlot(slotId: string): boolean {
+  return slotId.startsWith(CHECKPOINT_SLOT_PREFIX);
 }
 
 export interface SaveRequest {
@@ -52,19 +77,24 @@ export interface SaveRequest {
   readonly recipeId: string | null;
   /** The file's meta.variant, when it has one (copied into the slot index). */
   readonly variant?: SaveMetaVariant;
+  /** P2.2: the file's meta.evolution and meta.registry (copied into the slot index). */
+  readonly evolution?: SaveMetaEvolution;
+  readonly registry?: SaveMetaRegistry;
 }
 
 let recordCounter = 0;
 
 export class SaveStore {
-  constructor(private readonly backend: StorageBackend) {}
+  /** The backend is shared with the checkpoint ring, which writes through the same atomic commit (P2.8). */
+  constructor(readonly backend: StorageBackend) {}
 
   static slotIds(): string[] {
     return Array.from({ length: NAMED_SLOTS }, (_, i) => `slot${i + 1}`);
   }
 
+  /** Named slots and the autosave (automatic checkpoints are listed by the ring, P2.8). */
   async list(): Promise<SlotInfo[]> {
-    return (await this.backend.listSlots()).sort((a, b) => (a.slotId < b.slotId ? -1 : a.slotId > b.slotId ? 1 : 0));
+    return (await this.backend.listSlots()).filter((s) => !isCheckpointSlot(s.slotId)).sort((a, b) => (a.slotId < b.slotId ? -1 : a.slotId > b.slotId ? 1 : 0));
   }
 
   async save(req: SaveRequest): Promise<SlotInfo> {
@@ -83,6 +113,8 @@ export class SaveStore {
       bytes: data.byteLength,
       checksum: req.checksum,
       ...(req.variant ? { variant: req.variant } : {}),
+      ...(req.evolution ? { evolution: req.evolution } : {}),
+      ...(req.registry ? { registry: req.registry } : {}),
     };
     // The record older than the retained predecessor is removed in the same transaction.
     const deleteRecords = old?.previous ? [old.previous] : [];
@@ -124,11 +156,31 @@ export class SaveStore {
   }
 }
 
-/** In-memory backend (tests; also a fallback when IndexedDB is unavailable). Can inject failures. */
+/** An error shaped like the browser's QuotaExceededError (the store refused a write for lack of space). */
+export class StorageFullError extends Error {
+  override readonly name = 'QuotaExceededError';
+}
+
+/** True when a backend error means the store is out of space (IndexedDB QuotaExceededError or StorageFullError). */
+export function isStorageFull(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { name?: unknown }).name === 'QuotaExceededError';
+}
+
+/**
+ * In-memory backend (tests; also a fallback when IndexedDB is unavailable). Can inject failures, and
+ * with `quotaBytes` set it refuses (atomically) any commit that would hold more record bytes (P2.8).
+ */
 export class MemoryBackend implements StorageBackend {
   readonly slots: Record<string, SlotInfo> = {};
   readonly records: Record<string, StoredRecord> = {};
   failNextCommit = false;
+  quotaBytes: number | null = null;
+
+  usage(): Promise<{ readonly bytes: number; readonly quota: number | null }> {
+    let bytes = 0;
+    for (const id of Object.keys(this.records).sort()) bytes += this.records[id]!.data.byteLength;
+    return Promise.resolve({ bytes, quota: this.quotaBytes });
+  }
 
   getSlot(slotId: string): Promise<SlotInfo | null> {
     return Promise.resolve(this.slots[slotId] ?? null);
@@ -143,6 +195,14 @@ export class MemoryBackend implements StorageBackend {
     if (this.failNextCommit) {
       this.failNextCommit = false;
       return Promise.reject(new Error('simulated write failure'));
+    }
+    if (this.quotaBytes !== null) {
+      const kept: Record<string, number> = {};
+      for (const [id, r] of Object.entries(this.records)) kept[id] = r.data.byteLength;
+      for (const id of ops.deleteRecords) delete kept[id];
+      for (const r of ops.putRecords) kept[r.recordId] = r.data.byteLength;
+      const total = Object.values(kept).reduce((a, b) => a + b, 0);
+      if (total > this.quotaBytes) return Promise.reject(new StorageFullError('simulated full store'));
     }
     for (const r of ops.putRecords) this.records[r.recordId] = r;
     for (const s of ops.putSlots) this.slots[s.slotId] = s;

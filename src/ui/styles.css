@@ -2159,3 +2159,382 @@ html[data-text-scale='2'] .lab-cat span {
   border-color: var(--surface);
   box-shadow: inset 0 -5px 0 var(--focus);
 }
+
+/* ---------------------------------------------------------------- Evolution settings (P2.2; UX §2.3, §3.3) */
+.choice-list {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+.choice {
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  text-align: left;
+  gap: 0.15rem;
+}
+.choice-label {
+  font-weight: 600;
+}
+.choice-note {
+  font-weight: 400;
+  font-size: var(--fs-body);
+  color: var(--text-muted);
+}
+/* The chosen option is marked by shape as well as colour (UX §9): a thick bar on its leading edge. */
+.choice[aria-checked='true'] {
+  background: var(--text);
+  color: var(--surface);
+  border-color: var(--text);
+  box-shadow: inset 6px 0 0 var(--focus);
+  padding-left: 22px;
+}
+.choice[aria-checked='true'] .choice-note {
+  color: inherit;
+}
+.world-modes {
+  margin: 0.25rem 0 0.5rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.page .world-modes {
+  color: var(--text);
+}
+.panel-h {
+  font-size: 1rem;
+  margin: 0.75rem 0 0.25rem;
+}
+.rates {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-body);
+  margin: 0.25rem 0;
+}
+.rates caption {
+  text-align: left;
+  padding-bottom: 0.25rem;
+}
+.rates th,
+.rates td {
+  border-top: 1px solid var(--line);
+  padding: 0.35rem 0.25rem;
+  vertical-align: top;
+}
+.rates th {
+  text-align: left;
+  font-weight: 600;
+  /* At 200 % text on a phone a long word may break, so the table never pushes the page sideways. */
+  overflow-wrap: anywhere;
+}
+.rates td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rate-detail {
+  display: block;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.field {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+.field input,
+.field-row input {
+  min-height: var(--target);
+  padding: 0 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  min-width: 0;
+}
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.field-row input {
+  flex: 1 1 8rem;
+}
+.disclosure {
+  margin-top: 0.25rem;
+  text-align: left;
+}
+.change-list {
+  margin: 0.25rem 0 0.5rem;
+  padding-left: 1.25rem;
+  font-size: var(--fs-body);
+}
+.change-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.module-source {
+  display: block;
+  margin-top: 0.25rem;
+  font-style: italic;
+  /* Body size, not the module card's smaller text (UX §4.1: body text ≥ 16 px). */
+  font-size: var(--fs-body);
+}
+/* The inspector's header chips carry the "present at creation" label (UX §3.3): body size (UX §4.1). */
+.chips > .chip {
+  font-size: var(--fs-body);
+}
+/* A saved dish's mode labels (Saved dishes rows, the Save sheet's slot buttons; UX §3.3). */
+.slot-modes {
+  display: block;
+  font-size: var(--fs-body);
+  overflow-wrap: anywhere;
+}
+/*
+ * Toasts size to their text, up to 90 % of the area they sit in (centred with left 50 %, an absolute box
+ * could otherwise use only half of it), so a short message stays on a line or two at 200 % text; wrapped
+ * lines keep readable corners.
+ */
+.toast {
+  width: max-content;
+  border-radius: 1.25rem;
+}
+/* A toast on pages without a dish (Home, Saved dishes, …): pinned to the window, body size. */
+.toast.page-toast {
+  position: fixed;
+  top: auto;
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  font-size: var(--fs-body);
+  text-align: center;
+  z-index: 30;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- P2.8 regional trait graphs, journal notes */
+/* History tabs are touch targets too (UX §9: 48 px); with four tabs they wrap instead of clipping a label. */
+[data-testid='history'] .tabs .btn {
+  min-height: var(--target);
+  flex: 1 1 auto;
+}
+.history-record {
+  width: 100%;
+  margin: 0.5rem 0 0;
+}
+.trait-view {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.trait-pickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.trait-field,
+.nb-field {
+  display: grid;
+  gap: 0.25rem;
+  flex: 1 1 10rem;
+  min-width: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+.trait-field select,
+.nb-field select,
+.nb-field input {
+  min-height: var(--target);
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: #ffffff;
+  font-weight: 400;
+  font-size: var(--fs-body);
+}
+.trait-view-toggle {
+  justify-self: start;
+}
+.trait-summary {
+  margin: 0;
+}
+.trait-charts {
+  min-width: 0;
+  border-radius: var(--radius-s);
+}
+.trait-grid {
+  display: grid;
+  /* Two columns mirror the dish's quarters; at large text sizes the panels stack in the same order. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: 0.5rem 0.75rem;
+}
+.trait-panel {
+  margin: 0;
+  min-width: 0;
+}
+.trait-panel-dish {
+  grid-column: 1 / -1;
+}
+.trait-panel figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0 0.5rem;
+  font-size: var(--fs-body);
+}
+.trait-panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-weight: 600;
+}
+.trait-readout {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.trait-axis,
+.trait-time {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--fs-body);
+  font-variant-numeric: tabular-nums;
+}
+.trait-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.trait-table {
+  border-collapse: collapse;
+  font-size: var(--fs-body);
+  font-variant-numeric: tabular-nums;
+}
+.trait-table caption {
+  text-align: left;
+  color: var(--text-muted);
+  padding-bottom: 0.25rem;
+}
+.trait-table th,
+.trait-table td {
+  padding: 0.2rem 0.4rem;
+  text-align: right;
+  white-space: nowrap;
+}
+.trait-table thead th {
+  text-align: center;
+}
+.trait-table tbody th {
+  text-align: left;
+  font-weight: 400;
+}
+.nb-record {
+  margin: 0 0 0.75rem;
+}
+.nb-compose {
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+  margin: 0 0 0.75rem;
+}
+.nb-compose h2,
+.nb-compose h3 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+.nb-compose-intro {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text);
+}
+.nb-field {
+  font-size: 1rem;
+}
+.nb-check {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  min-height: var(--target);
+  font-size: 1rem;
+}
+.nb-check input {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+.nb-compose-error {
+  margin: 0;
+  color: var(--danger);
+  font-weight: 600;
+}
+.nb-compose-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.nb-note {
+  position: relative;
+  border-left: 6px solid var(--primary);
+  min-width: 0;
+}
+.nb-note h2 {
+  font-size: 1.15rem;
+  padding-right: 2rem;
+  overflow-wrap: anywhere;
+}
+.nb-note p {
+  font-size: 1rem;
+  color: var(--text);
+}
+.nb-note .nb-stamp-meta {
+  color: var(--text-muted);
+}
+.nb-note-mark {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+.nb-note .nb-note-honest {
+  color: var(--text-muted);
+}
+/* P2.8 checkpoint ring: the Settings explanation and the Saved dishes line read at body size (UX §9). */
+.setting-note.ring-note {
+  font-size: var(--fs-body);
+}
+.slot-automatic {
+  font-size: var(--fs-body);
+  color: var(--text-muted);
+}
+/* History's chart group headings (History and Regions) read at body size too (UX §9: text ≥ 16 px). */
+[data-testid='history'] .chart-group {
+  font-size: var(--fs-body);
+}
+/* P2.8 fix round 1: the trait pickers take a full row each on a narrow sheet, so a long trait name
+   ("Feeding investment") is never cut off when the select is closed. */
+.trait-pickers .trait-field {
+  flex-basis: 14rem;
+}
+/* Settings explanations read at body size (UX §9: text ≥ 16 px), not only the checkpoint ring's. */
+.setting-note {
+  font-size: var(--fs-body);
+}
+/* Saved dishes: automatic checkpoints are listed apart from the ten save slots, explained once. */
+.checkpoint-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.checkpoint-list > li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.checkpoint-confirm {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: var(--fs-body);
+}

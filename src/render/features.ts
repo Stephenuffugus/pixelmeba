@@ -6,11 +6,18 @@
  * only on an E05 carrier with its real fill band, a seam only on an E03 carrier that is Preparing,
  * Resting or Waking). At normal zoom at most two marks show (state first, then stored energy, then
  * the producer marking); a selected organism shows all of them (UX §6.2).
+ *
+ * The mark frames are atlas frames (ARCH §10.1): tools/art-build.ts packs every frame of every layer
+ * in all four headings into the organism atlas as `feature/<layer>/<heading>/<frame>` and lists each
+ * layer in the manifest's `features` table; tools/content-validate.ts fails when an enabled module's
+ * mark is missing. The renderer only looks them up (ARCH §3: snapshot types and the atlas manifest,
+ * nothing from art/src, no runtime texture building).
  */
-import { FEATURE_LAYERS, type FeatureLayerId } from '@art/src/layers/modules';
-import { hexToRgba } from '@art/src/palette';
-import { orient } from '@art/src/sprite';
 import { CUE_MOD_E01, CUE_MOD_E03, CUE_MOD_E05, CUE_RESERVE_BAND_MASK, CUE_RESERVE_BAND_SHIFT } from '@worker/protocol';
+
+/** The marks featureLayers() can pick; each is a module's content `visualLayer` id. */
+export type FeatureLayerId = 'starch_notch' | 'reserve_pocket' | 'resting_seam';
+export const FEATURE_LAYER_IDS: readonly FeatureLayerId[] = ['starch_notch', 'reserve_pocket', 'resting_seam'];
 
 /** Life states as saved in the lifeState column (see src/sim/entities.ts LIFE_*). */
 const LIFE_PREPARING = 1;
@@ -48,53 +55,46 @@ export function featureLayers(cue: number, life: number, selected: boolean, out:
   return selected ? n : Math.min(n, MAX_UNSELECTED_MARKS);
 }
 
-export interface LayerAtlas {
-  readonly width: number;
-  readonly height: number;
-  readonly rgba: Uint8ClampedArray<ArrayBuffer>;
-  /** Frame rectangle by `${layer}/${frame}/${heading}`. */
-  readonly rects: Readonly<Record<string, readonly [number, number, number, number]>>;
+/** One feature layer as the atlas manifest's `features` table lists it. */
+export interface AtlasFeatureLike {
+  /** Authored frame size (16); the renderer scales a mark by the body's frame size / size. */
+  readonly size: number;
+  readonly headings: number;
+  readonly frames: number;
 }
 
-const TILE = 16;
-const PAD = 2;
+const HEADING_CHARS = 'eswn';
 
-export function layerKey(layer: FeatureLayerId, frame: number, heading: number): string {
-  return `${layer}/${frame}/${heading}`;
+/** Authored mark size assumed when a manifest entry has no usable size (content:validate requires 16). */
+const FEATURE_SIZE_FALLBACK = 16;
+
+/**
+ * Draw scale of one mark over a body whose authored frame is `bodyPx` pixels, at sprite scale
+ * `scale`: the mark's authored frame (`markSize`, the manifest's features[layer].size) covers the
+ * body's frame, so a 16 px mark sits 1:1 on a 16 px body and ×2 on a 32 px body.
+ */
+export function featureMarkScale(scale: number, bodyPx: number, markSize: number | undefined): number {
+  return (scale * bodyPx) / (markSize !== undefined && markSize > 0 ? markSize : FEATURE_SIZE_FALLBACK);
+}
+
+/** Atlas key of one mark frame, the same key tools/art-build.ts writes. */
+export function featureFrameKey(layer: FeatureLayerId, frame: number, heading: number): string {
+  return `feature/${layer}/${HEADING_CHARS[heading] ?? 'e'}/${frame}`;
 }
 
 /**
- * Pack every layer frame in all four headings into one RGBA image (deterministic; nearest-neighbor
- * pixels exactly as authored). The renderer uploads it once as the feature-layer texture.
+ * Atlas keys for every mark frame the manifest declares, as [layer][frame][heading 0–3]. A layer the
+ * manifest does not list gets no keys, so its marks are simply not drawn (content:validate fails the
+ * build long before that can ship for an enabled module).
  */
-export function buildLayerAtlas(): LayerAtlas {
-  const tiles: { key: string; rgba: Uint8Array }[] = [];
-  for (const def of FEATURE_LAYERS) {
-    const colors = def.palette.map((hex, i) => (i === 0 ? [0, 0, 0, 0] : hexToRgba(hex)));
-    def.frames.forEach((f, fi) => {
-      for (let h = 0; h < 4; h++) {
-        const o = orient(f, h);
-        const rgba = new Uint8Array(TILE * TILE * 4);
-        for (let i = 0; i < o.data.length; i++) {
-          const c = colors[o.data[i]!];
-          if (!c) throw new Error(`${def.id}: palette index ${o.data[i]!} missing`);
-          rgba.set(c, i * 4);
-        }
-        tiles.push({ key: layerKey(def.id, fi, h), rgba });
-      }
-    });
+export function featureFrameKeys(features: Readonly<Record<string, AtlasFeatureLike>> | undefined): Partial<Record<FeatureLayerId, string[][]>> {
+  const out: Partial<Record<FeatureLayerId, string[][]>> = {};
+  for (const layer of FEATURE_LAYER_IDS) {
+    const f = features?.[layer];
+    if (!f || !(f.frames > 0)) continue;
+    const rows: string[][] = [];
+    for (let i = 0; i < f.frames; i++) rows.push([0, 1, 2, 3].map((h) => featureFrameKey(layer, i, h)));
+    out[layer] = rows;
   }
-  const cell = TILE + PAD * 2;
-  const cols = 16;
-  const width = cols * cell;
-  const height = Math.ceil(tiles.length / cols) * cell;
-  const rgba = new Uint8ClampedArray(width * height * 4);
-  const rects: Record<string, readonly [number, number, number, number]> = {};
-  tiles.forEach((t, k) => {
-    const x0 = (k % cols) * cell + PAD;
-    const y0 = Math.floor(k / cols) * cell + PAD;
-    for (let y = 0; y < TILE; y++) rgba.set(t.rgba.subarray(y * TILE * 4, (y + 1) * TILE * 4), ((y0 + y) * width + x0) * 4);
-    rects[t.key] = [x0, y0, TILE, TILE];
-  });
-  return { width, height, rgba, rects };
+  return out;
 }

@@ -4,6 +4,9 @@ import { IconClose, IconCopy, IconGuide, IconSave, IconUndo } from '../icons';
 import { IconCompare } from './CompareIcon';
 import { openWhatIf } from './WhatIfState';
 import { WHATIF_TEXT } from '../strings/whatif';
+import { worldModesLine } from '../strings/modes';
+import { slotModesLine } from '../strings/modes';
+import { evolution } from '../state';
 import {
   dishInfo,
   duplicateCurrent,
@@ -29,9 +32,18 @@ export function MoreSheet() {
             <IconClose />
           </button>
         </header>
+        {/* UX §3.3: mode labels wherever a world is described (P2.2). */}
+        {dishInfo.value ? (
+          <p class="world-modes" data-testid="more-world-label">
+            {worldModesLine(evolution.value?.preset ?? dishInfo.value.mutationPreset, evolution.value?.founderMode ?? dishInfo.value.founderMode, dishInfo.value.registry)}
+          </p>
+        ) : null}
         <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.5rem' }}>
           <button class="btn" onClick={() => (sheet.value = 'history')} data-testid="more-history">
             History and what happened
+          </button>
+          <button class="btn" onClick={() => (sheet.value = 'evolution')} data-testid="more-evolution">
+            Evolution settings (Advanced)
           </button>
           <button class="btn" onClick={() => (sheet.value = 'save')} data-testid="more-save">
             <IconSave /> Save…
@@ -172,7 +184,11 @@ export function SaveSheet() {
                 onClick={() => setTarget(id)}
               >
                 <span>Slot {i + 1}</span>
-                <span class="sub">{s ? `${s.name} · ${Math.floor(s.tick / 10)} s` : 'empty'}</span>
+                <span class="sub">
+                  {s ? `${s.name} · ${Math.floor(s.tick / 10)} s` : 'empty'}
+                  {/* P2.2: the saved world's mode labels (UX §3.3). */}
+                  {s && slotModesLine(s.modes) ? <span class="slot-modes">{slotModesLine(s.modes)}</span> : null}
+                </span>
               </button>
             );
           })}

@@ -27,8 +27,7 @@ import {
 import { Camera, ZOOM_CLOSE, ZOOM_NEIGHBORHOOD } from './camera';
 import { DISH_PX_PER_CELL, DISH_TEX, paintAggregation, paintDeposits, paintDish, paintOverlay, repaintDepositCells, type DirtyRect } from './layers';
 import { speciesRgb } from './speciesColors';
-import { buildLayerAtlas, featureLayers, layerKey, type LayerPick } from './features';
-import { FEATURE_LAYERS, type FeatureLayerId } from '@art/src/layers/modules';
+import { featureFrameKeys, featureLayers, featureMarkScale, type AtlasFeatureLike, type FeatureLayerId, type LayerPick } from './features';
 import { brushCellOutcome, lifeCellOutcome, ST_NONE, SUB_WATER, type LabBrushRule, type LifeBrush } from '@sim/grid';
 import type { LineageMarks } from '@worker/protocol';
 
@@ -63,6 +62,8 @@ export interface AtlasManifestLike {
   readonly height: number;
   readonly sprites: Record<string, { speciesId: string; size: number; headings: number; animations: Record<string, { frames: number; durationMs: number; loop: boolean; reducedMotionFrame: number }> }>;
   readonly frames: ReadonlyArray<{ key: string; x: number; y: number; w: number; h: number }>;
+  /** Module feature marks by visual layer (ARCH §10.1); their frames are in `frames` as feature/<layer>/<heading>/<frame>. */
+  readonly features?: Readonly<Record<string, AtlasFeatureLike>>;
 }
 
 interface Ghost {
@@ -140,10 +141,12 @@ export class DishRenderer {
   private readonly overlaySprite = new Sprite();
   private readonly aggSprite = new Sprite();
   private particles!: ParticleContainer;
-  /** Module feature layers above the bodies (UX §7.3 "feature rims"), from their own small atlas. */
+  /** Module feature layers above the bodies (UX §7.3 "feature rims"), drawn from the organism atlas. */
   private featureParticles!: ParticleContainer;
-  /** [layer][frame][heading] → texture. */
-  private layerTex: Record<string, Texture[][]> = {};
+  /** [layer][frame][heading] → atlas texture (undefined when the manifest lacks that frame). */
+  private layerTex: Record<string, (Texture | undefined)[][]> = {};
+  /** Authored frame size of each mark layer, from the manifest's `features` table. */
+  private layerSize: Record<string, number> = {};
   private featurePool: Particle[] = [];
   private readonly picks: LayerPick[] = [];
   private readonly effects = new Container();
@@ -269,7 +272,7 @@ export class DishRenderer {
       texture: atlas,
       roundPixels: false,
     });
-    this.buildFeatureLayers();
+    this.buildFeatureLayers(atlas);
     this.drawRim();
     this.world.addChild(this.dishSprite, this.depositSprite, this.overlaySprite, this.aggSprite, this.rim, this.particles, this.featureParticles, this.effects, this.selectionG);
     this.buildBandRings();
@@ -289,26 +292,20 @@ export class DishRenderer {
     return this.app.canvas;
   }
 
-  /** Upload the module feature-layer frames (art/src/layers) as one nearest-neighbor texture. */
-  private buildFeatureLayers(): void {
-    const la = buildLayerAtlas();
-    const canvas = document.createElement('canvas');
-    canvas.width = la.width;
-    canvas.height = la.height;
-    canvas.getContext('2d')!.putImageData(new ImageData(la.rgba, la.width, la.height), 0, 0);
-    const tex = Texture.from(canvas);
-    tex.source.scaleMode = 'nearest';
-    for (const def of FEATURE_LAYERS) {
-      this.layerTex[def.id] = def.frames.map((_, fi) =>
-        [0, 1, 2, 3].map((h) => {
-          const r = la.rects[layerKey(def.id, fi, h)]!;
-          return new Texture({ source: tex.source, frame: new Rectangle(r[0], r[1], r[2], r[3]) });
-        }),
-      );
+  /**
+   * Resolve the module feature-mark frames (packed into the organism atlas by tools/art-build.ts and
+   * listed in the manifest's `features` table) to the atlas textures made in init(): no runtime
+   * texture building. A frame the manifest does not carry stays undefined and is not drawn.
+   */
+  private buildFeatureLayers(atlas: Texture): void {
+    const keys = featureFrameKeys(this.manifest.features);
+    for (const layer of Object.keys(keys) as FeatureLayerId[]) {
+      this.layerTex[layer] = keys[layer]!.map((row) => row.map((key) => this.frames[key]));
+      this.layerSize[layer] = this.manifest.features![layer]!.size;
     }
     this.featureParticles = new ParticleContainer({
       dynamicProperties: { position: true, uvs: true, color: true, vertex: true, rotation: false },
-      texture: tex,
+      texture: atlas,
       roundPixels: false,
     });
   }
@@ -657,8 +654,9 @@ export class DishRenderer {
           fp.texture = lt;
           fp.x = x;
           fp.y = y;
-          fp.scaleX = (scale * d.size) / 16;
-          fp.scaleY = (scale * d.size) / 16;
+          const ms = featureMarkScale(scale, d.size, this.layerSize[pick.layer]);
+          fp.scaleX = ms;
+          fp.scaleY = ms;
           if (fp.alpha !== born) fp.alpha = born;
           flist[nf++] = fp;
         }

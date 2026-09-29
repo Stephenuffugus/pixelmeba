@@ -8,6 +8,7 @@ import type { DishInfo } from '@worker/protocol';
 import { reasonName } from '@sim/reasons';
 import { reasonText } from '../strings/reasons';
 import { paintName, structureName } from './LabTrayNames';
+import { evolutionLabel } from '../strings/whatif';
 
 /** Simulated time mm:ss (h:mm:ss when needed) from ticks. */
 export function clock(ticks: number): string {
@@ -38,7 +39,7 @@ export function describeChange(info: DishInfo, payload: CommandPayload, result: 
     case 'setLid':
       return `Lid ${payload.lid}`;
     case 'setMutationPreset':
-      return `Evolution setting: ${payload.preset}`;
+      return `Evolution setting: ${evolutionLabel(payload.preset)}`;
     // Lab habitat edits (P2.7), named from content ("Impermeable wall"), never by internal code.
     case 'paintSubstrate':
       return `${paintName(info, payload.substrate)} painted on ${accepted} cell${accepted === 1 ? '' : 's'}`;

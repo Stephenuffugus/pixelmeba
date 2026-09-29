@@ -10,6 +10,9 @@ import type { LineageAnswer } from '@sim/lineage';
 import type { VariantErrorCode, VariantPreview, VariantRecord } from '@sim/variants';
 import type { ExperimentCardView, JournalStamp, PlayerStep } from '@sim/experiments';
 import type { SaveMetaVariant } from '@persist/saveFile';
+import type { DishJournalEntry, RegionalTraitSeries } from '@sim/history';
+import type { FounderOrigin } from '@sim/founders';
+import type { EvolutionState, MutationRates } from '@sim/mutation';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -55,6 +58,14 @@ export type ToWorker =
   | { readonly type: 'duplicate'; readonly requestId: number; readonly dishId: string; readonly newDishId: string }
   | { readonly type: 'hash'; readonly requestId: number; readonly dishId: string }
   | { readonly type: 'history'; readonly requestId: number; readonly dishId: string; /** Only the most recent N per-second samples. */ readonly lastSeconds?: number }
+  /** P2.8: the recorded regional series of one species' locus (whole dish and four quarters), read from history only. */
+  | { readonly type: 'traitHistory'; readonly requestId: number; readonly dishId: string; readonly species: number; readonly locus: number }
+  /** P2.8: keep a Notebook entry with this dish (saved, checksummed and exported with it; never in the state hash). */
+  | { readonly type: 'journalPut'; readonly requestId: number; readonly dishId: string; readonly entry: unknown }
+  /** P2.8: the Notebook entries kept with this dish (read-only). */
+  | { readonly type: 'journalGet'; readonly requestId: number; readonly dishId: string }
+  /** P2.8: turn the automatic checkpoint ring on or off (Settings; off unless the player turns it on). */
+  | { readonly type: 'checkpointRing'; readonly enabled: boolean }
   | { readonly type: 'release'; readonly buffers: ArrayBuffer[] }
   | { readonly type: 'saveSlot'; readonly requestId: number; readonly dishId: string; readonly slotId: string; readonly name: string }
   | { readonly type: 'autosave'; readonly requestId: number; readonly dishId: string }
@@ -126,7 +137,12 @@ export type ToWorker =
       /** The new dish's id (not named dishId: a refused start must never touch an existing dish). */
       readonly newDishId: string;
       readonly compare: { readonly compareId: string; readonly aDishId: string; readonly bDishId: string } | null;
-    };
+    }
+  /**
+   * New Dish (P2.2, UX §2.3): what a dish with these choices would start with — realized in the worker
+   * exactly as `create` would build it, summarized, then discarded. Read-only; no dish is created.
+   */
+  | { readonly type: 'newDishPreview'; readonly requestId: number; readonly recipeId: string; readonly seed: number; readonly overrides: RecipeOverrides };
 
 export interface SlotSummary {
   readonly slotId: string;
@@ -141,6 +157,22 @@ export interface SlotSummary {
    * Absent for other dishes and for slots written before the index kept it. A display copy only.
    */
   readonly variant?: SaveMetaVariant;
+  /** P2.8: an automatic checkpoint (the ring), listed after the named slots; never a named slot. */
+  readonly automatic?: true;
+  /**
+   * P2.2 (UX §3.3 "mode labels … wherever a world is described"): the saved world's evolution setting
+   * and founder mode, and whether its recorded registry is partial, from the slot index's copy of the
+   * file's meta. Absent for slots written before the index kept it. A display copy only.
+   */
+  readonly modes?: SlotModes;
+}
+
+/** A saved dish's mode labels (P2.2): what Saved dishes and Continue say about the world in a slot. */
+export interface SlotModes {
+  readonly mutationPreset: string;
+  readonly founderMode: string;
+  /** True: "Core prototype — quantitative evolution"; absent when the slot did not record its registry. */
+  readonly partial?: boolean;
 }
 
 /** Per-entity record stride in SnapshotMsg.ents (Float32). */
@@ -231,6 +263,8 @@ export interface DishInfo {
   readonly variant?: VariantRecord | null;
   /** What if? (P2.6): the recipe whose What if? ideas apply to this dish (its source recipe), or null when none do. */
   readonly whatIfSourceId?: string | null;
+  /** P2.2: the module registry this world recorded (UX §3.3 label when partial; export metadata). */
+  readonly registry?: RegistryInfo;
 }
 
 export interface SnapshotMsg {
@@ -256,6 +290,8 @@ export interface SnapshotMsg {
   readonly branchCount?: number;
   /** Trait overlay bands and lineage highlight per entity, in `ents` order (P2.3); absent when off. */
   readonly lineage?: LineageMarks | null;
+  /** P2.2: the evolution setting now in effect, its per-daughter rates and the recorded changes (Advanced panel). */
+  readonly evolution?: EvolutionState;
 }
 
 /** What the lineage view asks the worker to mark: a locus to band, and/or a branch to highlight. */
@@ -360,6 +396,8 @@ export interface EntityInspect {
   readonly upkeep: UpkeepInspect;
   /** Dormancy state machine (SPEC §7.6), or null when it has no resting ability. */
   readonly dormancy: DormancyInspect | null;
+  /** P2.2: where its line began and how it came to carry each module ("present at creation", inherited, gained). */
+  readonly founderOrigin?: FounderOrigin;
 }
 
 /** One carried supplementary module and its recorded numbers (world's versioned registry). */
@@ -415,6 +453,12 @@ export interface DormancyInspect {
     readonly entryMinEnergy: number;
     readonly wakeConditionSeconds: number;
   };
+  /**
+   * The dormancy state reason (SPEC §12.2 States) read from the saved clocks by @sim/dormancy
+   * dormancyReason: PREPARING / RESTING_* / WAKING, DORMANCY_LOCKOUT (value = lockout seconds left;
+   * restHeld = a due rest waits only for the lockout) or NONE.
+   */
+  readonly reason: { readonly code: number; readonly value: number; readonly restHeld: boolean };
 }
 
 /** How a living family member is related to the organism asked about. */
@@ -479,6 +523,26 @@ export type FromWorker =
   | { readonly type: 'saved'; readonly requestId: number; readonly dishId: string; readonly json: string; readonly hash: string; readonly tick: number }
   | { readonly type: 'hash'; readonly requestId: number; readonly dishId: string; readonly hash: string; readonly tick: number }
   | { readonly type: 'history'; readonly requestId: number; readonly dishId: string; readonly seconds: unknown; readonly minutes: unknown; readonly compacted: boolean }
+  /** P2.8: a recorded regional trait series; `available` lists, per species, the loci that have records. */
+  | {
+      readonly type: 'traitHistory';
+      readonly requestId: number;
+      readonly dishId: string;
+      readonly series: RegionalTraitSeries;
+      readonly available: readonly (readonly number[])[];
+      /** The world's recorded locus names (content/loci.json as this dish recorded it). */
+      readonly loci: readonly { readonly index: number; readonly name: string }[];
+      /** Seconds at which the player changed the dish, from recorded history (history.interventionSeconds). */
+      readonly interventions?: readonly number[];
+    }
+  /** P2.8: the dish's journal entries (after journalPut, `stored` says whether the entry was kept with the dish). */
+  | { readonly type: 'journal'; readonly requestId: number; readonly dishId: string; readonly entries: readonly DishJournalEntry[]; readonly stored?: boolean }
+  /**
+   * Unsolicited (P2.8): an automatic checkpoint of `dishId` at `tick` was written (`ok`), or it was not
+   * ('storage-full', 'write-failed', or 'busy' while the previous one was still being written): then
+   * nothing changed and the `kept` older checkpoints are all still there.
+   */
+  | { readonly type: 'checkpoint'; readonly dishId: string; readonly tick: number; readonly ok: boolean; readonly reason?: 'storage-full' | 'write-failed' | 'busy'; readonly kept: number; readonly slot?: SlotSummary }
   /**
    * A request or a running dish failed. `paused` is true only when the worker paused that dish (at its
    * last valid state) because of this error; `request` names the request that failed (absent for a
@@ -496,7 +560,14 @@ export type FromWorker =
     }
   | { readonly type: 'slotSaved'; readonly requestId: number; readonly slot: SlotSummary }
   | { readonly type: 'slots'; readonly requestId: number; readonly slots: readonly SlotSummary[]; readonly persistent: boolean }
-  | { readonly type: 'loaded'; readonly requestId: number; readonly info: DishInfo; readonly usedPredecessor: boolean }
+  | {
+      readonly type: 'loaded';
+      readonly requestId: number;
+      readonly info: DishInfo;
+      readonly usedPredecessor: boolean;
+      /** P2.8: set when an automatic checkpoint was opened as a new branch (the dish it came from, and its moment). */
+      readonly branch?: { readonly fromName: string; readonly tick: number };
+    }
   | { readonly type: 'exported'; readonly requestId: number; readonly text: string; readonly filename: string }
   | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly family: FamilyAnswer }
   | { readonly type: 'lineage'; readonly requestId: number; readonly dishId: string; readonly lineage: LineageAnswer }
@@ -531,7 +602,9 @@ export type FromWorker =
    * again from a save or a file ('closed': the observation ended when the dish was closed, because
    * observer history is worker state and is not saved).
    */
-  | { readonly type: 'experimentEnded'; readonly dishId: string; readonly cardId: string; readonly reason: ExperimentEndReason };
+  | { readonly type: 'experimentEnded'; readonly dishId: string; readonly cardId: string; readonly reason: ExperimentEndReason }
+  /** Reply to newDishPreview (P2.2). */
+  | { readonly type: 'newDishPreview'; readonly requestId: number; readonly preview: NewDishPreview };
 
 /** Why a card's observation ended without a stamp (see the experimentEnded packet). */
 export type ExperimentEndReason = 'changed' | 'failed' | 'undone' | 'closed';
@@ -633,4 +706,52 @@ export interface WhatIfAnswer {
    * as DishInfo.manifestLabel, for the choice's Details.
    */
   readonly registryLabel: string;
+}
+
+/**
+ * A world's recorded module registry (P2.2, UX §3.3). `partial` is true while the world enables fewer
+ * modules than the full catalog this build knows (`catalogSize`): such a world is described as
+ * "Core prototype — quantitative evolution".
+ */
+export interface RegistryInfo {
+  readonly moduleRegistryVersion: number;
+  readonly evolutionRulesVersion: number;
+  readonly modules: readonly { readonly id: string; readonly name: string }[];
+  readonly catalogSize: number;
+  readonly partial: boolean;
+  /** Simulation systems the manifest enables (read-only in New Dish → Content). */
+  readonly systems: readonly string[];
+}
+
+/** New Dish summary (P2.2, UX §2.3): exactly what a dish with these choices would start with. */
+export interface NewDishPreview {
+  readonly recipeId: string;
+  readonly recipeName: string;
+  /** The habitat as the Field Guide names and summarizes it. */
+  readonly habitat: { readonly name: string; readonly summary: string };
+  readonly seed: number;
+  readonly mutationPreset: string;
+  readonly founderMode: string;
+  readonly empty: boolean;
+  /** Per-daughter chances the dish would start with. */
+  readonly rates: MutationRates;
+  readonly developmentalEnabled: boolean;
+  /** Founders by species in recipe order: how many, how many can carry an extra ability, how many start with one (present at creation). */
+  readonly founders: readonly {
+    readonly speciesId: string;
+    readonly name: string;
+    readonly count: number;
+    readonly eligible: number;
+    readonly withModule: number;
+    readonly modules: readonly { readonly id: string; readonly name: string; readonly count: number }[];
+  }[];
+  /** The recipe's food and debris patches (labels), as placed. */
+  readonly patches: readonly string[];
+  /** Carbon, nutrient and mineral at tick 0: the habitat's own, what the recipe adds, and the total (game units). */
+  readonly ledger: {
+    readonly habitat: { readonly c: number; readonly n: number; readonly m: number };
+    readonly added: { readonly c: number; readonly n: number; readonly m: number };
+    readonly total: { readonly c: number; readonly n: number; readonly m: number };
+  };
+  readonly registry: RegistryInfo;
 }

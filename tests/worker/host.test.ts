@@ -90,6 +90,11 @@ describe('worker host (P1.3)', () => {
     expect(h.host.world('a')!.tick).toBeGreaterThan(0);
     expect(h.host.world('b')!.tick).toBe(0);
     expect(h.host.world('b')!.worldId).not.toBe(h.host.world('a')!.worldId);
+    // A copy of a copy keeps a bounded id: the first part and the newest dish id (never "a+b+c").
+    h.host.handle({ type: 'duplicate', requestId: 3, dishId: 'b', newDishId: 'c' });
+    const root = h.host.world('a')!.worldId.split('+')[0];
+    expect(h.host.world('b')!.worldId).toBe(`${root}+b`);
+    expect(h.host.world('c')!.worldId).toBe(`${root}+c`);
   });
 
   it('reports an error and pauses instead of crashing on a bad request', () => {

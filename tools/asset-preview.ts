@@ -2,7 +2,8 @@
  * Asset previewer (BUILD_DIRECTIVE P1.4, UX §6.1–6.2). Served by the Vite dev server:
  *   npx vite --port 4175 → http://127.0.0.1:4175/tools/asset-preview.html
  * Loads the shipped atlas (public/atlas/organisms.png + manifest.json) and shows every sprite in
- * every animation and heading, animated and as frame strips, with grayscale and color-vision
+ * every animation and heading, animated and as frame strips, every module feature mark in every
+ * frame and heading (alone and over bodies, as the dish draws it), with grayscale and color-vision
  * simulations, and a dense mixed group at neighborhood scale. Nearest-neighbour everywhere.
  * A development tool: it never touches simulation state and is not part of the production build.
  */
@@ -29,6 +30,12 @@ interface AtlasSprite {
   readonly anchor: readonly [number, number];
   readonly animations: Readonly<Record<string, AtlasAnimation>>;
 }
+interface AtlasFeature {
+  readonly size: number;
+  readonly headings: number;
+  readonly frames: number;
+  readonly frameNames?: readonly string[];
+}
 interface AtlasManifest {
   readonly format: string;
   readonly image: string;
@@ -36,6 +43,8 @@ interface AtlasManifest {
   readonly height: number;
   readonly exportHash: string;
   readonly sprites: Readonly<Record<string, AtlasSprite>>;
+  /** Module feature marks by visual layer (ARCH §10.1); frames keyed feature/<layer>/<heading>/<frame>. */
+  readonly features?: Readonly<Record<string, AtlasFeature>>;
   readonly frames: readonly AtlasFrame[];
 }
 
@@ -58,6 +67,14 @@ for (const mod of Object.values(import.meta.glob<{ id: string; name: string }>('
   speciesNames[mod.id] = mod.name;
 }
 const enabledSpecies = new Set<string>(contentManifest.enabledSpecies);
+const moduleDefs: { id: string; name: string; visualLayer: string }[] = [];
+for (const mod of Object.values(import.meta.glob<{ id: string; name: string; visualLayer: string }>('../content/modules/*.json', { eager: true, import: 'default' }))) {
+  moduleDefs.push({ id: mod.id, name: mod.name, visualLayer: mod.visualLayer });
+}
+moduleDefs.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+const enabledModules = new Set<string>(contentManifest.enabledModules);
+/** Atlas key of a feature-mark frame (as tools/art-build.ts writes it and src/render/features.ts reads it). */
+const markKey = (layer: string, heading: string, frame: number): string => `feature/${layer}/${heading}/${frame}`;
 
 const $ = <T extends HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -250,6 +267,10 @@ function buildSpecies(): void {
         strip.setAttribute('aria-label', `${assetId} ${anim} ${label.textContent} frames`);
         const stripWrap = document.createElement('div');
         stripWrap.className = 'scroll';
+        // A sideways-scrolling strip must be reachable by keyboard (axe scrollable-region-focusable).
+        stripWrap.tabIndex = 0;
+        stripWrap.setAttribute('role', 'region');
+        stripWrap.setAttribute('aria-label', `${assetId} ${anim} ${label.textContent} frames (scrolls sideways)`);
         stripWrap.append(strip);
         cell.append(label, anim1, stripWrap);
         row.append(cell);
@@ -274,6 +295,117 @@ function buildSpecies(): void {
           sctx.fillStyle = groundColor();
           sctx.fillRect(0, 0, strip.width, strip.height);
           for (let i = 0; i < a.frames; i++) drawFrame(sctx, `${assetId}/${anim}/${hk}/${i}`, pad + i * (size * s + pad), pad, s);
+        });
+      }
+      block.append(row);
+      card.append(block);
+    }
+    if (missing.length > 0) {
+      const warn = document.createElement('span');
+      warn.className = 'badge warn';
+      warn.textContent = `missing frames: ${missing.join(', ')}`;
+      head.append(warn);
+    }
+    root.append(card);
+  }
+}
+
+// ---------- module feature marks ----------
+
+/** Body a mark is shown over: the first move/idle frame of a sprite in one heading. */
+function bodyKey(assetId: string, heading: string): string | null {
+  const sprite = manifest.sprites[assetId];
+  if (!sprite) return null;
+  const anim = sprite.animations.move ? 'move' : 'idle';
+  return `${assetId}/${anim}/${sprite.headings === 4 ? heading : 'e'}/0`;
+}
+
+function buildMarks(): void {
+  const root = $('marks');
+  root.replaceChildren();
+  const s = state.scale;
+  const features = manifest.features ?? {};
+  // A small (16×16, four-heading) body and a large one, as the dish scales marks by frame size / 16.
+  const small = Object.keys(manifest.sprites).find((id) => manifest.sprites[id]!.size === 16 && manifest.sprites[id]!.headings === 4) ?? null;
+  const large = Object.keys(manifest.sprites).find((id) => manifest.sprites[id]!.size >= 32) ?? null;
+  for (const [layer, feat] of Object.entries(features)) {
+    const card = document.createElement('article');
+    card.className = 'card';
+    card.dataset.mark = layer;
+    const head = document.createElement('header');
+    const h3 = document.createElement('h3');
+    h3.textContent = layer;
+    const meta = document.createElement('span');
+    meta.className = 'anim-meta';
+    meta.textContent = `${feat.frames} frame${feat.frames === 1 ? '' : 's'} · ${feat.size}×${feat.size} · ${feat.headings} headings · drawn at the body's center, heading and scale`;
+    head.append(h3, meta);
+    for (const m of moduleDefs.filter((d) => d.visualLayer === layer)) {
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = `${m.id} ${m.name} · ${enabledModules.has(m.id) ? 'enabled in this build' : 'not enabled'}`;
+      head.append(badge);
+    }
+    card.append(head);
+    const missing: string[] = [];
+    for (let i = 0; i < feat.frames; i++) {
+      const block = document.createElement('div');
+      block.className = 'anim';
+      const title = document.createElement('div');
+      title.innerHTML = `<span class="anim-title"></span> <span class="anim-meta"></span>`;
+      title.children[0]!.textContent = `frame ${i}`;
+      title.children[1]!.textContent = feat.frameNames?.[i] ?? '';
+      block.append(title);
+      const row = document.createElement('div');
+      row.className = 'headings';
+      for (let h = 0; h < feat.headings; h++) {
+        const hk = HEADINGS[h]!;
+        const key = markKey(layer, hk, i);
+        if (!frames[key]) missing.push(`${hk}/${i}`);
+        const cell = document.createElement('div');
+        cell.className = 'heading';
+        const label = document.createElement('div');
+        label.className = 'h-label';
+        label.textContent = `${HEADING_LABEL[hk]!} · alone, then over ${small ?? 'a body'}`;
+        const canvas = document.createElement('canvas');
+        canvas.className = 'stage';
+        canvas.setAttribute('aria-label', `${layer} frame ${i} ${HEADING_LABEL[hk]!}, alone and over a body`);
+        cell.append(label, canvas);
+        row.append(cell);
+        const size = feat.size;
+        const pad = 2;
+        const ctx = sizeCanvas(canvas, 2 * (size * s) + pad * 3, size * s + pad * 2);
+        strips.push(() => {
+          ctx.fillStyle = groundColor();
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          drawFrame(ctx, key, pad, pad, s);
+          const body = small ? bodyKey(small, hk) : null;
+          if (body) drawFrame(ctx, body, pad * 2 + size * s, pad, s);
+          drawFrame(ctx, key, pad * 2 + size * s, pad, s);
+        });
+      }
+      // A large body (one heading) carries the East mark scaled ×(frame size / 16), as the dish does.
+      if (large) {
+        const lsize = manifest.sprites[large]!.size;
+        const k = lsize / feat.size;
+        const cell = document.createElement('div');
+        cell.className = 'heading';
+        const label = document.createElement('div');
+        label.className = 'h-label';
+        label.textContent = `over ${large} (${lsize}×${lsize}, mark ×${k})`;
+        const canvas = document.createElement('canvas');
+        canvas.className = 'stage';
+        canvas.setAttribute('aria-label', `${layer} frame ${i} over ${large}`);
+        cell.append(label, canvas);
+        row.append(cell);
+        const pad = 2;
+        const ctx = sizeCanvas(canvas, lsize * s + pad * 2, lsize * s + pad * 2);
+        const key = markKey(layer, 'e', i);
+        strips.push(() => {
+          ctx.fillStyle = groundColor();
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          const body = bodyKey(large, 'e');
+          if (body) drawFrame(ctx, body, pad, pad, s);
+          drawFrame(ctx, key, pad, pad, s * k);
         });
       }
       block.append(row);
@@ -432,6 +564,7 @@ function wire(): void {
   scale.addEventListener('change', () => {
     state.scale = Number(scale.value);
     buildSpecies();
+    buildMarks();
     redrawAll();
   });
   const ground = $<HTMLSelectElement>('ground');
@@ -496,14 +629,17 @@ async function main(): Promise<void> {
     await atlasImage.decode();
     const sprites = Object.keys(manifest.sprites).length;
     const missingEnabled = [...enabledSpecies].filter((id) => !Object.values(manifest.sprites).some((s) => s.speciesId === id));
+    const markless = moduleDefs.filter((m) => enabledModules.has(m.id) && !manifest.features?.[m.visualLayer]).map((m) => `${m.id} (${m.visualLayer})`);
     status.textContent =
-      `${sprites} sprites · ${manifest.frames.length} frames · export ${manifest.exportHash.slice(0, 12)}` +
-      (missingEnabled.length > 0 ? ` · NO SPRITE for enabled ${missingEnabled.join(', ')}` : ' · every enabled species has a sprite');
-    if (missingEnabled.length > 0) status.className = 'error';
+      `${sprites} sprites · ${Object.keys(manifest.features ?? {}).length} module marks · ${manifest.frames.length} frames · export ${manifest.exportHash.slice(0, 12)}` +
+      (missingEnabled.length > 0 ? ` · NO SPRITE for enabled ${missingEnabled.join(', ')}` : ' · every enabled species has a sprite') +
+      (markless.length > 0 ? ` · NO MARK for enabled ${markless.join(', ')}` : ' · every enabled module has its mark');
+    if (missingEnabled.length > 0 || markless.length > 0) status.className = 'error';
     wire();
     layoutDense();
     buildDense();
     buildSpecies();
+    buildMarks();
     redrawAll();
     requestAnimationFrame(tick);
     document.body.dataset.ready = '1';

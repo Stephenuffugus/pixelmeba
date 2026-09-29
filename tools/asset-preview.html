@@ -8,7 +8,8 @@
       :root {
         --bg: #f5f4ef;
         --text: #172c35;
-        --muted: #6b7b84;
+        /* Darker than the palette's #6B7B84 so small labels pass 4.5:1 on white and on the page. */
+        --muted: #56656d;
         --line: #d9dcd6;
         --primary: #256e9e;
         --focus: #f2b84b;
@@ -238,7 +239,7 @@
         <label>Count <input id="dense-count" type="number" min="1" max="400" value="60" style="width: 5em" /></label>
         <button type="button" id="dense-shuffle">Shuffle</button>
       </div>
-      <div class="scroll"><canvas id="dense" class="stage" aria-label="Dense group of mixed organisms"></canvas></div>
+      <div class="scroll" tabindex="0" role="region" aria-label="Dense group (scrolls sideways)"><canvas id="dense" class="stage" aria-label="Dense group of mixed organisms"></canvas></div>
     </section>
 
     <section aria-labelledby="species-title">
@@ -247,10 +248,16 @@
       <div id="species"></div>
     </section>
 
+    <section aria-labelledby="marks-title">
+      <h2 id="marks-title">Module marks</h2>
+      <p class="sub">Every frame of each module's feature mark in all four headings, from the atlas: alone, then over a small body in the same heading, and over a large body scaled as the dish scales it.</p>
+      <div id="marks"></div>
+    </section>
+
     <section aria-labelledby="atlas-title">
       <h2 id="atlas-title">Atlas sheet</h2>
       <p class="sub" id="atlas-sub"></p>
-      <div class="scroll"><canvas id="sheet" class="stage" aria-label="Whole organism atlas"></canvas></div>
+      <div class="scroll" tabindex="0" role="region" aria-label="Atlas sheet (scrolls sideways)"><canvas id="sheet" class="stage" aria-label="Whole organism atlas"></canvas></div>
     </section>
 
     <script type="module" src="./asset-preview.ts"></script>

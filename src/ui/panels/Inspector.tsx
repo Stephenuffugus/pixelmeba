@@ -20,7 +20,8 @@ import {
 } from '../state';
 import { reasonText } from '../strings/reasons';
 import { dietAnswer, familySummary, relationLabel, stopAnswer } from '../strings/shortcuts';
-import { dormancyLines, energyCapText, LIFE_ACTIVE, lifeStateLabel, moduleText, originChip, upkeepText } from '../strings/modules';
+import { actionLabel, dormancyChip, dormancyLines, energyCapText, LIFE_ACTIVE, moduleText, originChip, upkeepText } from '../strings/modules';
+import { founderStartText, moduleSourceText } from '../strings/modes';
 import { openLineage } from './LineageState';
 import { paintName, structureName } from './LabTrayNames';
 import { PAINT_TARGETS, PLACEABLE_STRUCTURES, type PaintTarget, type PlaceableStructure } from '@sim/grid';
@@ -83,16 +84,6 @@ function strongestConstraint(e: EntityInspect): { code: number; value: number } 
   return { code: R.NONE, value: 0 };
 }
 
-function actionOf(e: EntityInspect): string {
-  // A life state other than Active (Preparing, Resting, Waking) is the organism's real state (P2.1).
-  if (e.lifeState !== LIFE_ACTIVE) return lifeStateLabel(e.lifeState);
-  if (e.flags & (1 << 2)) return e.predation ? 'Digesting' : 'Eating';
-  if (e.flags & (1 << 3)) return 'Hunting';
-  if (e.flags & (1 << 1)) return 'Stressed';
-  if (e.flags & (1 << 6)) return 'Moving';
-  // Not "resting": that word now names the resting stage.
-  return 'Staying in place';
-}
 
 function FamilyList({ f, onHide }: { f: FamilyAnswer; onHide: () => void }) {
   const [shown, setShown] = useState(FAMILY_LIST_STEP);
@@ -217,13 +208,11 @@ function EntityView({ e }: { e: EntityInspect }) {
             {name} <span class="sub">#{e.birthId}</span>
           </h2>
           <div class="chips" style={{ marginTop: '0.25rem' }}>
-            <span class="chip">{actionOf(e)}</span>
+            <span class="chip">{actionLabel(e)}</span>
             <span class="chip">age {Math.floor(e.age)} s</span>
             <span class="chip">generation {e.generation}</span>
             {originChip(e.origin) ? <span class="chip">{originChip(e.origin)}</span> : null}
-            {e.dormancy && e.dormancy.state === LIFE_ACTIVE && e.dormancy.lockoutSeconds > 0 ? (
-              <span class="chip">just woke up</span>
-            ) : null}
+            {dormancyChip(e.dormancy) ? <span class="chip">{dormancyChip(e.dormancy)}</span> : null}
           </div>
         </div>
         <button
@@ -416,11 +405,20 @@ function EntityView({ e }: { e: EntityInspect }) {
           {tab === 'inherited' ? (
             <div role="tabpanel">
               <p class="sub">
-                {e.genome.changedFromParent
+                {/* P2.2: a founder (generation 0) has no parent in this dish, so it is never compared with one. */}
+                {e.generation === 0
+                  ? 'A founder: it has no parent in this dish.'
+                  : e.genome.changedFromParent
                   ? 'This offspring inherited a different trait from its parent.'
                   : 'Same inherited traits as its parent.'}{' '}
                 Genome {e.genome.id.slice(0, 6)}.
               </p>
+              {/* P2.2: starting differences of varied founders are not evolution (honest labels). */}
+              {e.founderOrigin && founderStartText(e.founderOrigin) ? (
+                <p class="sub" data-testid="founder-start">
+                  {founderStartText(e.founderOrigin)}
+                </p>
+              ) : null}
               <dl class="kv">
                 {e.genome.loci.map((v, i) =>
                   e.lociActiveEffective[i] ? (
@@ -452,6 +450,16 @@ function EntityView({ e }: { e: EntityInspect }) {
                         <br />
                         {t.does} <span class="sub">{t.costs}</span>
                         {t.now ? <span class="sub"> {t.now}</span> : null}
+                        {/* P2.2: where this organism's copy came from, from its recorded lineage. */}
+                        {e.founderOrigin
+                          ? e.founderOrigin.modules
+                              .filter((o) => o.id === m.id)
+                              .map((o) => (
+                                <span key={o.id} class="module-source" data-testid={`module-source-${o.id}`}>
+                                  {moduleSourceText(o, e.founderOrigin!, e.birthId)}
+                                </span>
+                              ))
+                          : null}
                       </li>
                     );
                   })}

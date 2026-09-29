@@ -2,8 +2,9 @@
  * npm run content:validate [-- --write] [-- --atlas path/to/manifest.json]
  * Validates every content pack, prints exact file → field on failure, and checks (or with --write,
  * updates) the manifest's contentHash. Then checks the organism atlas (public/atlas by default) for
- * every frame each enabled species requires (BUILD_DIRECTIVE P1.4, UX §6.2). Exit code ≠ 0 on any
- * error.
+ * every frame each enabled species requires (BUILD_DIRECTIVE P1.4, UX §6.2) and every frame of each
+ * enabled module's feature mark (ARCH §10.1: dormancy prepare/rest/wake, reserve 4 bands, …) in all
+ * four headings. Exit code ≠ 0 on any error.
  */
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -65,6 +66,42 @@ export function requiredFrames(frameSize: number): readonly FrameRequirement[] {
   return frameSize >= 32 ? LARGE_FRAMES : SMALL_FRAMES;
 }
 
+/** What the atlas check needs to know about one enabled module: its content id and visual layer. */
+export interface AtlasMarkRef {
+  readonly moduleId: string;
+  readonly layer: string;
+}
+
+/**
+ * Required frames per module feature mark (ARCH §10.1 required frame counts, UX §6.2, SPEC §9
+ * visuals). Every mark is authored at FEATURE_SIZE and packed in all FEATURE_HEADINGS headings (it
+ * turns with the body it sits on). A layer not listed here still needs at least one frame. Kept
+ * independent of art/src, like the sprite requirements above. Layers of modules that later phases
+ * enable are listed now, so turning one on with too few frames fails: ARCH §10.1 "jacket 4 levels",
+ * "cache 4 fills", "Lantern dim/glow" (E02 glow_center is B09 Lantern's module equivalent), and
+ * UX §6.2 "jacket rim (4)", "cache icon (4 fills)".
+ */
+export const FEATURE_FRAMES: Readonly<Record<string, { readonly frames: number; readonly states: string }>> = {
+  starch_notch: { frames: 1, states: 'notch' },
+  reserve_pocket: { frames: 4, states: 'reserve fill bands 0–3' },
+  resting_seam: { frames: 3, states: 'prepare, rest, wake' },
+  glow_center: { frames: 2, states: 'dim, glow' },
+  jacket_rim: { frames: 4, states: 'jacket levels 0–3' },
+  cache_marker: { frames: 4, states: 'cache fill bands 0–3' },
+};
+export const FEATURE_SIZE = 16;
+export const FEATURE_HEADINGS = 4;
+
+/** Atlas key of one feature-mark frame (the renderer looks up exactly this; see src/render/features.ts). */
+export function featureFrameKey(layer: string, frame: number, heading: number): string {
+  return `feature/${layer}/${ATLAS_HEADINGS[heading] ?? heading}/${frame}`;
+}
+
+/** The feature marks the enabled modules need, from their content records (sorted by module id). */
+export function enabledMarks(registry: { readonly manifest: { readonly enabledModules: readonly string[] }; readonly modules: Readonly<Record<string, { readonly visualLayer: string }>> }): AtlasMarkRef[] {
+  return [...registry.manifest.enabledModules].sort().map((id) => ({ moduleId: id, layer: registry.modules[id]!.visualLayer }));
+}
+
 export const ATLAS_FILE = 'public/atlas/manifest.json';
 
 type Obj = Record<string, unknown>;
@@ -81,10 +118,16 @@ export function pngSize(png: Uint8Array): { width: number; height: number } | nu
 
 /**
  * Pure atlas completeness check. `atlas` is the parsed atlas manifest; `png`, when given, is the
- * atlas image (null = file missing) and must match the manifest's size and exportHash. Returns
- * one error per missing or malformed item, naming the exact sprite, animation, heading and frame.
+ * atlas image (null = file missing) and must match the manifest's size and exportHash; `marks`, when
+ * given, are the enabled modules' feature marks, each of which must be listed in the manifest's
+ * `features` table with every required frame packed in all four headings. Returns one error per
+ * missing or malformed item, naming the exact sprite or mark, animation, heading and frame.
  */
-export function checkAtlas(atlas: unknown, species: readonly AtlasSpeciesRef[], opts: { file?: string; png?: Uint8Array | null } = {}): ContentIssue[] {
+export function checkAtlas(
+  atlas: unknown,
+  species: readonly AtlasSpeciesRef[],
+  opts: { file?: string; png?: Uint8Array | null; marks?: readonly AtlasMarkRef[] } = {},
+): ContentIssue[] {
   const file = opts.file ?? ATLAS_FILE;
   const issues: ContentIssue[] = [];
   const err = (path: string, message: string) => issues.push({ severity: 'error', file, path, message });
@@ -170,6 +213,34 @@ export function checkAtlas(atlas: unknown, species: readonly AtlasSpeciesRef[], 
     }
   }
 
+  // Module feature marks (ARCH §10.1): listed in `features`, FEATURE_SIZE, four headings, every frame.
+  const features = isObj(atlas.features) ? atlas.features : null;
+  for (const mark of opts.marks ?? []) {
+    const who = `${mark.moduleId} (${mark.layer})`;
+    const base = `features.${mark.layer}`;
+    const need = FEATURE_FRAMES[mark.layer];
+    const entry = features?.[mark.layer];
+    if (!isObj(entry)) {
+      err(base, `enabled module ${who} has no feature mark in the atlas (run npm run art:build)`);
+      continue;
+    }
+    if (entry.size !== FEATURE_SIZE) err(`${base}.size`, `${who}: mark frame size ${String(entry.size)}, expected ${FEATURE_SIZE}`);
+    if (entry.headings !== FEATURE_HEADINGS) err(`${base}.headings`, `${who}: mark has ${String(entry.headings)} heading(s), needs ${FEATURE_HEADINGS}`);
+    const n = isInt(entry.frames) ? entry.frames : 0;
+    const required = need?.frames ?? 1;
+    if (n < required) err(`${base}.frames`, `${who}: mark has ${n} frame(s), needs ${required}${need ? ` (${need.states})` : ''}`);
+    for (let h = 0; h < FEATURE_HEADINGS; h++) {
+      for (let i = 0; i < Math.max(n, required); i++) {
+        const key = featureFrameKey(mark.layer, i, h);
+        const f = frames[key];
+        if (!f) {
+          // A short declared count is reported once above; only frames it declares are listed here.
+          if (i < n) err(`frames[${key}]`, `${who}: missing frame "${key}"`);
+        } else if (f.w !== FEATURE_SIZE || f.h !== FEATURE_SIZE) err(`frames[${key}]`, `${who}: frame "${key}" is ${String(f.w)}×${String(f.h)}, expected ${FEATURE_SIZE}×${FEATURE_SIZE}`);
+      }
+    }
+  }
+
   if (opts.png !== undefined) {
     const image = typeof atlas.image === 'string' ? atlas.image : 'organisms.png';
     if (opts.png === null) err('image', `atlas image "${image}" is missing (run npm run art:build)`);
@@ -204,6 +275,7 @@ async function main(): Promise<void> {
   const rel = relative(REPO_ROOT, atlasPath).split('\\').join('/');
   const atlasFile = rel.startsWith('..') ? atlasPath : rel;
   let atlasFrames = 0;
+  let marks: AtlasMarkRef[] = [];
   if (registry) {
     if (!existsSync(atlasPath)) {
       issues.push({ severity: 'error', file: atlasFile, path: '', message: 'atlas manifest is missing (run npm run art:build)' });
@@ -222,7 +294,8 @@ async function main(): Promise<void> {
           const s = registry.species[id]!;
           return { id, assetId: s.assetId, frameSize: s.frameSize, headings: s.headings };
         });
-        issues.push(...checkAtlas(atlas, refs, { file: atlasFile, png }));
+        marks = enabledMarks(registry);
+        issues.push(...checkAtlas(atlas, refs, { file: atlasFile, png, marks }));
         atlasFrames = isObj(atlas) && Array.isArray(atlas.frames) ? atlas.frames.length : 0;
       }
     }
@@ -254,7 +327,7 @@ async function main(): Promise<void> {
     `content ok · contentHash ${hash} · species ${r.speciesIds.length} (enabled ${r.manifest.enabledSpecies.length}) · ` +
       `materials ${r.materialIds.length} · modules ${r.moduleIds.length} · habitats ${r.habitatIds.length} · structures ${r.structureIds.length} · ` +
       `recipes ${r.recipeIds.length} · experiments ${r.experimentIds.length} · variants ${r.variantIds.length} · ` +
-      `atlas ${atlasFile} complete for ${r.manifest.enabledSpecies.length} enabled species (${atlasFrames} frames)`,
+      `atlas ${atlasFile} complete for ${r.manifest.enabledSpecies.length} enabled species and ${marks.length} enabled module marks (${marks.map((m) => m.layer).join(', ')}; ${atlasFrames} frames)`,
   );
 }
 

@@ -25,9 +25,19 @@ import { experimentCardView, experimentCatalog, experimentOf, GateWatch, inspect
 import { PAIRED_RUN_LABEL, SINGLE_RUN_LABEL, stepObserved, type ArmObserver } from '@sim/pairedRun';
 import { TICKS_PER_SECOND } from '@sim/constants';
 import { isIntervention } from '@sim/specimens';
+import { evolutionState, isMutationPreset, ratesFor } from '@sim/mutation';
+import { founderSummary } from '@sim/founders';
+import { creationFounders } from '@sim/founders';
+import { computeTotals } from '@sim/ledger';
+import type { NewDishPreview, RegistryInfo } from './protocol';
+import type { SlotModes } from './protocol';
 import { buildSaveFile, loadSaveFile, SaveFileError, saveMetaVariant } from '@persist/saveFile';
+import { saveMetaEvolution, saveMetaRegistry, type SaveFile, type SaveMetaEvolution, type SaveMetaRegistry } from '@persist/saveFile';
 import { AUTOSAVE_SLOT, type SaveStore, type SlotInfo } from '@persist/store';
 import { SaveStore as SaveStoreClass } from '@persist/store';
+import { isCheckpointSlot } from '@persist/store';
+import { branchName, branchWorldId, CHECKPOINT_INTERVAL_TICKS, CheckpointRing, type StorageEstimate } from '@persist/checkpoints';
+import { interventionSeconds, putJournalEntry, regionalTraitSeries, traitAvailability } from '@sim/history';
 import {
   MAX_WHAT_IF_CHOICES,
   nextVariantId,
@@ -60,10 +70,32 @@ class WhatIfRefusal extends Error {
   }
 }
 
+/** P2.8: an automatic checkpoint as the Saved dishes list shows it (labelled automatic, like "(autosave)"). */
+function checkpointSummary(s: SlotInfo, catalogSize: number): SlotSummary {
+  const modes = slotModes(s, catalogSize);
+  return { ...summary(s), name: `${s.name} (automatic checkpoint)`, automatic: true, ...(modes ? { modes } : {}) };
+}
+
 function summary(s: SlotInfo): SlotSummary {
   // The slot index is stored data: its variant copy is re-validated like a file's meta (a bad one is dropped).
   const variant = saveMetaVariant(s);
   return { slotId: s.slotId, name: s.name, tick: s.tick, savedAt: s.savedAt, recipeId: s.recipeId, bytes: s.bytes, ...(variant ? { variant } : {}) };
+}
+
+/**
+ * P2.2 (UX §3.3): a slot's mode labels from the index's copies of the file's meta, re-validated like the
+ * variant copy (a bad one is dropped). `partial` compares the recorded registry with this build's catalog.
+ */
+function slotModes(s: SlotInfo, catalogSize: number): SlotModes | null {
+  const evolution = saveMetaEvolution(s);
+  if (!evolution) return null;
+  const registry = saveMetaRegistry(s);
+  return { ...evolution, ...(registry ? { partial: registry.enabledModules.length < catalogSize } : {}) };
+}
+
+/** P2.2: the meta copies a slot index keeps with each save (mode labels on Saved dishes and Continue). */
+function slotMetaCopies(file: SaveFile): { evolution?: SaveMetaEvolution; registry?: SaveMetaRegistry } {
+  return { ...(file.meta.evolution ? { evolution: file.meta.evolution } : {}), ...(file.meta.registry ? { registry: file.meta.registry } : {}) };
 }
 
 /** An authored recipe's recorded start: the ledger's initial totals and its tick-0 recipe inputs. */
@@ -84,8 +116,8 @@ function recipeStartInputs(w: World): string {
 }
 
 /** UX §3.3 registry label of a world with this manifest (DishInfo.manifestLabel; What if? choices). */
-function registryLabel(m: { readonly enabledModules: readonly string[] }): string {
-  return m.enabledModules.length < 17 ? 'Core prototype — quantitative evolution' : 'Standard Evolution';
+function registryLabel(m: { readonly enabledModules: readonly string[] }, catalogSize: number): string {
+  return m.enabledModules.length < catalogSize ? 'Core prototype — quantitative evolution' : 'Standard Evolution';
 }
 
 interface Dish {
@@ -194,6 +226,11 @@ export class DishHost {
   private comparison: Comparison | null = null;
   private lastPump: number;
   private lastSnapshot = 0;
+  /** P2.8: the automatic checkpoint ring (same backend and atomic commit as the slots), off until Settings turns it on. */
+  private readonly ring: CheckpointRing | null;
+  private ringEnabled = false;
+  private ringBusy = false;
+  private ringKept = 0;
 
   constructor(
     private readonly registry: ContentRegistry,
@@ -201,8 +238,11 @@ export class DishHost {
     private readonly clock: HostClock,
     private readonly store: SaveStore | null = null,
     private readonly persistent = false,
+    /** P2.8: the platform's storage estimate, checked before each automatic checkpoint. */
+    storageEstimate?: () => Promise<StorageEstimate | undefined>,
   ) {
     this.lastPump = clock.now();
+    this.ring = store ? new CheckpointRing(store.backend, storageEstimate) : null;
   }
 
   /** Every packet leaves stamped with the protocol version. */
@@ -228,14 +268,16 @@ export class DishHost {
           const savedAt = this.iso();
           const built = await buildSaveFile(d.world, { name, savedAt, recipeId: d.world.content.provenance.recipeId });
           const variant = built.file.meta.variant;
-          const info = await this.store.save({ slotId, text: built.text, checksum: built.checksum, name, tick: d.world.tick, savedAt, recipeId: d.world.content.provenance.recipeId, ...(variant ? { variant } : {}) });
+          const info = await this.store.save({ slotId, text: built.text, checksum: built.checksum, name, tick: d.world.tick, savedAt, recipeId: d.world.content.provenance.recipeId, ...(variant ? { variant } : {}), ...slotMetaCopies(built.file) });
           if (msg.type === 'saveSlot') this.ownSlots[d.id] = slotId;
-          this.post({ type: 'slotSaved', requestId: msg.requestId, slot: summary(info) });
+          this.post({ type: 'slotSaved', requestId: msg.requestId, slot: this.describeSlot(info) });
           return;
         }
         case 'listSlots': {
           const slots = this.store ? await this.store.list() : [];
-          this.post({ type: 'slots', requestId: msg.requestId, slots: slots.map(summary), persistent: this.persistent });
+          // P2.8: automatic checkpoints follow the named slots, newest first, labelled as such.
+          const checkpoints = this.ring ? await this.ring.list() : [];
+          this.post({ type: 'slots', requestId: msg.requestId, slots: [...slots.map((s) => this.describeSlot(s)), ...checkpoints.map((s) => checkpointSummary(s, this.catalogSize()))], persistent: this.persistent });
           return;
         }
         case 'loadSlot': {
@@ -246,9 +288,16 @@ export class DishHost {
           });
           if (!res) throw new SaveFileError('That save could not be read, and no earlier copy was usable.', 'integrity');
           const { file, world } = await loadSaveFile(res.text);
-          const dish = this.addDish(msg.newDishId, world, file.meta.name);
+          // P2.8: an automatic checkpoint opens as a new branch from a stored state (SPEC §10.7): like
+          // Duplicate, it gets its own dish identity and a name that says the moment it starts from, so
+          // it (and the checkpoints it makes) can be told apart from the dish it came from; it is bound
+          // to no named slot. The state (and its hash) is exactly the checkpoint's.
+          const branch = isCheckpointSlot(msg.slotId) ? { fromName: file.meta.name, tick: world.tick } : null;
+          const opened = branch ? deserializeWorld({ ...file.state, worldId: branchWorldId(world.worldId, msg.newDishId) }) : world;
+          const dish = this.addDish(msg.newDishId, opened, branch ? branchName(file.meta.name, branch.tick) : file.meta.name);
           if (msg.slotId !== AUTOSAVE_SLOT) this.ownSlots[dish.id] = msg.slotId;
-          this.post({ type: 'loaded', requestId: msg.requestId, info: this.info(dish), usedPredecessor: res.usedPredecessor });
+          if (branch) delete this.ownSlots[dish.id];
+          this.post({ type: 'loaded', requestId: msg.requestId, info: this.info(dish), usedPredecessor: res.usedPredecessor, ...(branch ? { branch } : {}) });
           this.sendSnapshot(dish);
           this.experimentReopened(dish);
           return;
@@ -434,7 +483,10 @@ export class DishHost {
           this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: null, error: 'nothing to undo' });
           return;
         }
+        // P2.8: the player's journal entries are notes about the dish, not part of the undone change: keep them.
+        const journal = d.world.history.journal;
         d.world = deserializeWorld(d.undo);
+        d.world.history.journal = journal;
         d.checkpoint = d.undo;
         d.replay = [];
         // Names, pins and saved specimens made after the undone command are notebook labels, not part
@@ -470,7 +522,8 @@ export class DishHost {
       }
       case 'duplicate': {
         const d = this.need(msg.dishId);
-        const state = { ...serializeWorld(d.world), worldId: `${d.world.worldId}+${msg.newDishId}` };
+        // A copy of a copy does not grow the id (as a checkpoint branch; the id is never hashed).
+        const state = { ...serializeWorld(d.world), worldId: branchWorldId(d.world.worldId, msg.newDishId) };
         const copy = deserializeWorld(state);
         this.dishes[msg.newDishId] = {
           ...d,
@@ -504,6 +557,37 @@ export class DishHost {
         this.experimentHistoryOpened(d);
         return;
       }
+      case 'traitHistory': {
+        // Read-only (P2.8): the recorded regional series of one species' locus; never touches the world.
+        const d = this.need(msg.dishId);
+        const h = d.world.history;
+        this.post({
+          type: 'traitHistory',
+          requestId: msg.requestId,
+          dishId: d.id,
+          series: regionalTraitSeries(h, msg.species, msg.locus),
+          available: traitAvailability(h, d.world.species.length),
+          loci: d.world.content.loci.map((l) => ({ index: l.index, name: l.name })),
+          interventions: interventionSeconds(h),
+        });
+        return;
+      }
+      case 'journalPut': {
+        // P2.8: a Notebook entry kept with the dish (observation record; outside the state hash). A
+        // malformed entry is refused with stored false and never pauses the dish.
+        const d = this.need(msg.dishId);
+        const stored = putJournalEntry(d.world.history, msg.entry);
+        this.post({ type: 'journal', requestId: msg.requestId, dishId: d.id, entries: d.world.history.journal, stored });
+        return;
+      }
+      case 'journalGet': {
+        const d = this.need(msg.dishId);
+        this.post({ type: 'journal', requestId: msg.requestId, dishId: d.id, entries: d.world.history.journal });
+        return;
+      }
+      case 'checkpointRing':
+        this.ringEnabled = msg.enabled === true;
+        return;
       case 'family': {
         // Read-only: answers from lineage records and entity columns, never touches the world.
         const d = this.need(msg.dishId);
@@ -523,6 +607,10 @@ export class DishHost {
         this.sendSnapshot(d);
         return;
       }
+      case 'newDishPreview':
+        // Read-only (P2.2): built exactly as 'create' would build it, summarized, then discarded.
+        this.post({ type: 'newDishPreview', requestId: msg.requestId, preview: this.newDishPreview(msg) });
+        return;
       case 'experimentCatalog':
         this.post({ type: 'experimentCatalog', requestId: msg.requestId, cards: experimentCatalog(this.registry).map((d) => experimentCardView(this.registry, d)) });
         return;
@@ -779,6 +867,41 @@ export class DishHost {
       }
     }
     if (x && !x.ended && !x.posted) this.experimentSteps(d);
+    this.maybeCheckpoint(d);
+  }
+
+  /**
+   * P2.8: every 60 simulated seconds of a played dish (never a comparison copy), write an automatic
+   * checkpoint when the ring is on. The world is serialized here, synchronously, at this tick; the
+   * checksum, compression and the atomic write follow without holding the dish. The outcome is posted
+   * (a refused write changes nothing and keeps the older checkpoints).
+   */
+  private maybeCheckpoint(d: Dish): void {
+    if (!this.ring || !this.ringEnabled || d.arm || d.failed) return;
+    const tick = d.world.tick;
+    if (tick === 0 || tick % CHECKPOINT_INTERVAL_TICKS !== 0) return;
+    if (this.ringBusy) {
+      this.post({ type: 'checkpoint', dishId: d.id, tick, ok: false, reason: 'busy', kept: this.ringKept });
+      return;
+    }
+    this.ringBusy = true;
+    const ring = this.ring;
+    const savedAt = this.iso();
+    const recipeId = d.world.content.provenance.recipeId;
+    const name = d.name;
+    const worldId = d.world.worldId;
+    // buildSaveFile serializes the world before its first await, so the checkpoint holds exactly this tick.
+    void buildSaveFile(d.world, { name, savedAt, recipeId })
+      .then((b) => ring.write({ text: b.text, checksum: b.checksum, name, worldId, tick, savedAt, recipeId, ...slotMetaCopies(b.file) }))
+      .then(async (r) => {
+        this.ringKept = r.ok ? (await ring.list()).length : r.kept;
+        if (r.ok) this.post({ type: 'checkpoint', dishId: d.id, tick, ok: true, kept: this.ringKept, slot: checkpointSummary(r.slot, this.catalogSize()) });
+        else this.post({ type: 'checkpoint', dishId: d.id, tick, ok: false, reason: r.reason, kept: r.kept });
+      })
+      .catch(() => this.post({ type: 'checkpoint', dishId: d.id, tick, ok: false, reason: 'write-failed', kept: this.ringKept }))
+      .finally(() => {
+        this.ringBusy = false;
+      });
   }
 
   /**
@@ -997,6 +1120,10 @@ export class DishHost {
 
   private build(source: DishSource, dishId: string): World {
     if (source.kind === 'recipe') {
+      // P2.2: only the recorded evolution settings exist (a malformed request builds nothing).
+      const o0 = source.overrides;
+      if (o0?.mutationPreset !== undefined && !isMutationPreset(o0.mutationPreset)) throw new Error(`Unknown evolution setting "${String(o0.mutationPreset)}".`);
+      if (o0?.founderMode !== undefined && !['identical', 'varied', 'diverse'].includes(o0.founderMode)) throw new Error(`Unknown founder mode "${String(o0.founderMode)}".`);
       const o = source.overrides;
       return realizeRecipe(this.registry, source.recipeId, {
         worldId: dishId,
@@ -1133,7 +1260,7 @@ export class DishHost {
       current: d && record ? { ...record, atStart: await this.rebuildsExactly(d) } : null,
       next: next ? { id: next.id, title: next.title, question: next.question, previewDifference: next.previewDifference } : null,
       plan: await this.keepPlan(d),
-      registryLabel: registryLabel(this.registry.manifest),
+      registryLabel: registryLabel(this.registry.manifest, this.catalogSize()),
     };
   }
 
@@ -1210,7 +1337,7 @@ export class DishHost {
     const recipeId = d.world.content.provenance.recipeId;
     const built = await buildSaveFile(d.world, { name: d.name, savedAt, recipeId });
     const variant = built.file.meta.variant;
-    return this.store!.save({ slotId, text: built.text, checksum: built.checksum, name: d.name, tick: d.world.tick, savedAt, recipeId, ...(variant ? { variant } : {}) });
+    return this.store!.save({ slotId, text: built.text, checksum: built.checksum, name: d.name, tick: d.world.tick, savedAt, recipeId, ...(variant ? { variant } : {}), ...slotMetaCopies(built.file) });
   }
 
   /**
@@ -1244,7 +1371,7 @@ export class DishHost {
           }
         }
         try {
-          slot = summary(await this.writeSlot(d, slotId));
+          slot = this.describeSlot(await this.writeSlot(d, slotId));
         } catch (e) {
           throw new WhatIfRefusal('save-failed', `"${d.name}" could not be saved, so the new dish was not started. Your saves are unchanged. (${e instanceof Error ? e.message : String(e)})`);
         }
@@ -1283,7 +1410,7 @@ export class DishHost {
       founderMode: w.settings.founderMode,
       recipeId: w.content.provenance.recipeId,
       contentHash: m.contentHash,
-      manifestLabel: registryLabel(m),
+      manifestLabel: registryLabel(m, this.catalogSize()),
       // Lab trays (P2.7): recorded content the item details quote (read-only).
       speciesHabitats: w.species.map((s) => [...s.def.habitats]),
       speciesAttachment: w.species.map((s) => (s.def.attachment ? [...s.def.attachment.surfaces] : null)),
@@ -1293,6 +1420,71 @@ export class DishHost {
       // The world's own manifest decides which structure tools its Lab offers (D-0024), never this build's.
       structureIds: [...(m.enabledStructures ?? [])],
       ...this.whatIfInfo(w),
+      registry: this.registryInfo(w.content.manifest, w.content.modules),
+    };
+  }
+
+  /** A slot as the Saved dishes list and Continue show it, with its mode labels when recorded (P2.2). */
+  /** How many modules this build's catalog holds (a world with fewer enabled is a partial registry). */
+  private catalogSize(): number {
+    return Object.keys(this.registry.modules).length;
+  }
+
+  private describeSlot(s: SlotInfo): SlotSummary {
+    const modes = slotModes(s, this.catalogSize());
+    return { ...summary(s), ...(modes ? { modes } : {}) };
+  }
+
+  /**
+   * P2.2: a world's recorded module registry (never this build's content), with the build's catalog
+   * size so a partial registry is described as "Core prototype — quantitative evolution" (UX §3.3).
+   */
+  private registryInfo(m: World['content']['manifest'], modules: World['content']['modules']): RegistryInfo {
+    const catalogSize = Object.keys(this.registry.modules).length;
+    return {
+      moduleRegistryVersion: m.moduleRegistryVersion,
+      evolutionRulesVersion: m.evolutionRulesVersion,
+      modules: modules.map((d) => ({ id: d.id, name: d.name })),
+      catalogSize,
+      partial: m.enabledModules.length < catalogSize,
+      systems: [...m.enabledSystems],
+    };
+  }
+
+  /** New Dish summary (P2.2, UX §2.3): the world `create` would build with these choices, summarized. */
+  private newDishPreview(msg: Extract<ToWorker, { type: 'newDishPreview' }>): NewDishPreview {
+    const recipe = this.registry.recipes[msg.recipeId];
+    if (!recipe) throw new Error(`There is no recipe "${msg.recipeId}" in this version of Pixelmeba.`);
+    const w = this.build({ kind: 'recipe', recipeId: msg.recipeId, seed: msg.seed, overrides: msg.overrides }, 'new-dish-preview');
+    const names: Record<string, string> = {};
+    for (const d of w.content.modules) names[d.id] = d.name;
+    const total = computeTotals(w);
+    const L = w.ledger;
+    return {
+      recipeId: recipe.id,
+      recipeName: recipe.name,
+      habitat: { name: w.content.habitat.name, summary: w.content.habitat.guide.summary },
+      seed: w.seed,
+      mutationPreset: w.settings.mutationPreset,
+      founderMode: w.settings.founderMode,
+      empty: msg.overrides.empty === true,
+      rates: ratesFor(w.settings.mutationPreset, w.content.manifest.developmentalEnabled),
+      developmentalEnabled: w.content.manifest.developmentalEnabled,
+      founders: founderSummary(w).map((r) => ({
+        speciesId: w.species[r.species]!.id,
+        name: w.species[r.species]!.def.name,
+        count: r.count,
+        eligible: r.eligible,
+        withModule: r.withModule,
+        modules: r.modules.map((x) => ({ id: x.id, name: names[x.id] ?? x.id, count: x.count })),
+      })),
+      patches: msg.overrides.empty ? [] : recipe.fieldPatches.map((p, k) => p.label ?? `Patch ${k + 1}`),
+      ledger: {
+        habitat: { ...L.initial },
+        added: { ...L.inputs },
+        total: { c: total.c, n: total.n, m: total.m },
+      },
+      registry: this.registryInfo(w.content.manifest, w.content.modules),
     };
   }
 
@@ -1323,6 +1515,8 @@ export class DishHost {
       w = deserializeWorld(d.checkpoint);
       d.replay = [];
     }
+    // P2.8: journal entries written since the checkpoint are the player's notes: keep them.
+    w.history.journal = d.world.history.journal;
     d.world = w;
     d.lastEventId = Math.min(d.lastEventId, w.counters.nextEventId - 1);
     d.lastGeometryVersion = -1;
@@ -1410,6 +1604,8 @@ export class DishHost {
       undoAvailable: d.undo !== null,
       branchCount: w.branches.branches.length,
       ...(lineage ? { lineage } : {}),
+      // P2.2: with the founders the dish was made with, so the Evolution sheet can say what they carried.
+      evolution: { ...evolutionState(w), creation: creationFounders(w) },
     };
     const transfer: Transferable[] = [packed.ents.buffer, packed.ids.buffer, deposits.buffer];
     if (overlay) transfer.push(overlay.data.buffer);

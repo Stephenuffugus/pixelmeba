@@ -9,9 +9,17 @@ export interface ReasonContext {
   readonly value?: number;
   readonly food?: string;
   readonly speciesName?: string;
+  /** DORMANCY_LOCKOUT: a rest is due now and waits only for the lockout (see @sim/dormancy dormancyReason). */
+  readonly restHeld?: boolean;
 }
 
 const secs = (v?: number) => (v === undefined || !Number.isFinite(v) ? 'some' : String(Math.max(0, Math.round(v))));
+/**
+ * Whole seconds left in a countdown (PREPARING, WAKING, DORMANCY_LOCKOUT), rounded up so a running
+ * countdown never reads "0 s" before it ends (0.1 s left reads "1 s"). The tolerance absorbs float
+ * accumulation of the 0.1 s tick (2.0000000000004 reads "2").
+ */
+export const secondsLeft = (v?: number): string => (v === undefined || !Number.isFinite(v) ? 'some' : String(Math.max(0, Math.ceil(v - 1e-6))));
 const pct = (v?: number) => (v === undefined || !Number.isFinite(v) ? 'an unknown share' : `${Math.round(v * 100)} %`);
 
 const EXPLORE: Record<ReasonName, string> = {
@@ -122,9 +130,14 @@ function lab(name: ReasonName, ctx: ReasonContext): string {
     case 'RESTING_DRY':
       return `Resting because it was too dry; wakes after 10 s of moisture and energy ≥ 5 (${secs(ctx.value)} s so far).`;
     case 'PREPARING':
-      return `Getting ready to rest: ${secs(ctx.value)} s left.`;
+      return `Getting ready to rest: ${secondsLeft(ctx.value)} s left.`;
     case 'WAKING':
-      return `Waking up: ${secs(ctx.value)} s left.`;
+      return `Waking up: ${secondsLeft(ctx.value)} s left.`;
+    case 'DORMANCY_LOCKOUT': {
+      // The measured value is the lockout seconds left (SPEC §7.6: 30 s after waking).
+      const wait = ctx.value === undefined || !Number.isFinite(ctx.value) ? 'yet' : `for ${secondsLeft(ctx.value)} s`;
+      return ctx.restHeld ? `Just woke up: it would start resting now, but cannot rest again ${wait}.` : `Just woke up: it cannot rest again ${wait}.`;
+    }
     default:
       return EXPLORE[name];
   }

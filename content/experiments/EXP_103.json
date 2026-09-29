@@ -4,7 +4,7 @@
   "title": "Cleaning crew",
   "question": "Who cleans up the debris?",
   "recipeId": "CLEANING_CREW_V1",
-  "intervention": "Watch the Recyclers on the debris patch: the Debris overlay (Lab → Observe) shows how much debris is left in each cell. Then open the resource history to see how the Recyclers’ numbers and living biomass change.",
+  "intervention": "Watch the Recyclers on the debris patch: the Debris overlay (Lab → Observe) shows how much debris is left in each cell. Then open the resource history (More → History and what happened) to see how the Recyclers’ numbers and living biomass change; its “Debris (total)” chart shows the dish’s total debris over time.",
   "predictedTradeoff": "Recyclers turn debris into body and energy. The debris is finite, so a group that grows fast may run out.",
   "measurements": ["consumed.detritus", "field.detritus", "intake.B04", "biomass.B04", "alive.B04", "births.B04", "deaths.B04"],
   "stoppingSeconds": 180,

@@ -1,4 +1,5 @@
 import { route } from '../state';
+import { toast } from '../state';
 import { Home } from '../views/Home';
 import { Play } from '../views/Play';
 import { DishScreen } from '../views/DishScreen';
@@ -10,7 +11,32 @@ import { Notebook } from '../views/Notebook';
 import { ExperimentCard } from '../views/ExperimentCard';
 import { ExperimentRun } from '../views/ExperimentRun';
 
+/** Screens that show toasts themselves (over the dish or the paired run). */
+const OWN_TOAST_ROUTES: readonly string[] = ['dish', 'compare', 'experimentRun'];
+
+/**
+ * A toast raised while a page without its own toast host is showing (e.g. an import from Saved dishes
+ * that was refused, or a save that could not be opened): shown here so the message reaches the player.
+ */
+function PageToast() {
+  if (!toast.value || OWN_TOAST_ROUTES.includes(route.value.name)) return null;
+  return (
+    <div class="toast page-toast" role="status" aria-live="polite" data-testid="page-toast">
+      {toast.value}
+    </div>
+  );
+}
+
 export function App() {
+  return (
+    <>
+      <RoutedPage />
+      <PageToast />
+    </>
+  );
+}
+
+function RoutedPage() {
   const r = route.value;
   switch (r.name) {
     case 'home':

@@ -4,7 +4,7 @@
  */
 import { TICKS_PER_SECOND } from './constants';
 import { maskCells } from './grid';
-import { pushSample } from './history';
+import { debrisTotal, pushSample, recordTraitSample } from './history';
 import type { World } from './world';
 import { compactLineage } from './lineage';
 
@@ -44,6 +44,8 @@ export function stagePublish(world: World): void {
     sugarSum += sugar[i]!;
   }
   const h = world.history;
+  // P2.8: the dish's debris total (detritus carbon), recorded with every sample from schema 3 on.
+  const debris = debrisTotal(world);
   pushSample(h, {
     second: nextTick / TICKS_PER_SECOND,
     count,
@@ -55,7 +57,10 @@ export function stagePublish(world: World): void {
     sugarTotal: sugarSum,
     capacityLimited: h.pendingCapacity,
     interventions: h.pendingInterventions,
+    ...(debris !== undefined ? { debrisTotal: debris } : {}),
   });
+  // P2.8: regional trait sample every 10 simulated seconds (observation only).
+  recordTraitSample(world, nextTick);
   h.pendingBirths.fill(0);
   h.pendingDeaths.fill(0);
   h.pendingInterventions = 0;

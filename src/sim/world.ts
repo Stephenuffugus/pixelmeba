@@ -21,11 +21,12 @@ import type { Command } from './commands';
 import { createBranchBook, type BranchBook } from './branches';
 
 /**
- * World schema. 1 = Phase 1. 2 = P2.1 adds the dryTimer entity column (dormancy). Older states are
- * migrated by copy in migrateWorldState (src/sim/serialize.ts); new states are always written at
- * the current version.
+ * World schema. 1 = Phase 1. 2 = P2.1 adds the dryTimer entity column (dormancy). 3 = P2.8 adds
+ * history records (regional trait samples, the debris total, the dish's journal; see history.ts).
+ * Older states are migrated by copy in migrateWorldState (src/sim/serialize.ts); new states are
+ * always written at the current version.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export type MutationPreset = 'standard' | 'accelerated' | 'fixed';
 export type FounderMode = 'identical' | 'varied' | 'diverse';
@@ -47,7 +48,13 @@ export interface WorldContent {
   readonly materials: readonly MaterialDef[];
   readonly loci: readonly LocusDef[];
   readonly habitat: HabitatDef;
-  readonly provenance: { readonly recipeId: string | null; readonly recipeRevision: number | null; readonly createdFrom: string };
+  readonly provenance: {
+    readonly recipeId: string | null;
+    readonly recipeRevision: number | null;
+    readonly createdFrom: string;
+    /** SPEC §14.5 "tags provenance": the schema versions this world was migrated from, oldest first (D-0029). */
+    readonly migratedFrom?: readonly number[];
+  };
 }
 
 export interface Derived {
