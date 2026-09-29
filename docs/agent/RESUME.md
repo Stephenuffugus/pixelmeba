@@ -1,14 +1,32 @@
 # Resume point — read this first after a restart
 
-> **Update 2026‑09‑29 ≈ 03:00 UTC:** wave C is committed (`9708c29`, docs `f0a45de`, pushed): P2.1–P2.8
-> ticked, decisions D‑0029…D‑0032. Running now: `docs/agent/g2-close.workflow.js.txt` — D‑0033 "keep the
-> open dish first" on every replacement (builder + two verifiers + fix rounds), P2.9 tuning report
-> (`docs/reports/tune-g2.md`), then the D6 §18 comprehension self-review (`docs/reports/comprehension-g2.md`,
-> `tools/review-g2.mjs`) with label/hierarchy fixes. Reports in `docs/reports/reviews/g2-close/`. After it:
-> lead integration (record D‑0033 + proposed decisions, full check + full Playwright, commit), then the G2
-> gate ritual (BUILD_DIRECTIVE Appendix A; EXPANSION_RESPONSE §1–§8; tag `g2`), then Phase 3 (`g3-plan.md`).
-> If this session died mid-run: read the reports in that folder and `git status`, and rerun only the parts
-> not reported.
+> **Update 2026‑09‑29 ≈ 03:05 UTC — PAUSED FOR A CODESPACE RESTART. START HERE.**
+> State: `main` clean and pushed. Wave C committed (`9708c29`, docs `f0a45de`); P2.1–P2.8 ticked;
+> decisions through D‑0032. Last full evidence: `npm run check` 611/611 (after one documented golden
+> update); full Playwright 111/117 with the 6 failures in two new journeys' own test code, then after
+> the fixes garden 21/21, observe 12/12 and save-reload/new-dish/whatif green; content and atlas checks ok.
+> The `g2-close` workflow was stopped two minutes after launch, before any agent changed a file:
+> nothing to recover. The local branch `wip/g2-wave-c-found` is superseded by `9708c29`; ignore it.
+> **Next, in order:**
+> 1. Sanity: `git status` clean; stop stray servers by port
+>    (`for p in 4173 4191 4195 4196 4197 4201 4211 4221; do lsof -t -i :$p | xargs -r kill; done`).
+> 2. Copy `docs/agent/g2-close.workflow.js.txt` to the session scratchpad as a `.js` file and run it with
+>    the Workflow tool (`scriptPath`). It does: D‑0033 "keep the open dish first" on every replacement
+>    (Play, New Dish, experiment Start, Saved dishes → Open, Import, Continue) with two verifiers and fix
+>    rounds; the P2.9 tuning report (`docs/reports/tune-g2.md`, no recipe/mechanic changes); then the
+>    D6 §18 comprehension self-review (`docs/reports/comprehension-g2.md`, `tools/review-g2.mjs`) with
+>    label/hierarchy fixes and a re-review. Reports go to `docs/reports/reviews/g2-close/`.
+> 3. Lead integration: record D‑0033 (the ruling text is in the workflow's KEEP prompt) and the proposed
+>    decisions; run `npm run check` and the full `npx playwright test`; commit; tick P2.9.
+> 4. G2 gate ritual (BUILD_DIRECTIVE "G2 gate — evidence" + Appendix A): named fixtures, e2e whatif and
+>    lab-tools, view-switch hash, determinism 1× == 4× == reload, conservation, perf; EXPANSION_RESPONSE
+>    §1–§8 (versions: world schema 3, contentHash from content:validate); tag `g2`; push with tags.
+> 5. Phase 3 from `docs/agent/g3-plan.md`, lead preflight first. Correction to that plan: world schema 3 is
+>    already used by P2.8 (history traits/journal), so Phase 3's foundation bump is schema **4**; re-check
+>    its file paths against the current tree before writing the wave files.
+> Owner questions (none block): D‑0022 (EXP_A bootstrap), D‑0027 (RESERVE_COMPARE_V2 meal dose), D‑0030
+> (New Dish/Play keep the open dish — being implemented as D‑0033), D‑0031 (one checkpoint ring per device),
+> EXPANSION_RESPONSE §8 list.
 
 > **Update 2026‑09‑28 afternoon (after the codespace closed at ≈ 14:35 UTC):** wave C builders
 > (founders, observe) were cut off during their final regression runs; art‑marks never started. Their
