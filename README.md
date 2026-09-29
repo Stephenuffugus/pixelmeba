@@ -27,6 +27,20 @@ same dish with one change. Deterministic, ledgered, explainable. No accounts, ad
 | `docs/PLAY_STORE_CHECKLIST.md` | Release readiness: agent tasks and owner tasks. |
 | `docs/source/` | The ten original design documents (reference). |
 
+## Web build for the Lucid Winds Arcade
+
+```
+nvm use            # Node 24 (.nvmrc)
+npm ci
+npm run build      # typecheck + production build into dist/
+npm run preview    # optional: serve dist/ locally on port 4173
+```
+
+Upload the contents of `dist/` to any static folder. Asset paths are relative (Vite `base: './'`),
+so the game runs from a subfolder or inside an iframe. No server code, accounts or network calls;
+saves stay in the browser's own storage on that device. The current `main` is a Phase 2 development
+build (the `g2` gate is not yet tagged), not the release candidate.
+
 ## Quick start (after Phase 0 exists)
 
 ```
