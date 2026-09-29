@@ -707,6 +707,8 @@ describe('A What if? dish names its idea in the slot index (SlotSummary.variant)
   it('slot and autosave summaries carry the idea; other dishes do not; a malformed index copy is dropped', async () => {
     const h = harness();
     await h.create('g');
+    // D-0033 fix round 1: an untouched Garden rebuilds exactly and is not kept, so let it change first.
+    h.steps('g', 1);
     await h.started('v', 'g', { kind: 'variant', variantId: 'R-G3' });
     h.steps('v', 3);
     const saved = await h.ask({ type: 'saveSlot', dishId: 'v', slotId: 'slot5', name: 'Far dinner' });
@@ -753,5 +755,27 @@ describe('Error packets say what really happened (paused, and which request)', (
     expect(h.world('g').tick).toBe(tick);
     h.frame(200);
     expect(h.world('g').tick).toBe(tick);
+  });
+});
+
+// D-0033: What if?'s keep step is now the one every replacing action shares. Its one new case: a dish its
+// own slot already holds exactly (same checksummed file and name) is not written again.
+describe('D-0033: a dish its own slot already holds exactly is not saved again', () => {
+  it('the plan says so, Start writes nothing (not even Continue), and the toast has nothing to say', async () => {
+    const h = harness();
+    await h.create('cur');
+    h.steps('cur', 6);
+    await h.ask({ type: 'saveSlot', dishId: 'cur', slotId: 'slot2', name: 'Mine' });
+    expect((await h.answer(null, 'cur')).plan).toEqual({ kind: 'saved', slotId: 'slot2', name: 'Mine' });
+    const before = await h.slotState();
+    const s = await h.started('v', 'cur', { kind: 'variant', variantId: 'R-G1' });
+    expect(s.kept).toMatchObject({ kind: 'saved', replaced: null, name: 'Mine', autosaved: false });
+    expect(s.kept.slot?.slotId).toBe('slot2');
+    expect(await h.slotState()).toEqual(before);
+    // Once it has changed, it goes to its own slot again as before.
+    h.steps('v', 3);
+    await h.ask({ type: 'saveSlot', dishId: 'v', slotId: 'slot4', name: 'Idea' });
+    h.steps('v', 1);
+    expect((await h.answer(null, 'v')).plan).toEqual({ kind: 'slot', slotId: 'slot4', own: true, name: 'Idea' });
   });
 });

@@ -8,6 +8,7 @@ import { IconBack, IconPlay } from '../icons';
 import { journal } from '../journal';
 import { busy, experimentCard, experimentCards, experimentCardsError, loadExperimentCards, route, startExperiment } from '../state';
 import { clauseText, completionText, describeArms, durationText, measureLabel, playerStepText } from '../strings/experiments';
+import { KeepPlanLine } from '../panels/KeepPlanLine';
 
 export function ExperimentCard() {
   const r = route.value;
@@ -122,8 +123,10 @@ export function ExperimentCard() {
             <IconPlay /> Start this experiment
           </button>
           <p class="xp-note">
-            Starts a new paused dish from this recipe and seed{startAt > 0 ? `, run to ${startAt} s before the copy` : ''}. Your current dish is kept in Continue first.
+            Starts a new paused dish from this recipe and seed{startAt > 0 ? `, run to ${startAt} s before the copy` : ''}.
           </p>
+          {/* D-0033: what happens first to the open dish (or the dish Continue holds), from the worker's plan. */}
+          <KeepPlanLine verb="experiment" class="xp-note" testId="experiment-card-keep" />
         </article>
       </div>
     </main>

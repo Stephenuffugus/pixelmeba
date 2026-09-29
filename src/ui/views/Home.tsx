@@ -46,7 +46,8 @@ export function Home() {
                 {slotModesLine(auto.modes)}
               </p>
             ) : null}
-            <button class="btn primary" onClick={() => void loadSlot('autosave')} data-testid="home-continue">
+            {/* Continue opens the autosave only while no dish is open (then there is nothing to keep, D-0033). */}
+            <button class="btn primary" onClick={() => void loadSlot('autosave', auto.name)} data-testid="home-continue">
               <IconPlay /> Continue
             </button>
           </section>

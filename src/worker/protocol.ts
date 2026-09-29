@@ -46,7 +46,8 @@ export type DishSource =
   | { readonly kind: 'state'; readonly state: WorldState };
 
 export type ToWorker =
-  | { readonly type: 'create'; readonly requestId: number; readonly dishId: string; readonly source: DishSource; readonly name?: string }
+  /** With `keepFrom` (D-0033) the open dish is kept first, as What if? keeps it: see KeepFrom. */
+  | { readonly type: 'create'; readonly requestId: number; readonly dishId: string; readonly source: DishSource; readonly name?: string; readonly keepFrom?: KeepFrom }
   | { readonly type: 'dispose'; readonly dishId: string }
   | { readonly type: 'activate'; readonly dishId: string }
   | { readonly type: 'command'; readonly requestId: number; readonly dishId: string; readonly commandId: string; readonly payload: CommandPayload; readonly undoable: boolean }
@@ -55,7 +56,11 @@ export type ToWorker =
   | { readonly type: 'undo'; readonly requestId: number; readonly dishId: string }
   | { readonly type: 'view'; readonly dishId: string; readonly overlay: OverlayId | null; readonly selection: Selection | null }
   | { readonly type: 'save'; readonly requestId: number; readonly dishId: string }
-  | { readonly type: 'duplicate'; readonly requestId: number; readonly dishId: string; readonly newDishId: string }
+  /**
+   * With `keepFrom` (D-0033) the dish being duplicated is kept first, as every replacing action keeps
+   * it (the copy then takes its place on screen); a plain duplicate is synchronous as before.
+   */
+  | { readonly type: 'duplicate'; readonly requestId: number; readonly dishId: string; readonly newDishId: string; readonly keepFrom?: KeepFrom }
   | { readonly type: 'hash'; readonly requestId: number; readonly dishId: string }
   | { readonly type: 'history'; readonly requestId: number; readonly dishId: string; /** Only the most recent N per-second samples. */ readonly lastSeconds?: number }
   /** P2.8: the recorded regional series of one species' locus (whole dish and four quarters), read from history only. */
@@ -70,10 +75,19 @@ export type ToWorker =
   | { readonly type: 'saveSlot'; readonly requestId: number; readonly dishId: string; readonly slotId: string; readonly name: string }
   | { readonly type: 'autosave'; readonly requestId: number; readonly dishId: string }
   | { readonly type: 'listSlots'; readonly requestId: number }
-  | { readonly type: 'loadSlot'; readonly requestId: number; readonly slotId: string; readonly newDishId: string }
+  | { readonly type: 'loadSlot'; readonly requestId: number; readonly slotId: string; readonly newDishId: string; readonly keepFrom?: KeepFrom }
   | { readonly type: 'deleteSlot'; readonly requestId: number; readonly slotId: string }
   | { readonly type: 'exportDish'; readonly requestId: number; readonly dishId: string; readonly strip: boolean }
-  | { readonly type: 'importDish'; readonly requestId: number; readonly text: string; readonly newDishId: string }
+  | { readonly type: 'importDish'; readonly requestId: number; readonly text: string; readonly newDishId: string; readonly keepFrom?: KeepFrom }
+  /**
+   * D-0033: how the open dish `aboutDishId` would be kept if an action replaced it now (New Dish, the
+   * Saved dishes checkpoint confirmation, an experiment card). With no dish open (null) it is the dish
+   * Continue holds (fix round 1: after a relaunch that is the player's dish). `opening` names the save
+   * the action opens, if any. Read-only. (Not named dishId: the dish is optional.)
+   */
+  | { readonly type: 'keepPlan'; readonly requestId: number; readonly aboutDishId: string | null; readonly opening?: string | null }
+  /** D-0033: a stored save (the autosave that Continue holds) as a .pixelmeba file, exactly as stored; answered by 'exported'. */
+  | { readonly type: 'exportSave'; readonly requestId: number; readonly slotId: string }
   /** Read-only family query for the inspector's "Where is its family?" shortcut (SPEC §12.1, UX §5.3). */
   | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly birthId: number }
   /** Read-only lineage panel query (SPEC §8.5, UX §5.5): branches, variation, specimens, and detail for one branch or one organism's branch. */
@@ -106,13 +120,15 @@ export type ToWorker =
   /**
    * What if? (P2.6, UX §3.4): the choices for a source recipe (or, with sourceId null, for the recipe
    * `aboutDishId` came from), each with its preview, and how that dish would be kept if a new dish
-   * started. Read-only; never simulates. (Not named dishId: the dish is optional.)
+   * started (with no dish open: the dish Continue holds, D-0033 fix round 1). Read-only; never
+   * simulates. (Not named dishId: the dish is optional.)
    */
   | { readonly type: 'whatIf'; readonly requestId: number; readonly sourceId: string | null; readonly aboutDishId: string | null }
   /**
    * Start a What if? variant as a NEW paused dish with its own world id. The new world is built first
-   * (a refusal changes nothing); then `fromDishId` is kept through the save flow (`keep`); only then
-   * does the new dish open. Again / Another idea need `fromDishId` to be a variant dish.
+   * (a refusal changes nothing); then `fromDishId` is kept through the save flow (`keep`; with no dish
+   * open, the dish Continue holds, D-0033 fix round 1); only then does the new dish open. Again /
+   * Another idea need `fromDishId` to be a variant dish.
    */
   | {
       readonly type: 'whatIfStart';
@@ -137,6 +153,8 @@ export type ToWorker =
       /** The new dish's id (not named dishId: a refused start must never touch an existing dish). */
       readonly newDishId: string;
       readonly compare: { readonly compareId: string; readonly aDishId: string; readonly bDishId: string } | null;
+      /** D-0033: keep the open dish first (see KeepFrom); the card's arms are realized before it is kept. */
+      readonly keepFrom?: KeepFrom;
     }
   /**
    * New Dish (P2.2, UX §2.3): what a dish with these choices would start with — realized in the worker
@@ -517,7 +535,8 @@ export interface CellInspect {
 }
 
 export type FromWorker =
-  | { readonly type: 'ready'; readonly requestId: number; readonly info: DishInfo }
+  /** `kept` (D-0033): how the dish that was open was kept first, when the request carried keepFrom. */
+  | { readonly type: 'ready'; readonly requestId: number; readonly info: DishInfo; readonly kept?: WhatIfKept }
   | SnapshotMsg
   | { readonly type: 'ack'; readonly requestId: number; readonly dishId: string; readonly result: CommandResult | null; readonly error?: string }
   | { readonly type: 'saved'; readonly requestId: number; readonly dishId: string; readonly json: string; readonly hash: string; readonly tick: number }
@@ -567,6 +586,8 @@ export type FromWorker =
       readonly usedPredecessor: boolean;
       /** P2.8: set when an automatic checkpoint was opened as a new branch (the dish it came from, and its moment). */
       readonly branch?: { readonly fromName: string; readonly tick: number };
+      /** D-0033: how the dish that was open was kept first, when the request carried keepFrom. */
+      readonly kept?: WhatIfKept;
     }
   | { readonly type: 'exported'; readonly requestId: number; readonly text: string; readonly filename: string }
   | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly family: FamilyAnswer }
@@ -586,7 +607,26 @@ export type FromWorker =
   /** The experiment cards this build ships (P2.5). */
   | { readonly type: 'experimentCatalog'; readonly requestId: number; readonly cards: readonly ExperimentCardView[] }
   /** A card started: its new paused dish, and for a paired card its comparison (setup, change on B). */
-  | { readonly type: 'experimentStarted'; readonly requestId: number; readonly cardId: string; readonly info: DishInfo; readonly compare: ComparisonState | null }
+  | { readonly type: 'experimentStarted'; readonly requestId: number; readonly cardId: string; readonly info: DishInfo; readonly compare: ComparisonState | null; readonly kept?: WhatIfKept }
+  /** D-0033: the answer to keepPlan. */
+  | { readonly type: 'keepPlan'; readonly requestId: number; readonly plan: WhatIfPlan }
+  /**
+   * D-0033: an action that replaces the open dish was refused because the open dish could not be kept
+   * first: all ten slots used ('slots-full'), no saving on this device ('save-unavailable'), the write
+   * failed ('save-failed'), or the chosen slot cannot be used ('failed'). `message` is readable as-is;
+   * nothing was started, opened, imported, saved or changed, and the open dish keeps its run state.
+   * `exclude` names a slot the player's replacement choice may not use (the save being opened).
+   * `name`: the dish that could not be kept; `fromContinue`: it is the dish Continue holds (no dish was open).
+   */
+  | {
+      readonly type: 'keepRefused';
+      readonly requestId: number;
+      readonly code: KeepRefusalCode;
+      readonly message: string;
+      readonly exclude: string | null;
+      readonly name: string;
+      readonly fromContinue?: true;
+    }
   /** Unsolicited: a running card reached its observation gate and every listed player step was taken. */
   | { readonly type: 'experimentStamp'; readonly dishId: string; readonly stamp: ExperimentStampMsg }
   /**
@@ -649,29 +689,73 @@ export type WhatIfPick =
  */
 export type WhatIfKeep = { readonly kind: 'auto' } | { readonly kind: 'replace'; readonly slotId: string } | { readonly kind: 'exported' };
 
+/**
+ * D-0033 fix round 1: set on a plan (and a kept result) about the dish Continue holds, when no dish is
+ * open (after a relaunch Home offers that dish as the player's own). It is kept by the same rules; the
+ * autosave is never written for it (it already holds it).
+ */
+interface AboutContinue {
+  readonly fromContinue?: true;
+}
+
 /** How the current dish would be kept on 'auto' (shown before Start). */
 export type WhatIfPlan =
-  /** No dish is open. */
+  /** No dish is open (and Continue holds none to keep). */
   | { readonly kind: 'none' }
-  /** A What if? dish still exactly at its recorded start: nothing to keep (it can be rebuilt exactly). */
-  | { readonly kind: 'unchanged'; readonly name: string }
+  /**
+   * Still exactly its recorded start, and this build rebuilds it exactly: nothing to keep. A What if?
+   * dish (no `seed`: "starting that idea again"), or, D-0033 fix round 1, a recipe, New Dish or
+   * experiment start (`seed`: the same start with this seed rebuilds it).
+   */
+  | ({ readonly kind: 'unchanged'; readonly name: string; readonly seed?: number } & AboutContinue)
+  /**
+   * D-0033: already in its own slot exactly as it is now (the file a save would write has the same
+   * checksummed state and name as the slot's current record): nothing is written.
+   */
+  | ({ readonly kind: 'saved'; readonly slotId: string; readonly name: string } & AboutContinue)
   /** Saved to this named slot (`own`: the slot it was opened from or last saved to). */
-  | { readonly kind: 'slot'; readonly slotId: string; readonly own: boolean; readonly name: string }
+  | ({ readonly kind: 'slot'; readonly slotId: string; readonly own: boolean; readonly name: string } & AboutContinue)
   /** All ten named slots are used by other saves. */
-  | { readonly kind: 'full'; readonly name: string }
+  | ({ readonly kind: 'full'; readonly name: string } & AboutContinue)
   /** This device cannot save. */
   | { readonly kind: 'unavailable'; readonly name: string };
 
 /** What happened to the previous dish when a What if? dish started. */
-export interface WhatIfKept {
-  readonly kind: 'none' | 'unchanged' | 'slot' | 'exported';
-  /** The named slot written ('slot'), with `replaced` naming the save it replaced, if any. */
+export interface WhatIfKept extends AboutContinue {
+  /** 'saved' (D-0033): its own slot already held it exactly as it was, so nothing was written. */
+  readonly kind: 'none' | 'unchanged' | 'saved' | 'slot' | 'exported';
+  /** The named slot written ('slot') or already holding it ('saved'), with `replaced` naming the save it replaced, if any. */
   readonly slot: SlotSummary | null;
   readonly replaced: string | null;
+  /** D-0033 fix round 1: the simulated moment of the save it replaced (tells two saves of one name apart). */
+  readonly replacedTick?: number;
   readonly name: string | null;
-  /** The autosave (Continue) now holds the previous dish. False if that write failed (the rest stands). */
+  /**
+   * The autosave (Continue) now holds the previous dish. False if that write failed (the rest stands).
+   * For the dish Continue itself holds (`fromContinue`, D-0033 fix round 2): true when Continue was
+   * written again, the same file bound to the named slot just written; false when no slot was written
+   * (it was exported: Continue is left exactly as it was) or that write failed.
+   */
   readonly autosaved: boolean;
 }
+
+// ---------------------------------------------------------------------------------------------
+// D-0033: every action that replaces the open dish keeps it first, through What if?'s keep flow.
+
+/**
+ * Keep the open dish `dishId` before the new one opens: `keep` as for What if? ('auto': its own named
+ * slot, else the first empty one; 'replace': a named slot the player chose; 'exported': no slot).
+ * The new dish is prepared first (a refusal there keeps and changes nothing); a keep that cannot be
+ * done answers `keepRefused` and nothing is opened. `dishId` null (fix round 1): no dish is open, so
+ * the dish Continue holds is kept by the same rules (nothing when Continue is empty or is what opens).
+ */
+export interface KeepFrom {
+  readonly dishId: string | null;
+  readonly keep: WhatIfKeep;
+}
+
+/** Why keeping the open dish refused its replacement (see the keepRefused packet). */
+export type KeepRefusalCode = 'slots-full' | 'save-failed' | 'save-unavailable' | 'failed';
 
 /** One What if? choice: the pure preview plus its cells before/after and the record checksums. */
 export interface WhatIfChoice {

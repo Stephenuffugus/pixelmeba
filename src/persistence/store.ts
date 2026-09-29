@@ -32,8 +32,24 @@ export interface SlotInfo {
    * slot or the autosave. Absent on every other slot.
    */
   readonly automatic?: true;
-  /** P2.8: the world id of the dish a checkpoint holds (automatic checkpoints only). */
+  /**
+   * P2.8: the world id of the dish a checkpoint holds. D-0033: named slots and the autosave written from
+   * now on record it too (absent in older indexes), so an autosave's `activeSlot` is trusted only while
+   * that slot still holds the same dish.
+   */
   readonly worldId?: string;
+  /**
+   * D-0033 (autosave only): the named slot the dish was bound to when the autosave was written (D-0026's
+   * "active slot": opened from or last saved to), so Continue reopens it bound to that slot again.
+   */
+  readonly activeSlot?: string;
+  /**
+   * D-0033 fix round 1 (autosave only): that slot's current record when the autosave's state was taken.
+   * Continue is bound to the slot again only while the slot still holds exactly that record: a slot
+   * written after it (the player saved again, and Continue was not refreshed) is never overwritten by
+   * the older Continue. Absent: Continue binds to nothing.
+   */
+  readonly activeRecord?: string;
   /**
    * P2.2: copies of the save file's meta.evolution and meta.registry, so Saved dishes and Continue can
    * state the world's mode labels (UX §3.3) without loading it. Optional (indexes written before lack
@@ -80,6 +96,11 @@ export interface SaveRequest {
   /** P2.2: the file's meta.evolution and meta.registry (copied into the slot index). */
   readonly evolution?: SaveMetaEvolution;
   readonly registry?: SaveMetaRegistry;
+  /** D-0033: the dish's world id and, for the autosave, the named slot the dish is bound to (index copies). */
+  readonly worldId?: string;
+  readonly activeSlot?: string;
+  /** D-0033 fix round 1 (autosave only): the bound slot's current record id when the state was taken. */
+  readonly activeRecord?: string;
 }
 
 let recordCounter = 0;
@@ -115,6 +136,9 @@ export class SaveStore {
       ...(req.variant ? { variant: req.variant } : {}),
       ...(req.evolution ? { evolution: req.evolution } : {}),
       ...(req.registry ? { registry: req.registry } : {}),
+      ...(req.worldId !== undefined ? { worldId: req.worldId } : {}),
+      ...(req.activeSlot !== undefined && req.slotId === AUTOSAVE_SLOT ? { activeSlot: req.activeSlot } : {}),
+      ...(req.activeRecord !== undefined && req.activeSlot !== undefined && req.slotId === AUTOSAVE_SLOT ? { activeRecord: req.activeRecord } : {}),
     };
     // The record older than the retained predecessor is removed in the same transaction.
     const deleteRecords = old?.previous ? [old.previous] : [];
@@ -147,6 +171,12 @@ export class SaveStore {
     const slot = await this.backend.getSlot(slotId);
     if (!slot) return;
     await this.backend.commit({ putRecords: [], putSlots: [], deleteRecords: [slot.current, ...(slot.previous ? [slot.previous] : [])], deleteSlots: [slotId] });
+  }
+
+  /** D-0033: a named slot's or the autosave's index record (never a checkpoint), or null when empty. */
+  async slot(slotId: string): Promise<SlotInfo | null> {
+    if (isCheckpointSlot(slotId)) return null;
+    return this.backend.getSlot(slotId);
   }
 
   /** First free named slot, or null when all ten are used. */

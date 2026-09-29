@@ -74,19 +74,38 @@ export function slotNumber(slotId: string): number {
   return m ? Number(m[1]) : 0;
 }
 
-/** How the current dish will be kept if Start is pressed (shown before Start; UX §3.4). */
+/**
+ * How the current dish will be kept if Start is pressed (shown before Start; UX §3.4). D-0033 fix round
+ * 1: with no dish open, the dish Continue holds is kept the same way (`fromContinue`), and a recipe or
+ * New Dish start that has not changed names its seed (`seed`); every other sentence is unchanged.
+ */
 export function planText(plan: WhatIfPlan): string {
+  const fromContinue = plan.kind !== 'none' && plan.kind !== 'unavailable' && plan.fromContinue === true;
+  const held = (name: string) => `Continue holds “${name}”, which`;
   switch (plan.kind) {
     case 'none':
       return 'No dish is open, so there is nothing to save first.';
     case 'unchanged':
-      return `“${plan.name}” has not changed since it started, so it is not saved again: starting that idea again rebuilds it exactly.`;
+      if (plan.seed === undefined && !fromContinue)
+        return `“${plan.name}” has not changed since it started, so it is not saved again: starting that idea again rebuilds it exactly.`;
+      return `${fromContinue ? held(plan.name) : `“${plan.name}”`} has not changed since it started${plan.seed !== undefined ? ` (seed ${plan.seed})` : ''}, so it is not saved again: ${
+        plan.seed !== undefined ? 'the same start rebuilds it exactly' : 'starting that idea again rebuilds it exactly'
+      }.`;
+    case 'saved':
+      // D-0033: its own slot already holds it exactly as it is now.
+      return fromContinue
+        ? `${held(plan.name)} is already saved in Slot ${slotNumber(plan.slotId)} exactly as it is, so nothing needs saving first.`
+        : `Your current dish “${plan.name}” is already saved in Slot ${slotNumber(plan.slotId)} exactly as it is now, so nothing needs saving first.`;
     case 'slot':
+      if (fromContinue)
+        return plan.own
+          ? `${held(plan.name)} will first be saved to Slot ${slotNumber(plan.slotId)}, where it was saved before.`
+          : `${held(plan.name)} will first be saved to Slot ${slotNumber(plan.slotId)} (empty now).`;
       return plan.own
         ? `Your current dish “${plan.name}” will first be saved to Slot ${slotNumber(plan.slotId)}, where it was saved before, and to Continue.`
         : `Your current dish “${plan.name}” will first be saved to Slot ${slotNumber(plan.slotId)} (empty now) and to Continue.`;
     case 'full':
-      return `All ten save slots are used. Before the new dish opens you will choose how to keep “${plan.name}”.`;
+      return `All ten save slots are used. Before the new dish opens you will choose how to keep “${plan.name}”${fromContinue ? ', the dish Continue holds' : ''}.`;
     case 'unavailable':
       return `This device cannot keep saves. You will be asked to export “${plan.name}” as a file first.`;
   }
@@ -98,15 +117,17 @@ export function startedText(title: string, kept: WhatIfKept, again: boolean): st
     ? `Started “${title}” again from the same start — paused.`
     : `Started “${title}” — paused. Press Run when you are ready.`;
   let keptLine = '';
+  // D-0033 fix round 1: the dish Continue held (no dish was open) is named as such; Continue already holds it.
+  const from = kept.fromContinue ? ' from Continue' : '';
   if (kept.kind === 'slot' && kept.slot) {
     keptLine = kept.replaced
-      ? `“${kept.name ?? 'Your dish'}” replaced “${kept.replaced}” in Slot ${slotNumber(kept.slot.slotId)}.`
-      : `“${kept.name ?? 'Your dish'}” was saved to Slot ${slotNumber(kept.slot.slotId)}.`;
+      ? `“${kept.name ?? 'Your dish'}”${from} replaced “${kept.replaced}” in Slot ${slotNumber(kept.slot.slotId)}.`
+      : `“${kept.name ?? 'Your dish'}”${from} was saved to Slot ${slotNumber(kept.slot.slotId)}.`;
   } else if (kept.kind === 'exported') {
-    keptLine = `“${kept.name ?? 'Your dish'}” is in the file you exported.`;
+    keptLine = `“${kept.name ?? 'Your dish'}”${from} is in the file you exported.`;
   }
   const autosaveLine =
-    (kept.kind === 'slot' || kept.kind === 'exported') && !kept.autosaved
+    (kept.kind === 'slot' || kept.kind === 'exported') && !kept.autosaved && !kept.fromContinue
       ? ' Continue could not be updated.'
       : '';
   return `${keptLine ? `${keptLine} ` : ''}${opened}${autosaveLine}`;

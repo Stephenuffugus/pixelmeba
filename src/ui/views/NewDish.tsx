@@ -8,9 +8,10 @@
  * Life tray open.
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { NewDishPreview, Speed } from '@worker/protocol';
+import type { DishInfo, NewDishPreview, Speed } from '@worker/protocol';
 import { IconBack, IconPlay } from '../icons';
 import { busy, dishInfo, newDishPreview, route, setSpeed, startCustom, toast } from '../state';
+import { useKeepPlanText } from '../panels/KeepPlanLine';
 import { ChoiceGroup, newDishReturn, RatesTable } from '../panels/AdvancedEvolution';
 import { labShowsDish, openLabWith } from './LabView';
 import {
@@ -142,27 +143,14 @@ export function NewDish() {
   // The registry is this build's manifest whatever the choices, so an older answer still describes it.
   const registry = (current ?? preview)?.registry ?? null;
 
-  const create = async () => {
-    setProblem(null);
-    try {
-      await startCustom({
-        recipeId: RECIPE_ID,
-        name,
-        seed,
-        mutationPreset: preset,
-        founderMode: founders,
-        empty: start === 'empty',
-      });
-    } catch (e) {
-      setProblem(
-        `The new dish could not be started; nothing changed: ${e instanceof Error ? e.message : String(e)}`,
-      );
-      return;
-    }
+  // D-0033: what Create will do to the open dish (with none open, the dish Continue holds: fix round 1),
+  // from the worker's keep step (said before Create).
+  const planLine = useKeepPlanText('start');
+
+  /** Runs once the new dish is open (at once, or after the all-slots-used choice). */
+  const started = (info: DishInfo) => {
     // The dish New Dish was opened from is closed now: Back has nothing to return to.
     newDishReturn.current = null;
-    const info = dishInfo.value;
-    if (!info) return;
     // A message about the dish that was open (e.g. its last evolution change) is not about this one.
     toast.value = null;
     // UX §2.3: a new Lab dish enters paused with the Life tray open. Tell the Lab this dish is already
@@ -170,6 +158,29 @@ export function NewDish() {
     labShowsDish(info.dishId);
     openLabWith('life');
     revealLifeTray();
+  };
+
+  const create = async () => {
+    setProblem(null);
+    try {
+      const outcome = await startCustom(
+        {
+          recipeId: RECIPE_ID,
+          name,
+          seed,
+          mutationPreset: preset,
+          founderMode: founders,
+          empty: start === 'empty',
+        },
+        started,
+      );
+      // A refused keep (e.g. the save could not be written) started nothing and says why.
+      if (outcome.kind === 'refused') setProblem(outcome.message);
+    } catch (e) {
+      setProblem(
+        `The new dish could not be started; nothing changed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
   };
 
   // Back returns to the dish the Evolution sheet opened this from, in the run state it had; else Home.
@@ -184,7 +195,6 @@ export function NewDish() {
     }
     route.value = { name: 'home' };
   };
-  const openDish = dishInfo.value;
 
   return (
     <main class="page" aria-labelledby="new-title">
@@ -339,10 +349,10 @@ export function NewDish() {
               {problem}
             </p>
           ) : null}
-          {openDish ? (
-            <p class="constraint" data-testid="new-dish-replaces">
-              Creating a new dish closes “{openDish.name}”. To keep it, go Back and save it first (More →
-              Save…).
+          {/* D-0033: the open dish (or the dish Continue holds) is kept first; this says how, or that nothing needs keeping. */}
+          {planLine ? (
+            <p class="constraint" data-testid="new-dish-replaces" aria-live="polite">
+              {planLine}
             </p>
           ) : null}
           <button

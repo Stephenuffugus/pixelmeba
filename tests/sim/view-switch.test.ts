@@ -22,6 +22,7 @@ import type * as LabViewModule from '../../src/ui/views/LabView';
 import type * as OverlayPickerModule from '../../src/ui/panels/OverlayPicker';
 import type { GestureHandlers } from '../../src/ui/gestures';
 import { DishHost } from '../../src/worker/host';
+import { MemoryBackend, SaveStore } from '../../src/persistence/store';
 import type { FromWorker, ToWorker } from '../../src/worker/protocol';
 import { canonicalJson, sha256Hex } from '../../src/sim/hash';
 import { CELL_COUNT } from '../../src/sim/constants';
@@ -39,9 +40,15 @@ const sent: Msg[] = [];
 class InProcessWorker {
   onmessage: ((ev: { data: FromWorker }) => void) | null = null;
   constructor() {
-    host = new DishHost(registry(), (m) => queueMicrotask(() => this.onmessage?.({ data: m })), {
-      now: () => clock,
-    });
+    // D-0033: an import over the open dish keeps that dish first, so this device can save (in memory).
+    host = new DishHost(
+      registry(),
+      (m) => queueMicrotask(() => this.onmessage?.({ data: m })),
+      {
+        now: () => clock,
+      },
+      new SaveStore(new MemoryBackend()),
+    );
   }
   postMessage(msg: Msg): void {
     sent.push(msg);

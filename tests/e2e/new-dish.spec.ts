@@ -244,12 +244,12 @@ test('New Dish and the evolution sheet work at 200 % text', async ({ page }) => 
   );
   await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
 
-  // "New dish…" from the sheet: New Dish says the open dish would close; Back returns to it running.
+  // "New dish…" from the sheet: New Dish says how the open dish is kept first (D-0033); Back returns to it running.
   await page.getByTestId('run-toggle').click();
   await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Pause');
   await page.getByTestId('evolution-new-dish').click();
   await expect(page.getByRole('heading', { name: 'New dish' })).toBeVisible();
-  await expect(page.getByTestId('new-dish-replaces')).toContainText('Creating a new dish closes');
+  await expect(page.getByTestId('new-dish-replaces')).toHaveText('“My dish” will first be saved to Slot 1 (empty now) and to Continue.');
   await page.getByRole('button', { name: 'Back' }).click();
   await expect(page.getByTestId('dish-screen')).toBeVisible();
   await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Pause');

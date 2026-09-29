@@ -179,7 +179,8 @@ test('observe: regional trait graphs and table, automatic checkpoint at 4×, ope
   const confirm = row.getByTestId('checkpoint-confirm');
   await expect(confirm).toBeFocused();
   await expect(confirm).toContainText(/^Continue now holds “Little Living Garden” at 1:\d\d\. /);
-  await expect(confirm).toContainText('save it to a slot first');
+  // D-0033: the open dish is kept first, and the question says how.
+  await expect(confirm).toContainText('“Little Living Garden” will first be saved to Slot 1 (empty now).');
   await expect(row.getByTestId('checkpoint-open-confirm')).toHaveAccessibleDescription(/^Continue now holds “Little Living Garden”/);
   await expectNoSeriousA11yViolations(page);
   await page.keyboard.press('Tab');

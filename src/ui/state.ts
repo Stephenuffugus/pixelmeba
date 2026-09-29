@@ -20,6 +20,11 @@ import { JOURNAL_MAX, mergeJournal, setJournalSink, type JournalEntry } from './
 import { journalRemovedText } from './journal';
 import type { CheckpointNotice } from '@worker/client';
 import { clauseText, experimentEndedText, formatDiff, formatMeasure, measureLabel, stampToastText, waitingStepsText } from './strings/experiments';
+import type { KeepRefused } from '@worker/client';
+import type { DishSource, KeepFrom, SlotSummary, WhatIfKeep, WhatIfPlan } from '@worker/protocol';
+import { duplicatedText, KEEP_TEXT, keptLine, withKeptLine, type KeepVerb } from './strings/keep';
+import type { KeepStep } from './panels/KeepChoice';
+import { mountKeepHost } from './panels/KeepSheet';
 
 export type Route =
   | { readonly name: 'home' }
@@ -299,7 +304,20 @@ function newDishId(): string {
   return `dish-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
 }
 
-function enterDish(info: DishInfo, promptText: string | null): void {
+/** No tick of the open dish has been autosaved yet (Continue holds another dish, or none). */
+const NOT_AUTOSAVED = -1;
+/** The tick of the open dish that Continue holds (the last autosave of it), or NOT_AUTOSAVED. */
+let lastAutosaveTick = NOT_AUTOSAVED;
+
+/**
+ * Show a dish that was just opened or started. `continueHolds`: Continue already holds exactly this dish
+ * at this moment (it was opened from Continue itself), so the next autosave has nothing to write until
+ * it changes. Any other dish Continue does not hold yet: the next autosave (every 30 s, going to the
+ * background, leaving the page) writes it even at an unchanged tick, so Continue is the last dish
+ * (UX §2 "Home ─ Continue (last dish …)"). D-0033 fix round 2: a dish opened and left unrun used to leave
+ * Continue on the dish before it, which Home then offered after the next launch.
+ */
+function enterDish(info: DishInfo, promptText: string | null, continueHolds = false): void {
   clearFeed();
   evolution.value = null;
   batch(() => {
@@ -316,21 +334,26 @@ function enterDish(info: DishInfo, promptText: string | null): void {
     route.value = { name: 'dish' };
   });
   renderer?.setSpecies(info.speciesIds, info.speciesAssets);
-  lastAutosaveTick = info.tick;
+  lastAutosaveTick = continueHolds ? info.tick : NOT_AUTOSAVED;
   // P2.8: a dish opened from a save or a file brings its journal entries into this device's Notebook.
   void syncDishJournal(info.dishId);
 }
 
-let lastAutosaveTick = -1;
-
-/** Autosave the active dish if it changed since the last autosave (SPEC §14.2). */
-export async function autosave(): Promise<boolean> {
+/**
+ * Autosave the active dish if it changed since the last autosave, or was never autosaved since it opened
+ * (SPEC §14.2; enterDish). `force`: write even at an unchanged tick (a manual save is an autosave event
+ * too, and a change made while paused — Add Life, a rename — keeps the tick: Continue must still follow
+ * it; D-0033 fix round 1).
+ */
+export async function autosave(force = false): Promise<boolean> {
   const info = dishInfo.value;
   const m = meta.value;
-  if (!info || !m || m.tick === lastAutosaveTick) return true;
+  if (!info || !m || (!force && m.tick === lastAutosaveTick)) return true;
   try {
-    await getClient().autosave(info.dishId);
-    lastAutosaveTick = m.tick;
+    const written = await getClient().autosave(info.dishId);
+    // The moment the worker wrote (the meta read above may still be the previous dish's), and only for
+    // the dish it wrote: another dish opened meanwhile is still not autosaved.
+    if (dishInfo.value?.dishId === info.dishId) lastAutosaveTick = written.tick;
     return true;
   } catch (e) {
     showToast(`Autosave failed; your previous save is intact. (${(e as Error).message})`, 4000);
@@ -344,9 +367,11 @@ export async function saveToSlot(slotId: string, name: string): Promise<boolean>
   try {
     const s = await getClient().saveSlot(info.dishId, slotId, name);
     dishInfo.value = { ...info, name: s.name };
-    // A manual save is an autosave event too (SPEC §14.2), so Continue opens this same moment. Confirm
-    // only once both writes have landed: leaving the page right after "Saved" must not lose Continue.
-    if (await autosave()) showToast(`Saved "${s.name}".`);
+    // A manual save is an autosave event too (SPEC §14.2), so Continue opens this same moment, even when
+    // the tick has not moved since the last autosave (D-0033 fix round 1: a Continue older than the slot
+    // it names is never bound to it again). Confirm only once both writes have landed: leaving the page
+    // right after "Saved" must not lose Continue.
+    if (await autosave(true)) showToast(`Saved "${s.name}".`);
     else showToast(`Saved "${s.name}", but Continue could not be updated; it still opens your previous autosave.`, 4000);
     return true;
   } catch (e) {
@@ -355,41 +380,70 @@ export async function saveToSlot(slotId: string, name: string): Promise<boolean>
   }
 }
 
-export async function loadSlot(slotId: string): Promise<void> {
+/**
+ * Saved dishes → Open (a named slot, the autosave or an automatic checkpoint) and Home → Continue.
+ * D-0033: the open dish is kept first (the save is read and checked before anything is kept; never into
+ * the slot being opened). `label` names the save while the all-slots-used choice waits.
+ */
+export async function loadSlot(slotId: string, label = 'the saved dish'): Promise<ReplaceOutcome> {
   busy.value = true;
   try {
     const c = getClient();
-    const old = dishInfo.value;
-    const { info, usedPredecessor, branch } = await c.loadSlot(slotId, newDishId());
-    if (old && old.dishId !== info.dishId) c.dispose(old.dishId);
-    enterDish(info, null);
-    // P2.8: an automatic checkpoint is not where the player left a dish: it opens as a new branch.
-    if (branch) {
-      // P2.8 fix round 2: Continue follows the branch from the moment it opens, as the confirm and the
-      // toast say (autosave() alone would skip the unchanged tick until the branch runs).
-      const followed = await c.autosave(info.dishId).then(
-        () => true,
-        () => false,
-      );
-      showToast(checkpointOpenedText(branch, info.name, followed), 6000);
-    } else showToast(usedPredecessor ? 'The latest save was damaged, so the previous copy was opened.' : `Opened "${info.name}" — paused where you left it.`, 3500);
+    const checkpoint = slotId.startsWith('checkpoint-');
+    const outcome = await replaceOpenDish(checkpoint ? 'checkpoint' : 'open', label, async (keepFrom) => {
+      const old = dishInfo.value;
+      const r = await c.loadSlotKeeping(slotId, newDishId(), keepFrom);
+      if (!r.ok) return r;
+      const { info, usedPredecessor, branch } = r;
+      if (old && old.dishId !== info.dishId) c.dispose(old.dishId);
+      // Continue holds exactly the dish opened from it (not an older copy read from its predecessor).
+      enterDish(info, null, slotId === 'autosave' && !usedPredecessor);
+      // P2.8: an automatic checkpoint is not where the player left a dish: it opens as a new branch.
+      if (branch) {
+        // P2.8 fix round 2: Continue follows the branch from the moment it opens, as the confirm and the
+        // toast say (not only at the next autosave).
+        const followed = await c.autosave(info.dishId).then(
+          (written) => {
+            if (dishInfo.value?.dishId === info.dishId) lastAutosaveTick = written.tick;
+            return true;
+          },
+          () => false,
+        );
+        showToast(withKeptLine(r.kept, checkpointOpenedText(branch, info.name, followed), false), 6000);
+      } else {
+        const opened = usedPredecessor ? 'The latest save was damaged, so the previous copy was opened.' : `Opened “${info.name}” — paused where you left it.`;
+        // Opening Continue itself writes no Continue first, so there is nothing to say about it.
+        showToast(withKeptLine(r.kept, opened, slotId !== 'autosave'), r.kept && keptLine(r.kept) ? 6000 : 3500);
+      }
+      return { ok: true };
+    });
+    if (outcome.kind === 'refused') showToast(outcome.message, 6000);
+    return outcome;
   } catch (e) {
-    showToast(`That save could not be opened: ${(e as Error).message}`, 5000);
+    const message = `That save could not be opened: ${(e as Error).message}`;
+    showToast(message, 5000);
+    return { kind: 'refused', message };
   } finally {
     busy.value = false;
   }
 }
 
+/** Import a .pixelmeba file (Saved dishes, More). D-0033: the file is checked first, then the open dish is kept. */
 export async function importFile(file: File): Promise<void> {
   busy.value = true;
   try {
     const text = await file.text();
     const c = getClient();
-    const old = dishInfo.value;
-    const info = await c.importDish(text, newDishId());
-    if (old) c.dispose(old.dishId);
-    enterDish(info, null);
-    showToast(`Imported "${info.name}" — paused.`, 3000);
+    const outcome = await replaceOpenDish('import', file.name, async (keepFrom) => {
+      const old = dishInfo.value;
+      const r = await c.importDishKeeping(text, newDishId(), keepFrom);
+      if (!r.ok) return r;
+      if (old && old.dishId !== r.info.dishId) c.dispose(old.dishId);
+      enterDish(r.info, null);
+      showToast(withKeptLine(r.kept, `Imported “${r.info.name}” — paused.`), r.kept && keptLine(r.kept) ? 6000 : 3000);
+      return { ok: true };
+    });
+    if (outcome.kind === 'refused') showToast(outcome.message, 6000);
   } catch (e) {
     showToast(`Nothing was changed: ${(e as Error).message}`, 5000);
   } finally {
@@ -397,34 +451,82 @@ export async function importFile(file: File): Promise<void> {
   }
 }
 
+/** A dish file the player keeps: `text` offered as a download named `filename` (Export; the keep flow's export). */
+export function saveTextFile(text: string, filename: string): void {
+  const blob = new Blob([text], { type: 'application/vnd.pixelmeba+json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+/** Export a dish as a file the player keeps (no toast); resolves the file name. */
+export async function exportDishFile(dishId: string): Promise<string> {
+  const { text, filename } = await getClient().exportDish(dishId, false);
+  saveTextFile(text, filename);
+  return filename;
+}
+
+/**
+ * Export the dish Continue holds, exactly as stored (the keep flow while no dish is open; D-0033 fix
+ * round 1); resolves the file name.
+ */
+export async function exportContinueFile(): Promise<string> {
+  const { text, filename } = await getClient().exportSave('autosave');
+  saveTextFile(text, filename);
+  return filename;
+}
+
+/** The ten named slots as Saved dishes lists them (the autosave and checkpoints left out). */
+export async function namedSlots(): Promise<readonly SlotSummary[]> {
+  const { slots } = await getClient().listSlots();
+  return slots.filter((s) => s.slotId !== 'autosave' && !s.automatic);
+}
+
 export async function exportCurrent(strip: boolean): Promise<void> {
   const info = dishInfo.value;
   if (!info) return;
   try {
     const { text, filename } = await getClient().exportDish(info.dishId, strip);
-    const blob = new Blob([text], { type: 'application/vnd.pixelmeba+json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    saveTextFile(text, filename);
     showToast(`Exported ${filename}.`);
   } catch (e) {
     showToast(`Export failed: ${(e as Error).message}`, 4000);
   }
 }
 
+/**
+ * Duplicate dish (More, Lab Tools → Duplicate). D-0033: the copy takes the dish's place on screen, so the
+ * dish is kept first like any replaced dish (its own slot, else the first empty one; nothing when that
+ * slot already holds it exactly or it has not changed since it started; the Keep sheet when all ten are
+ * used); then the copy of that same moment opens and the original is let go. The line says where the
+ * original is (it used to say "unchanged" and then leave it unreachable).
+ */
 export async function duplicateCurrent(): Promise<void> {
   const info = dishInfo.value;
   if (!info) return;
-  const c = getClient();
-  const copy = await c.duplicate(info.dishId, newDishId());
-  c.activate(copy.dishId);
-  enterDish(copy, null);
-  showToast('Duplicated. You are now in the copy; the original is unchanged.', 3500);
+  busy.value = true;
+  try {
+    const c = getClient();
+    const outcome = await replaceOpenDish('duplicate', `${info.name} (copy)`, async (keepFrom) => {
+      const r = await c.duplicateKeeping(info.dishId, newDishId(), keepFrom);
+      if (!r.ok) return r;
+      c.activate(r.info.dishId);
+      c.dispose(info.dishId);
+      enterDish(r.info, null);
+      showToast(duplicatedText(r.kept), 5000);
+      return { ok: true };
+    });
+    if (outcome.kind === 'refused') showToast(outcome.message, 6000);
+  } catch (e) {
+    showToast(`The dish was not duplicated; nothing was changed: ${(e as Error).message}`, 5000);
+  } finally {
+    busy.value = false;
+  }
 }
 
 /** A fresh dish id for a dish the UI asks the worker to create (UI bookkeeping, never simulation state). */
@@ -441,38 +543,258 @@ export function enterStartedDish(info: DishInfo, previousDishId: string | null):
   enterDish(info, null);
 }
 
-export async function startCustom(opts: {
-  recipeId: string;
-  name: string;
-  seed: number;
-  mutationPreset: 'standard' | 'accelerated' | 'fixed';
-  founderMode: 'identical' | 'varied' | 'diverse';
-  empty: boolean;
-}): Promise<void> {
+/**
+ * New Dish → Create (P2.2). D-0033: the dish is built first, then the open dish is kept, then the new
+ * one opens; `onStarted` runs once it is open (also after the all-slots-used choice).
+ */
+export async function startCustom(
+  opts: {
+    recipeId: string;
+    name: string;
+    seed: number;
+    mutationPreset: 'standard' | 'accelerated' | 'fixed';
+    founderMode: 'identical' | 'varied' | 'diverse';
+    empty: boolean;
+  },
+  onStarted?: (info: DishInfo) => void,
+): Promise<ReplaceOutcome> {
+  const source: DishSource = { kind: 'recipe', recipeId: opts.recipeId, seed: opts.seed, overrides: { mutationPreset: opts.mutationPreset, founderMode: opts.founderMode, empty: opts.empty } };
+  return startDish(source, opts.name, null, onStarted);
+}
+
+/** The start prompt of a Play shelf dish (cleared when the dish first runs). */
+const PLAY_PROMPT = 'Press play and look closely.';
+
+/** The Play shelf's Start (P1.12). D-0033: the open dish is kept first. */
+export async function startRecipe(recipeId: string, name: string): Promise<ReplaceOutcome> {
+  const outcome = await startDish({ kind: 'recipe', recipeId }, name, settings.value.showPrompts ? PLAY_PROMPT : null);
+  if (outcome.kind === 'refused') showToast(outcome.message, 6000);
+  return outcome;
+}
+
+/** Create a dish in place of the open one, keeping the open one first (D-0033). */
+async function startDish(source: DishSource, name: string, promptText: string | null, onStarted?: (info: DishInfo) => void): Promise<ReplaceOutcome> {
   busy.value = true;
   try {
     const c = getClient();
-    const old = dishInfo.value;
-    // The new dish first: a failed start leaves the current dish exactly as it was.
-    const info = await c.create(newDishId(), { kind: 'recipe', recipeId: opts.recipeId, seed: opts.seed, overrides: { mutationPreset: opts.mutationPreset, founderMode: opts.founderMode, empty: opts.empty } }, opts.name);
-    if (old && old.dishId !== info.dishId) c.dispose(old.dishId);
-    enterDish(info, null);
+    return await replaceOpenDish('start', name, async (keepFrom) => {
+      const old = dishInfo.value;
+      // The new dish first: a failed start leaves the current dish exactly as it was.
+      const r = await c.createKeeping(newDishId(), source, name, keepFrom);
+      if (!r.ok) return r;
+      if (old && old.dishId !== r.info.dishId) c.dispose(old.dishId);
+      // The line about the dish that was kept joins the start prompt when there is one (a toast in the
+      // same place would cover the prompt); otherwise it is a toast.
+      const line = keptLine(r.kept);
+      enterDish(r.info, promptText && line ? `${line} ${promptText}` : promptText);
+      onStarted?.(r.info);
+      if (line && !promptText) showToast(line, 5000);
+      return { ok: true };
+    });
   } finally {
     busy.value = false;
   }
 }
 
-export async function startRecipe(recipeId: string, name: string): Promise<void> {
-  busy.value = true;
+// ---------------------------------------------------------------------------------------------
+// D-0033: every action that replaces the open dish (Play shelf Start, New Dish Create, an experiment
+// card's Start, Saved dishes → Open, Import; What if? has its own sheet) keeps it first through the
+// worker's one keep step: its own slot, else the first empty one, and nothing when nothing needs
+// keeping. With all ten slots used the player chooses in the Keep sheet (the shared KeepChoicePanel):
+// export it and go ahead, deliberately replace a save, or Cancel (nothing changes, and the dish keeps
+// its run state). A failed write refuses the replacement with a readable message.
+
+/** How a replacing action ended for its caller. */
+export type ReplaceOutcome =
+  /** The new dish is open. */
+  | { readonly kind: 'done' }
+  /** All ten slots are used (or saving is unavailable): the Keep sheet asks the player. */
+  | { readonly kind: 'choosing' }
+  /** Nothing was replaced: `message` says why (readable as-is). */
+  | { readonly kind: 'refused'; readonly message: string };
+
+/** The Keep sheet's state while the player chooses how to keep the open dish. */
+export interface KeepFlow {
+  readonly verb: KeepVerb;
+  /** What waits to open: the new dish's name, the save's, the file's or the card's. */
+  readonly waiting: string;
+  /** The open dish being kept (null: no dish is open, the dish Continue holds is kept), and its name. */
+  readonly dishId: string | null;
+  readonly name: string;
+  readonly step: KeepStep;
+  /** A slot the replacement may not use (the save being opened). */
+  readonly exclude: string | null;
+}
+
+export const keepFlow = signal<KeepFlow | null>(null);
+export const keepBusy = signal<boolean>(false);
+export const keepNotice = signal<string | null>(null);
+
+/**
+ * One try of a replacing action with a way of keeping the open dish (`keepFrom.dishId` null: no dish is
+ * open, so the worker keeps the dish Continue holds, if any; D-0033 fix round 1).
+ */
+type KeepAttempt = (keepFrom: KeepFrom) => Promise<{ readonly ok: true } | KeepRefused>;
+
+let keepAttempt: KeepAttempt | null = null;
+/** The open dish's run state when the action began: restored when nothing is replaced. */
+let keepResume: { readonly dishId: string; readonly speed: Speed } | null = null;
+/** The control that started the waiting action and the screen it was on (focus returns there on Cancel). */
+let keepOpener: { readonly el: HTMLElement | null; readonly route: Route['name'] } | null = null;
+
+/** Where focus returns when the Keep sheet closes without replacing the dish (null: leave it). */
+export function keepReturnTarget(): HTMLElement | null {
+  const o = keepOpener;
+  if (!o || route.value.name !== o.route || typeof document === 'undefined') return null;
+  if (o.el?.isConnected) return o.el;
+  return document.querySelector<HTMLElement>('[data-testid="more"]');
+}
+
+/** Nothing was replaced: the dish carries on in the run state it had (only while it is on screen). */
+function resumeKept(): void {
+  const r = keepResume;
+  keepResume = null;
+  if (r && r.speed > 0 && dishInfo.value?.dishId === r.dishId && route.value.name === 'dish') getClient().setSpeed(r.dishId, r.speed);
+}
+
+function isFullRefusal(r: KeepRefused): r is KeepRefused & { readonly code: 'slots-full' | 'save-unavailable' } {
+  return r.code === 'slots-full' || r.code === 'save-unavailable';
+}
+
+async function replaceOpenDish(verb: KeepVerb, waiting: string, attempt: KeepAttempt): Promise<ReplaceOutcome> {
+  const open = dishInfo.value;
+  const focused = typeof document !== 'undefined' && document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+  keepOpener = { el: focused, route: route.value.name };
+  // The kept dish holds one moment: pause it while it is kept (a running dish is possible behind More → Import).
+  const speed = meta.value?.speed ?? 0;
+  keepResume = open ? { dishId: open.dishId, speed } : null;
+  if (open && speed > 0) getClient().setSpeed(open.dishId, 0);
+  let r: { readonly ok: true } | KeepRefused;
   try {
-    const c = getClient();
-    const old = dishInfo.value;
-    // The new dish first: a failed start leaves the current dish exactly as it was.
-    const info = await c.create(newDishId(), { kind: 'recipe', recipeId }, name);
-    if (old && old.dishId !== info.dishId) c.dispose(old.dishId);
-    enterDish(info, settings.value.showPrompts ? 'Press play and look closely.' : null);
+    // With no dish open, the dish Continue holds is what the player left: the worker keeps it (if any).
+    r = await attempt({ dishId: open?.dishId ?? null, keep: { kind: 'auto' } });
+  } catch (e) {
+    resumeKept();
+    throw e;
+  }
+  if (r.ok) {
+    keepResume = null;
+    return { kind: 'done' };
+  }
+  if (isFullRefusal(r)) {
+    keepAttempt = attempt;
+    batch(() => {
+      keepNotice.value = null;
+      keepBusy.value = false;
+      keepFlow.value = {
+        verb,
+        waiting,
+        dishId: open?.dishId ?? null,
+        name: r.name,
+        step: { stage: 'choose', reason: r.code === 'slots-full' ? 'full' : 'unavailable' },
+        exclude: r.exclude,
+      };
+    });
+    mountKeepHost();
+    return { kind: 'choosing' };
+  }
+  resumeKept();
+  return { kind: 'refused', message: r.message };
+}
+
+/** The player's choice in the Keep sheet: try the waiting action again, keeping the dish that way. */
+export async function continueKeep(keep: WhatIfKeep): Promise<void> {
+  const flow = keepFlow.value;
+  const attempt = keepAttempt;
+  if (!flow || !attempt || keepBusy.value) return;
+  batch(() => {
+    keepBusy.value = true;
+    keepNotice.value = null;
+    busy.value = true;
+  });
+  try {
+    const r = await attempt({ dishId: flow.dishId, keep });
+    if (r.ok) {
+      endKeepFlow(false);
+      return;
+    }
+    // Refused again (e.g. the write failed): the choice stays open and says why; nothing was changed.
+    const now = keepFlow.value ?? flow;
+    batch(() => {
+      if (isFullRefusal(r)) keepFlow.value = { ...now, step: { stage: 'choose', reason: r.code === 'slots-full' ? 'full' : 'unavailable' }, exclude: r.exclude };
+      keepNotice.value = r.message;
+    });
+  } catch (e) {
+    keepNotice.value = (e as Error).message;
   } finally {
-    busy.value = false;
+    batch(() => {
+      keepBusy.value = false;
+      busy.value = false;
+    });
+  }
+}
+
+/** Cancel the Keep sheet: nothing was written, the dish is exactly as it was, in its run state. */
+export function cancelKeep(): void {
+  if (!keepFlow.value || keepBusy.value) return;
+  endKeepFlow(true);
+  showToast(KEEP_TEXT.cancelled, 3000);
+}
+
+function endKeepFlow(resume: boolean): void {
+  keepAttempt = null;
+  batch(() => {
+    keepFlow.value = null;
+    keepNotice.value = null;
+  });
+  if (resume) resumeKept();
+  else keepResume = null;
+}
+
+/** All slots used → "Export it as a file": a real export of the open dish, then the action is offered. */
+export async function exportBeforeKeep(): Promise<void> {
+  const flow = keepFlow.value;
+  if (!flow || keepBusy.value) return;
+  keepBusy.value = true;
+  try {
+    const file = flow.dishId !== null ? await exportDishFile(flow.dishId) : await exportContinueFile();
+    const now = keepFlow.value;
+    if (now) keepFlow.value = { ...now, step: { stage: 'exported', file } };
+  } catch (e) {
+    keepNotice.value = KEEP_TEXT.exportFailed((e as Error).message);
+  } finally {
+    keepBusy.value = false;
+  }
+}
+
+/** All slots used → "Replace a saved dish…": list the ten slots for a deliberate choice. */
+export async function chooseKeepReplacement(): Promise<void> {
+  const flow = keepFlow.value;
+  if (!flow) return;
+  try {
+    const slots = await namedSlots();
+    const now = keepFlow.value;
+    if (now) keepFlow.value = { ...now, step: { stage: 'replace', slots, slotId: null } };
+  } catch (e) {
+    keepNotice.value = (e as Error).message;
+  }
+}
+
+export function pickKeepReplacement(slotId: string): void {
+  const flow = keepFlow.value;
+  if (flow?.step.stage === 'replace' && slotId !== flow.exclude) keepFlow.value = { ...flow, step: { ...flow.step, slotId } };
+}
+
+/**
+ * How the open dish (with none open, the dish Continue holds; D-0033 fix round 1) would be kept if an
+ * action replaced it now (New Dish, Saved dishes' checkpoint confirmation, an experiment card), from the
+ * worker's keep step; `opening`: the save the action opens. Null when the plan could not be read.
+ */
+export async function keepPlanNow(opening: string | null = null): Promise<WhatIfPlan | null> {
+  try {
+    return await getClient().keepPlan(dishInfo.value?.dishId ?? null, opening);
+  } catch {
+    return null;
   }
 }
 
@@ -480,7 +802,7 @@ export function setSpeed(speed: Speed): void {
   const info = dishInfo.value;
   if (!info) return;
   getClient().setSpeed(info.dishId, speed);
-  if (speed > 0 && prompt.value === 'Press play and look closely.') prompt.value = null;
+  if (speed > 0 && prompt.value?.endsWith(PLAY_PROMPT)) prompt.value = null;
 }
 
 export function togglePause(): void {
@@ -1058,9 +1380,11 @@ function onExperimentNotice(m: ExperimentNotice): void {
 }
 
 /**
- * Start a card as a new paused dish (SPEC §13.2). The current dish is kept in Continue first (a failed
- * write starts nothing). A paired card opens its paired run with the card's change already on B and
- * the prediction note shown; a single-arm card opens its dish, whose gate the worker watches.
+ * Start a card as a new paused dish (SPEC §13.2). D-0033 (supersedes D-0027's "autosave to Continue
+ * without writing a named slot"): the card's arms are realized first, then the open dish is kept like any
+ * replaced dish (its own slot, else the first empty one, and Continue), then the card opens. A paired
+ * card opens its paired run with the card's change already on B and the prediction note shown; a
+ * single-arm card opens its dish, whose gate the worker watches.
  */
 export async function startExperiment(cardId: string): Promise<void> {
   const card = experimentCard(cardId);
@@ -1071,55 +1395,73 @@ export async function startExperiment(cardId: string): Promise<void> {
   }
   busy.value = true;
   try {
-    const old = dishInfo.value;
-    if (old && !(await autosave())) {
-      showToast('Your current dish could not be kept in Continue, so the experiment was not started. Nothing changed.', 5000);
-      return;
-    }
-    const c = getClient();
-    const dishId = newDishId();
-    if (card.paired) {
-      const base = `${dishId}-xp`;
-      const ids = { compareId: base, aDishId: `${base}-A`, bDishId: `${base}-B` };
-      compareLastGeometry.A = compareLastGeometry.B = null;
-      compareLastSnapshot.A = compareLastSnapshot.B = null;
-      experimentStampEntry.value = null;
-      batch(() => {
-        // Set before the request so the arms' first snapshots are routed to the paired run.
-        compareState.value = { ...ids, sourceDishId: dishId, baselineTick: 0, status: 'setup', horizonTicks: null, ticksRun: 0, speed: 4, priorSpeed: 0, interventions: [], results: null, error: null };
-        comparePrediction.value = '';
-        compareHorizon.value = null;
-        compareConclusion.value = null;
-        compareNote.value = '';
-        compareCardSaved.value = false;
-        compareArmMeta.value = { A: null, B: null };
-        compareShown.value = 'B';
-        cameraLeader = 'B';
-      });
-      let started: Awaited<ReturnType<SimClient['experimentStart']>>;
-      try {
-        started = await c.experimentStart(cardId, dishId, ids);
-      } catch (e) {
-        compareState.value = null;
-        throw e;
-      }
-      if (old && old.dishId !== started.info.dishId) c.dispose(old.dishId);
-      enterDish(started.info, null);
-      batch(() => {
-        compareState.value = started.compare;
-        route.value = { name: 'experimentRun' };
-      });
-    } else {
-      const { info } = await c.experimentStart(cardId, dishId, null);
-      if (old && old.dishId !== info.dishId) c.dispose(old.dishId);
-      enterDish(info, `${card.title}: press play and watch. Your Journal gets a stamp when the observation is complete; the dish keeps running.`);
-    }
-    activeExperiment.value = { cardId, dishId, paired: card.paired };
+    const outcome = await replaceOpenDish('experiment', card.title, (keepFrom) => startCard(card, keepFrom));
+    if (outcome.kind === 'refused') showToast(outcome.message, 6000);
   } catch (e) {
     showToast(`The experiment could not start: ${(e as Error).message}`, 5000);
   } finally {
     busy.value = false;
   }
+}
+
+/** One try of a card's start with a way of keeping the open dish (see startExperiment). */
+/**
+ * D-0033: the line about the dish kept when a paired card started, shown in the run's setup panel
+ * (a toast there would cover the A/B switch on a phone). Null when nothing was written.
+ */
+export const experimentKeptLine = signal<string | null>(null);
+
+async function startCard(card: ExperimentCardView, keepFrom: KeepFrom): Promise<{ readonly ok: true } | KeepRefused> {
+  const c = getClient();
+  const old = dishInfo.value;
+  const dishId = newDishId();
+  if (card.paired) {
+    const base = `${dishId}-xp`;
+    const ids = { compareId: base, aDishId: `${base}-A`, bDishId: `${base}-B` };
+    compareLastGeometry.A = compareLastGeometry.B = null;
+    compareLastSnapshot.A = compareLastSnapshot.B = null;
+    experimentStampEntry.value = null;
+    batch(() => {
+      // Set before the request so the arms' first snapshots are routed to the paired run.
+      compareState.value = { ...ids, sourceDishId: dishId, baselineTick: 0, status: 'setup', horizonTicks: null, ticksRun: 0, speed: 4, priorSpeed: 0, interventions: [], results: null, error: null };
+      comparePrediction.value = '';
+      compareHorizon.value = null;
+      compareConclusion.value = null;
+      compareNote.value = '';
+      compareCardSaved.value = false;
+      compareArmMeta.value = { A: null, B: null };
+      compareShown.value = 'B';
+      cameraLeader = 'B';
+    });
+    let started: Awaited<ReturnType<SimClient['experimentStartKeeping']>>;
+    try {
+      started = await c.experimentStartKeeping(card.id, dishId, ids, keepFrom);
+    } catch (e) {
+      compareState.value = null;
+      throw e;
+    }
+    if (!started.ok) {
+      compareState.value = null;
+      return started;
+    }
+    if (old && old.dishId !== started.info.dishId) c.dispose(old.dishId);
+    enterDish(started.info, null);
+    batch(() => {
+      compareState.value = started.compare;
+      experimentKeptLine.value = keptLine(started.kept) || null;
+      route.value = { name: 'experimentRun' };
+    });
+  } else {
+    const r = await c.experimentStartKeeping(card.id, dishId, null, keepFrom);
+    if (!r.ok) return r;
+    if (old && old.dishId !== r.info.dishId) c.dispose(old.dishId);
+    // The line about the dish that was kept leads the card's start prompt (a toast would cover it).
+    const line = keptLine(r.kept);
+    const cardPrompt = `${card.title}: press play and watch. Your Journal gets a stamp when the observation is complete; the dish keeps running.`;
+    enterDish(r.info, line ? `${line} ${cardPrompt}` : cardPrompt);
+  }
+  activeExperiment.value = { cardId: card.id, dishId, paired: card.paired };
+  return { ok: true };
 }
 
 /** The player's conclusion for the open paired run; kept on its journal stamp when there is one. */
@@ -1142,6 +1484,7 @@ export async function runExperimentPair(): Promise<void> {
 
 /** Close a paired card's run (its two copies are discarded) and go to the card's dish or the Journal. */
 export async function closeExperimentRun(to: 'dish' | 'journal'): Promise<void> {
+  experimentKeptLine.value = null;
   await closeCompare();
   if (to === 'journal') route.value = { name: 'notebook', tab: 'journal' };
 }

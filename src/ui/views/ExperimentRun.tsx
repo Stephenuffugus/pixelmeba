@@ -19,6 +19,7 @@ import {
   compareState,
   dishInfo,
   experimentCard,
+  experimentKeptLine,
   getClient,
   getCompareRenderer,
   loadExperimentCards,
@@ -211,6 +212,12 @@ function ExperimentSetup({ card, x }: { card: ExperimentCardView; x: ComparisonE
   return (
     <div class="compare-body xp-body">
       <h2 id="xp-heading">{card.title}</h2>
+      {/* D-0033: how the dish that was open was kept when this card started (here, not over the A/B switch). */}
+      {experimentKeptLine.value ? (
+        <p class="xp-note" role="status" data-testid="experiment-kept">
+          {experimentKeptLine.value}
+        </p>
+      ) : null}
       <Labels card={card} />
       {/* P2.2: mode labels wherever a world is described (UX §3.3); both copies share them. */}
       <p class="world-modes" data-testid="experiment-world-modes">

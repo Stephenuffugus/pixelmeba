@@ -6,7 +6,6 @@
  * shows the dish's provenance. Starting keeps the current dish through the save flow; when all ten
  * slots are used the player exports it or deliberately replaces a save, and Cancel changes nothing.
  */
-import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { WhatIfAnswer, WhatIfChoice, WhatIfPick } from '@worker/protocol';
 import { IconClose, IconCopy, IconPlay, IconSave } from '../icons';
@@ -16,12 +15,13 @@ import {
   identityLine,
   planText,
   provenanceDetails,
-  slotNumber,
   WHATIF_TEXT,
   type DetailRow,
 } from '../strings/whatif';
+import type { KeepChoiceText } from '../strings/keep';
 import { IconAgain, IconAnother, WhatIfIcon } from './WhatIfIcons';
 import { amountScale, WhatIfPreview } from './WhatIfPreview';
+import { inertOutside, KeepChoicePanel } from './KeepChoice';
 import {
   cancelFullStep,
   chooseReplacement,
@@ -49,26 +49,6 @@ export function WhatIfHost(props: { readonly context: WhatIfContext }) {
 }
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
-
-/**
- * Make everything outside `root` inert (no focus, no pointer, hidden from assistive technology): each
- * sibling of `root` and of every ancestor up to <body>. Returns the undo (only what this set).
- */
-function inertOutside(root: HTMLElement): () => void {
-  const made: HTMLElement[] = [];
-  for (let el: HTMLElement | null = root; el && el !== document.body; el = el.parentElement) {
-    const parent: HTMLElement | null = el.parentElement;
-    if (!parent) break;
-    for (const sib of Array.from(parent.children)) {
-      if (sib === el || !(sib instanceof HTMLElement) || sib.inert) continue;
-      sib.inert = true;
-      made.push(sib);
-    }
-  }
-  return () => {
-    for (const el of made) el.inert = false;
-  };
-}
 
 function WhatIfModal(props: { readonly context: WhatIfContext }) {
   const modal = useRef<HTMLDivElement>(null);
@@ -372,129 +352,49 @@ function pickTitle(a: WhatIfAnswer, pick: WhatIfPick): string {
   return a.next?.title ?? '';
 }
 
-/** All ten slots used (or no saving on this device): export, or deliberately replace; Cancel changes nothing. */
-function FullStepPanel(props: { readonly answer: WhatIfAnswer; readonly step: FullStep }) {
-  const { answer: a, step } = props;
-  const busy = whatIfBusy.value;
-  const name = a.plan.kind === 'none' ? (dishInfo.value?.name ?? '') : a.plan.name;
-  const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => heading.current?.focus(), [step.stage]);
-  const unavailable = step.stage === 'choose' && step.reason === 'unavailable';
-  const actions = (children: ComponentChildren) => <div class="whatif-actions">{children}</div>;
-  const cancel = (
-    <button class="btn" disabled={busy} onClick={cancelFullStep} data-testid="whatif-cancel">
-      {WHATIF_TEXT.cancel}
-    </button>
-  );
-  return (
-    <section class="whatif-full" aria-labelledby="whatif-full-title" data-testid="whatif-full">
-      <h3 id="whatif-full-title" ref={heading} tabIndex={-1}>
-        {unavailable ? WHATIF_TEXT.exportIt : WHATIF_TEXT.fullTitle}
-      </h3>
-      <p class="whatif-text">
-        {unavailable ? WHATIF_TEXT.unavailableBody(name) : WHATIF_TEXT.fullBody(name)}
-      </p>
-      <p class="whatif-note">{WHATIF_TEXT.pending(pickTitle(a, step.pick))}</p>
-      <Notice />
-      {step.stage === 'choose'
-        ? actions(
-            <>
-              <button
-                class="btn"
-                disabled={busy}
-                onClick={() => void exportBeforeStart()}
-                data-testid="whatif-export"
-              >
-                {busy ? WHATIF_TEXT.exporting : WHATIF_TEXT.exportIt}
-              </button>
-              {step.reason === 'full' ? (
-                <button
-                  class="btn"
-                  disabled={busy}
-                  onClick={() => void chooseReplacement()}
-                  data-testid="whatif-replace"
-                >
-                  {WHATIF_TEXT.replaceIt}
-                </button>
-              ) : null}
-              {cancel}
-            </>,
-          )
-        : null}
-      {step.stage === 'exported'
-        ? actions(
-            <>
-              <p class="whatif-text" role="status" data-testid="whatif-exported">
-                {WHATIF_TEXT.exported(step.file)}
-              </p>
-              <button
-                class="btn primary"
-                disabled={busy}
-                onClick={() => void startWhatIf(step.pick, { kind: 'exported' })}
-                data-testid="whatif-start-exported"
-              >
-                <IconPlay /> {WHATIF_TEXT.startAfterExport}
-              </button>
-              {cancel}
-            </>,
-          )
-        : null}
-      {step.stage === 'replace' ? <ReplaceStep step={step} name={name} busy={busy} cancel={cancel} /> : null}
-    </section>
-  );
+/** What if?'s words for the shared all-slots-used choice (unchanged since P2.6). */
+function whatIfChoiceText(pending: string): KeepChoiceText {
+  return {
+    fullTitle: WHATIF_TEXT.fullTitle,
+    fullBody: WHATIF_TEXT.fullBody,
+    unavailableTitle: WHATIF_TEXT.exportIt,
+    unavailableBody: WHATIF_TEXT.unavailableBody,
+    pending,
+    exportIt: WHATIF_TEXT.exportIt,
+    exporting: WHATIF_TEXT.exporting,
+    exported: WHATIF_TEXT.exported,
+    continueAfterExport: WHATIF_TEXT.startAfterExport,
+    replaceIt: WHATIF_TEXT.replaceIt,
+    replaceLegend: WHATIF_TEXT.replaceLegend,
+    replaceSlot: WHATIF_TEXT.replaceSlot,
+    // What if? opens no save, so no slot is ever excluded.
+    replaceExcluded: WHATIF_TEXT.replaceSlot,
+    replaceConfirm: WHATIF_TEXT.replaceConfirm,
+    replaceContinue: WHATIF_TEXT.replaceStart,
+    cancel: WHATIF_TEXT.cancel,
+  };
 }
 
-function ReplaceStep(props: {
-  readonly step: Extract<FullStep, { stage: 'replace' }>;
-  readonly name: string;
-  readonly busy: boolean;
-  readonly cancel: ComponentChildren;
-}) {
-  const { step, name, busy } = props;
-  const bySlot = Object.fromEntries(step.slots.map((s) => [s.slotId, s]));
-  const ids = Array.from({ length: 10 }, (_, i) => `slot${i + 1}`);
-  const chosen = step.slotId !== null ? bySlot[step.slotId] : undefined;
+/**
+ * All ten slots used (or no saving on this device): export, or deliberately replace; Cancel changes
+ * nothing. The shared choice (KeepChoicePanel, D-0033) with What if?'s ids and words.
+ */
+function FullStepPanel(props: { readonly answer: WhatIfAnswer; readonly step: FullStep }) {
+  const { answer: a, step } = props;
+  const name = a.plan.kind === 'none' ? (dishInfo.value?.name ?? '') : a.plan.name;
   return (
-    <>
-      <fieldset class="whatif-choices">
-        <legend>{WHATIF_TEXT.replaceLegend}</legend>
-        {ids.map((id, i) => (
-          <label
-            key={id}
-            class={`whatif-choice${step.slotId === id ? ' selected' : ''}`}
-            data-testid={`whatif-slot-${id}`}
-          >
-            <input
-              type="radio"
-              name="whatif-slot"
-              value={id}
-              checked={step.slotId === id}
-              onChange={() => pickReplacement(id)}
-            />
-            <span class="whatif-choice-text">{WHATIF_TEXT.replaceSlot(i + 1, bySlot[id])}</span>
-          </label>
-        ))}
-      </fieldset>
-      {step.slotId !== null ? (
-        <p class="constraint whatif-text" data-testid="whatif-replace-confirm">
-          {chosen
-            ? WHATIF_TEXT.replaceConfirm(chosen.name, slotNumber(step.slotId), name)
-            : WHATIF_TEXT.replaceSlot(slotNumber(step.slotId), undefined)}
-        </p>
-      ) : null}
-      <div class="whatif-actions">
-        <button
-          class="btn primary"
-          disabled={busy || step.slotId === null}
-          onClick={() =>
-            step.slotId !== null && void startWhatIf(step.pick, { kind: 'replace', slotId: step.slotId })
-          }
-          data-testid="whatif-replace-start"
-        >
-          {WHATIF_TEXT.replaceStart}
-        </button>
-        {props.cancel}
-      </div>
-    </>
+    <KeepChoicePanel
+      ids="whatif"
+      step={step}
+      name={name}
+      text={whatIfChoiceText(WHATIF_TEXT.pending(pickTitle(a, step.pick)))}
+      busy={whatIfBusy.value}
+      notice={<Notice />}
+      onExport={() => void exportBeforeStart()}
+      onChooseReplacement={() => void chooseReplacement()}
+      onPick={pickReplacement}
+      onKeep={(keep) => void startWhatIf(step.pick, keep)}
+      onCancel={cancelFullStep}
+    />
   );
 }

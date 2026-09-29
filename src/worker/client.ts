@@ -6,7 +6,8 @@ import type { CommandPayload, CommandResult } from '@sim/commands';
 import type { CompareSpeed, ComparisonState } from './comparison';
 import type { LineageAnswer } from '@sim/lineage';
 import type { LineageView } from './protocol';
-import type { WhatIfAnswer, WhatIfKeep, WhatIfKept, WhatIfPick, WhatIfRefusalCode } from './protocol';
+import type { WhatIfAnswer, WhatIfKeep, WhatIfKept, WhatIfPick, WhatIfPlan, WhatIfRefusalCode } from './protocol';
+import type { KeepFrom, KeepRefusalCode } from './protocol';
 import type { ExperimentCardView } from '@sim/experiments';
 import type { NewDishPreview, RecipeOverrides } from './protocol';
 import { PROTOCOL_VERSION, stamp, type DishInfo, type DishSource, type Envelope, type FamilyAnswer, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
@@ -26,6 +27,27 @@ export interface WorkerLike {
   postMessage(msg: ToWorker & Envelope, transfer?: Transferable[]): void;
   onmessage: ((ev: MessageEvent<FromWorker & Partial<Envelope>>) => void) | null;
   terminate?(): void;
+}
+
+/**
+ * D-0033: an action that replaces the open dish was refused because the open dish could not be kept
+ * first (readable `message`; nothing was changed). `exclude`: a slot the replacement choice may not use.
+ */
+export interface KeepRefused {
+  readonly ok: false;
+  readonly code: KeepRefusalCode;
+  readonly message: string;
+  readonly exclude: string | null;
+  /** The dish that could not be kept; `fromContinue`: the dish Continue holds (no dish was open). */
+  readonly name: string;
+  readonly fromContinue: boolean;
+}
+
+/** D-0033: the answer to a replacing request: opened, with how the open dish was kept (null: nothing to keep), or refused. */
+export type KeptOr<T> = ({ readonly ok: true; readonly kept: WhatIfKept | null } & T) | KeepRefused;
+
+function keepRefused(msg: Extract<FromWorker, { type: 'keepRefused' }>): KeepRefused {
+  return { ok: false, code: msg.code, message: msg.message, exclude: msg.exclude, name: msg.name, fromContinue: msg.fromContinue === true };
 }
 
 /** Unsolicited automatic checkpoint outcomes (P2.8). */
@@ -263,9 +285,84 @@ export class SimClient {
     return { text: msg.text, filename: msg.filename };
   }
 
+  /** D-0033: a stored save (the autosave Continue holds) as a .pixelmeba file, exactly as stored. */
+  async exportSave(slotId: string): Promise<{ text: string; filename: string }> {
+    const msg = await this.request<Extract<FromWorker, { type: 'exported' }>>((requestId) => ({ type: 'exportSave', requestId, slotId }));
+    return { text: msg.text, filename: msg.filename };
+  }
+
   async importDish(text: string, newDishId: string): Promise<DishInfo> {
     const msg = await this.request<Extract<FromWorker, { type: 'loaded' }>>((requestId) => ({ type: 'importDish', requestId, text, newDishId }));
     return msg.info;
+  }
+
+  // D-0033: the requests that replace the open dish, keeping it first when `keepFrom` names it.
+
+  /** Create a dish (Play shelf, New Dish), keeping the open dish first. */
+  async createKeeping(dishId: string, source: DishSource, name: string | undefined, keepFrom: KeepFrom | null): Promise<KeptOr<{ readonly info: DishInfo }>> {
+    const msg = await this.request<Extract<FromWorker, { type: 'ready' | 'keepRefused' }>>((requestId) => ({
+      type: 'create',
+      requestId,
+      dishId,
+      source,
+      ...(name !== undefined ? { name } : {}),
+      ...(keepFrom ? { keepFrom } : {}),
+    }));
+    if (msg.type === 'keepRefused') return keepRefused(msg);
+    return { ok: true, info: msg.info, kept: msg.kept ?? null };
+  }
+
+  /** Open a save (a named slot, the autosave or an automatic checkpoint), keeping the open dish first. */
+  async loadSlotKeeping(
+    slotId: string,
+    newDishId: string,
+    keepFrom: KeepFrom | null,
+  ): Promise<KeptOr<{ readonly info: DishInfo; readonly usedPredecessor: boolean; readonly branch?: { readonly fromName: string; readonly tick: number } }>> {
+    const msg = await this.request<Extract<FromWorker, { type: 'loaded' | 'keepRefused' }>>((requestId) => ({ type: 'loadSlot', requestId, slotId, newDishId, ...(keepFrom ? { keepFrom } : {}) }));
+    if (msg.type === 'keepRefused') return keepRefused(msg);
+    return { ok: true, info: msg.info, usedPredecessor: msg.usedPredecessor, kept: msg.kept ?? null, ...(msg.branch ? { branch: msg.branch } : {}) };
+  }
+
+  /** Open a .pixelmeba file, keeping the open dish first (the file is checked before anything is kept). */
+  async importDishKeeping(text: string, newDishId: string, keepFrom: KeepFrom | null): Promise<KeptOr<{ readonly info: DishInfo }>> {
+    const msg = await this.request<Extract<FromWorker, { type: 'loaded' | 'keepRefused' }>>((requestId) => ({ type: 'importDish', requestId, text, newDishId, ...(keepFrom ? { keepFrom } : {}) }));
+    if (msg.type === 'keepRefused') return keepRefused(msg);
+    return { ok: true, info: msg.info, kept: msg.kept ?? null };
+  }
+
+  /** Start an experiment card (P2.5), keeping the open dish first. */
+  async experimentStartKeeping(
+    cardId: string,
+    newDishId: string,
+    compare: { readonly compareId: string; readonly aDishId: string; readonly bDishId: string } | null,
+    keepFrom: KeepFrom | null,
+  ): Promise<KeptOr<{ readonly info: DishInfo; readonly compare: ComparisonState | null }>> {
+    const msg = await this.request<Extract<FromWorker, { type: 'experimentStarted' | 'keepRefused' }>>((requestId) => ({
+      type: 'experimentStart',
+      requestId,
+      cardId,
+      newDishId,
+      compare,
+      ...(keepFrom ? { keepFrom } : {}),
+    }));
+    if (msg.type === 'keepRefused') return keepRefused(msg);
+    return { ok: true, info: msg.info, compare: msg.compare, kept: msg.kept ?? null };
+  }
+
+  /** Duplicate dish, keeping the dish being duplicated first (D-0033); the copy is registered, not activated. */
+  async duplicateKeeping(dishId: string, newDishId: string, keepFrom: KeepFrom | null): Promise<KeptOr<{ readonly info: DishInfo }>> {
+    const msg = await this.request<Extract<FromWorker, { type: 'ready' | 'keepRefused' }>>((requestId) => ({ type: 'duplicate', requestId, dishId, newDishId, ...(keepFrom ? { keepFrom } : {}) }));
+    if (msg.type === 'keepRefused') return keepRefused(msg);
+    return { ok: true, info: msg.info, kept: msg.kept ?? null };
+  }
+
+  /**
+   * How the open dish (with none open: the dish Continue holds) would be kept if an action replaced it
+   * now (`opening`: the save it would open). Read-only.
+   */
+  async keepPlan(aboutDishId: string | null, opening: string | null = null): Promise<WhatIfPlan> {
+    const msg = await this.request<Extract<FromWorker, { type: 'keepPlan' }>>((requestId) => ({ type: 'keepPlan', requestId, aboutDishId, opening }));
+    return msg.plan;
   }
 
   /** Living relatives of an organism ("Where is its family?"); a read-only query. */

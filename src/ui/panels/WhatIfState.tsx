@@ -4,9 +4,10 @@
  * a world; choosing "Another idea" reads catalog order from the worker, never a random stream.
  */
 import { batch, signal } from '@preact/signals';
-import type { SlotSummary, Speed, WhatIfAnswer, WhatIfKeep, WhatIfPick } from '@worker/protocol';
-import { dishInfo, enterStartedDish, freshDishId, getClient, meta, setSpeed, showToast } from '../state';
+import type { Speed, WhatIfAnswer, WhatIfKeep, WhatIfPick } from '@worker/protocol';
+import { dishInfo, enterStartedDish, exportContinueFile, exportDishFile, freshDishId, getClient, meta, namedSlots, setSpeed, showToast } from '../state';
 import { startedText, WHATIF_TEXT } from '../strings/whatif';
+import type { KeepStep } from './KeepChoice';
 
 /** Where the sheet was opened: the Play shelf (under Garden) or a dish's More sheet. */
 export type WhatIfContext = 'play' | 'dish';
@@ -16,18 +17,9 @@ export const PLAY_SOURCE = 'FIRST_DISH_V1';
 
 /**
  * The all-slots-used step (UX §3.4): the pick waiting to start, and the player's way of keeping the
- * current dish. Cancel clears it and nothing is changed.
+ * current dish (the shared KeepStep, D-0033). Cancel clears it and nothing is changed.
  */
-export type FullStep =
-  /** 'unavailable': this device cannot save at all, so only export is offered. */
-  | { readonly stage: 'choose'; readonly pick: WhatIfPick; readonly reason: 'full' | 'unavailable' }
-  | { readonly stage: 'exported'; readonly pick: WhatIfPick; readonly file: string }
-  | {
-      readonly stage: 'replace';
-      readonly pick: WhatIfPick;
-      readonly slots: readonly SlotSummary[];
-      readonly slotId: string | null;
-    };
+export type FullStep = KeepStep & { readonly pick: WhatIfPick };
 
 export const whatIfOpen = signal<WhatIfContext | null>(null);
 export const whatIfAnswer = signal<WhatIfAnswer | null>(null);
@@ -156,11 +148,11 @@ export async function startWhatIf(pick: WhatIfPick, keep: WhatIfKeep = { kind: '
 export async function exportBeforeStart(): Promise<void> {
   const step = whatIfFull.value;
   const info = dishInfo.value;
-  if (!step || !info || whatIfBusy.value) return;
+  if (!step || whatIfBusy.value) return;
   whatIfBusy.value = true;
   try {
-    const { text, filename } = await getClient().exportDish(info.dishId, false);
-    download(text, filename);
+    // With no dish open, the dish being kept is the one Continue holds (D-0033 fix round 1).
+    const filename = info ? await exportDishFile(info.dishId) : await exportContinueFile();
     whatIfFull.value = { stage: 'exported', pick: step.pick, file: filename };
   } catch (e) {
     whatIfNotice.value = WHATIF_TEXT.exportFailed((e as Error).message);
@@ -174,11 +166,10 @@ export async function chooseReplacement(): Promise<void> {
   const step = whatIfFull.value;
   if (!step) return;
   try {
-    const { slots } = await getClient().listSlots();
     whatIfFull.value = {
       stage: 'replace',
       pick: step.pick,
-      slots: slots.filter((s) => s.slotId !== 'autosave'),
+      slots: await namedSlots(),
       slotId: null,
     };
   } catch (e) {
@@ -197,18 +188,6 @@ export function cancelFullStep(): void {
     whatIfFull.value = null;
     whatIfNotice.value = WHATIF_TEXT.cancelled;
   });
-}
-
-function download(text: string, filename: string): void {
-  const blob = new Blob([text], { type: 'application/vnd.pixelmeba+json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 /** Copy text; clipboard writes can be unavailable (the text stays selectable on screen). */

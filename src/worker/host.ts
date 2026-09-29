@@ -11,6 +11,7 @@ import type { ContentRegistry } from '@sim/content/registry';
 import type { RecipeDef } from '@sim/content/schema';
 import { realizeRecipe, recipeOverridesOf, type RecipeOverridesRecord, type RecipeWorldProvenance } from '@sim/recipes';
 import { deserializeWorld, serializeWorld, stateHash, type WorldState } from '@sim/serialize';
+import { canonicalJson } from '@sim/hash';
 import { step } from '@sim/tick';
 import type { World } from '@sim/world';
 import { allocatedFieldIds } from '@sim/fields';
@@ -52,12 +53,57 @@ import {
   type VariantRecord,
 } from '@sim/variants';
 import type { WhatIfAnswer, WhatIfChoice, WhatIfKeep, WhatIfKept, WhatIfPlan, WhatIfRefusalCode } from './protocol';
+import type { KeepFrom, KeepRefusalCode } from './protocol';
 
 export interface HostClock {
   now(): number;
   /** Wall-clock ISO timestamp for save metadata (never enters the simulation). */
   iso?(): string;
 }
+
+/**
+ * D-0033: what an action that replaces the open dish is about to do, for the keep step's refusals. What
+ * if? keeps its own wording byte for byte ('whatIf' and 'start' read the same).
+ */
+type KeepAction = 'whatIf' | 'start' | 'experiment' | 'open' | 'checkpoint' | 'import' | 'duplicate';
+
+const NOT_DONE: Readonly<Record<KeepAction, string>> = {
+  whatIf: 'the new dish was not started',
+  start: 'the new dish was not started',
+  experiment: 'the experiment was not started',
+  open: 'the saved dish was not opened',
+  checkpoint: 'the checkpoint was not opened',
+  import: 'the file was not opened',
+  duplicate: 'the copy was not made',
+};
+
+/** How the keep step is asked to keep a dish (D-0033). */
+interface KeepOptions {
+  readonly action: KeepAction;
+  /**
+   * The named slot the action opens: never the target of this keep (it opens exactly as it was saved).
+   * Opening the autosave or a checkpoint excludes no named slot.
+   */
+  readonly exclude: string | null;
+  /** The slot the action opens, if any (opening the autosave writes no autosave first). */
+  readonly opening: string | null;
+}
+
+const WHAT_IF_KEEP: KeepOptions = { action: 'whatIf', exclude: null, opening: null };
+
+/** The named slot an action that opens `slotId` must never write while keeping the open dish. */
+function excludedBy(slotId: string | null): string | null {
+  return slotId !== null && SaveStoreClass.slotIds().includes(slotId) ? slotId : null;
+}
+
+/** A dish name as a file name ("Little Living Garden" → "little-living-garden"). */
+function fileBase(name: string): string {
+  return name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'dish';
+}
+
+/** Id prefix of the dish Continue holds, loaded only to be kept (never registered, never run). */
+const CONTINUE_DISH = 'continue:';
+let continueDishes = 0;
 
 /** A readable What if? refusal (UX §3.4): nothing was started, saved or changed. */
 class WhatIfRefusal extends Error {
@@ -146,6 +192,12 @@ interface Dish {
   undoLabels?: { readonly commandId: string; readonly payload: CommandPayload }[];
   /** A single-arm experiment card running on this dish (P2.5): its gate is watched while it runs. */
   experiment?: SingleArmExperiment | null;
+  /**
+   * D-0033 fix round 1: the dish Continue holds, loaded only so a replacing action can keep it while no
+   * dish is open. Never registered, never run. The autosave is written for it only to bind it to the
+   * named slot its keep just wrote (the same file; fix round 2).
+   */
+  transient?: true;
 }
 
 /** A single-arm experiment card's observation of its dish (worker state; never saved in the world). */
@@ -266,9 +318,27 @@ export class DishHost {
           const name = msg.type === 'autosave' ? d.name : msg.name;
           if (msg.type === 'saveSlot') d.name = name;
           const savedAt = this.iso();
+          // D-0033: the autosave remembers the slot its dish is bound to, so Continue reopens it bound again,
+          // and (fix round 1) that slot's record as it stands before this state is taken: Continue is bound
+          // again only while the slot still holds exactly that record, so an older Continue never replaces
+          // a newer save in the slot. Read first: the file below is serialized after it, never before.
+          const own = msg.type === 'autosave' ? this.ownSlots[d.id] : undefined;
+          const ownRecord = own !== undefined ? (await this.store.slot(own))?.current : undefined;
           const built = await buildSaveFile(d.world, { name, savedAt, recipeId: d.world.content.provenance.recipeId });
           const variant = built.file.meta.variant;
-          const info = await this.store.save({ slotId, text: built.text, checksum: built.checksum, name, tick: d.world.tick, savedAt, recipeId: d.world.content.provenance.recipeId, ...(variant ? { variant } : {}), ...slotMetaCopies(built.file) });
+          const info = await this.store.save({
+            slotId,
+            text: built.text,
+            checksum: built.checksum,
+            name,
+            tick: built.file.tick,
+            savedAt,
+            recipeId: d.world.content.provenance.recipeId,
+            ...(variant ? { variant } : {}),
+            ...slotMetaCopies(built.file),
+            worldId: built.file.state.worldId,
+            ...(own !== undefined && ownRecord !== undefined ? { activeSlot: own, activeRecord: ownRecord } : {}),
+          });
           if (msg.type === 'saveSlot') this.ownSlots[d.id] = slotId;
           this.post({ type: 'slotSaved', requestId: msg.requestId, slot: this.describeSlot(info) });
           return;
@@ -282,6 +352,7 @@ export class DishHost {
         }
         case 'loadSlot': {
           if (!this.store) throw new Error('Saving is unavailable on this device.');
+          // 1. Read and check the save first: one that cannot be opened keeps nothing and changes nothing.
           const res = await this.store.load(msg.slotId, async (text) => {
             await loadSaveFile(text);
             return true;
@@ -294,10 +365,19 @@ export class DishHost {
           // to no named slot. The state (and its hash) is exactly the checkpoint's.
           const branch = isCheckpointSlot(msg.slotId) ? { fromName: file.meta.name, tick: world.tick } : null;
           const opened = branch ? deserializeWorld({ ...file.state, worldId: branchWorldId(world.worldId, msg.newDishId) }) : world;
+          // 2. Keep the open dish first, never into the named slot being opened; a refusal opens nothing.
+          const kept = await this.keepFirst(msg, { action: branch ? 'checkpoint' : 'open', exclude: excludedBy(msg.slotId), opening: msg.slotId });
+          if (kept === false) return;
+          // 3. Open it, bound to its named slot (D-0026's active slot; D-0033). Decided after the keep:
+          // Continue binds to its slot only while that slot still holds the record Continue was bound to,
+          // and the keep may just have written that slot (fix round 1). A copy of Continue read from its
+          // predecessor (the latest record was damaged) is bound to nothing, as when it is kept: the
+          // index describes the damaged record, and a save newer than this copy may be in that slot.
+          const olderContinue = msg.slotId === AUTOSAVE_SLOT && res.usedPredecessor;
+          const bindTo = branch || olderContinue ? null : await this.bindingOf(msg.slotId, world.worldId);
           const dish = this.addDish(msg.newDishId, opened, branch ? branchName(file.meta.name, branch.tick) : file.meta.name);
-          if (msg.slotId !== AUTOSAVE_SLOT) this.ownSlots[dish.id] = msg.slotId;
-          if (branch) delete this.ownSlots[dish.id];
-          this.post({ type: 'loaded', requestId: msg.requestId, info: this.info(dish), usedPredecessor: res.usedPredecessor, ...(branch ? { branch } : {}) });
+          if (bindTo !== null) this.ownSlots[dish.id] = bindTo;
+          this.post({ type: 'loaded', requestId: msg.requestId, info: this.info(dish), usedPredecessor: res.usedPredecessor, ...(branch ? { branch } : {}), ...(kept ? { kept } : {}) });
           this.sendSnapshot(dish);
           this.experimentReopened(dish);
           return;
@@ -310,16 +390,70 @@ export class DishHost {
         case 'exportDish': {
           const d = this.need(msg.dishId);
           const built = await buildSaveFile(d.world, { name: d.name, savedAt: this.iso(), recipeId: d.world.content.provenance.recipeId }, { stripNames: msg.strip });
-          const base = (msg.strip ? 'shared-dish' : d.name).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'dish';
-          this.post({ type: 'exported', requestId: msg.requestId, text: built.text, filename: `${base}.pixelmeba` });
+          this.post({ type: 'exported', requestId: msg.requestId, text: built.text, filename: `${fileBase(msg.strip ? 'shared-dish' : d.name)}.pixelmeba` });
+          return;
+        }
+        case 'exportSave': {
+          // D-0033: the save Continue holds, as a file, exactly as stored (the Keep sheet's export while no
+          // dish is open). It is read and checked like any save being opened; nothing is written.
+          if (!this.store) throw new Error('Saving is unavailable on this device.');
+          let name = 'dish';
+          const res = await this.store.load(msg.slotId, async (text) => {
+            name = (await loadSaveFile(text)).file.meta.name;
+            return true;
+          });
+          if (!res) throw new SaveFileError('That save could not be read, and no earlier copy was usable.', 'integrity');
+          this.post({ type: 'exported', requestId: msg.requestId, text: res.text, filename: `${fileBase(name)}.pixelmeba` });
           return;
         }
         case 'importDish': {
+          // The file is checked first: a refused file keeps nothing and changes nothing (D-0033).
           const { file, world } = await loadSaveFile(msg.text);
+          const kept = await this.keepFirst(msg, { action: 'import', exclude: null, opening: null });
+          if (kept === false) return;
           const dish = this.addDish(msg.newDishId, world, file.meta.name);
-          this.post({ type: 'loaded', requestId: msg.requestId, info: this.info(dish), usedPredecessor: false });
+          this.post({ type: 'loaded', requestId: msg.requestId, info: this.info(dish), usedPredecessor: false, ...(kept ? { kept } : {}) });
           this.sendSnapshot(dish);
           this.experimentReopened(dish);
+          return;
+        }
+        case 'create': {
+          // D-0033 (with keepFrom; a plain create is synchronous, see dispatch): build first, keep, open.
+          if (!msg.keepFrom) {
+            this.handle(msg);
+            return;
+          }
+          const world = this.build(msg.source, msg.dishId);
+          const kept = await this.keepFirst(msg, { action: 'start', exclude: null, opening: null });
+          if (kept === false) return;
+          const dish = this.addDish(msg.dishId, world, msg.name ?? world.content.provenance.recipeId ?? 'Dish');
+          this.post({ type: 'ready', requestId: msg.requestId, info: this.info(dish), ...(kept ? { kept } : {}) });
+          this.sendSnapshot(dish);
+          return;
+        }
+        case 'experimentStart':
+          // D-0033 (with keepFrom; a plain start is synchronous, see dispatch).
+          if (msg.keepFrom) await this.experimentStartKeeping(msg);
+          else this.handle(msg);
+          return;
+        case 'keepPlan': {
+          const opening = msg.opening ?? null;
+          this.post({ type: 'keepPlan', requestId: msg.requestId, plan: await this.planFor(msg.aboutDishId, excludedBy(opening), opening) });
+          return;
+        }
+        case 'duplicate': {
+          // D-0033 (with keepFrom; a plain duplicate is synchronous, see dispatch): keep the dish first,
+          // then copy it. The keep paused it, so the copy holds the very moment that was kept.
+          if (!msg.keepFrom) {
+            this.handle(msg);
+            return;
+          }
+          const d = this.need(msg.dishId);
+          if (this.dishes[msg.newDishId]) throw new Error('That new dish id is already in use.');
+          const kept = await this.keepFirst(msg, { action: 'duplicate', exclude: null, opening: null });
+          if (kept === false) return;
+          const copy = this.duplicateDish(d, msg.newDishId);
+          this.post({ type: 'ready', requestId: msg.requestId, info: this.info(copy), ...(kept ? { kept } : {}) });
           return;
         }
         case 'whatIf':
@@ -413,6 +547,10 @@ export class DishHost {
   private dispatch(msg: ToWorker): void {
     switch (msg.type) {
       case 'create': {
+        if (msg.keepFrom) {
+          void this.handleAsync(msg);
+          return;
+        }
         const world = this.build(msg.source, msg.dishId);
         const dish = this.addDish(msg.dishId, world, msg.name ?? world.content.provenance.recipeId ?? 'Dish');
         this.post({ type: 'ready', requestId: msg.requestId, info: this.info(dish) });
@@ -521,27 +659,12 @@ export class DishHost {
         return;
       }
       case 'duplicate': {
-        const d = this.need(msg.dishId);
-        // A copy of a copy does not grow the id (as a checkpoint branch; the id is never hashed).
-        const state = { ...serializeWorld(d.world), worldId: branchWorldId(d.world.worldId, msg.newDishId) };
-        const copy = deserializeWorld(state);
-        this.dishes[msg.newDishId] = {
-          ...d,
-          id: msg.newDishId,
-          world: copy,
-          name: `${d.name} (copy)`,
-          speed: 0,
-          undo: null,
-          checkpoint: state,
-          replay: [],
-          failed: false,
-          ticksWindow: [],
-          lastGeometryVersion: -1,
-          selection: null,
-          arm: null,
-          experiment: null,
-        };
-        this.post({ type: 'ready', requestId: msg.requestId, info: this.info(this.dishes[msg.newDishId]!) });
+        if (msg.keepFrom) {
+          void this.handleAsync(msg);
+          return;
+        }
+        const copy = this.duplicateDish(this.need(msg.dishId), msg.newDishId);
+        this.post({ type: 'ready', requestId: msg.requestId, info: this.info(copy) });
         return;
       }
       case 'hash': {
@@ -615,6 +738,10 @@ export class DishHost {
         this.post({ type: 'experimentCatalog', requestId: msg.requestId, cards: experimentCatalog(this.registry).map((d) => experimentCardView(this.registry, d)) });
         return;
       case 'experimentStart':
+        if (msg.keepFrom) {
+          void this.handleAsync(msg);
+          return;
+        }
         this.experimentStart(msg);
         return;
       case 'compareStart':
@@ -681,6 +808,8 @@ export class DishHost {
       case 'deleteSlot':
       case 'exportDish':
       case 'importDish':
+      case 'keepPlan':
+      case 'exportSave':
       case 'whatIf':
       case 'whatIfStart':
         void this.handleAsync(msg);
@@ -698,17 +827,37 @@ export class DishHost {
   // the card's one change already on B. The same GateWatch as the headless runner watches the gate;
   // reaching it posts the journal stamp and the world keeps running. Worker state only.
 
+  /** A card's start without keeping (synchronous; a refusal throws before anything changes). */
   private experimentStart(msg: Extract<ToWorker, { type: 'experimentStart' }>): void {
-    const def = this.registry.experiments[msg.cardId];
-    if (!def || def.phase > this.registry.manifest.buildPhase) throw new Error(`There is no experiment "${msg.cardId}" in this version of Pixelmeba.`);
+    this.openExperiment(msg, this.prepareExperiment(msg), null);
+  }
+
+  /** D-0033: the card's arms are realized first (a refusal keeps nothing), then the open dish is kept, then the card opens. */
+  private async experimentStartKeeping(msg: Extract<ToWorker, { type: 'experimentStart' }>): Promise<void> {
+    const prepared = this.prepareExperiment(msg);
+    const kept = await this.keepFirst(msg, { action: 'experiment', exclude: null, opening: null });
+    if (kept === false) return;
+    // Checked again after the keep's awaits: nothing else may have taken the ids or opened a comparison.
+    this.checkExperimentIds(msg, prepared.def.paired);
+    this.openExperiment(msg, prepared, kept);
+  }
+
+  private checkExperimentIds(msg: Extract<ToWorker, { type: 'experimentStart' }>, paired: boolean): void {
     if (this.dishes[msg.newDishId]) throw new Error('That new dish id is already in use.');
     const ids = msg.compare;
-    if (def.paired) {
-      if (!ids) throw new Error('A paired experiment needs comparison ids.');
-      if (this.comparison) throw new Error('A comparison is already open; finish or delete it first.');
-      const all = [msg.newDishId, ids.aDishId, ids.bDishId];
-      if (new Set(all).size !== 3 || all.some((id) => this.dishes[id])) throw new Error('comparison dish ids must be new and distinct');
-    }
+    if (!paired) return;
+    if (!ids) throw new Error('A paired experiment needs comparison ids.');
+    if (this.comparison) throw new Error('A comparison is already open; finish or delete it first.');
+    const all = [msg.newDishId, ids.aDishId, ids.bDishId];
+    if (new Set(all).size !== 3 || all.some((id) => this.dishes[id])) throw new Error('comparison dish ids must be new and distinct');
+  }
+
+  /** Everything a card's start needs, built without touching any dish (pure realization). */
+  private prepareExperiment(msg: Extract<ToWorker, { type: 'experimentStart' }>) {
+    const def = this.registry.experiments[msg.cardId];
+    if (!def || def.phase > this.registry.manifest.buildPhase) throw new Error(`There is no experiment "${msg.cardId}" in this version of Pixelmeba.`);
+    this.checkExperimentIds(msg, def.paired);
+    const ids = msg.compare;
     const recipe = this.registry.recipes[def.recipeId]!;
     const labels = [...recipe.labels];
     // Labels such as "Seeded traits demonstration" travel with the dish name wherever it is shown.
@@ -718,10 +867,17 @@ export class DishHost {
     });
     const watch = new GateWatch(def, recipe, this.registry.manifest);
     const steps = new PlayerSteps(def);
+    return { def, labels, name, arms, watch, steps };
+  }
+
+  private openExperiment(msg: Extract<ToWorker, { type: 'experimentStart' }>, p: ReturnType<DishHost['prepareExperiment']>, kept: WhatIfKept | null): void {
+    const { def, labels, name, arms, watch, steps } = p;
+    const ids = msg.compare;
+    const keptField = kept ? { kept } : {};
     if (!def.paired || !ids || !arms.B || !arms.obsB) {
       const dish = this.addDish(msg.newDishId, arms.A, name);
       dish.experiment = { watch, obs: arms.obsA, labels, ended: false, steps, species: stepSpecies(def), pending: null, posted: false, waitingFor: null };
-      this.post({ type: 'experimentStarted', requestId: msg.requestId, cardId: def.id, info: this.info(dish), compare: null });
+      this.post({ type: 'experimentStarted', requestId: msg.requestId, cardId: def.id, info: this.info(dish), compare: null, ...keptField });
       this.sendSnapshot(dish);
       return;
     }
@@ -758,7 +914,7 @@ export class DishHost {
       this.dishes[id] = dish;
     }
     this.active = null;
-    this.post({ type: 'experimentStarted', requestId: msg.requestId, cardId: def.id, info: this.info(src), compare: this.compareState(c) });
+    this.post({ type: 'experimentStarted', requestId: msg.requestId, cardId: def.id, info: this.info(src), compare: this.compareState(c), ...keptField });
     this.sendSnapshot(this.dishes[c.aDishId]!);
     this.sendSnapshot(this.dishes[c.bDishId]!);
   }
@@ -1112,6 +1268,30 @@ export class DishHost {
     }
   }
 
+  /** Duplicate dish: an independent copy of `d` as a new branch (registered, not activated). */
+  private duplicateDish(d: Dish, newDishId: string): Dish {
+    // A copy of a copy does not grow the id (as a checkpoint branch; the id is never hashed).
+    const state = { ...serializeWorld(d.world), worldId: branchWorldId(d.world.worldId, newDishId) };
+    const copy: Dish = {
+      ...d,
+      id: newDishId,
+      world: deserializeWorld(state),
+      name: `${d.name} (copy)`,
+      speed: 0,
+      undo: null,
+      checkpoint: state,
+      replay: [],
+      failed: false,
+      ticksWindow: [],
+      lastGeometryVersion: -1,
+      selection: null,
+      arm: null,
+      experiment: null,
+    };
+    this.dishes[newDishId] = copy;
+    return copy;
+  }
+
   private need(dishId: string): Dish {
     const d = this.dishes[dishId];
     if (!d) throw new Error(`no dish ${dishId}`);
@@ -1259,22 +1439,77 @@ export class DishHost {
       },
       current: d && record ? { ...record, atStart: await this.rebuildsExactly(d) } : null,
       next: next ? { id: next.id, title: next.title, question: next.question, previewDifference: next.previewDifference } : null,
-      plan: await this.keepPlan(d),
+      // With no dish open, the plan is about the dish Continue holds (D-0033 fix round 1).
+      plan: await this.planFor(d?.id ?? null, null, null),
       registryLabel: registryLabel(this.registry.manifest, this.catalogSize()),
     };
   }
 
   /**
-   * A What if? dish that is still exactly its recorded start AND that this build rebuilds exactly
-   * (D-0026): tick 0 with the recorded start hash, and the variant revision, both checksums, the
-   * content hash and the rule versions all as recorded. Only such a dish is "unchanged" and not saved
-   * again; any other goes through the normal save flow.
+   * "Unchanged, rebuilds exactly" (D-0026; D-0033 (a)): nothing needs keeping because this build rebuilds
+   * the dish exactly as it is. The dish is at tick 0 and everything a save of it would hold (the whole
+   * serialized world: state, history with the journal, command log, lineage, branches, provenance; what
+   * the save file's checksum covers) equals what this build realizes from its recorded start under the
+   * same world id (freshStart): a What if? idea, and (fix round 1) a recipe start from the Play shelf
+   * or New Dish with its recorded seed and choices, or an experiment card's start. A tick, a command, a
+   * rename, a journal note, another build's content or an idea revised since all differ, so such a dish
+   * is kept like any other. A start this build cannot realize (a card with a timed change, another
+   * recipe revision, malformed recorded choices, an idea not exactly as recorded here) is never called
+   * unchanged. An older save that did not record its choices is compared with the recipe's authored
+   * start (fix round 2: the comment used to say it was always kept): only an exact match of the whole
+   * world, content manifest and provenance included, is unchanged, so a custom seed or setting is kept.
    */
   private async rebuildsExactly(d: Dish): Promise<boolean> {
-    const record = variantRecordOf(d.world);
-    if (!record || !(await this.recordMatchesBuild(record))) return false;
-    // Checked after the await, with no await after it: the dish may have been stepped meanwhile.
-    return d.world.tick === 0 && stateHash(d.world) === record.initialStateHash;
+    if (d.world.tick !== 0) return false;
+    let fresh: World | null;
+    try {
+      fresh = await this.freshStart(d.world);
+    } catch {
+      fresh = null;
+    }
+    // Compared after the await, with no await after it: the dish may have been stepped meanwhile.
+    return fresh !== null && d.world.tick === 0 && canonicalJson(serializeWorld(d.world)) === canonicalJson(serializeWorld(fresh));
+  }
+
+  /**
+   * The world this build realizes from `w`'s recorded start, under `w`'s own world id; null when that
+   * start cannot be named exactly. A What if? dish only while its idea is exactly as recorded here (the
+   * variant revision, both checksums, the content hash and the rule versions: recordMatchesBuild).
+   */
+  private async freshStart(w: World): Promise<World | null> {
+    const record = variantRecordOf(w);
+    if (record) return (await this.recordMatchesBuild(record)) ? realizeVariant(this.registry, record.variantId, { worldId: w.worldId }) : null;
+    const cardId = experimentOf(w);
+    if (cardId !== null) {
+      const def = this.registry.experiments[cardId];
+      // A card with a timed change starts after its recipe ran to the change: not a tick-0 start.
+      if (!def || def.change.kind === 'commands') return null;
+      return realizeExperimentArms(this.registry, def, { worldIds: { A: w.worldId, B: `${w.worldId}:B` } }).A;
+    }
+    const p = w.content.provenance;
+    if (p.createdFrom !== 'recipe' || p.recipeId === null) return null;
+    const recipe = this.registry.recipes[p.recipeId];
+    const o = recipeOverridesOf(w);
+    // Undefined overrides: an older save that did not record its choices. Its start is only guessed at
+    // here, and any difference (a custom seed or setting) makes the comparison below fail: it is kept.
+    if (!recipe || p.recipeRevision !== recipe.revision || o === null) return null;
+    const changed = o !== undefined && (o.mutationPreset !== undefined || o.founderMode !== undefined || o.empty === true);
+    return realizeRecipe(this.registry, recipe.id, {
+      worldId: w.worldId,
+      ...(o?.seed !== undefined ? { seed: o.seed } : {}),
+      ...(changed
+        ? {
+            transform: (r: RecipeDef): RecipeDef => ({
+              ...r,
+              ...(o.mutationPreset ? { mutationPreset: o.mutationPreset } : {}),
+              ...(o.founderMode ? { founderMode: o.founderMode } : {}),
+              ...(o.empty ? { founders: [], fieldPatches: [], scheduledCommands: [] } : {}),
+            }),
+          }
+        : {}),
+      // Recorded as the dish recorded it: provenance is compared too, never assumed.
+      provenance: JSON.parse(JSON.stringify(p)) as World['content']['provenance'],
+    });
   }
 
   /** The variant record names exactly what this build would realize (same idea, same rules). */
@@ -1292,15 +1527,199 @@ export class DishHost {
     }
   }
 
-  /** How 'auto' would keep this dish (UX §3.4): its own slot, else the first free named slot. */
-  private async keepPlan(d: Dish | null): Promise<WhatIfPlan> {
+  /** The 'unchanged' plan of `d`: a What if? idea says "that idea again"; any other start names its seed. */
+  private unchangedPlan(d: Dish): WhatIfPlan {
+    return { kind: 'unchanged', name: d.name, ...(variantRecordOf(d.world) ? {} : { seed: d.world.seed }), ...(d.transient ? { fromContinue: true as const } : {}) };
+  }
+
+  /**
+   * How 'auto' would keep this dish (UX §3.4; D-0033): nothing when it rebuilds exactly, or when its own
+   * slot already holds it exactly as it is; else its own slot (unless the action opens that slot:
+   * `exclude`), else the first free named slot; 'full' when all ten are used.
+   */
+  private async keepPlan(d: Dish | null, exclude: string | null = null): Promise<WhatIfPlan> {
     if (!d) return { kind: 'none' };
-    if (await this.rebuildsExactly(d)) return { kind: 'unchanged', name: d.name };
+    const about = d.transient ? { fromContinue: true as const } : {};
+    if (await this.rebuildsExactly(d)) return this.unchangedPlan(d);
     if (!this.store) return { kind: 'unavailable', name: d.name };
     const own = this.ownSlots[d.id];
-    if (own !== undefined) return { kind: 'slot', slotId: own, own: true, name: d.name };
+    if (own !== undefined) {
+      if (await this.holdsExactly(own, d)) return { kind: 'saved', slotId: own, name: d.name, ...about };
+      if (own !== exclude) return { kind: 'slot', slotId: own, own: true, name: d.name, ...about };
+    }
     const free = await this.store.freeSlot();
-    return free !== null ? { kind: 'slot', slotId: free, own: false, name: d.name } : { kind: 'full', name: d.name };
+    return free !== null ? { kind: 'slot', slotId: free, own: false, name: d.name, ...about } : { kind: 'full', name: d.name, ...about };
+  }
+
+  /**
+   * D-0033: the plan for the open dish `aboutDishId`, or, with no dish open (fix round 1), for the dish
+   * Continue holds. Continue is loaded only when it may be an untouched start (tick 0); otherwise its
+   * index says everything the plan needs (its bound slot, that slot's checksum, the free slots).
+   */
+  private async planFor(aboutDishId: string | null, exclude: string | null, opening: string | null): Promise<WhatIfPlan> {
+    if (aboutDishId !== null) return this.keepPlan(this.need(aboutDishId), exclude);
+    const found = await this.continueToKeep(opening, true, true);
+    if (found === null) return { kind: 'none' };
+    if (found.kind === 'saved') return { kind: 'saved', slotId: found.held.slotId, name: found.name, fromContinue: true };
+    if (found.kind === 'dish') {
+      try {
+        return await this.keepPlan(found.dish, exclude);
+      } finally {
+        delete this.ownSlots[found.dish.id];
+      }
+    }
+    // Not a tick-0 start (so never 'unchanged') and not already in its slot: where it would go.
+    if (found.bound !== null && found.bound !== exclude) return { kind: 'slot', slotId: found.bound, own: true, name: found.name, fromContinue: true };
+    const free = await this.store!.freeSlot();
+    return free !== null ? { kind: 'slot', slotId: free, own: false, name: found.name, fromContinue: true } : { kind: 'full', name: found.name, fromContinue: true };
+  }
+
+  /**
+   * D-0033 fix round 1: the dish Continue holds while no dish is open. Home offers it as the player's
+   * dish ("Continue — … Opens paused"), and the next autosave of whatever opens instead would replace it,
+   * so a replacing action keeps it first by the same rules as an open dish. Null when there is nothing
+   * to keep: no saving on this device, Continue is empty or unreadable, or the action opens Continue.
+   * - 'saved': its slot (bindingOf: a named slot holding exactly Continue's file, else D-0026's active
+   *   slot while it still holds the record Continue was bound to) holds exactly the same file (index
+   *   checksum and name; nothing is loaded; `quick` only). Fix round 2: once kept, the dish Continue
+   *   holds is exactly in the slot it was written to, so every later launch answers 'saved';
+   * - 'index' (`planOnly`, not a tick-0 start): what a plan needs, without loading it;
+   * - 'dish': loaded as a transient dish (never registered or run), bound to that slot, to be kept like
+   *   an open dish. The caller removes its binding afterwards.
+   */
+  private async continueToKeep(
+    opening: string | null,
+    quick: boolean,
+    planOnly = false,
+  ): Promise<
+    | { readonly kind: 'saved'; readonly held: SlotInfo; readonly name: string }
+    | { readonly kind: 'index'; readonly bound: string | null; readonly name: string }
+    | { readonly kind: 'dish'; readonly dish: Dish }
+    | null
+  > {
+    if (!this.store || opening === AUTOSAVE_SLOT) return null;
+    const auto = await this.store.slot(AUTOSAVE_SLOT);
+    if (!auto) return null;
+    const bound = await this.bindingOf(AUTOSAVE_SLOT, auto.worldId ?? null);
+    if (quick && bound !== null) {
+      const held = await this.store.slot(bound);
+      if (held && held.checksum === auto.checksum && held.name === auto.name) return { kind: 'saved', held, name: auto.name };
+    }
+    if (planOnly && auto.tick !== 0) return { kind: 'index', bound, name: auto.name };
+    const got: { v: { file: SaveFile; world: World } | null } = { v: null };
+    const res = await this.store.load(AUTOSAVE_SLOT, async (text) => {
+      got.v = await loadSaveFile(text);
+      return true;
+    });
+    if (!res || !got.v) return null;
+    const { file, world } = got.v;
+    const dish: Dish = { ...this.makeDish(`${CONTINUE_DISH}${++continueDishes}`, world, file.meta.name, file.state), transient: true };
+    // An older copy (the latest autosave was damaged) is bound to nothing: it never replaces a newer save.
+    if (bound !== null && !res.usedPredecessor) this.ownSlots[dish.id] = bound;
+    return { kind: 'dish', dish };
+  }
+
+  /** The save file of `d` as a keep would write it now (serialized before the first await: one moment). */
+  private buildFor(d: Dish, savedAt: string): ReturnType<typeof buildSaveFile> {
+    return buildSaveFile(d.world, { name: d.name, savedAt, recipeId: d.world.content.provenance.recipeId });
+  }
+
+  /**
+   * D-0033 "unchanged since it was saved to its active slot", proved exactly: the slot's current record
+   * has the checksum of the file a save would write now (the checksum covers the whole serialized world:
+   * state, history, journal, command log, provenance) and the same name. Only the write time differs.
+   * A different name or moment (the tick is part of that state) is a change without building anything;
+   * the index can only err towards writing (e.g. an older index with a later tick than its file).
+   * `built`: the file already built for this moment (the keep step writes that same file).
+   */
+  private async holdsExactly(slotId: string, d: Dish, built?: Awaited<ReturnType<typeof buildSaveFile>>): Promise<boolean> {
+    const held = this.store ? await this.store.slot(slotId) : null;
+    if (held === null || held.name !== d.name || held.tick !== d.world.tick) return false;
+    const file = built ?? (await this.buildFor(d, this.iso()));
+    return held.checksum === file.checksum;
+  }
+
+  /**
+   * D-0033: the named slot a dish opened from `slotId` is bound to (D-0026's active slot: the slot it was
+   * opened from or last saved to). A named slot binds to itself. The autosave (Continue) binds to:
+   * 1. (fix round 2) a named slot whose current record is exactly Continue's file: the same index
+   *    checksum (over the whole serialized state, world id and moment included) and the same name.
+   *    Continue is then that save, so that is where it was last saved: the recorded slot when it is one
+   *    of them, else the lowest-numbered. This holds however the two were written (a keep of the dish
+   *    Continue held, a save and its autosave, a Continue rewrite that failed), and a changed dish never
+   *    matches;
+   * 2. else the slot its dish was bound to when it was written, only while that slot still holds exactly
+   *    the record it held when Continue's state was taken (fix round 1: Continue is then that save or a
+   *    later moment of the same dish, so a save written after it is never replaced by the older
+   *    Continue) and the same world;
+   * 3. else (an older index without that record) none.
+   * Only for Continue's latest record: a copy read from its predecessor is bound to nothing (callers).
+   */
+  private async bindingOf(slotId: string, worldId: string | null): Promise<string | null> {
+    if (SaveStoreClass.slotIds().includes(slotId)) return slotId;
+    if (slotId !== AUTOSAVE_SLOT || !this.store) return null;
+    const auto = await this.store.slot(AUTOSAVE_SLOT);
+    if (!auto) return null;
+    const exact = await this.exactCopies(auto);
+    if (exact.length > 0) return auto.activeSlot !== undefined && exact.includes(auto.activeSlot) ? auto.activeSlot : exact[0]!;
+    const bound = auto.activeSlot;
+    if (bound === undefined || auto.activeRecord === undefined || !SaveStoreClass.slotIds().includes(bound)) return null;
+    const target = await this.store.slot(bound);
+    const same = worldId ?? auto.worldId;
+    return target !== null && target.current === auto.activeRecord && target.worldId !== undefined && target.worldId === same && auto.worldId === same ? bound : null;
+  }
+
+  /**
+   * The named slots, in slot order, whose current record is exactly the file `s` describes (same index
+   * checksum and name; only the write time may differ). Read from the index: nothing is loaded.
+   */
+  private async exactCopies(s: SlotInfo): Promise<string[]> {
+    const index = this.store ? await this.store.list() : [];
+    return SaveStoreClass.slotIds().filter((id) => index.some((x) => x.slotId === id && x.checksum === s.checksum && x.name === s.name));
+  }
+
+  /**
+   * The dish a keep is about: the open dish `dishId`, or with none open the dish Continue holds (fix
+   * round 1; see continueToKeep). A WhatIfKept when Continue's own slot already holds it exactly (nothing
+   * to write); null when there is nothing to keep.
+   */
+  private async keepSource(dishId: string | null, keep: WhatIfKeep, opening: string | null): Promise<Dish | WhatIfKept | null> {
+    if (dishId !== null) return this.need(dishId);
+    const found = await this.continueToKeep(opening, keep.kind === 'auto');
+    if (found === null || found.kind === 'index') return null;
+    if (found.kind === 'dish') return found.dish;
+    return { kind: 'saved', slot: this.describeSlot(found.held), replaced: null, name: found.name, autosaved: false, fromContinue: true };
+  }
+
+  /** keepDish for a keep source (a transient Continue dish is marked as such and unbound afterwards). */
+  private async keepSourceDish(d: Dish, keep: WhatIfKeep, options: KeepOptions): Promise<WhatIfKept> {
+    try {
+      const kept = await this.keepDish(d, keep, options);
+      return d.transient ? { ...kept, fromContinue: true } : kept;
+    } finally {
+      if (d.transient) delete this.ownSlots[d.id];
+    }
+  }
+
+  /**
+   * D-0033: keep the open dish named by a request's `keepFrom` (with none open, the dish Continue holds)
+   * before the new dish opens, through the one keep step (keepDish). Returns how it was kept, null when
+   * the request keeps nothing, or false when keeping refused the replacement: `keepRefused` has been
+   * posted and nothing was changed.
+   */
+  private async keepFirst(msg: { readonly requestId: number; readonly keepFrom?: KeepFrom }, options: KeepOptions): Promise<WhatIfKept | null | false> {
+    if (!msg.keepFrom) return null;
+    const src = await this.keepSource(msg.keepFrom.dishId, msg.keepFrom.keep, options.opening);
+    if (src === null || !('world' in src)) return src;
+    if (src.arm) throw new Error('A comparison copy is not a dish to keep.');
+    try {
+      return await this.keepSourceDish(src, msg.keepFrom.keep, options);
+    } catch (e) {
+      if (!(e instanceof WhatIfRefusal)) throw e;
+      const code: KeepRefusalCode = e.code === 'slots-full' || e.code === 'save-failed' || e.code === 'save-unavailable' ? e.code : 'failed';
+      this.post({ type: 'keepRefused', requestId: msg.requestId, code, message: e.message, exclude: options.exclude, name: src.name, ...(src.transient ? { fromContinue: true as const } : {}) });
+      return false;
+    }
   }
 
   private async whatIfStart(msg: Extract<ToWorker, { type: 'whatIfStart' }>): Promise<void> {
@@ -1323,70 +1742,114 @@ export class DishHost {
         world = await realizeVariant(this.registry, nextId, { worldId });
       }
     }
-    // 2. Keep the current dish through the save flow; a refusal or failed write starts nothing.
-    const kept = await this.keepDish(from, msg.keep);
+    // 2. Keep the current dish (with none open, the dish Continue holds: D-0033 fix round 1) through the
+    // save flow; a refusal or failed write starts nothing.
+    const src = await this.keepSource(msg.fromDishId, msg.keep, null);
+    const kept = src === null ? await this.keepDish(null, msg.keep) : 'world' in src ? await this.keepSourceDish(src, msg.keep, WHAT_IF_KEEP) : src;
     // 3. Open the new dish, paused, as a separate dish with its own world id.
     const dish = this.addDish(msg.newDishId, world, variantRecordOf(world)!.title);
     this.post({ type: 'whatIfStarted', requestId: msg.requestId, info: this.info(dish), kept });
     this.sendSnapshot(dish);
   }
 
-  /** Write one dish to a slot exactly as saveSlot/autosave do. */
-  private async writeSlot(d: Dish, slotId: string): Promise<SlotInfo> {
-    const savedAt = this.iso();
-    const recipeId = d.world.content.provenance.recipeId;
-    const built = await buildSaveFile(d.world, { name: d.name, savedAt, recipeId });
+  /**
+   * Write a built file of dish `d` to a slot exactly as saveSlot/autosave do. The autosave notes the
+   * dish's active slot, with `activeRecord`: that slot's record as it stood when the state was taken.
+   */
+  private async writeBuilt(d: Dish, slotId: string, savedAt: string, built: Awaited<ReturnType<typeof buildSaveFile>>, activeRecord?: string): Promise<SlotInfo> {
     const variant = built.file.meta.variant;
-    return this.store!.save({ slotId, text: built.text, checksum: built.checksum, name: d.name, tick: d.world.tick, savedAt, recipeId, ...(variant ? { variant } : {}), ...slotMetaCopies(built.file) });
+    const own = slotId === AUTOSAVE_SLOT ? this.ownSlots[d.id] : undefined;
+    return this.store!.save({
+      slotId,
+      text: built.text,
+      checksum: built.checksum,
+      name: d.name,
+      tick: built.file.tick,
+      savedAt,
+      recipeId: d.world.content.provenance.recipeId,
+      ...(variant ? { variant } : {}),
+      ...slotMetaCopies(built.file),
+      worldId: built.file.state.worldId,
+      ...(own !== undefined && activeRecord !== undefined ? { activeSlot: own, activeRecord } : {}),
+    });
   }
 
   /**
-   * Keep the dish being left (UX §3.4, D09 §3): 'auto' saves it to its own slot or the first free one
-   * and refuses when all ten are used; 'replace' writes the slot the player chose; 'exported' writes
-   * no slot. The autosave (Continue) follows. The dish is paused first so every write holds one
-   * moment; on refusal or a failed write it resumes its prior speed and nothing else changes.
+   * The one keep step (UX §3.4, D09 §3; D-0026, D-0033): keep the dish being left before a new dish
+   * opens. 'auto' writes nothing when the dish rebuilds exactly ('unchanged') or its own slot already
+   * holds it exactly ('saved'); else it saves it to its own slot (never the slot being opened) or the
+   * first free one, and refuses when all ten are used; 'replace' writes the slot the player chose;
+   * 'exported' writes no slot. The autosave (Continue) follows every write, except when the action opens
+   * the autosave itself; for the dish Continue holds it is rewritten (the same file) only to bind it to
+   * the slot just written (fix round 2). The dish is paused first so everything holds one moment (one
+   * file is built and written everywhere); on refusal or a failed write it resumes its prior speed and
+   * nothing else changes.
    */
-  private async keepDish(d: Dish | null, keep: WhatIfKeep): Promise<WhatIfKept> {
+  private async keepDish(d: Dish | null, keep: WhatIfKeep, options: KeepOptions = WHAT_IF_KEEP): Promise<WhatIfKept> {
     if (!d) return { kind: 'none', slot: null, replaced: null, name: null, autosaved: false };
-    if (keep.kind === 'auto' && (await this.rebuildsExactly(d))) return { kind: 'unchanged', slot: null, replaced: null, name: d.name, autosaved: false };
     const priorSpeed = d.speed;
     d.speed = 0;
     d.acc = 0;
     try {
-      let slot: SlotSummary | null = null;
-      let replaced: string | null = null;
+      if (keep.kind === 'auto' && (await this.rebuildsExactly(d))) return { kind: 'unchanged', slot: null, replaced: null, name: d.name, autosaved: false };
+      const own = this.ownSlots[d.id];
+      // Its slot's record before this state is taken: the autosave below is bound to it (fix round 1).
+      const ownRecord = own !== undefined && this.store ? (await this.store.slot(own))?.current : undefined;
+      const savedAt = this.iso();
+      const built = await this.buildFor(d, savedAt);
+      if (keep.kind === 'auto' && own !== undefined && (await this.holdsExactly(own, d, built))) {
+        // Unchanged since it was saved to its own slot: nothing is written (not even Continue).
+        const held = await this.store!.slot(own);
+        return { kind: 'saved', slot: held ? this.describeSlot(held) : null, replaced: null, name: d.name, autosaved: false };
+      }
+      let written: SlotInfo | null = null;
+      let replaced: SlotInfo | null = null;
       if (keep.kind !== 'exported') {
-        if (!this.store) throw new WhatIfRefusal('save-unavailable', 'This device cannot save dishes, so the new dish was not started. Export your dish as a file first.');
+        if (!this.store) throw new WhatIfRefusal('save-unavailable', `This device cannot save dishes, so ${NOT_DONE[options.action]}. Export your dish as a file first.`);
         const slots = await this.store.list();
         let slotId: string | null;
         if (keep.kind === 'replace') {
           if (!SaveStoreClass.slotIds().includes(keep.slotId)) throw new WhatIfRefusal('failed', 'That save slot does not exist. Nothing was changed.');
+          if (keep.slotId === options.exclude) throw new WhatIfRefusal('failed', 'That is the save being opened, so it cannot hold this dish too. Choose another save. Nothing was changed.');
           slotId = keep.slotId;
-          const old = slots.find((s) => s.slotId === slotId);
-          replaced = old && this.ownSlots[d.id] !== slotId ? old.name : null;
+          replaced = (own !== slotId ? slots.find((s) => s.slotId === slotId) : undefined) ?? null;
         } else {
-          slotId = this.ownSlots[d.id] ?? (await this.store.freeSlot());
+          slotId = own !== undefined && own !== options.exclude ? own : await this.store.freeSlot();
           if (slotId === null) {
             throw new WhatIfRefusal('slots-full', `All ten save slots are used, so "${d.name}" has nowhere to go. Export it as a file or choose a save to replace. Nothing has changed.`);
           }
         }
         try {
-          slot = this.describeSlot(await this.writeSlot(d, slotId));
+          written = await this.writeBuilt(d, slotId, savedAt, built);
         } catch (e) {
-          throw new WhatIfRefusal('save-failed', `"${d.name}" could not be saved, so the new dish was not started. Your saves are unchanged. (${e instanceof Error ? e.message : String(e)})`);
+          throw new WhatIfRefusal('save-failed', `"${d.name}" could not be saved, so ${NOT_DONE[options.action]}. Your saves are unchanged. (${e instanceof Error ? e.message : String(e)})`);
         }
         this.ownSlots[d.id] = slotId;
       }
       let autosaved = false;
-      if (this.store) {
+      // Continue holds the very file just written (or exported), bound to the record now in its slot;
+      // not when the action opens Continue itself. The dish Continue already holds is written to Continue
+      // again only when a named slot was just written (fix round 2): the same file, now bound to that
+      // record, so the next launch finds it saved there instead of keeping it again into another slot.
+      // An export leaves Continue exactly as it was.
+      const follow = options.opening !== AUTOSAVE_SLOT && (!d.transient || written !== null);
+      if (this.store && follow) {
         try {
-          await this.writeSlot(d, AUTOSAVE_SLOT);
+          await this.writeBuilt(d, AUTOSAVE_SLOT, savedAt, built, written?.current ?? ownRecord);
           autosaved = true;
         } catch {
-          // The dish is kept in its slot or file; Continue keeps opening the previous autosave.
+          // The dish is kept in its slot or file; Continue keeps opening the previous autosave (for the
+          // dish Continue holds, bindingOf still finds that slot: it holds exactly Continue's file).
         }
       }
-      return { kind: slot ? 'slot' : 'exported', slot, replaced, name: d.name, autosaved };
+      return {
+        kind: written ? 'slot' : 'exported',
+        slot: written ? this.describeSlot(written) : null,
+        replaced: replaced?.name ?? null,
+        ...(replaced ? { replacedTick: replaced.tick } : {}),
+        name: d.name,
+        autosaved,
+      };
     } catch (e) {
       d.speed = priorSpeed;
       throw e;
