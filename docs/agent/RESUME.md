@@ -1,6 +1,39 @@
 # Resume point — read this first after a restart
 
-> **Update 2026‑09‑29 ≈ 03:25 UTC — resumed after the restart; `g2-close` RUNNING.** The owner said
+> **Update 2026‑09‑29 ≈ 13:50 UTC — PAUSED FOR A BREAK (owner's request). START HERE.**
+> State: `main` clean and pushed. g2-close part 1 is committed: "keep the open dish first" (D‑0033:
+> build, two verifier lenses, two fix rounds) in `7962785`, the P2.9 tuning report (D‑0034) in `9c087bc`,
+> decisions + review reports + the P2.9 tick in the docs commit right after them. Evidence: `npm run check` 702/702 (75 files; typecheck and lint clean); the round‑2
+> fixer's whole e2e suite 159/159 (1.4 h) on its own port (tmp/fix2-keep/e2e-full.log). Fix round 2 was committed
+> WITHOUT its re‑verification (the workflow was stopped there for the break). The Phase 3 plan re-check is
+> committed (`docs/agent/g3-plan-recheck.md`: 185 verified corrections, 16 blockers, four lead choices).
+> **Next, in order:**
+> 1. Sanity: `git status` clean; stop stray servers (`for p in $(seq 4173 4299); do lsof -t -i :$p | xargs -r kill; done`).
+> 2. Copy `docs/agent/g2-close-2.workflow.js.txt` to the session scratchpad as `.js` and run it with the
+>    Workflow tool (`scriptPath`). It re-verifies fix round 2 (saves + player lenses), runs fix round 3 with
+>    the D‑0033 carry-overs (a change made while paused reaches Continue at the next autosave; J one time
+>    format per save; K curly quotes; E toasts at 16 px; D‑0034 ability names in gain lines), re-verifies,
+>    then runs the D6 §18 comprehension self-review with label fixes and a re-review. Reports:
+>    `docs/reports/reviews/g2-close/`.
+> 3. Lead integration: read every report (journal.jsonl), fix leftovers, record decisions, `npm run check` and
+>    the full `npx playwright test` (≈ 159 journeys, ≈ 1 h), commit, push.
+> 4. G2 gate ritual (BUILD_DIRECTIVE "G2 gate — evidence" + Appendix A): module-accounting,
+>    registry-imports, branch-evidence (tests/fixtures), tests/sim/comparison, tests/recipes/variants,
+>    tests/experiments/*, e2e whatif + lab-tools, tests/sim/view-switch; determinism 1× == 4× == reload
+>    (deterministic-state fixture), conservation (closed-lid fixture), perf (cite tune-g2.md's sim:run lines);
+>    EXPANSION_RESPONSE §1–§8 (world schema 3, contentHash from content:validate, owner items incl. the
+>    five-tester comprehension session); tag `g2`; `git push --tags`.
+> 5. Phase 3: make and record the four lead choices of `docs/agent/g3-plan-recheck.md` (G2, G3, G10, G11)
+>    plus its decision 6, apply its corrections while writing `docs/agent/g3-wave-{1..6}.workflow.js.txt`,
+>    then the lead preflight (g3-plan §2, world schema 4). Lead leanings, not yet recorded: G2 Option A
+>    (hash-neutral stateHash, so g2 saves keep their exact hashes); G3 Option P (the lead bumps buildPhase 3
+>    and contentVersion 2 in the preflight commit with the pinned-test fixes); G10 Option W3 (host-level
+>    Cancel restores the command state like Undo; Undo while a sample is held acts as Cancel); G11 at W5;
+>    decision 6: a usable-intake seconds column in schema 4.
+> Owner questions (none block): D‑0022 (EXP_A bootstrap), D‑0027 (RESERVE_COMPARE_V2 meal dose), D‑0031
+> (one checkpoint ring per device), EXPANSION_RESPONSE §8 list.
+
+> **(Superseded by the banner above.) Update 2026‑09‑29 ≈ 03:25 UTC — resumed after the restart; `g2-close` RUNNING.** The owner said
 > "let's get started"; the lead relaunched `docs/agent/g2-close.workflow.js.txt` (now with a third
 > verifier lens, `coverage`, for the tuning report). Builders edit the working tree and never commit;
 > reports land in `docs/reports/reviews/g2-close/`. If this session dies before the lead commits: look at
@@ -8,7 +41,7 @@
 > read the reports, then either finish the missing parts by hand or rerun the script, and continue with
 > steps 3–5 of the 03:05 banner below.
 
-> **Update 2026‑09‑29 ≈ 03:05 UTC — PAUSED FOR A CODESPACE RESTART. START HERE.**
+> **(Superseded by the banner above.) Update 2026‑09‑29 ≈ 03:05 UTC — paused for a codespace restart.**
 > State: `main` clean and pushed. Wave C committed (`9708c29`, docs `f0a45de`); P2.1–P2.8 ticked;
 > decisions through D‑0032. Last full evidence: `npm run check` 611/611 (after one documented golden
 > update); full Playwright 111/117 with the 6 failures in two new journeys' own test code, then after

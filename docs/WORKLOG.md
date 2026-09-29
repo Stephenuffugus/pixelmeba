@@ -43,7 +43,7 @@ with the next task).
 - [x] (2761cbd, d085a65, b17aa5b, 4804a91, 87204e7) P2.6 What if? R1 (RecipeVariant, R‑G0…R‑G3, Again, Another idea, preview, metadata)
 - [x] (d085a65, b17aa5b, 4804a91) P2.7 Lab view (categories, trays, brushes, habitat paint, stone/wall/bead, overlays picker, charts)
 - [x] (9708c29) P2.8 Regional trait graphs, checkpoint ring, journal
-- [ ] P2.9 Second tuning report (Standard + Accelerated; docs/reports/tune-g2.md)
+- [x] (9c087bc) P2.9 Second tuning report (Standard + Accelerated; docs/reports/tune-g2.md)
 - [ ] G2 gate: module‑accounting · registry‑imports · branch‑evidence · comparison · variants · experiments · e2e whatif/lab‑tools · view‑switch hash · comprehension self‑review → tag `g2`
 
 ## Phase 3 — Launch Ecology
