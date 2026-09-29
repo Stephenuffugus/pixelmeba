@@ -36,13 +36,13 @@ with the next task).
 
 ## Phase 2 — Core Abilities, Comparison, What if?
 - [x] (2761cbd) P2.1 Module framework + E01, E03, E05
-- [ ] P2.2 Founder modes + mutation presets UI + Advanced panel + prototype label
-- [ ] P2.3 Branch discovery, naming/pinning, lineage panel, follow lineage, trait overlay, specimens, discovery card
+- [x] (9708c29) P2.2 Founder modes + mutation presets UI + Advanced panel + prototype label
+- [x] (d085a65, b17aa5b, 4804a91) P2.3 Branch discovery, naming/pinning, lineage panel, follow lineage, trait overlay, specimens, discovery card
 - [x] (2761cbd) P2.4 Comparison engine + results + prediction note
-- [~] (2761cbd framework + 6 cards; EXP_C and in-app cards in wave B) P2.5 Experiments framework + EXP_A/B/C + Food trail, Light and life, Cleaning crew, Predator balance
-- [~] (2761cbd simulation half; sheet + e2e in wave B) P2.6 What if? R1 (RecipeVariant, R‑G0…R‑G3, Again, Another idea, preview, metadata)
-- [ ] P2.7 Lab view (categories, trays, brushes, habitat paint, stone/wall/bead, overlays picker, charts)
-- [ ] P2.8 Regional trait graphs, checkpoint ring, journal
+- [x] (2761cbd, d085a65, b17aa5b, 4804a91) P2.5 Experiments framework + EXP_A/B/C + Food trail, Light and life, Cleaning crew, Predator balance
+- [x] (2761cbd, d085a65, b17aa5b, 4804a91, 87204e7) P2.6 What if? R1 (RecipeVariant, R‑G0…R‑G3, Again, Another idea, preview, metadata)
+- [x] (d085a65, b17aa5b, 4804a91) P2.7 Lab view (categories, trays, brushes, habitat paint, stone/wall/bead, overlays picker, charts)
+- [x] (9708c29) P2.8 Regional trait graphs, checkpoint ring, journal
 - [ ] P2.9 Second tuning report (Standard + Accelerated; docs/reports/tune-g2.md)
 - [ ] G2 gate: module‑accounting · registry‑imports · branch‑evidence · comparison · variants · experiments · e2e whatif/lab‑tools · view‑switch hash · comprehension self‑review → tag `g2`
 
