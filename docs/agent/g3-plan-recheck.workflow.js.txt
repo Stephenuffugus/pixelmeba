@@ -1,0 +1,94 @@
+export const meta = {
+  name: 'g3-plan-recheck',
+  description: 'Read-only re-check of docs/agent/g3-plan.md against the current tree (after Phase 2 waves B/C): paths, symbols, versions, numbers; each wave adversarially re-checked; one corrections file',
+  phases: [
+    { title: 'Check', detail: 'one read-only checker per plan section' },
+    { title: 'Verify', detail: 'one skeptic per section re-checks every claimed correction' },
+    { title: 'Synthesize', detail: 'docs/agent/g3-plan-recheck.md' },
+  ],
+}
+
+const SECTIONS = [
+  { key: 'preflight', lines: '1-174', what: 'the header, §0 "What the committed code already does", §1 dependency sketch and stage-file owner table, §2 determinism and the Preflight steps 1-9, §3 shared PRE and VERIFY' },
+  { key: 'wave1', lines: '175-279', what: 'Wave 1 (foundation, environment, stage8, art-organisms) and "Lead after W1"' },
+  { key: 'wave2', lines: '280-399', what: 'Wave 2' },
+  { key: 'wave3', lines: '400-517', what: 'Wave 3' },
+  { key: 'wave4', lines: '518-611', what: 'Wave 4 and the lead module flip' },
+  { key: 'wave5', lines: '612-716', what: 'Wave 5' },
+  { key: 'wave6', lines: '717-887', what: 'Wave 6, §5 G3 gate evidence checklist, §6 risks/open questions/critical files' },
+]
+
+const CONTEXT = `Project: /workspaces/pixelmeba (Pixelmeba; CLAUDE.md applies). docs/agent/g3-plan.md is the lead's Phase 3 build plan. It was written at HEAD 6a35126, when Phase 2 was only at wave A. Since then Phase 2 waves B and C landed (commits d085a65, b17aa5b, 4804a91, 87204e7, 9708c29, f0a45de; decisions D-0024…D-0032 in docs/DECISIONS.md) and a Phase 2 close-out workflow is editing the working tree RIGHT NOW (uncommitted edits in src/worker/*, src/ui/*, src/persistence/store.ts, tools/sim-tune.ts, tools/sim-run.ts, docs/reports/*). Judge the plan against the COMMITTED tree: use "git show HEAD:<path>", "git ls-tree -r --name-only HEAD", "git grep -n <pattern> HEAD -- <paths>". Known correction already recorded by the lead: world schema 3 was used by P2.8 (history.traits/journal, D-0031), so Phase 3's single foundation bump is to schema 4 (COLUMNS_ADDED_IN[4], "schema 3 → 4" migration tests, "1 → 4" and "2 → 4" through loadSaveFile) — still list every place in your section that says schema 3 so the lead can patch each one.
+
+STRICTLY READ-ONLY: do not create, edit or delete any file in the repository; do not run git commands that change anything (no add/commit/stash/checkout/reset/restore); do not run npm scripts, vitest, playwright, builds or the simulation (the 2 CPUs are busy). Reading files, git show/grep/ls-tree/log and plain grep/cat/sed are fine.`
+
+const CORR = {
+  type: 'object',
+  properties: {
+    corrections: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          planLine: { type: 'number' },
+          kind: { type: 'string', enum: ['path', 'symbol', 'status', 'version', 'number', 'doc-ref', 'ownership', 'port', 'other'] },
+          severity: { type: 'string', enum: ['BLOCKER', 'MAJOR', 'MINOR'] },
+          claim: { type: 'string' },
+          actual: { type: 'string' },
+          evidence: { type: 'string' },
+          replacement: { type: 'string' },
+        },
+        required: ['planLine', 'kind', 'severity', 'claim', 'actual', 'evidence', 'replacement'],
+      },
+    },
+    facts: { type: 'array', items: { type: 'string' } },
+    notes: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['corrections', 'facts', 'notes'],
+}
+
+const CHECK = (s) => `${CONTEXT}
+
+YOUR SECTION: docs/agent/g3-plan.md lines ${s.lines} — ${s.what}. Read the whole plan header (lines 1-35) for context, then your section in full.
+
+Check EVERY concrete claim your section makes about the repository or the canonical docs, against HEAD:
+1. Paths: every file named (to read, to own, SHARED, or "new"). Does it exist? Was it renamed or split (e.g. Lab tray files, NewDish, Notebook, src/ui/journal.ts, atlas feature layers, grid/structures placement helpers that waves B/C created)? Does a file the plan calls "new" already exist (a builder would clobber it)? Give the exact current path.
+2. Symbols: every function, type, constant, command, RNG stream, reason code, column, protocol message, overlay id, content ID, test helper and npm script named (e.g. setLid, habitatGrid, buildSpeciesTable, registry(), NEG_ONE_DEFAULT, COLUMNS_ADDED_IN, migrateWorldState, checkAtlas, StateHasher, stateHash, FILM_DIGESTION_IMPLEMENTED, FOOD_OBJECT_CAP, FUNGAL_CAP, NativeAbility, StarchRules, validateContent, buildSaveFile, loadSaveFile, worldContentFor, allocateFields, expectNoSeriousA11yViolations). Does it exist with that name and a compatible signature? If not, what is the real one?
+3. Status: every "already implemented" / "not implemented" / "verify P2.x built it" claim. Is it still true after waves B/C? (e.g. shade paint ×0.1 and erase, the Lab trays and their categories, structure placement, overlay picker, protocol version number, atlas feature table keyed feature/<layer>/<heading>/<frame> from D-0032, the journal and Notebook from D-0027/D-0031, checkpoints.)
+4. Versions: schemaVersion (plan says 3 → must be 4), contentVersion, buildPhase, moduleRegistryVersion, evolutionRulesVersion, protocolVersion, atlas manifest version — what are they at HEAD and what should the plan say?
+5. Numbers: every number your section's prompts state as a rule (rates, caps, thresholds, doses, radii, coordinates, frame counts, colours) — does it match docs/CONTENT_TABLES.md / docs/PIXELMEBA_IMPLEMENTATION_SPEC.md / docs/UX_SPEC.md / docs/ARCHITECTURE.md? Quote the doc line for any mismatch. Spot-check doc section references (e.g. "CT §8.1", "SPEC §9.19", "D04 §2 row C08") point at the right content.
+6. Ownership: within your wave, are two builders given the same file to own, or a SHARED file edited non-additively? Does a builder own a file that Phase 2 now uses heavily in a way the prompt ignores?
+7. Anything else that would mislead a builder who follows the prompt literally (e.g. a test file name that collides, a port clash inside the wave, a step that is now redundant because Phase 2 already did it).
+
+Return corrections (planLine = the plan line where the claim is; claim = what the plan says, quoted briefly; actual = what is true at HEAD; evidence = command + output excerpt or file:line; replacement = exact text the lead should put in the plan; severity BLOCKER = a builder following the plan would break the build/saves/determinism or clobber work, MAJOR = would waste significant time or implement something wrong, MINOR = cosmetic/imprecise). Put in "facts" the concrete current-tree facts a builder of your section will need (exact paths, signatures, current version numbers, names of existing helpers) — short lines. "notes" for anything else. Do not pad: if a claim holds, say nothing about it.`
+
+const VERIFY = (s, found) => `${CONTEXT}
+
+A checker compared docs/agent/g3-plan.md lines ${s.lines} (${s.what}) with the committed tree and claims these corrections are needed:
+---
+${JSON.stringify(found.corrections, null, 1)}
+---
+and these facts:
+---
+${JSON.stringify(found.facts, null, 1)}
+---
+You are the skeptic. For EACH correction, independently re-check the plan line and the tree/docs and try to REFUTE it: is the plan actually right (e.g. the path exists under another command, the symbol exists with that name, the number matches the doc)? Is the replacement text itself correct and complete? For each fact, check it is true at HEAD. Also look quickly for important errors the checker MISSED in that section (same rules: paths, symbols, status, versions, numbers, ownership). Return "corrections" = the corrections that HOLD (fix their replacement text if it was wrong) plus any you found that were missed (mark those with "MISSED: " at the start of claim); "facts" = the facts that hold (corrected where needed); "notes" = one line per REFUTED correction or fact saying why.`
+
+const results = await pipeline(
+  SECTIONS,
+  (s) => agent(CHECK(s), { label: `check:${s.key}`, phase: 'Check', schema: CORR }),
+  (found, s) => (found ? agent(VERIFY(s, found), { label: `verify:${s.key}`, phase: 'Verify', schema: CORR }).then((v) => ({ key: s.key, lines: s.lines, found, verified: v })) : { key: s.key, lines: s.lines, found: null, verified: null }),
+)
+
+phase('Synthesize')
+const bundle = results.filter(Boolean).map((r) => ({ section: r.key, lines: r.lines, corrections: r.verified ? r.verified.corrections : (r.found ? r.found.corrections : []), facts: r.verified ? r.verified.facts : (r.found ? r.found.facts : []), refutedOrNotes: r.verified ? r.verified.notes : ['NOT VERIFIED (skeptic missing)'], checkerNotes: r.found ? r.found.notes : ['CHECKER MISSING'] }))
+const missing = results.filter((r) => !r || !r.verified).map((r) => (r ? r.key : '?'))
+if (missing.length) log(`sections without a verified result: ${missing.join(', ')}`)
+const doc = await agent(`${CONTEXT.replace('STRICTLY READ-ONLY: do not create, edit or delete any file in the repository;', 'You may create exactly ONE file: docs/agent/g3-plan-recheck.md (nothing else);')}
+
+Write docs/agent/g3-plan-recheck.md: the verified corrections to docs/agent/g3-plan.md after Phase 2 waves B/C, for the lead to apply when writing docs/agent/g3-wave-{1..6}.workflow.js.txt. Structure: a short header (date 2026-09-29, HEAD at the time: run "git log --oneline -1", method: read-only checker + skeptic per section); "Global corrections" (anything that applies across waves — schema 4, version numbers, renamed paths used in several waves — deduplicated); then one section per plan section (preflight, wave1 … wave6) with a table: plan line | severity | plan says | actually | replace with; then "Facts builders need" per section (deduplicated, exact paths and signatures); then "Refuted by the skeptic" (one line each, so the lead knows what NOT to change); then "Sections not verified" if any. Keep replacement text exact and paste-ready. Do not invent corrections that are not in the data below; you may merge duplicates. Data:
+---
+${JSON.stringify(bundle, null, 1)}
+---
+Return a 10-line summary: counts by severity per section and the three most important corrections.`, { label: 'synthesize', phase: 'Synthesize' })
+return { summary: doc, missing, counts: bundle.map((b) => ({ section: b.section, n: b.corrections.length, blockers: b.corrections.filter((c) => c.severity === 'BLOCKER').length })) }
