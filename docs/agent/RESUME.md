@@ -1,5 +1,13 @@
 # Resume point — read this first after a restart
 
+> **Update 2026‑09‑29 ≈ 03:25 UTC — resumed after the restart; `g2-close` RUNNING.** The owner said
+> "let's get started"; the lead relaunched `docs/agent/g2-close.workflow.js.txt` (now with a third
+> verifier lens, `coverage`, for the tuning report). Builders edit the working tree and never commit;
+> reports land in `docs/reports/reviews/g2-close/`. If this session dies before the lead commits: look at
+> `git status` (uncommitted builder work may be there — keep it on a local `wip/` branch, do not push it),
+> read the reports, then either finish the missing parts by hand or rerun the script, and continue with
+> steps 3–5 of the 03:05 banner below.
+
 > **Update 2026‑09‑29 ≈ 03:05 UTC — PAUSED FOR A CODESPACE RESTART. START HERE.**
 > State: `main` clean and pushed. Wave C committed (`9708c29`, docs `f0a45de`); P2.1–P2.8 ticked;
 > decisions through D‑0032. Last full evidence: `npm run check` 611/611 (after one documented golden
