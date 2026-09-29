@@ -1,5 +1,15 @@
 # Resume point — read this first after a restart
 
+> **Update 2026‑09‑29 ≈ 03:00 UTC:** wave C is committed (`9708c29`, docs `f0a45de`, pushed): P2.1–P2.8
+> ticked, decisions D‑0029…D‑0032. Running now: `docs/agent/g2-close.workflow.js.txt` — D‑0033 "keep the
+> open dish first" on every replacement (builder + two verifiers + fix rounds), P2.9 tuning report
+> (`docs/reports/tune-g2.md`), then the D6 §18 comprehension self-review (`docs/reports/comprehension-g2.md`,
+> `tools/review-g2.mjs`) with label/hierarchy fixes. Reports in `docs/reports/reviews/g2-close/`. After it:
+> lead integration (record D‑0033 + proposed decisions, full check + full Playwright, commit), then the G2
+> gate ritual (BUILD_DIRECTIVE Appendix A; EXPANSION_RESPONSE §1–§8; tag `g2`), then Phase 3 (`g3-plan.md`).
+> If this session died mid-run: read the reports in that folder and `git status`, and rerun only the parts
+> not reported.
+
 > **Update 2026‑09‑28 afternoon (after the codespace closed at ≈ 14:35 UTC):** wave C builders
 > (founders, observe) were cut off during their final regression runs; art‑marks never started. Their
 > uncommitted work is kept locally at branch `wip/g2-wave-c-found` (`ecb52d9`, not pushed). The lead

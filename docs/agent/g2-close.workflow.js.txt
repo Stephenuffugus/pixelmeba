@@ -1,0 +1,163 @@
+export const meta = {
+  name: 'g2-close',
+  description: 'Phase 2 close: keep the open dish on every replacement (D-0033), P2.9 tuning report, and the D6 §18 comprehension self-review with fixes; each adversarially verified',
+  phases: [
+    { title: 'Build', detail: 'keep-dish builder + P2.9 tuner' },
+    { title: 'Verify', detail: 'adversarial verifiers per task' },
+    { title: 'Fix', detail: 'fix + re-verify, at most 2 rounds' },
+    { title: 'Review', detail: 'comprehension self-review (after keep-dish), fixes, re-review' },
+  ],
+}
+
+const R = 'docs/reports/reviews/g2-close'
+
+const PRE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Phase 2 tasks P2.1–P2.8 are committed on main (HEAD f0a45de; wave C = 9708c29). What remains before the G2 gate: this workflow. Canonical rules: docs/PIXELMEBA_IMPLEMENTATION_SPEC.md, docs/CONTENT_TABLES.md (every number), docs/ARCHITECTURE.md, docs/UX_SPEC.md, docs/CONFLICT_REGISTER.md; docs/DECISIONS.md holds rulings through D-0032 (read the titles; D-0026 = What if? keep flow; D-0027 = experiments; D-0029 = wave C lead pass). Contract (CLAUDE.md): determinism (randomness only via det(); never Math.random/Date/unordered iteration in src/sim), conservation ledger, no hidden rescue, honest labels, content is validated JSON, the UI changes the world only through commands, saves are sacred (atomic, checksummed, predecessor kept; world schema change ⇒ bump + migration by copy + old-save test).
+
+The lead commits: do NOT run git add/commit/stash/checkout/reset/rm/restore and do not delete files you did not create. Other agents may edit the same working tree at the same time: edit ONLY files your assignment lets you own; SHARED files additively, re-reading right before each edit. After changing content/ run "npx tsx tools/content-validate.ts --write". Never run prettier/format on files you do not own.
+
+Browser tests only with your own port and build folder: E2E_PORT=<port> E2E_OUTDIR=tmp/dist-<key> npx playwright test <specs> (projects phone-portrait, desktop, phone-landscape), then stop only your port (lsof -t -i :<port> | xargs -r kill; never pkill -f). The machine has 2 CPUs shared by several agents: targeted vitest files only; long commands with run_in_background and an until-loop wait (never a bare sleep); a single spec on three projects takes 5–15 min. Before finishing: npx tsc -p tsconfig.json --noEmit and npx eslint <your files> clean; your tests pass; no serious/critical axe violations on screens you touched; touch targets ≥ 48 px, text ≥ 16 px; 200 % text works in phone portrait and landscape. Put proposed decisions in the report as "PROPOSED DECISION: …".`
+
+const KEEP = {
+  key: 'keep-dish',
+  port: 4191,
+  prompt: `ASSIGNMENT: implement lead ruling D-0033 ("keep the open dish first").
+Ruling (decided by the lead; UX §3.4 states it for What if?, CLAUDE.md "saves are sacred"; today New Dish's Create, the Play shelf and an experiment card's Start close the open dish without saving it, and Saved dishes → Open and Import replace it the same way): EVERY action that replaces the open dish with a different one keeps the open dish first, exactly as What if? does (D-0026): Play shelf Start, New Dish Create, an experiment card's Start (this supersedes D-0027's "autosave to Continue without writing a named slot"), Saved dishes → Open (a named slot or an automatic checkpoint), Import, and Home → Continue when it would open a different dish than the one open. Keeping = the worker's existing keep flow (src/worker/host.ts keepPlan/keepDish; protocol WhatIfPlan/WhatIfKeep): save to the dish's active slot (the store keeps the previous copy) or else the first empty slot; with all ten used, the player chooses export-then-continue, a confirmed replacement of a named slot, or Cancel (nothing changes: the open dish is exactly as it was, in its previous run state). Nothing is written when keeping is unnecessary: (a) the plan is 'unchanged' (What if?'s rebuild-exactly rule), or (b) the dish is unchanged since it was saved to its active slot — decide how to prove that exactly and cheaply (e.g. the file the keep would write has the same checksum as the slot's current record, or a dirty flag set by every accepted command and every tick since the last save; whichever you choose must never skip a save of a changed dish — test it). A dish opened from an automatic checkpoint is a branch bound to no slot, so it is kept like any other changed dish. The player is told in one short line what happened (e.g. "Saved “Little Living Garden” to slot 2 first.") and nothing when nothing was written. A failed write refuses the replacement with a readable message and changes nothing (the new dish is not started/opened/imported). Before the action, where the UI already shows a confirmation or a sheet (New Dish, What if?, Saved dishes checkpoint confirm), say truthfully what will happen to the open dish (use the plan); replace New Dish's "Creating a new dish closes “…”" warning accordingly.
+Implementation: ONE shared worker keep step (generalize the What if? one; keep What if?'s behaviour and messages byte-for-byte where they already exist) and ONE shared UI flow for the slots-full choice (refactor WhatIfState/WhatIfSheet's full-slots UI into a shared component used by all entry points; What if? keeps working exactly as before — tests/e2e/whatif.spec.ts must stay green unchanged unless a message it asserts was ruled to change, and then say so).
+You own: src/ui/state.ts, src/ui/panels/WhatIf*.tsx, src/ui/panels/Keep*.tsx (new), src/ui/strings/{whatif,keep}.ts, src/ui/views/{NewDish,Play,Saves,Home,Notebook,ExperimentRun}.tsx, src/worker/{host,protocol,client}.ts, src/persistence/store.ts (additive), tests/worker/keep*.test.ts (new), tests/worker/whatif.test.ts (additive), tests/e2e/keep-dish.spec.ts (new), and existing e2e specs ONLY where the specified new behaviour changes what they see (e.g. a new "Saved … first" toast, or a slot now used) — list each such edit and why.
+Done when: worker tests for every entry point's keep decision (unchanged recipe start → nothing written; changed dish → own slot with predecessor kept; no own slot → first empty slot; all ten used → 'full' plan and no write; Cancel changes nothing incl. run state; failed write → refusal, nothing changed; a changed dish is never skipped); tests/e2e/keep-dish.spec.ts on all three projects: play the Garden, run, New Dish → Create → the line says it was saved and Saved dishes lists it; Play shelf start from a changed dish keeps it; with ten slots filled, starting shows the full-slots choice and Cancel keeps the dish open and unchanged, Replace works; Saved dishes → Open of another slot keeps the changed open dish. Then run the WHOLE e2e suite on your port (all specs, three projects; ≈ 60–70 min, run it in the background) and fix anything your change broke; report the pass count.`,
+}
+
+const TUNE = {
+  key: 'tune-g2',
+  port: null,
+  prompt: `ASSIGNMENT: BUILD_DIRECTIVE P2.9 "Second tuning report" and D06 §18 (docs/source/D06-core-experience-evolution-pacing-and-build-priorities.md §18 "Small reproducible tuning batch"; read it fully). Run FIRST_DISH_V1 on the six development seeds 104729, 130363, 155921, 196613, 262147, 314159 for 600 simulated seconds, no interventions, in Standard AND in Accelerated mode (extend to 1,200 s when no inherited difference by 600 s, keeping the 600 s checkpoint). Record: effective speed (headless tick cost), births, deaths (by cause), biomass, food remaining, mutation counts, module attempts, successful gains (and losses), branch confirmations, per-daughter rates for rare modules (events per daughter trial as well as per minute), median and range of first intake and first division, and the fraction with no event by the stopping time — never dropping an extinct dish and never treating "no event by T" as an event at T. Report: docs/reports/tune-g2.md (both presets; tools/sim-tune.ts already writes tables and keeps a hand-written analysis block between its markers; extend the tool if a required field is missing, with a test in tests/tools/sim-tune.test.ts, keeping its read-only guarantee: endpoint hash equals a plain run). Compare with docs/reports/tune-g1.md (all hashes changed at D-0023 and with modules enabled; say so). Write the analysis block: what is mechanically correct, what a player would see in the first 10 minutes on each preset, what is slow or absent (e.g. module gains too rare to see on Standard — give the per-daughter numbers and the expected waiting time), and whether Accelerated makes module gains and branches visible within 10 minutes. Separate "mechanically correct", "understood", "interesting" and "fast enough" (D06 §18). Also measure and report the tick cost (p50/p95/p99 ms and agents) with npm run sim:run -- --recipe FIRST_DISH_V1 --seed 104729 --ticks 6000 --perf for both presets.
+Rules: do NOT change any recipe, mechanic, constant or content number (BUILD_DIRECTIVE Appendix B: "Do not tune mechanics to make a demo look good; tune a new recipe version and report"). If a change looks warranted, describe the candidate recipe revision (one parameter at a time, D06 §18 "Tune the cause"), measure it on the six seeds with a scratch recipe outside content/ (or a test-only transform) and put it in the report as a PROPOSED owner decision with its numbers. The owner questions already open are D-0022 (EXP_A bootstrap) and D-0027 (RESERVE_COMPARE_V2 meal dose) — mention whether the G2 numbers bear on them.
+You own: tools/sim-tune.ts, tools/sim-run.ts (additive), tests/tools/sim-tune.test.ts, docs/reports/tune-g2.md. Nothing else. Do not run Playwright.`,
+}
+
+const LENSES = {
+  'keep-dish': [
+    { key: 'saves', text: `LENS: saves and state. Every entry point (Play, New Dish, experiment card, Saved dishes → Open incl. checkpoints, Import, Home → Continue) keeps the open dish or proves it unchanged; a changed dish is NEVER skipped (try: run 1 tick; one accepted command while paused; rename a branch; add a journal note; open from a checkpoint then change nothing/something); the predecessor is kept; slots-full shows the choice and Cancel changes nothing incl. run state and the What if?/New Dish sheet state; a failed write (MemoryBackend failing commit) refuses and changes nothing; What if? behaviour and messages unchanged; no simulation state touched (state hashes identical before/after a keep). Read the diff; re-run the worker tests; mentally revert — would each test fail?` },
+    { key: 'player', text: `LENS: player-facing truth and usability. Drive the built app on your port (throwaway spec under tmp/) at phone-portrait, phone-landscape and desktop, 100 % and 200 % text: every line about the open dish is true (what will happen before, what happened after), wording follows UX_SPEC tone, the full-slots choice is reachable by keyboard with correct focus order and announced (role/aria), 48 px targets, 16 px text, axe clean; the whole e2e suite result the builder reported is real (re-run tests/e2e/keep-dish.spec.ts and tests/e2e/whatif.spec.ts on all three projects).` },
+  ],
+  'tune-g2': [
+    { key: 'numbers', text: `LENS: numbers and honesty. Re-run at least two seeds per preset yourself (npx tsx tools/sim-tune.ts with the builder's options into a scratch --out under tmp/) and compare every number in docs/reports/tune-g2.md; check censoring rules (D06 §18: never drop an extinct dish, no "event at T"), per-daughter rates (numerator and denominator stated and correct), medians/ranges, that the analysis claims only what the tables show, that no recipe/mechanic/constant/content changed (git diff content/ src/sim), and that the tool's read-only guarantee test still passes.` },
+  ],
+}
+
+const VERDICT = { type: 'object', properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } }, required: ['ok', 'problems'] }
+const serious = (v) => (v && Array.isArray(v.problems) ? v.problems.filter((p) => /^(BLOCKER|MAJOR|MINOR)/.test(p.trim())) : [])
+const blocking = (ps) => ps.filter((p) => /^(BLOCKER|MAJOR)/.test(p.trim()))
+const portNote = (t, off) => (t.port ? `Playwright: E2E_PORT=${t.port + off} E2E_OUTDIR=tmp/dist-${t.key}-${off}, then stop only that port.` : 'No Playwright for this task.')
+
+const VERIFY = (t, built, lens) => `You are an adversarial verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). Do NOT edit any repository file except your report file, and do NOT run git add/commit/stash/checkout/reset/restore. Other agents may be editing other files. Scratch goes in tmp/verify-${t.key}-${lens.key}/ (git-ignored). 2 CPUs shared: targeted commands, background + until-loop for long runs. ${portNote(t, lens.key === 'player' ? 20 : 10)}
+
+A builder was given this assignment:
+---
+${t.prompt}
+---
+The builder reported:
+---
+${typeof built === 'string' ? built : JSON.stringify(built)}
+---
+${lens.text}
+Try to REFUTE that the assignment is done correctly, completely and honestly — every item of it. Return problems with file:line and a concrete repro, most severe first, each prefixed BLOCKER / MAJOR / MINOR; add "VERIFIED OK — <item> — <evidence>" entries for parts that hold. ok=false if any BLOCKER or MAJOR. Write the same list to ${R}/${t.key}-verify-${lens.key}.md.`
+
+const FIX = (t, problems, round) => `${PRE}
+
+${t.port ? `Your Playwright port is ${t.port}.` : 'Do not run Playwright.'}
+
+You are the round-${round} fixer for this assignment (the work is in the tree; do not start over):
+---
+${t.prompt}
+---
+Adversarial verifiers found these problems (reports in ${R}/${t.key}-verify-*.md${round > 1 ? ` and ${R}/${t.key}-reverify${round - 1}.md` : ''}):
+---
+${problems.join('\n')}
+---
+Fix EVERY BLOCKER and MAJOR and every MINOR that is cheap and within your files. For each behavioural problem add or tighten a test that fails on the old behaviour and passes now. If a problem is wrong, say why with quotes from the canonical docs instead of changing code. Re-run your unit tests and the task's e2e specs (three projects) before finishing. Write your report to ${R}/${t.key}-fix${round}.md and return it as your final message: per problem FIXED (how, which test) / NOT A PROBLEM (why, quotes) / NOT FIXED (why); files changed; commands + results.`
+
+const REVERIFY = (t, fixReport, problems, round) => `You are an adversarial re-verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). Do NOT edit any repository file except your report file, and do NOT run git add/commit/stash/checkout/reset/restore. Scratch in tmp/reverify-${t.key}/. 2 CPUs: targeted commands. ${portNote(t, 30)}
+
+Original assignment:
+---
+${t.prompt}
+---
+Verifiers found these problems:
+---
+${problems.join('\n')}
+---
+A fixer (round ${round}) reported:
+---
+${fixReport}
+---
+For EACH problem try to REFUTE that it is fixed: reproduce the original finding against the current tree, read the diff, check the new test fails on the old behaviour, and check nothing regressed. Return remaining/new problems with file:line and repro, prefixed BLOCKER / MAJOR / MINOR, and "VERIFIED OK — <problem> — <evidence>" for fixed ones. ok=false if any BLOCKER or MAJOR remains. Write the same list to ${R}/${t.key}-reverify${round}.md.`
+
+async function runTask(t) {
+  const built = await agent(`${PRE}\n\n${t.port ? `Your Playwright port is ${t.port}.` : 'Do not run Playwright.'}\n\n${t.prompt}\n\nWhen you finish, write your final report to ${R}/${t.key}-build.md (create the folder if needed) and return the same report: files changed, what each test proves, commands + results (paste the pass/fail summary lines), anything not done + why, bugs noticed elsewhere, proposed decisions.`, { label: `build:${t.key}`, phase: 'Build' })
+  const verdicts = (await parallel(LENSES[t.key].map((l) => () => agent(VERIFY(t, built, l), { label: `verify:${t.key}:${l.key}`, phase: 'Verify', schema: VERDICT })))).filter(Boolean)
+  let problems = verdicts.flatMap(serious)
+  let ok = verdicts.length > 0 && verdicts.every((v) => v.ok) && blocking(problems).length === 0
+  const rounds = []
+  for (let round = 1; round <= 2 && problems.length > 0; round++) {
+    const fixReport = await agent(FIX(t, problems, round), { label: `fix${round}:${t.key}`, phase: 'Fix' })
+    const rv = await agent(REVERIFY(t, String(fixReport), problems, round), { label: `reverify${round}:${t.key}`, phase: 'Fix', schema: VERDICT })
+    rounds.push({ round, fixReport, reverify: rv })
+    if (!rv) break
+    problems = serious(rv)
+    ok = rv.ok && blocking(problems).length === 0
+    if (ok) break
+  }
+  log(`${t.key}: ${ok ? 'clean' : 'problems remain'} after ${rounds.length} fix round(s)`)
+  return { key: t.key, built, verdicts, rounds, ok, remaining: problems }
+}
+
+const REVIEW_PORT = 4195
+const REVIEW_TASK = `ASSIGNMENT: the G2 gate's comprehension self-review (BUILD_DIRECTIVE "G2 gate — evidence": "Self-review against D6 §18 comprehension tasks (write the five tester tasks and confirm each is achievable in ≤ 10 min from a cold start)"). Read D06 §18 "Comprehension session" and "Return evidence rather than a verdict" (docs/source/D06-…md), UX_SPEC §3.2 (first minutes), docs/reports/opening-loop-g1.md (the G1 review, same style) and tools/review-opening-loop.mjs.
+1. Write the five tester tasks from D06 §18: the session task "Make a dish change, show why it changed, and preserve another version to compare", and the four questions (identify one food source; one cause of population change; one inherited trait; one difference between the two dishes), plus distinguishing a temporary state from an inherited trait. Phrase them as a tester would receive them (no UI names that give the answer away).
+2. Perform each task from a COLD START (fresh browser context, empty storage, default settings as a first-time player gets them — prompts on) in the production build (npx vite build --outDir tmp/dist-review && npx vite preview --outDir tmp/dist-review --port ${REVIEW_PORT} --strictPort --host 127.0.0.1), acting as a player who has never seen the design: navigate ONLY by what is on screen (role, name, visible text — no test ids, no reading the source to find the way), record every step, what the screen said (quote it), the simulated and real time taken, and screenshots, at desktop 1440×900 and phone portrait 360×800 (and one task at phone landscape 800×360 and one at 200 % text). A task passes only if a naive player can do it in ≤ 10 minutes of real interaction using only what the screen offers. Write tools/review-g2.mjs so the run is reproducible (Playwright library like the G1 tool), screenshots in docs/reports/img/g2/, report docs/reports/comprehension-g2.md: per task the steps, quotes, times, pass/fail, and the screen where any difficulty arose; then D06's four separate headings "mechanically correct", "understood", "interesting", "fast enough"; and state plainly that this is a self-review by the build agent, not the five-tester session, which remains an owner item (D06 §18 asks the team to recruit testers).
+3. Return every comprehension problem you hit as BLOCKER (a task cannot be done in ≤ 10 min) / MAJOR (done only with luck or by reading something misleading) / MINOR (friction), each with the screen, what was said, and a concrete proposed change to labels, hierarchy or event evidence (D06: "If comprehension fails, revise labels, hierarchy or event evidence before adding another system") — never a mechanics change.
+You own: tools/review-g2.mjs, docs/reports/comprehension-g2.md, docs/reports/img/g2/**. Do not edit src/. Stop your port when done.`
+
+const REVIEW_SCHEMA = { type: 'object', properties: { tasksPassed: { type: 'number' }, tasksTotal: { type: 'number' }, problems: { type: 'array', items: { type: 'string' } }, summary: { type: 'string' } }, required: ['tasksPassed', 'tasksTotal', 'problems', 'summary'] }
+
+const REVIEW_FIX = (problems, round) => `${PRE}
+
+Your Playwright port is 4197.
+
+ASSIGNMENT: fix the comprehension problems the G2 self-review found (docs/reports/comprehension-g2.md${round > 1 ? ` and ${R}/review-rerun${round - 1}.md` : ''}) by revising labels, hierarchy or event evidence — never mechanics, numbers or content values (D06 §18). Every visible claim must stay true and trace to measured state (honest labels). Problems:
+---
+${problems.join('\n')}
+---
+You own: src/ui/** (views, panels, strings, styles) and content text fields only (names/guide/summary text; never numbers), tests/ui/**, and the e2e specs whose asserted wording you change (say which and why). Keep What if?, keep-dish, experiments and lab flows working: run the e2e specs of every screen you touched on all three projects, plus tests/e2e/garden.spec.ts. Write ${R}/review-fix${round}.md and return it: per problem FIXED (how; test) / NOT A PROBLEM (why) / NOT FIXED (why); files; commands + results.`
+
+const REVIEW_RERUN = (problems, fixReport, round) => `You re-run the G2 comprehension self-review for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md) after fixes. Do NOT edit src/ or tests/. You own tools/review-g2.mjs, docs/reports/comprehension-g2.md and docs/reports/img/g2/** (update them to the current build: re-run every task, replace screenshots, keep the history of what changed in a "Revisions" section) and ${R}/review-rerun${round}.md. Port ${REVIEW_PORT + 1} (build into tmp/dist-review2; stop the port when done).
+Problems the first review found:
+---
+${problems.join('\n')}
+---
+The fixer reported:
+---
+${fixReport}
+---
+Re-run all five tasks from a cold start as a naive player (on-screen navigation only) at desktop and phone portrait, check each problem is really gone, and look for new ones. Return tasksPassed/tasksTotal, remaining or new problems (BLOCKER/MAJOR/MINOR with screen, quote and proposed change), and a summary.`
+
+// Run: tuner in the background of the keep-dish chain; the review waits for keep-dish (it changes the flows under review).
+const tuneP = runTask(TUNE)
+const keepRes = await runTask(KEEP)
+
+phase('Review')
+let review = await agent(`${PRE}\n\n${REVIEW_TASK}`, { label: 'review:comprehension', phase: 'Review', schema: REVIEW_SCHEMA })
+const reviewRounds = []
+let rProblems = review ? review.problems.filter((p) => /^(BLOCKER|MAJOR|MINOR)/.test(p.trim())) : []
+for (let round = 1; round <= 2 && rProblems.length > 0; round++) {
+  const fixReport = await agent(REVIEW_FIX(rProblems, round), { label: `review-fix${round}`, phase: 'Review' })
+  const rerun = await agent(REVIEW_RERUN(rProblems, String(fixReport), round), { label: `review-rerun${round}`, phase: 'Review', schema: REVIEW_SCHEMA })
+  reviewRounds.push({ round, fixReport, rerun })
+  if (!rerun) break
+  rProblems = rerun.problems.filter((p) => /^(BLOCKER|MAJOR|MINOR)/.test(p.trim()))
+  if (blocking(rProblems).length === 0) break
+}
+log(`review: ${reviewRounds.length} fix round(s); ${blocking(rProblems).length} blocking problem(s) remain`)
+const tuneRes = await tuneP
+return { keep: keepRes, tune: tuneRes, review: { first: review, rounds: reviewRounds, remaining: rProblems } }
