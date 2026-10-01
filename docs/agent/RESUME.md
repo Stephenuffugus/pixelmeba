@@ -1,5 +1,8 @@
 # Resume point — read this first after a restart
 
+> **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
+> per-builder verification, three-project e2e runs and six-wave layout below.**
+>
 > **Update 2026‑10‑01 ≈ 11:45 UTC — PAUSED for a codespace restart, mid Phase 3 wave 1. START HERE.**
 > - `main` = `g2` + Preflight (`4c5c0b8`, D‑0042) + docs; pushed. Tags g0 g1 g2.
 > - Wave 1's four builders FINISHED (foundation = world schema 4, environment = P3.1/P3.2, stage8 = P3.7
