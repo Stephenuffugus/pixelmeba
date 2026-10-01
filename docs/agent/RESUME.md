@@ -1,5 +1,14 @@
 # Resume point — read this first after a restart
 
+> **Update 2026‑10‑01 ≈ 08:30 UTC — G2 TAGGED. START HERE if this session died.** `g2` is on the gate commit
+> (check 755/755, e2e 174/174, EXPANSION_RESPONSE G2). Next: rebase the local branch `p3-preflight` (worktree
+> `tmp/wt-p3`, commit `02c7774`: determinism fence, verified) onto `main`; resolve `tools/deploy-arcade.mjs` in
+> favour of main; `npx tsx tools/make-g2-saves.ts` must report every file unchanged; run the fence + replay +
+> the whole unit suite; fast-forward `main`; record D‑0042 (EXP_106 arm B saved at t300; four fence files).
+> Then Phase 3 wave 1, lean (owner's usage note): write `docs/agent/g3-wave-1.tasks.js.txt` with ONE writer
+> (effort high, no checker), run `docs/agent/g3-runner.workflow.js.txt` with builders at effort 'high' and one
+> rules verifier each (player lens only for UI/art tasks).
+
 > **Update 2026‑10‑01 ≈ 00:55 UTC — RESUMED (owner: "code all night", back ≈ 12:00 UTC). START HERE if this session died.**
 > g2-close-2 was restructured to save a stage (the separate re-verify of fix round 2 is folded into the round‑3
 > re-verify): two workflows run at once —

@@ -4,61 +4,103 @@ Update at every gate (`g0` … `v1.3.0`). Replace placeholders with real, pasted
 **implemented**, **tested**, and **proposed/deferred**. Never claim a pass that did not run in
 this session. Keep older gate evidence in `docs/reports/` and link it.
 
-Last updated: 2026‑09‑27 · Gate: **G1 (first playable)** · Commit: see `git log` (tag `g1`; G0 evidence kept below)
+Last updated: 2026‑10‑01 · Gate: **G2 (core abilities, comparison, What if?)** · Commit: tag `g2` (G1 and G0 evidence kept below)
 
 ---
 
 ## 1. Build identity
 - Repository: `github.com/Stephenuffugus/pixelmeba`, branch `main`.
 - Runtime: Node 24.21.0 (`.nvmrc` 24), npm 12.1.0, linux x64 (Codespace, 2 vCPU, 7 GB).
-- Pinned dependencies (exact, `package-lock.json` committed): vite 8.3.1, pixi.js 8.21.0,
+- Pinned dependencies unchanged since G1 (exact, `package-lock.json` committed): vite 8.3.1, pixi.js 8.21.0,
   preact 10.29.8, @preact/signals 2.11.2, zod 4.6.5, typescript 6.0.3, vitest 5.0.2,
   @playwright/test 1.63.0, @axe-core/playwright 4.13.0, eslint 10.11.0, typescript-eslint 8.70.1,
   prettier 3.9.9, tsx 4.23.15, @capacitor/{core,cli,android} 8.5.2, @capacitor/app 8.1.1,
   filesystem 8.1.3, share 8.0.2, preferences 8.0.1, splash-screen 8.0.2, status-bar 8.0.3,
   vite-plugin-pwa 1.3.0, pngjs 7.0.0.
-  - TypeScript 7.0.2 exists but is outside typescript-eslint's peer range (< 6.1), so 6.0.3 is pinned.
-  - npm 12 gates install scripts: esbuild's postinstall is explicitly approved in `allowScripts`.
 - Versions: `simulationVersion` 3 · `evolutionRulesVersion` 1 · `moduleRegistryVersion` 1 ·
-  `phenotypeMappingVersion` 1 · `contentVersion` 1 · world `schemaVersion` 1.
-- `contentHash` d795100f14bcd09b82c36e84620dc1e20598c81d5b8bb539632190c125e91920.
+  `phenotypeMappingVersion` 1 · `contentVersion` 1 · `buildPhase` 2 · world `schemaVersion` 3
+  (2 = P2.1 `dryTimer`; 3 = P2.8 `history.traits`/`history.journal`) · `PROTOCOL_VERSION` 1 ·
+  atlas manifest version 1.
+- `contentHash` e88b629838a74fa5013ebde92659f067287db9562d957ef8ba0721e017964ca5.
 - Measurement machine for all numbers below: the Codespace above (not a phone).
 
 ## 2. Implemented scope
 | Phase | Status | Species enabled | Modules enabled | Systems enabled | Missing / known limitations |
 |-------|--------|-----------------|-----------------|-----------------|-----------------------------|
 | 0 | **Implemented, gate passed** (`g0`) | B01 B04 B06 A01 P01 (data); all 38 species authored and validated | none | core, enzymes | — |
-| 1 | **Implemented, gate passed** (`g1`) | B01 B04 B06 A01 P01 | none (draws recorded, registry empty until P2.1) | core, enzymes | 60 fps not measurable here (software WebGL); device measurement P3.12. Overlay picker arrives with the Lab Observe tray (P2.7). Android install on a device not verified (no device). |
-| 2–7 | Not started | | | | |
+| 1 | **Implemented, gate passed** (`g1`) | B01 B04 B06 A01 P01 | none | core, enzymes | 60 fps not measurable here (software WebGL); device measurement P3.12. Android install on a device not verified (no device). |
+| 2 | **Implemented, gate passed** (`g2`) | B01 B04 B06 A01 P01 | E01 Starch enzyme, E03 Resting stage, E05 Reserve chamber | core, enzymes | The five-tester comprehension session (D06 §18) is an owner item; the build agent's self-review is in §5. Owner questions D‑0022, D‑0027, D‑0031, D‑0038 (§8). |
+| 3–7 | Not started (Phase 3 lead choices D‑0035…D‑0039 recorded) | | | | |
 
-Phase 1 in the browser: Home, Play shelf, New Dish, the Garden in Explore view (Add Life, Feed,
-Look, undo that rewinds time), inspector with Summary/Why/Details and four shortcut questions,
-cell inspector, family rings, event feed, History charts (small multiples) and table, ten save
-slots plus autosave, `.pixelmeba` export/import with full validation, duplicate, Settings (text
-size to 200 %, reduced motion), worker-owned simulation with protocol versioning and rollback on
-error, PixiJS renderer with whole-dish aggregation and catalysis dust.
+Phase 2 in the browser, on top of Phase 1:
+- **Abilities (P2.1):** the module framework with E01 (starch enzyme), E03 (resting stage: preparing,
+  resting, waking, a 30 s post-wake lockout with its own reason) and E05 (reserve chamber), drawn as
+  atlas marks; module gains and losses are inherited, recorded per daughter and shown in the
+  inspector, lineage and History.
+- **Founders and presets (P2.2):** Identical / Varied / Diverse founders; Standard / Accelerated /
+  Fixed mutation presets with an Advanced panel that shows the per-birth chances; changing the preset
+  is a timed, undoable intervention; the "Core prototype — quantitative evolution" label while the
+  registry is partial.
+- **Branches and lineage (P2.3):** branch discovery from recorded evidence, naming and pinning, the
+  lineage panel, follow lineage, a trait overlay, specimens and the discovery card.
+- **Comparison (P2.4):** a deterministic paired-run engine, results with honest wording and a
+  prediction note.
+- **Experiments (P2.5):** the experiments framework, EXP_A/B/C, and the Food trail, Light and life,
+  Cleaning crew and Predator balance cards in Notebook → Experiments, with stamps in the Journal.
+- **What if? (P2.6):** recipe variants R‑G0…R‑G3, Again, Another idea, a preview and recorded
+  metadata; every action that replaces the open dish keeps it first (D‑0033).
+- **Lab view (P2.7):** categories and trays, brushes, habitat paint (substrate, shade), stone, wall and
+  bead placement with a sealing planner, the overlays picker and charts.
+- **Observation (P2.8):** regional trait graphs (whole dish and quarters), an automatic checkpoint ring,
+  and a journal saved with the dish.
+- **Tuning (P2.9):** the second development-seed report (Standard and Accelerated, `docs/reports/tune-g2.md`).
 
-Content catalog authored now (all phases, validated, not enabled): 38 species, 17 modules,
-32 materials. Every value was written against CONTENT_TABLES and then independently checked field
-by field by a separate verifier; 10 text discrepancies were found and fixed, 1 rejected with cited
-reasoning (B09 headings stay 4).
+Content catalog (all phases, validated): 38 species (5 enabled), 17 modules (3 enabled), 32 materials,
+1 habitat, 3 structures, 7 recipes, 7 experiment cards, 4 variants.
 
 ## 3. Resolved specification
 - Canonical docs: BUILD_DIRECTIVE, PIXELMEBA_IMPLEMENTATION_SPEC, CONTENT_TABLES, ARCHITECTURE,
   UX_SPEC, CONFLICT_REGISTER (R01–R40 applied where relevant).
-- G0 decisions: D‑0001 … D‑0010 (see DECISIONS.md; D‑0005 FIRST_DISH_V1 Sunbead radius 4 → 5).
-- G1 decisions:
-  - D‑0011 sugar shown as a faint haze in Explore; D‑0012 determinism-review follow-ups;
-  - D‑0013 saves in IndexedDB from the worker (atomic transaction, predecessor kept) on web and
-    Android;
-  - D‑0014 charts as small multiples in one validated ink (species hues fail CVD checks);
-  - D‑0015 FIRST_DISH_V1 kept (targets met; candidates measured, none clearly better);
-  - D‑0016 aggregation exactly when the snapped sprite scale is below 1;
-  - D‑0017 sheets scroll inside; the inspector keeps its organism in view and can collapse;
-  - D‑0018 the worker stamps seq/targetTick; protocolVersion on every packet.
+- G0 decisions D‑0001…D‑0010; G1 decisions D‑0011…D‑0018 (see the G1 list in git history of this file).
+- G2 decisions:
+  - D‑0019 module framework and the resting stage (world schema 2, `dryTimer`); D‑0023 energy held at death is ledgered;
+  - D‑0020 comparison engine; D‑0021 What if? variants; D‑0022 experiments framework (owner question on EXP_A);
+  - D‑0024 Lab view; D‑0025 branches, lineage panel and specimens; D‑0026 What if? sheet;
+  - D‑0027 one paired-run model, Experiment C and the cards (owner question on RESERVE_COMPARE);
+  - D‑0028 wave B fix rounds; D‑0029 wave C lead pass (keys, stripped export, migration provenance, the action chip);
+  - D‑0030 founder modes and presets; D‑0031 regional trait graphs, checkpoint ring and journal (world schema 3; owner question: one ring per device);
+  - D‑0032 module marks in the atlas, DORMANCY_LOCKOUT, sim-tune producers;
+  - D‑0033 keep the open dish first on every replacement (closes D‑0030's owner note); D‑0040 its fix round 3 (Continue written by exact record, one dish clock per save, curly quotes, 16 px toasts, named module gains);
+  - D‑0034 second tuning report: FIRST_DISH_V1 kept; a supplementary 1,200 s horizon;
+  - D‑0041 comprehension self-review fixes (taps outside the dish, saved result cards in the Journal, inherited differences named from birth records, honest comparison and food lines);
+- Phase 3 lead choices recorded before the gate: D‑0035 (world schema 4 keeps old saves' hashes; a
+  usable-intake seconds column), D‑0036 (the Preflight bumps buildPhase 3 / contentVersion 2),
+  D‑0037 (Sample Cancel is host-level and exact), D‑0038 (film is eaten as detritus), D‑0039 (tool texts
+  as content; relationship observations per device).
 - Remaining conflicts: none open.
 
-## 4. Correctness evidence (G1)
+## 4. Correctness evidence (G2)
+```
+npm run check            → typecheck ok · lint ok · 81 test files, 755 tests passed (15.5 min)
+npx playwright test      → 174 passed (1.9 h) on phone 360×800, phone 800×360 and desktop 1440×900
+npm run content:validate → content ok · contentHash e88b6298…64ca5 · species 38 (enabled 5) · modules 17 (enabled 3) · atlas complete (221 frames incl. 3 module marks)
+determinism fixtures     → 4× session hash 0815aebd62ed9173 at tick 320 == its 1× replay == after a save/reload; 6,000-tick endpoint df89c6854737adb1 (save/reload at 3,000 equals straight)
+conservation, closed lid → worst relative error C 5.220e-15, N 1.080e-13 over 10,000 ticks (731 births, 320 deaths)
+```
+| G2 gate row | File | Result |
+|---|---|---|
+| module-accounting | tests/fixtures/module-accounting.test.ts | pass — E05 grants capacity only (+40 cap, 0.05 E/s carrying cost, never energy); E01 never duplicates a native ability and gives producer behaviour with its costs; E03 pays entry 10 E, rest 0.01 E/s and wake 5 E; a module loss frees no material and excess energy dissipates ledgered; the 0.02 E/s per-module surcharge is charged exactly once per tick |
+| registry-imports | tests/fixtures/registry-imports.test.ts | pass — a save that references a module this build lacks is refused by id before anything is built; a changed build registry never changes an old save's registry, genomes, candidates or branches |
+| branch-evidence | tests/fixtures/branch-evidence.test.ts | pass — a branch is established only when the threshold, the count (five living qualifying descendants) and the depth (three generations, held by a living descendant) all hold; each condition missing records no branch |
+| comparison | tests/sim/comparison.test.ts | pass — paired runs are deterministic and identical but for the change; wave-A comparisons match their recorded numbers |
+| variants | tests/recipes/variants.test.ts | pass — R‑G0…R‑G3 registered with the CT titles; each variant changes only its declared data (R‑G0 equals the source recipe's state hash; R‑G3 moves the sugar patch with the same count and mass) |
+| experiments | tests/experiments/*.test.ts | pass — EXP_A/B/C, the four cards, framework, app flow, journal and words; wave-A golden measurements reproduce |
+| e2e whatif, lab-tools | tests/e2e/whatif.spec.ts, tests/e2e/lab-tools.spec.ts | pass — in the 174/174 run on three layouts |
+| view-switch hash | tests/sim/view-switch.test.ts | pass — Explore ⇄ Lab switches send no command and keep the hash identical, also while running; an interrupted stroke commits nothing; a completed stroke is one command and Undo restores the hash |
+| keep the open dish first | tests/worker/keep-*.test.ts, tests/e2e/keep-dish.spec.ts | pass — every replacing action keeps the open dish or proves it unchanged; re-verified with mutants (docs/reports/reviews/g2-close/) |
+| comprehension self-review | docs/reports/comprehension-g2.md | done — five tester tasks 5/5 within ten minutes from a cold start (self-review, not the five-tester session); the blocker and five majors it found are fixed (D‑0041) |
+
+## 4b. Correctness evidence (G1, kept)
 ```
 npm run check            → typecheck ok · lint ok · 29 test files, 205 tests passed (3 m 52 s)
 npm run content:validate → content ok · contentHash d795100f…920 · atlas complete for 5 enabled species (189 frames)
@@ -84,7 +126,7 @@ persistence tests (interrupted write keeps the predecessor, malformed or tampere
 nothing, export → import hash equality, slot exhaustion), history compaction, reason copy for every
 code, atlas completeness, renderer deposit repaint equality.
 
-## 4b. Correctness evidence (G0, kept)
+## 4c. Correctness evidence (G0, kept)
 ```
 npm run check            → typecheck ok · lint ok · 93 tests passed (10 files)
 npm run content:validate → content ok · contentHash d795100f…920 · species 38 (enabled 5) · materials 32 · modules 17
@@ -102,65 +144,66 @@ Headless runner: `npm run sim:run -- --recipe FIRST_DISH_V1 --seed 104729 --tick
 → endpoint `576350939f1d34b2`, ledger relErr C 1.1e‑14 N 1.0e‑13, 710 alive at 600 s.
 
 ## 5. Experience evidence
-Opening loop (docs/reports/opening-loop-g1.md), FIRST_DISH_V1 seed 104729, headless Chromium:
-- Food → growth: 56 → 77 alive by 50 s; Sunbeads split first (29 s), Sprinters from 35 s.
-- Starch → sugar: catalysis dust on the starch patch; a Crumbsmith's "What does it eat?" explains
-  the enzyme and reports its measured intake; "Why did it stop?" lists every division blocker with
-  its value ("Body 1.23 of 2.00 needed. Energy 31 of 60 needed.").
-- Intervene and inspect: Feed adds sugar to 32 cells; 15 s later a generation‑1 Sprinter there is
-  eating (0.015 C in the last second).
-- Inherited differences appear in History ("2 Sunbead offspring inherited different traits.").
-- Save → reload → Continue returns to the same moment, paused; Duplicate makes an independent copy.
+Comprehension self-review (docs/reports/comprehension-g2.md, `tools/review-g2.mjs`): the five D06 §18
+tester tasks — make a change, show why something changed and keep a second version; a food source; a
+cause of population change; an inherited trait against a temporary state; a difference between two
+dishes — were each done from a cold start using only what the screen offers, within ten minutes, at
+1440×900 and 360×800 (one task also at 800×360 and at 200 % text). Scripted times from Home, slowest
+layout plus 10 s per action: T1 ≈ 7:50, T2 ≈ 6:05, T3 ≈ 6:35, T4 ≈ 4:05, T5 ≈ 5:20. Finding a creature
+that actually differs from its parent took luck in one run of four (M2); that is now stated in the
+inspector and the event lines from birth records (D‑0041). This is the build agent's self-review; the
+five-tester session remains an owner item (§8).
 
-Seed report (docs/reports/tune-g1.md): D06 targets met on 6/6 development seeds (first intake at
-tick 0, first division 29.3 s). Crumbsmiths stall after about 60 s (energy below the 35 emit
-threshold); Recyclers empty their patch by about 120 s and die out on 3/6 seeds by 600 s. Recipe
-candidates were measured and none adopted (D‑0015).
+Seed report (docs/reports/tune-g2.md, D‑0034): the D06 targets hold on 6/6 seeds at Standard and
+Accelerated (first intake at tick 0, first division 29.3 s). Accelerated shows a module gain on 6/6
+seeds (median 88.9 s) and a confirmed branch on 6/6 (median 312.1 s) within ten minutes at 1×;
+Standard shows gains on 6/6 (median 255.9 s) and a confirmed branch on 1/6 by 600 s (4/6 by
+1,200 s), which D06 §9 allows. Every draw count lies inside its preset's 95 % range, every committed
+daughter reproduces its recorded draw, and the ledger is exact.
 
 ## 6. Design handoff
-- Art is code: palette‑indexed pixel matrices in `art/src/`, compiled by `npm run art:build` to
-  `public/atlas/organisms.png` + `manifest.json` (189 frames, hash 0da0be41a127, deterministic).
-- `tools/asset-preview.html` (Vite dev server) shows every species × animation × heading,
-  a grayscale toggle and a dense group of 60; `npm run art:preview` renders the same to a PNG.
-- Sprites follow UX §6–§7: B01/B04/B06 16×16 with 4 headings; A01 16×16 one heading; P01 32×32.
-- Charts use one validated ink (#256E9E) as small multiples (D‑0014).
-- Not yet: launcher icon, splash, store art (Phase 4), sound (Phase 4).
+- Art is code (`art/src/`), compiled by `npm run art:build` to `public/atlas/organisms.png` +
+  `manifest.json`: 221 frames including the module marks (starch notch, resting seam ×3,
+  reserve pocket ×4, four headings each), keyed `feature/<layer>/<heading>/<frame>` (D‑0032);
+  deterministic (`--check`).
+- Charts stay small multiples in one validated ink (D‑0014), now also for regional trait graphs.
+- Not yet: launcher icon, splash, store art (Phase 4), sound (Phase 3 P3.10 / Phase 4).
 
 ## 7. Performance and saves
-- Headless tick cost, FIRST_DISH_V1, 6000 ticks, up to 710 agents: p50 1.28 ms, p95 2.61 ms,
-  p99 4.62 ms. Stage breakdown per tick: environment 0.59 ms, sense/move 0.42 ms, intake 0.26 ms,
-  maintenance 0.12 ms, births 0.05 ms. Target‑population (6,000 agents) measurement is P3.12.
-- Renderer (docs/reports/render-perf-g1.md): 6,000 sprites at neighborhood zoom. **60 fps was not
-  reached in this environment**: 3.1–3.3 fps at 1440×900 and about 10 fps at 360×800 under
-  SwiftShader software WebGL on a shared 2‑CPU machine, where an empty WebGL page runs at 60 fps
-  and one full‑screen textured quad alone drops to about 23 fps. The renderer's own JavaScript
-  costs about 1.1–1.6 ms per frame plus 3.5–4.6 ms per snapshot (10 per second) under load. A GPU
-  device measurement is required (P3.12). Aggregation and reduced‑motion rules are checked by the
-  bench on every run.
-- Saves: serialize 18 ms and deserialize 26 ms at 718 organisms (was 230 ms before table‑driven
-  base64). IndexedDB single‑transaction commit with the predecessor retained; gzip on disk.
-  Autosave every 30 s of real time while running, on backgrounding, on leaving the page and on a
-  manual save. Rollback checkpoint every 30 simulated seconds.
-- Android spike (P1.11): Capacitor 8.5.2 project `com.lucidwinds.pixelmeba`, minSdk 24,
-  compileSdk and targetSdk 36 (Play requires API 36 from 2026‑08‑31). With JDK 21 and a
-  command‑line SDK, `assembleDebug` built a 6.0 MB debug APK and `bundleRelease` built a 4.3 MB
-  unsigned AAB; a signed build with a throwaway keystore outside the repo verified and was deleted.
-  JDK 25 (the Codespace default) cannot run Gradle 8.14.3. **Not verified:** install and launch on
-  a device or emulator (none here). Open: the template's `INTERNET` permission (ARCH §12 wants
-  none; remove only after a device test), launcher icon and splash (Phase 4). Steps are in
-  `docs/ANDROID_SETUP.md`.
+- Headless tick cost (docs/reports/tune-g2.md, seven interleaved rounds under load 4.8–6.9 on this
+  2-CPU machine): FIRST_DISH_V1 seed 104729, 6,000 ticks, up to ≈ 720 agents — G2 Standard wall p50
+  4.14 ms (range 2.01–4.61), p95 10.23 ms, p99 15.15 ms; Accelerated p50 4.25 ms; the `g1` tag 4.21 ms
+  on the same rounds: no difference visible at this machine's ±10 % resolution. Heaviest stages
+  (Standard, ms per tick): environment 2.04, sense/move 1.13, intake 0.74, maintenance 0.36,
+  births 0.32, conversion 0.15. These do not test the SPEC §16 device budget (P3.12).
+- Renderer: unchanged from G1's measurement (docs/reports/render-perf-g1.md); module marks are atlas
+  frames in the same texture and draw batch.
+- Saves: world schema 3 with migration by copy from schemas 1 and 2 (`provenance.migratedFrom`);
+  the checkpoint ring (10 per device, whole dish-minutes) on the same atomic, checksummed,
+  predecessor-keeping store; the journal travels with the dish; every replacing action keeps the open
+  dish first (D‑0033); an unchanged dish is never rewritten: each autosave builds and compares the file (171–504 ms at 10 dish-minutes on this loaded machine, D‑0040).
+- Android: unchanged since G1 (debug APK and unsigned AAB build; install/launch unverified, no device).
 
 ## 8. Changes and next gate
-- Tuning revisions: none (FIRST_DISH_V1 kept, D‑0015).
-- Next gate G2: P2.1 module framework (E01, E03, E05), P2.2 founder modes and presets, P2.3 branch
-  discovery and lineage, P2.4 comparison engine, P2.5 experiments, P2.6 What if?, P2.7 Lab view,
-  P2.8 regional graphs, checkpoint ring and journal, P2.9 second tuning report.
-- Environment limits (documented, not blocking): no GPU (frame rates are software‑rendered lower
+- Tuning revisions: none (FIRST_DISH_V1 kept at G1 and G2: D‑0015, D‑0034).
+- Next gate G3 (Launch Ecology): Preflight (determinism fence) then six waves — P3.1 chemistry and
+  environment, P3.2 habitats, P3.3/P3.4 organism waves A and B, P3.5 Sample/Transfer/Clean water,
+  P3.6 living chemistry and food objects, P3.7 modules E04–E12, P3.8 Field Guide, P3.9 experiments
+  and curated dishes, P3.10 audio, P3.11 accessibility, P3.12 performance.
+- Environment limits (documented, not blocking): no GPU (frame rates are software-rendered lower
   bounds), no Android device or emulator (install/launch unverified).
 - **Owner decisions required** (none block current work):
   1. Play Store: price ($0.99 assumed), countries, Families program opt‑in, content rating answers.
   2. Privacy policy hosting URL.
   3. Signing keystore creation and Play App Signing enrollment (owner‑held).
   4. Minimum Android device for measured performance gates.
-  5. Lucid Winds Arcade manifest/embedding format.
+  5. Lucid Winds Arcade manifest/embedding format (a deploy tool for the arcade's In Development
+     shelf now exists: `tools/deploy-arcade.mjs`).
   6. Whether the web build is full or DEMO_MODE.
+  7. D‑0022: Experiment A — all 12 Crumbsmiths starve by ≈ 150 s in both copies; revise to bootstrap
+     0.50 (keeps them alive but no longer separates the copies)? Rectangle patch shape for recipes?
+  8. D‑0027: RESERVE_COMPARE_V2 with a 2.0 meal dose so the gate can be reached?
+  9. D‑0031: one checkpoint ring per device (chosen; bounded storage) or one per dish?
+  10. D‑0038: film eaten as detritus (chosen) or as a separate food (a forced rules change)?
+  11. D06 §18 five-tester comprehension session: recruit five testers unfamiliar with the design and
+      run the ten-minute task (the self-review in §5 is not a substitute).
