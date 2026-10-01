@@ -13,7 +13,7 @@
 > Phase 3 (four lead choices of g3-plan-recheck.md, preflight with world schema 4, waves).
 > If the session died mid-run: `git status`; keep uncommitted fixer work on a LOCAL `wip/` branch (never push
 > it); read the reports; rerun only what is missing.
-> **Also running since ≈ 01:40 UTC (Phase 3 preparation, off `main`):** `docs/agent/g3-preflight.workflow.js.txt`
+> **Also running since ≈ 01:00 UTC (Phase 3 preparation, off `main`):** `docs/agent/g3-preflight.workflow.js.txt`
 > builds the Preflight (determinism fence, D‑0035/D‑0036) in the git worktree `tmp/wt-p3` on LOCAL branch
 > `p3-preflight` (never push it before g2); after the `g2` tag the lead rebases it onto `g2`, re-runs
 > `tools/make-g2-saves.ts` there (saves must be byte-identical), runs check, merges. `docs/agent/g3-wave-tasks.workflow.js.txt`
