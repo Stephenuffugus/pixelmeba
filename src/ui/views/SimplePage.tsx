@@ -2,8 +2,9 @@ import { IconBack } from '../icons';
 import { PauseOnDiscoveriesToggle } from '../panels/DiscoverySetting';
 import { reducedMotionFollowsDevice, route, settings, TEXT_SCALES, updateSettings } from '../state';
 import { checkpointSettingText, lastCheckpoint } from '../state';
+import { aboutLines } from '../strings/about';
 
-export function SimplePage({ title, body, settings: showSettings }: { title: string; body: string; settings?: boolean }) {
+export function SimplePage({ title, body, settings: showSettings, about }: { title: string; body: string; settings?: boolean; about?: boolean }) {
   const s = settings.value;
   return (
     <main class="page" aria-labelledby="page-title">
@@ -18,6 +19,16 @@ export function SimplePage({ title, body, settings: showSettings }: { title: str
         </header>
         <section class="card">
           <p>{body}</p>
+          {about ? (
+            <dl class="kv about-versions" data-testid="about-versions">
+              {aboutLines().map((l) => (
+                <>
+                  <dt>{l.term}</dt>
+                  <dd>{l.value}</dd>
+                </>
+              ))}
+            </dl>
+          ) : null}
           {showSettings ? (
             <div style={{ display: 'grid', gap: '0.75rem' }}>
               <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', minHeight: '48px' }}>

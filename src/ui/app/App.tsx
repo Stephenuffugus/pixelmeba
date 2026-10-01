@@ -66,6 +66,7 @@ function RoutedPage() {
         <SimplePage
           title="About Pixelmeba"
           body="Pixelmeba is a playful pixel ecosystem sandbox. Every organism, rate and chemical is a fictional game rule, not a real laboratory measurement. Your dishes are saved only on this device. Nothing is uploaded."
+          about
         />
       );
   }

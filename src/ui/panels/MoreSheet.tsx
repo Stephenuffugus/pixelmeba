@@ -99,6 +99,9 @@ export function MoreSheet() {
             accept=".pixelmeba,application/json,application/vnd.pixelmeba+json"
             class="sr-only"
             aria-label="Import a dish file"
+            // m24: the visible button operates this input; assistive technology hears that button only.
+            aria-hidden="true"
+            tabIndex={-1}
             onChange={(e) => {
               const f = e.currentTarget.files?.[0];
               if (f) void importFile(f);

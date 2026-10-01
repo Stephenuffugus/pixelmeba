@@ -74,7 +74,13 @@ function onTap(arm: CompareArm, wx: number, wy: number): void {
     showToast('A is the baseline and stays unchanged. Place your change on B.', 3200);
     return;
   }
-  if (t.kind === 'addLife') void queueOnB({ kind: 'inoculate', speciesId: t.speciesId, x: wx, y: wy, radius: t.radius, count: t.count });
-  else void queueOnB({ kind: 'deposit', materialId: t.materialId, points: [[wx, wy]], radius: t.radius, dose: t.dose });
+  const queued =
+    t.kind === 'addLife'
+      ? queueOnB({ kind: 'inoculate', speciesId: t.speciesId, x: wx, y: wy, radius: t.radius, count: t.count })
+      : queueOnB({ kind: 'deposit', materialId: t.materialId, points: [[wx, wy]], radius: t.radius, dose: t.dose });
   setTool({ kind: 'look' }); // one change per comparison
+  // m4: a refused placement keeps the chosen food or organism, so the next tap can place it.
+  void queued.then((accepted) => {
+    if (accepted === 0 && tool.value.kind === 'look' && (compareState.value?.interventions.length ?? 0) === 0) setTool(t);
+  });
 }

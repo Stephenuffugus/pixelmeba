@@ -140,3 +140,26 @@ test('without a device preference reduced motion is off', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(page.locator('html')).toHaveAttribute('data-reduced-motion', 'true');
 });
+
+// G2 comprehension m25: About names the exact build (app version, content hash, rule versions).
+test('About shows the app version, the content hash and the rule versions', async ({ page }) => {
+  await seedSettings(page, { showPrompts: false });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'About' }).click();
+  const v = page.getByTestId('about-versions');
+  await expect(v).toContainText(/App version\s*\d+\.\d+\.\d+/);
+  await expect(v).toContainText(/Content hash\s*[0-9a-f]{64}/);
+  for (const term of ['Simulation rules', 'Evolution rules', 'Ability registry', 'Trait mapping', 'Content version', 'Build phase']) await expect(v).toContainText(term);
+  await expectNoHorizontalOverflow(page);
+  await expectNoSeriousA11yViolations(page);
+});
+
+// G2 comprehension m24: assistive technology hears one import control (the raw file input is hidden).
+test('More and Saved dishes each offer one import control to assistive technology', async ({ page }) => {
+  await startGarden(page);
+  await page.getByTestId('more').click();
+  await expect(page.getByRole('button', { name: /Import a dish file/ })).toHaveCount(1);
+  await page.getByRole('button', { name: 'Saved dishes' }).click();
+  await expect(page.getByRole('button', { name: /Import a dish file|Choose a file/ })).toHaveCount(1);
+  await expect(page.locator('input[type="file"]')).toHaveAttribute('aria-hidden', 'true');
+});

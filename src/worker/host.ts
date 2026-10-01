@@ -15,7 +15,7 @@ import { canonicalJson } from '@sim/hash';
 import { step } from '@sim/tick';
 import type { World } from '@sim/world';
 import { allocatedFieldIds } from '@sim/fields';
-import { buildFamily, buildInspector, packDeposits, packEntities, packOverlay, visualEvents } from './snapshot';
+import { buildFamily, buildInspector, lociOfBirth, packDeposits, packEntities, packOverlay, visualEvents } from './snapshot';
 import { buildLineage, packLineageMarks } from '@sim/lineage';
 import type { LineageMarks, LineageView } from './protocol';
 import { stamp, type DishInfo, type DishSource, type Envelope, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
@@ -2077,7 +2077,7 @@ export class DishHost {
     const packed = packEntities(w, null, null);
     const deposits = packDeposits(w, null);
     const overlay = d.overlay ? packOverlay(w, d.overlay, null) : null;
-    const events = visualEvents(w.events.ring, d.lastEventId, w.content.modules);
+    const events = visualEvents(w.events.ring, d.lastEventId, w.content.modules, lociOfBirth(w));
     const lv = d.lineageView;
     const lineage: LineageMarks | null = lv ? { locus: lv.locus, branch: lv.branch, ...packLineageMarks(w, lv.locus, lv.branch) } : null;
     d.lastEventId = w.counters.nextEventId - 1;

@@ -4,13 +4,15 @@
  * the cards this build ships (SPEC §13.2). Opening the Notebook never pauses or changes a dish.
  */
 import { Component, type ComponentChildren } from 'preact';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ExperimentCardView } from '@sim/experiments';
 import { IconBack } from '../icons';
 import { journal, journalUnseen, type JournalStampEntry } from '../journal';
 import { JournalComposer, ObservationCard } from './NotebookJournal';
 import { CONCLUSIONS } from '../panels/CompareText';
-import { experimentCards, experimentCardsError, loadExperimentCards, route } from '../state';
+import { experimentCards, experimentCardsError, loadCompareCards, loadExperimentCards, route, type CompareCard } from '../state';
+import { compareCardLine, isListableCard } from '../strings/compareCards';
+import { fmt, fmtDiff, measureLabel } from '../panels/CompareText';
 import { durationText, journalMeasureCells, recordedText } from '../strings/experiments';
 import { clock } from '../panels/CompareText';
 
@@ -199,7 +201,97 @@ function JournalTab() {
           ))}
         </ul>
       )}
+      <SavedResults />
     </>
+  );
+}
+
+/**
+ * G2 comprehension M1: saved comparison result cards, newest first, one line each from what the card
+ * recorded; opening one shows its saved table. They stay on this device (localStorage).
+ */
+function SavedResults() {
+  const cards = useMemo(() => loadCompareCards().filter(isListableCard), []);
+  return (
+    <section class="nb-results" aria-labelledby="nb-results-title" data-testid="journal-results">
+      <h2 id="nb-results-title" class="nb-section-title">
+        Saved comparison results
+      </h2>
+      {cards.length === 0 ? (
+        <p class="nb-empty" data-testid="journal-results-empty">
+          No comparison results saved yet. After a paired run (More → Compare), Save result card keeps its table here, on this device.
+        </p>
+      ) : (
+        <ul class="nb-journal" aria-label="Saved comparison results">
+          {cards.map((c, i) => (
+            <li key={`${c.savedAt}-${i}`}>
+              <EntryBoundary>
+                <SavedResult card={c} index={i} />
+              </EntryBoundary>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function SavedResult({ card: c, index }: { card: CompareCard; index: number }) {
+  const rows = c.rows.filter((r) => measureLabel(r.key as Parameters<typeof measureLabel>[0]) !== null);
+  return (
+    <article class="card nb-note nb-result" aria-labelledby={`nb-result-${index}`} data-testid="journal-result">
+      <p class="nb-note-mark" aria-hidden="true">
+        A|B
+      </p>
+      <h3 id={`nb-result-${index}`}>{compareCardLine(c)}</h3>
+      <p class="nb-stamp-meta">
+        Comparison result · saved {recordedText(c.savedAt)} · seed {c.seed}
+      </p>
+      {c.prediction ? (
+        <figure class="compare-prediction">
+          <figcaption>Your prediction</figcaption>
+          <blockquote>{c.prediction}</blockquote>
+        </figure>
+      ) : null}
+      {c.note ? (
+        <p>
+          <strong>Your note:</strong> {c.note}
+        </p>
+      ) : null}
+      <details class="xp-details">
+        <summary>Measured at the end of that paired run</summary>
+        <p class="nb-note-honest">
+          A and B started identical; the change on B was the only recorded difference. Every difference traces back to it, directly or through knock-on effects; this table does
+          not show which. These numbers describe that paired run only.
+        </p>
+        <div class="compare-table-wrap" tabIndex={0} role="region" aria-label="Measured values of this result card">
+          <table class="xp-table">
+            <caption>“{c.dishName}”, seed {c.seed}</caption>
+            <thead>
+              <tr>
+                <th scope="col">Measure</th>
+                <th scope="col">A</th>
+                <th scope="col">B</th>
+                <th scope="col">B − A</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const key = r.key as Parameters<typeof fmt>[1];
+                return (
+                  <tr key={r.key}>
+                    <th scope="row">{measureLabel(key)}</th>
+                    <td>{fmt(r.a, key)}</td>
+                    <td>{fmt(r.b, key)}</td>
+                    <td>{fmtDiff(r.diff, key)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </article>
   );
 }
 

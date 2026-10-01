@@ -70,6 +70,10 @@ test('compare: Feed on B, run 60 s, read results beside the prediction, pick a c
 
   await expect(page.getByTestId('compare-results-title')).toBeVisible({ timeout: 120_000 });
   await expect(page.getByTestId('compare-results-title')).toHaveText('Results · this paired run');
+  // G2 comprehension M4: no row is presented as a direct effect of the change.
+  await expect(page.getByTestId('compare-knock-on')).toHaveText(
+    'Every difference below traces back to your change, directly or through knock-on effects; this table does not show which.',
+  );
   await expect(page.getByTestId('compare-summary')).toContainText('each ran 1:00 from 0:00');
   await expect(page.getByTestId('compare-time')).toContainText('both ran 1:00');
   // Both arms stand at the same moment.
@@ -91,6 +95,9 @@ test('compare: Feed on B, run 60 s, read results beside the prediction, pick a c
   await expect(page.getByTestId('compare-conclusion-contradicts')).toHaveAttribute('aria-checked', 'false');
   await page.getByTestId('compare-save-card').click();
   await expect(page.getByTestId('compare-save-card')).toHaveText('Result card saved');
+  // G2 comprehension M1: the toast says where the card is kept, and Done says how to keep a changed dish.
+  await expect(page.getByText('Result card saved on this device. Notebook → Journal lists it.')).toBeVisible();
+  await expect(page.getByTestId('compare-done-note')).toContainText('To keep a changed version as its own dish, use More → Duplicate dish and change the copy.');
   const cards = await page.evaluate(() => JSON.parse(localStorage.getItem('pixelmeba.compareCards') ?? '[]') as { prediction: string; conclusion: string; label: string; ticks: number }[]);
   expect(cards[0]).toMatchObject({ prediction, conclusion: 'supports', label: 'this paired run', ticks: 600 });
   await expectNoHorizontalOverflow(page);
@@ -101,6 +108,21 @@ test('compare: Feed on B, run 60 s, read results beside the prediction, pick a c
   await expect(page.getByTestId('dish-screen')).toBeVisible();
   await expect(page.getByTestId('sim-time')).toContainText('0:00 · 56 alive');
   await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
+
+  // M1: the saved card is listed in Notebook → Journal, one line from what it recorded, opening to its table.
+  await page.getByRole('button', { name: 'Home' }).click();
+  await page.getByTestId('home-notebook').click();
+  await page.getByTestId('notebook-tab-journal').click();
+  const result = page.getByTestId('journal-result');
+  await expect(result).toHaveCount(1);
+  await expect(result.getByRole('heading', { level: 3 })).toHaveText(
+    /^“Little Living Garden” at 0:00 · B: Sugar, 0\.1 per cell on \d+ cells · both ran 1:00 · Organisms alive: A \d+, B \d+ \((?:[+−]\d+|0)\) · Your conclusion: Supports my prediction$/,
+  );
+  await expect(result.getByText(prediction)).toBeVisible();
+  await result.getByText('Measured at the end of that paired run').click();
+  await expect(result.getByRole('rowheader', { name: 'Carbon added since the start' })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await expectNoSeriousA11yViolations(page);
 });
 
 test('compare: A refuses the change, Clear change resets B, and closing from setup leaves the dish as it was', async ({ page }) => {
@@ -124,6 +146,11 @@ test('compare: A refuses the change, Clear change resets B, and closing from set
   await page.getByTestId('compare-feed').click();
   await page.getByTestId('feed-choose').click();
   if (await page.getByTestId('compare-show-B').isVisible()) await page.getByTestId('compare-show-B').click();
+  // m4: a refused placement says why and keeps the chosen food for the next tap.
+  await tapArm(page, 'B', 0.01, 0.01);
+  await expect(page.getByText("That can't go there: food can't go onto stone, a wall or beyond the rim. Tap open water.")).toBeVisible();
+  await expect(page.getByText('Now tap dish B to place it.')).toBeVisible();
+  await expect(page.getByTestId('compare-change')).toHaveCount(0);
   await tapArm(page, 'B', 0.42, 0.5);
   await expect(page.getByTestId('compare-change')).toBeVisible();
   await page.getByTestId('compare-clear').click();

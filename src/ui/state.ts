@@ -933,7 +933,8 @@ function reportCommand(info: DishInfo, payload: CommandPayload, res: CommandResu
     ring?.placementRing(payload.x, payload.y, payload.radius);
   } else if (payload.kind === 'deposit') {
     const mat = info.materials.find((m) => m.id === payload.materialId);
-    if (res.accepted === 0) showToast("That can't go there.");
+    // m4: say why. A deposit goes only into cells open to the water (SPEC §2.4: not stone, a wall or beyond the rim).
+    if (res.accepted === 0) showToast("That can't go there: food can't go onto stone, a wall or beyond the rim. Tap open water.", 4000);
     else showToast(`Added ${mat?.name.toLowerCase() ?? 'food'} to ${res.accepted} cells.`);
     const p = payload.points[payload.points.length - 1];
     if (p) ring?.placementRing(p[0], p[1], payload.radius);
@@ -1108,16 +1109,18 @@ export async function openCompare(): Promise<void> {
 }
 
 /** Queue the one change on B through the ordinary command path (a paused edit on B only). */
-export async function queueOnB(payload: CommandPayload): Promise<void> {
+/** Queue the one change on B. Resolves to how much of it B accepted (0 when refused or failed). */
+export async function queueOnB(payload: CommandPayload): Promise<number> {
   const info = dishInfo.value;
   const c = compareState.value;
-  if (!info || !c || c.status !== 'setup') return;
+  if (!info || !c || c.status !== 'setup') return 0;
   const { result, error } = await getClient().commandAck(c.bDishId, `cmp-${++commandCounter}`, payload, true);
   if (error) {
     showToast(error, 3500);
-    return;
+    return 0;
   }
   reportCommand(info, payload, result, compareRenderers.B);
+  return result?.accepted ?? 0;
 }
 
 export async function clearCompareChange(): Promise<void> {
@@ -1193,7 +1196,7 @@ export async function closeCompare(): Promise<void> {
   showToast('Comparison closed. Your dish is exactly as you left it.', 3000);
 }
 
-/** A saved result card (UI state on this device; the Notebook lists them from Phase 4). */
+/** A saved result card (UI state on this device; Notebook → Journal lists them, G2 comprehension M1). */
 export interface CompareCard {
   readonly version: 1;
   readonly savedAt: string;
@@ -1248,7 +1251,7 @@ export function saveCompareCard(change: string): boolean {
   try {
     localStorage.setItem(COMPARE_CARDS_KEY, JSON.stringify([card, ...loadCompareCards()].slice(0, COMPARE_CARDS_MAX)));
     compareCardSaved.value = true;
-    showToast('Result card saved on this device.');
+    showToast('Result card saved on this device. Notebook → Journal lists it.', 4000);
     return true;
   } catch {
     showToast("Couldn't save the result card on this device.", 3500);

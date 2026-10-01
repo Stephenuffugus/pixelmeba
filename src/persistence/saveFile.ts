@@ -23,7 +23,8 @@ import type { Command } from '@sim/commands';
 
 export const SAVE_FORMAT = 'pixelmeba-save';
 export const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
-export const APP_VERSION = '0.1.0';
+import { APP_VERSION } from './appVersion';
+export { APP_VERSION };
 
 /**
  * A What if? dish's identity (D09 §4), copied from the world's variant record into the file's meta so

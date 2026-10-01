@@ -87,6 +87,11 @@ const DECIMALS: Record<MeasureRow['key'], number> = {
   speciesBiomass: 2,
 };
 
+/** The name of a dish-wide measure (not a per-kind row), e.g. for a saved result card. */
+export function measureLabel(key: MeasureRow['key']): string | null {
+  return key === 'speciesCount' || key === 'speciesBiomass' ? null : LABELS[key];
+}
+
 export function rowLabel(row: MeasureRow, info: DishInfo): string {
   if (row.key === 'speciesCount') return `${info.speciesNames[row.species ?? -1] ?? '?'} alive`;
   if (row.key === 'speciesBiomass') return `${info.speciesNames[row.species ?? -1] ?? '?'} biomass`;

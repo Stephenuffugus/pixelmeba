@@ -4,7 +4,6 @@
  */
 import { signal } from '@preact/signals';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import { R } from '@sim/reasons';
 import type { EntityInspect, FamilyAnswer } from '@worker/protocol';
 import { IconClose, IconFollow } from '../icons';
 import {
@@ -19,7 +18,8 @@ import {
   showOrganism,
 } from '../state';
 import { reasonText } from '../strings/reasons';
-import { dietAnswer, familySummary, relationLabel, stopAnswer } from '../strings/shortcuts';
+import { constraintWords, dietAnswer, familySummary, leadConstraint, makesOwnFood, relationLabel, stopAnswer } from '../strings/shortcuts';
+import { inheritedLead, LOCUS_NAMES, locusNote } from '../strings/inherited';
 import { actionLabel, dormancyChip, dormancyLines, energyCapText, LIFE_ACTIVE, moduleText, originChip, upkeepText } from '../strings/modules';
 import { founderStartText, moduleSourceText } from '../strings/modes';
 import { openLineage } from './LineageState';
@@ -34,16 +34,6 @@ function groundName(substrate: string, structure: string): string {
   return (PAINT_TARGETS as readonly string[]).includes(substrate) ? paintName(dishInfo.value, substrate as PaintTarget) : substrate;
 }
 
-const LOCUS_NAMES = [
-  'Motility',
-  'Feeding',
-  'Sensing',
-  'Division',
-  'pH preference',
-  'Salt preference',
-  'Warmth preference',
-  'Dormancy',
-];
 const FOOD_NAMES: Record<string, string> = {
   sugar: 'sugar',
   starch: 'starch',
@@ -54,10 +44,49 @@ const FOOD_NAMES: Record<string, string> = {
   metabolite: 'metabolite',
   film: 'film',
 };
+/**
+ * Cell panel names (m15): what a field holds, capitalised like "Ground" (fallback: the field id). The
+ * "…N" fields are the mineral nutrient bound in a food.
+ */
+const CELL_FIELD_NAMES: Record<string, string> = {
+  sugar: 'Sugar',
+  sugarN: 'Nutrient in sugar',
+  starch: 'Starch',
+  starchN: 'Nutrient in starch',
+  oil: 'Oil',
+  oilN: 'Nutrient in oil',
+  protein: 'Protein',
+  proteinN: 'Nutrient in protein',
+  broth: 'Broth',
+  brothN: 'Nutrient in broth',
+  detritus: 'Debris',
+  detritusN: 'Nutrient in debris',
+  metabolite: 'Metabolite',
+  film: 'Biofilm',
+  filmN: 'Nutrient in biofilm',
+  nutrient: 'Mineral nutrient',
+  oxygen: 'Oxygen',
+  co2: 'Carbon dioxide',
+  acid: 'Acid',
+  base: 'Base',
+  buffer: 'Buffer',
+  salt: 'Salt',
+  silicate: 'Silicate',
+  grit: 'Grit',
+  eStarch: 'Starch enzyme',
+  eOil: 'Oil enzyme',
+  eProtein: 'Protein enzyme',
+};
+
+/** A measured cell value with fixed decimals; a missing or non-finite value reads "not measured" (B1). */
+function cellNumber(v: number | undefined, digits: number): string {
+  return typeof v === 'number' && Number.isFinite(v) ? v.toFixed(digits) : 'not measured';
+}
+
 /** Family members listed in the inspector before "Show more". */
 const FAMILY_LIST_STEP = 6;
 
-function Bar({ label, value, max, kind }: { label: string; value: number; max: number; kind: string }) {
+function Bar({ label, value, max, kind, unit = '' }: { label: string; value: number; max: number; kind: string; unit?: string }) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100));
   return (
     <div class="stat-row">
@@ -69,20 +98,18 @@ function Bar({ label, value, max, kind }: { label: string; value: number; max: n
         aria-valuemin={0}
         aria-valuemax={max}
         aria-valuenow={Math.round(value)}
+        aria-valuetext={`${Math.round(value)}${unit}`}
       >
         <span style={{ width: `${pct}%` }} />
       </div>
-      <span style={{ textAlign: 'right' }}>{Math.round(value)}</span>
+      <span style={{ textAlign: 'right' }}>
+        {Math.round(value)}
+        {unit}
+      </span>
     </div>
   );
 }
 
-function strongestConstraint(e: EntityInspect): { code: number; value: number } {
-  if (e.limitCode !== R.NONE) return { code: e.limitCode, value: e.limitValue };
-  if (e.divisionBlockers.length > 0 && e.B >= 1.5 * e.B0) return { code: e.divisionBlockers[0]!, value: 0 };
-  if (e.predation) return { code: e.predation.code, value: 0 };
-  return { code: R.NONE, value: 0 };
-}
 
 
 function FamilyList({ f, onHide }: { f: FamilyAnswer; onHide: () => void }) {
@@ -142,6 +169,13 @@ function FamilyList({ f, onHide }: { f: FamilyAnswer; onHide: () => void }) {
 
 type Answer = 'eat' | 'family' | null;
 
+/** "Happening now" (temporary state) against "Passed to offspring" (inherited): UX §5.1. */
+const INSPECTOR_TABS = [
+  { id: 'now', label: 'Happening now' },
+  { id: 'inherited', label: 'Passed to offspring' },
+  { id: 'evidence', label: 'Details' },
+] as const;
+
 /** Four decimals, but a nonzero amount never reads as "0.0000". */
 function amount(v: number): string {
   if (v > 0 && v < 0.00005) return 'trace (< 0.0001)';
@@ -180,10 +214,13 @@ function EntityView({ e }: { e: EntityInspect }) {
   const [tab, setTab] = useState<'now' | 'inherited' | 'evidence'>('now');
   const [answer, setAnswer] = useState<Answer>(null);
   const [whyFocus, setWhyFocus] = useState(0);
+  const [tabPicked, setTabPicked] = useState(0);
   const whyRef = useRef<HTMLElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const answerRef = useRef<HTMLDivElement>(null);
   const name = info?.speciesNames[e.speciesIdx] ?? e.speciesId;
-  const c = strongestConstraint(e);
+  const c = leadConstraint(e);
+  const cw = constraintWords(e, c.code, c.value);
   const stop = stopAnswer(e);
   const fam = familyView.value;
   const family = fam && fam.birthId === e.birthId ? fam : null;
@@ -198,6 +235,23 @@ function EntityView({ e }: { e: EntityInspect }) {
   useEffect(() => {
     if (answer) answerRef.current?.scrollIntoView({ block: 'nearest' });
   }, [answer, family]);
+  // M3: a tab the player opens gets the sheet's height. When little of its answer would show below the
+  // tabs (large text, a short sheet), scroll the sheet so the answer starts at its top; the answer then
+  // begins with the open tab's name, and the tab names are a scroll up, never clipped.
+  useEffect(() => {
+    if (tabPicked === 0) return;
+    const panel = panelRef.current;
+    const scroller = panel?.closest<HTMLElement>('.sheet-scroll');
+    if (!panel || !scroller) return;
+    const box = scroller.getBoundingClientRect();
+    const r = panel.getBoundingClientRect();
+    const shown = Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top);
+    if (shown < Math.min(r.height, box.height * 0.4)) scroller.scrollTop += r.top - box.top;
+  }, [tabPicked]);
+  const pickTab = (next: 'now' | 'inherited' | 'evidence') => {
+    setTab(next);
+    setTabPicked((n) => n + 1);
+  };
 
   const diet = answer === 'eat' ? dietAnswer(e, info?.speciesNames ?? []) : null;
   return (
@@ -251,14 +305,14 @@ function EntityView({ e }: { e: EntityInspect }) {
         </button>
       </header>
       <p class="constraint" data-testid="constraint">
-        {reasonText(c.code, 'explore')}
-        {c.code !== R.NONE ? <span class="sub"> {reasonText(c.code, 'lab', { value: c.value })}</span> : null}
+        {cw.text}
+        {cw.detail ? <span class="sub"> {cw.detail}</span> : null}
       </p>
       {collapsed.value ? null : (
         <>
           <Bar label="Energy" value={e.E} max={e.energyCap} kind="energy" />
           <Bar label="Health" value={e.H} max={100} kind="health" />
-          <Bar label="Body" value={(e.B / (2 * e.B0)) * 100} max={100} kind="" />
+          <Bar label="Body" value={(e.B / (2 * e.B0)) * 100} max={100} kind="" unit=" %" />
           <div class="shortcuts" role="group" aria-label="Questions">
             <button
               class="btn"
@@ -326,29 +380,27 @@ function EntityView({ e }: { e: EntityInspect }) {
               ) : null}
             </div>
           ) : null}
-          <div class="tabs" role="tablist">
-            <button class="btn" role="tab" aria-selected={tab === 'now'} onClick={() => setTab('now')}>
-              Happening now
-            </button>
-            <button
-              class="btn"
-              role="tab"
-              aria-selected={tab === 'inherited'}
-              onClick={() => setTab('inherited')}
-            >
-              Passed to offspring
-            </button>
-            <button
-              class="btn"
-              role="tab"
-              aria-selected={tab === 'evidence'}
-              onClick={() => setTab('evidence')}
-            >
-              Details
-            </button>
+          <div class="tabs inspector-tabs" role="tablist">
+            {INSPECTOR_TABS.map((t) => (
+              <button
+                key={t.id}
+                class="btn"
+                role="tab"
+                id={`insp-tab-${t.id}`}
+                aria-selected={tab === t.id}
+                aria-controls="insp-tabpanel"
+                onClick={() => pickTab(t.id)}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
+          <div role="tabpanel" id="insp-tabpanel" aria-labelledby={`insp-tab-${tab}`} ref={panelRef}>
+            <p class="tab-context" aria-hidden="true">
+              {INSPECTOR_TABS.find((t) => t.id === tab)!.label}
+            </p>
           {tab === 'now' ? (
-            <div role="tabpanel">
+            <div>
               <section
                 class={`why${whyFocus > 0 ? ' focused' : ''}`}
                 tabIndex={-1}
@@ -360,6 +412,7 @@ function EntityView({ e }: { e: EntityInspect }) {
                 <p>
                   <strong>{stop.title}</strong>
                 </p>
+                {stop.splitOnly ? <p class="sub">Before it can split:</p> : null}
                 {stop.items.length > 0 ? (
                   <ul>
                     {stop.items.map((it) => (
@@ -403,15 +456,11 @@ function EntityView({ e }: { e: EntityInspect }) {
             </div>
           ) : null}
           {tab === 'inherited' ? (
-            <div role="tabpanel">
-              <p class="sub">
-                {/* P2.2: a founder (generation 0) has no parent in this dish, so it is never compared with one. */}
-                {e.generation === 0
-                  ? 'A founder: it has no parent in this dish.'
-                  : e.genome.changedFromParent
-                  ? 'This offspring inherited a different trait from its parent.'
-                  : 'Same inherited traits as its parent.'}{' '}
-                Genome {e.genome.id.slice(0, 6)}.
+            <div>
+              <p class="sub" data-testid="inherited-lead">
+                {/* P2.2: a founder (generation 0) has no parent in this dish, so it is never compared with one.
+                    M2: both comparisons, with its parent and with its line's founder, from recorded genomes. */}
+                {inheritedLead(e)} Genome {e.genome.id.slice(0, 6)}.
               </p>
               {/* P2.2: starting differences of varied founders are not evolution (honest labels). */}
               {e.founderOrigin && founderStartText(e.founderOrigin) ? (
@@ -426,16 +475,18 @@ function EntityView({ e }: { e: EntityInspect }) {
                       <dt>{LOCUS_NAMES[i]}</dt>
                       <dd>
                         {v}
-                        {v !== 50 ? ` (${v > 50 ? '+' : ''}${v - 50} from the ancestor)` : ''}
+                        {locusNote(e, i)}
                       </dd>
                     </>
                   ) : null,
                 )}
                 <dt>Feeding policy</dt>
                 <dd>
-                  {e.profile.policy === 'ordered'
-                    ? `in order: ${e.profile.foods.join(', ') || '—'}`
-                    : `weighted: ${e.profile.weights?.map((w) => w.toFixed(2)).join(' / ')}`}
+                  {makesOwnFood(e)
+                    ? 'makes its own food'
+                    : e.profile.policy === 'ordered'
+                      ? `in order: ${e.profile.foods.join(', ') || '—'}`
+                      : `weighted: ${e.profile.weights?.map((w) => w.toFixed(2)).join(' / ')}`}
                 </dd>
                 <dt>Extra abilities</dt>
                 <dd>{e.modules.length ? `${e.modules.length} of 3 slots used` : 'none'}</dd>
@@ -468,7 +519,7 @@ function EntityView({ e }: { e: EntityInspect }) {
             </div>
           ) : null}
           {tab === 'evidence' ? (
-            <div role="tabpanel">
+            <div>
               <dl class="kv">
                 <dt>Biomass</dt>
                 <dd>
@@ -505,6 +556,7 @@ function EntityView({ e }: { e: EntityInspect }) {
               </dl>
             </div>
           ) : null}
+          </div>
         </>
       )}
     </>
@@ -545,21 +597,23 @@ export function InspectorSheet() {
             <dl class="kv">
               <dt>Ground</dt>
               <dd>{groundName(p.cell.substrate, p.cell.structure)}</dd>
-              <dt>pH · light</dt>
-              <dd>
-                {p.cell.ph.toFixed(1)} · {p.cell.light.toFixed(2)}
-              </dd>
-              {Object.entries(p.cell.fields)
-                .filter(([, v]) => v > 1e-6)
+              <dt>pH</dt>
+              <dd>{cellNumber(p.cell.ph, 1)}</dd>
+              <dt>Light</dt>
+              <dd>{cellNumber(p.cell.light, 2)}</dd>
+              {Object.entries(p.cell.fields ?? {})
+                .filter(([, v]) => typeof v === 'number' && v > 1e-6)
                 .map(([k, v]) => (
                   <>
-                    <dt>{FOOD_NAMES[k] ?? k}</dt>
+                    <dt>{CELL_FIELD_NAMES[k] ?? k.charAt(0).toUpperCase() + k.slice(1)}</dt>
                     <dd>{amount(v)}</dd>
                   </>
                 ))}
               <dt>Residents</dt>
               <dd>
-                {p.cell.residents.length === 0 ? 'none' : p.cell.residents.map((r) => r.speciesId).join(', ')}
+                {(p.cell.residents ?? []).length === 0
+                  ? 'none'
+                  : p.cell.residents.map((r) => dishInfo.value?.speciesNames[dishInfo.value.speciesIds.indexOf(r.speciesId)] ?? r.speciesId).join(', ')}
               </dd>
             </dl>
           </>

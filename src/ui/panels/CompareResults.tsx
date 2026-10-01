@@ -35,6 +35,10 @@ export function CompareResults() {
         {r.stoppedEarly ? ' (stopped early)' : ''}. They started identical; your change was the only recorded difference. These numbers describe this paired run only —
         another seed, horizon or change could turn out differently.
       </p>
+      {/* G2 comprehension M4: a row is never presented as a direct effect of the change. */}
+      <p class="sub" data-testid="compare-knock-on">
+        Every difference below traces back to your change, directly or through knock-on effects; this table does not show which.
+      </p>
       <div class="compare-results-grid">
         <PredictionNote />
         <div class="compare-table-wrap">
@@ -140,7 +144,10 @@ export function CompareResults() {
           Done — back to my dish
         </button>
       </div>
-      <p class="sub">Done discards the two copies. Your dish is exactly as you left it.</p>
+      <p class="sub" data-testid="compare-done-note">
+        Done discards the two copies. Your dish is exactly as you left it. A saved result card is listed in Notebook → Journal. To keep a changed version as its own dish, use More →
+        Duplicate dish and change the copy.
+      </p>
     </div>
   );
 }

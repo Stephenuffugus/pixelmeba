@@ -432,9 +432,17 @@ textarea {
   margin: 0.75rem 0 0.5rem;
 }
 .tabs .btn {
-  min-height: 40px;
-  flex: 1;
+  min-height: var(--target);
+  /* M3: a tab is at least as wide as its longest word and wraps only between words; tabs that do not
+     fit move to the next line instead of clipping their names. */
+  flex: 1 1 auto;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+  text-align: center;
 }
+
 .kv {
   display: grid;
   grid-template-columns: minmax(0, auto) minmax(0, 1fr);
@@ -2574,4 +2582,42 @@ html[data-text-scale='2'] .lab-cat span {
   flex: 1 1 100%;
   margin: 0;
   font-size: var(--fs-body);
+}
+/* G2 comprehension M1: saved comparison results in Notebook → Journal. */
+.nb-results {
+  margin-top: 1.5rem;
+  min-width: 0;
+}
+.nb-section-title {
+  color: #dfe8ea;
+  font-size: 1.15rem;
+  margin: 0 0 0.75rem;
+}
+.nb-result h3 {
+  font-size: 1.05rem;
+  margin: 0 0 0.25rem;
+  padding-right: 2.5rem;
+  overflow-wrap: anywhere;
+}
+.nb-result .nb-note-mark {
+  font-size: 1rem;
+}
+/* m25: About lists the build's versions at body size; the long content hash wraps anywhere. */
+.about-versions {
+  font-size: var(--fs-body);
+  margin-top: 0.75rem;
+}
+.about-versions dd {
+  overflow-wrap: anywhere;
+}
+/* M3: the open tab's name at the top of its answer, shown at large text sizes, where the sheet scrolls
+   the answer to its top and the tab names sit a scroll up. */
+.tab-context {
+  display: none;
+  margin: 0 0 0.25rem;
+  font-weight: 700;
+}
+html[data-text-scale='1.5'] .tab-context,
+html[data-text-scale='2'] .tab-context {
+  display: block;
 }

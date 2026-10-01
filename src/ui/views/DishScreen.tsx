@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { DishRenderer } from '@render/renderer';
 import { loadAtlas } from '../atlas';
 import { attachGestures } from '../gestures';
+import { dishCellAt } from '../dishPoint';
 import {
   IconBack,
   IconFood,
@@ -302,8 +303,16 @@ function onTap(r: DishRenderer, sx: number, sy: number, wx: number, wy: number):
     if (!t.paint) setTool({ kind: 'look' });
     return;
   }
-  const { candidates: list, cell } = r.pick(sx, sy);
+  const { candidates: list } = r.pick(sx, sy);
   if (list.length === 0) {
+    // B1: only a cell inside the dish is ever described; a tap beyond the rim closes the panel instead.
+    const cell = dishCellAt(wx, wy);
+    if (cell === null) {
+      candidates.value = null;
+      select(null);
+      showToast('Outside the dish.', 1600);
+      return;
+    }
     select({ kind: 'cell', cell });
     return;
   }

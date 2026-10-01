@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { HistorySample } from '@sim/history';
 import { drawFrame, loadAtlas } from '../atlas';
 import { feed } from '../feed';
+import { inheritedLead } from '../strings/inherited';
 import { IconClose } from '../icons';
 import { dishInfo, getClient, historyFocus, inspector, meta, sheet } from '../state';
 import { TraitGraphs } from './TraitGraphs';
@@ -207,6 +208,10 @@ export function HistorySheet() {
     name: info.speciesNames[i]!,
     asset: info.speciesAssets[i]!,
   }));
+  // m12: a kind with no organism and no biomass in any sample since the dish began (the samples reach
+  // back to its first second and none was summarized) was never in this dish: say so instead of a flat chart.
+  const fromStart = !compacted && samples.length > 1 && (samples[0]?.second ?? Infinity) <= 1;
+  const neverPresent = (i: number) => fromStart && samples.every((x) => (x.count[i] ?? 0) === 0 && (x.biomass[i] ?? 0) === 0);
   const births = samples.map((s) => s.births.reduce((a, b) => a + b, 0));
   // P2.8: the recorded debris total (samples from older saves have none, and draw no line).
   const debris = samples.filter((s) => s.debrisTotal !== undefined);
@@ -274,7 +279,12 @@ export function HistorySheet() {
         {tab === 'charts' ? (
           <div role="tabpanel" id="history-panel-charts" aria-labelledby="history-tab-charts">
             <h3 class="chart-group">Organisms alive</h3>
-            {species.map((s) => (
+            {species.map((s) =>
+              neverPresent(s.i) ? (
+                <p key={s.id} class="sub" data-testid="history-none-added">
+                  {s.name} — none added yet
+                </p>
+              ) : (
               <div key={s.id} class="spark-row">
                 <SpeciesThumb asset={s.asset} />
                 <Spark
@@ -285,9 +295,10 @@ export function HistorySheet() {
                   unit="alive"
                 />
               </div>
-            ))}
+              ),
+            )}
             <h3 class="chart-group">Living biomass</h3>
-            {species.map((s) => (
+            {species.filter((s) => !neverPresent(s.i)).map((s) => (
               <div key={s.id} class="spark-row">
                 <SpeciesThumb asset={s.asset} />
                 <Spark
@@ -436,11 +447,7 @@ export function HistorySheet() {
                   {info.speciesNames[focused.speciesIdx] ?? focused.speciesId} #{focused.birthId}
                 </strong>
                 : generation {focused.generation}.{' '}
-                {focused.parentBirthId > 0
-                  ? focused.genome.changedFromParent
-                    ? 'It inherited a different trait from its parent.'
-                    : 'Same inherited traits as its parent.'
-                  : 'It was added to the dish.'}
+                {focused.parentBirthId > 0 ? inheritedLead(focused) : 'It was added to the dish.'}
               </p>
             ) : null}
             {filterName !== null ? (

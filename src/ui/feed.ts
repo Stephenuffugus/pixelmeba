@@ -4,8 +4,10 @@
  */
 import { signal } from '@preact/signals';
 import { MUT_DEV, MUT_MODULE_GAIN, MUT_MODULE_LOSS, MUT_POLICY_ESTABLISHED, MUT_PREF, MUT_QUANT } from '@sim/mutation';
+import { reasonName, type ReasonName } from '@sim/reasons';
 import type { VisualEvent } from '@worker/protocol';
 import { reasonText } from './strings/reasons';
+import { locusName } from './strings/inherited';
 
 export interface FeedLine {
   readonly key: string;
@@ -14,6 +16,11 @@ export interface FeedLine {
   /** Species index the events belong to, or -1 for dish-wide events (e.g. starch became sugar). */
   readonly species: number;
   count: number;
+  /**
+   * A coalesced inherited-change line (G2 comprehension M2): each birth's recorded change in words
+   * ("Division 50 → 48"), or null when its birth record carried no trait values (another kind of change).
+   */
+  details?: (string | null)[];
 }
 
 export const feed = signal<readonly FeedLine[]>([]);
@@ -47,7 +54,63 @@ function moduleLine(change: { readonly gained: boolean; readonly id: string; rea
   return `${who} ${change.gained ? 'gained' : 'lost'} ${ability}${also}.`;
 }
 
-function describe(ev: VisualEvent, name: string, n: number, moduleName: ModuleNameOf): string {
+/** Death causes for several organisms at once (m11: "2 Sprinters died — they ran out of energy."). */
+const DEATH_PLURAL: Partial<Record<ReasonName, string>> = {
+  DEATH_STARVATION: 'they ran out of energy',
+  DEATH_STRESS: 'the conditions were too harsh',
+  DEATH_INHIBITOR: 'something in the water harmed them',
+  DEATH_AGE: 'they reached the end of their lives',
+  DEATH_PREDATION: 'they were eaten',
+  DEATH_LYSIS: 'a virus burst them',
+  DEATH_PARASITE_DRAIN: 'a parasite drained them',
+  DEATH_TRAP_DRAIN: 'a trap drained them',
+  REMOVED_SAMPLED: 'they were moved with the sample tool',
+};
+
+function deathLine(name: string, n: number, cause: number): string {
+  if (n === 1) return `A ${name} died — ${lowerFirst(reasonText(cause, 'explore').replace(/\.$/, ''))}.`;
+  const plural = DEATH_PLURAL[reasonName(cause)];
+  return `${n} ${name}s died — ${plural ?? lowerFirst(reasonText(cause, 'explore').replace(/\.$/, ''))}.`;
+}
+
+function lowerFirst(t: string): string {
+  return t.charAt(0).toLowerCase() + t.slice(1);
+}
+
+/** One birth's recorded quantitative change ("Division 50 → 48"), or null when its values were not sent. */
+function quantDetail(ev: VisualEvent): string | null {
+  const m = ev.mutation;
+  if (!m || (m.flags & MUT_QUANT) === 0 || m.locus === undefined || m.from === undefined || m.to === undefined) return null;
+  return `${locusName(m.locus)} ${m.from} → ${m.to}`;
+}
+
+/** Shown in a coalesced line before "and N more". */
+const DETAILS_SHOWN = 4;
+
+/**
+ * An inherited change at a birth, from its recorded descriptor (M2): the trait and both values for a
+ * quantitative change ("A Sprinter offspring inherited a lower Division value (parent 50 → 48)."); a
+ * burst coalesces into one line listing the recorded values.
+ */
+function inheritedLine(ev: VisualEvent, name: string, n: number, details: readonly (string | null)[]): string {
+  const m = ev.mutation;
+  if (n === 1) {
+    if (m && (m.flags & MUT_QUANT) !== 0 && m.locus !== undefined && m.from !== undefined && m.to !== undefined) {
+      const also = m.flags & MUT_POLICY_ESTABLISHED ? ', and began mixing its foods by weight' : m.flags & MUT_PREF ? ', and a shifted food preference' : '';
+      return `A ${name} offspring inherited a ${m.to < m.from ? 'lower' : 'higher'} ${locusName(m.locus)} value (parent ${m.from} → ${m.to})${also}.`;
+    }
+    if (m && (m.flags & MUT_QUANT) === 0 && m.flags & MUT_POLICY_ESTABLISHED) return `A ${name} offspring began mixing its foods by weight.`;
+    if (m && (m.flags & MUT_QUANT) === 0 && m.flags & MUT_PREF) return `A ${name} offspring inherited a shifted food preference.`;
+    return `A ${name} offspring inherited a different trait.`;
+  }
+  const known = details.filter((d): d is string => d !== null);
+  if (known.length === 0) return `${n} ${name} offspring inherited different traits.`;
+  const shown = known.slice(0, DETAILS_SHOWN);
+  const more = n - shown.length;
+  return `${n} ${name} offspring inherited different traits: ${shown.join('; ')}${more > 0 ? `; ${more} other change${more === 1 ? '' : 's'}` : ''}.`;
+}
+
+function describe(ev: VisualEvent, name: string, n: number, moduleName: ModuleNameOf, details: readonly (string | null)[] = []): string {
   const s = n === 1 ? '' : 's';
   const change = moduleChangeOf(ev);
   if (change) return moduleLine(change, name, n, moduleName);
@@ -55,13 +118,13 @@ function describe(ev: VisualEvent, name: string, n: number, moduleName: ModuleNa
     case 'birth':
       return n === 1 ? `A ${name} split in two.` : `${n} ${name} divisions.`;
     case 'death':
-      return `${n} ${name}${s} died — ${reasonText(ev.cause ?? 0, 'explore').replace(/\.$/, '').toLowerCase()}.`;
+      return deathLine(name, n, ev.cause ?? 0);
     case 'introduce':
       return `${n} ${name}${s} added.`;
     case 'capture':
       return n === 1 ? `A ${name} caught its prey.` : `${name}s caught prey ${n} times.`;
     case 'mutation':
-      return n === 1 ? `A ${name} offspring inherited a different trait.` : `${n} ${name} offspring inherited different traits.`;
+      return inheritedLine(ev, name, n, details);
     case 'branchEstablished':
       return `A new ${name} branch was established.`;
     case 'branchExtinct':
@@ -89,11 +152,14 @@ export function pushFeed(events: readonly VisualEvent[], speciesNames: readonly 
     const name = speciesNames[ev.species] ?? 'organism';
     const key = keyOf(ev);
     const last = lines.find((l) => l.key === key && ev.tick - l.tick < WINDOW);
+    const inherited = ev.type === 'mutation' && moduleChangeOf(ev) === null;
     if (last) {
       last.count++;
-      (last as { text: string }).text = describe(ev, name, last.count, moduleName);
+      if (inherited) last.details = [...(last.details ?? []), quantDetail(ev)];
+      (last as { text: string }).text = describe(ev, name, last.count, moduleName, last.details);
     } else {
-      lines.unshift({ key, tick: ev.tick, text: describe(ev, name, 1, moduleName), species: ev.species, count: 1 });
+      const details = inherited ? [quantDetail(ev)] : undefined;
+      lines.unshift({ key, tick: ev.tick, text: describe(ev, name, 1, moduleName, details), species: ev.species, count: 1, ...(details ? { details } : {}) });
     }
   }
   feed.value = lines.slice(0, MAX_LINES);

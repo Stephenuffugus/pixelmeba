@@ -251,7 +251,18 @@ export interface VisualEvent {
    * module gained or lost. `flags` are the MUT_* bits (@sim/mutation), `delta` the quantitative change,
    * `module` the gained or lost module's id from the world's recorded content (null when none).
    */
-  readonly mutation?: { readonly flags: number; readonly delta: number; readonly module: string | null };
+  readonly mutation?: {
+    readonly flags: number;
+    readonly delta: number;
+    readonly module: string | null;
+    /**
+     * A quantitative change (G2 comprehension M2): its locus and the value in the parent's and the
+     * offspring's recorded genomes. Absent when either birth record is no longer kept.
+     */
+    readonly locus?: number;
+    readonly from?: number;
+    readonly to?: number;
+  };
 }
 
 export interface DishInfo {
@@ -399,6 +410,10 @@ export interface EntityInspect {
     readonly ancestorLoci: readonly number[];
     readonly modules: readonly string[];
     readonly changedFromParent: boolean;
+    /** The parent's recorded loci (null for a founder or when the record is not kept); G2 comprehension M2. */
+    readonly parentLoci?: readonly number[] | null;
+    /** The recorded loci of the founder its line began with (null when not recorded). */
+    readonly founderLoci?: readonly number[] | null;
   };
   readonly foodHere: readonly { readonly food: string; readonly amount: number }[];
   /** The species' recorded diet rules in this world's ruleset (for "What does it eat?"). */
@@ -409,6 +424,11 @@ export interface EntityInspect {
     /** Native abilities recorded for the species (e.g. E_STARCH_SECRETION, PREDATION). */
     readonly abilities: readonly string[];
     readonly digestsFilm: boolean;
+    /**
+     * Species of this world that can put sugar into the water under its recorded rules (G2 comprehension
+     * M5): `makers` make food from light and release part of it as sugar; `enzyme` turn starch into sugar.
+     */
+    readonly sugarSources?: { readonly makers: readonly number[]; readonly enzyme: readonly number[] };
   };
   /** Loci that act for this genome: the template's plus module activations (E03 → dormancy). */
   readonly lociActiveEffective: readonly boolean[];

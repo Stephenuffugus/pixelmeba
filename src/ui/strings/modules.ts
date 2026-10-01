@@ -48,11 +48,13 @@ const FLAG_USABLE_INTAKE = 1 << 11;
  * usable share of its intake ceiling (FLAG.usableIntake, USABLE_INTAKE_FRACTION); a smaller intake is
  * named as traces, so the chip never says "Eating" beside "No usable food" and "Food access: 0 %".
  */
-export function actionLabel(e: Pick<EntityInspect, 'flags' | 'lifeState' | 'predation'>): string {
+export function actionLabel(e: Pick<EntityInspect, 'flags' | 'lifeState' | 'predation'> & Partial<Pick<EntityInspect, 'diet' | 'profile'>>): string {
   // A life state other than Active (Preparing, Resting, Waking) is the organism's real state (P2.1).
   if (e.lifeState !== LIFE_ACTIVE) return lifeStateLabel(e.lifeState);
   if (e.flags & FLAG_FEEDING) {
     if (e.predation) return 'Digesting';
+    // m6: an organism that makes its food from light is never said to be eating (its intake is fixed carbon).
+    if (e.diet?.metabolism === 'photosynthesis' && e.profile?.foods.length === 0) return e.flags & FLAG_USABLE_INTAKE ? 'Making food' : 'Making only a little food';
     return e.flags & FLAG_USABLE_INTAKE ? 'Eating' : 'Finding only traces of food';
   }
   if (e.flags & FLAG_HUNTING) return 'Hunting';

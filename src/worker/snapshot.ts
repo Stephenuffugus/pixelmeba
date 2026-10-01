@@ -153,7 +153,12 @@ export function packOverlay(world: World, id: OverlayId, out: Float32Array | nul
  * Events for the snapshot. `modules`: the world's recorded module list (D-0034 label ruling), so a
  * 'mutation' event carries its recorded descriptor with the module's id, and the feed names the ability.
  */
-export function visualEvents(events: readonly SimEvent[], sinceId: number, modules: readonly { readonly id: string }[] = []): VisualEvent[] {
+export function visualEvents(
+  events: readonly SimEvent[],
+  sinceId: number,
+  modules: readonly { readonly id: string }[] = [],
+  lociOf: (birthId: number) => readonly number[] | undefined = () => undefined,
+): VisualEvent[] {
   const out: VisualEvent[] = [];
   for (const ev of events) {
     if (ev.id <= sinceId) continue;
@@ -182,12 +187,36 @@ export function visualEvents(events: readonly SimEvent[], sinceId: number, modul
               flags: ev.detail.flags,
               delta: typeof ev.detail.delta === 'number' ? ev.detail.delta : 0,
               module: typeof ev.detail.module === 'number' && ev.detail.module >= 0 ? (modules[ev.detail.module]?.id ?? null) : null,
+              ...quantValues(ev, lociOf),
             },
           }
         : {}),
     });
   }
   return out;
+}
+
+/**
+ * A quantitative change's locus and its value in the parent's and the offspring's recorded genomes
+ * (fix round G2 comprehension M2: the feed names the trait and both values). Omitted when either birth
+ * record is no longer kept or the recorded values do not match the recorded delta.
+ */
+function quantValues(ev: SimEvent, lociOf: (birthId: number) => readonly number[] | undefined): { locus?: number; from?: number; to?: number } {
+  const d = ev.detail;
+  if (!d || typeof d.locus !== 'number' || d.locus < 0 || typeof d.delta !== 'number' || d.delta === 0) return {};
+  if (typeof d.parent !== 'number' || ev.birthId === undefined) return {};
+  const from = lociOf(d.parent)?.[d.locus];
+  const to = lociOf(ev.birthId)?.[d.locus];
+  if (from === undefined || to === undefined || to - from !== d.delta) return {};
+  return { locus: d.locus, from, to };
+}
+
+/** Recorded genome loci of a birth, from the lineage record (undefined when the record is not kept). */
+export function lociOfBirth(world: World): (birthId: number) => readonly number[] | undefined {
+  return (birthId) => {
+    const g = lineageField(world.lineage, 'genome', birthId);
+    return g === undefined ? undefined : world.genomes.get(g).loci;
+  };
 }
 
 function findSlotByBirth(world: World, birthId: number): number {
@@ -217,6 +246,8 @@ function inspectEntity(world: World, slot: number): EntityInspect {
   }
   const foodHere = prof.foods.map((f) => ({ food: f, amount: world.fields[f]?.[cell] ?? 0 }));
   const blockers = divisionBlocker(world, slot) === R.NONE ? allDivisionBlockers(world, slot) : allDivisionBlockers(world, slot);
+  // P2.2: from recorded lineage only (a module seeded at creation vs inherited vs gained here).
+  const origin = founderOriginOf(world, birthId);
   return {
     birthId,
     entityId: c.entityId[slot]!,
@@ -274,6 +305,9 @@ function inspectEntity(world: World, slot: number): EntityInspect {
       ancestorLoci: [50, 50, 50, 50, 50, 50, 50, 50],
       modules: g.modules,
       changedFromParent: parentGenome !== undefined && parentGenome !== c.genome[slot],
+      // Recorded birth records only (G2 comprehension M2): the parent's and the line founder's loci.
+      parentLoci: parentGenome !== undefined ? world.genomes.get(parentGenome).loci : null,
+      founderLoci: founderLociOf(world, origin),
     },
     foodHere,
     diet: {
@@ -283,15 +317,37 @@ function inspectEntity(world: World, slot: number): EntityInspect {
       // Film digestion is a P3.3 mechanic: claim it only when this world has a film field and the
       // simulation consumes it. Until then the inspector must not describe it (honest labels).
       digestsFilm: sp.def.digestsFilm && world.fields.film !== undefined && FILM_DIGESTION_IMPLEMENTED,
+      sugarSources: sugarSourcesOf(world),
     },
     lociActiveEffective: prof.lociActive,
     energyCapBase: prof.baseEnergyCap,
     modules: moduleSummaries(world, slot),
     upkeep: upkeepNow(world, slot),
     dormancy: dormancySummary(world, slot),
-    // P2.2: from recorded lineage only (a module seeded at creation vs inherited vs gained here).
-    founderOrigin: founderOriginOf(world, birthId),
+    founderOrigin: origin,
   };
+}
+
+/** The recorded loci of the founder at the root of an organism's recorded ancestry, or null when not recorded. */
+function founderLociOf(world: World, origin: ReturnType<typeof founderOriginOf>): readonly number[] | null {
+  if (!origin || origin.founderBirthId <= 0) return null;
+  const g = lineageField(world.lineage, 'genome', origin.founderBirthId);
+  return g === undefined ? null : world.genomes.get(g).loci;
+}
+
+/**
+ * Where sugar can come from in this world under its recorded rules (M5): species that make food from
+ * light (each releases PHOTO_SUGAR_FRACTION of the carbon it fixes as sugar, SPEC §6.5) and species
+ * whose native enzyme turns starch into sugar. Species indices of this world, ascending.
+ */
+function sugarSourcesOf(world: World): { makers: number[]; enzyme: number[] } {
+  const makers: number[] = [];
+  const enzyme: number[] = [];
+  world.species.forEach((s, i) => {
+    if (s.photosynthetic && !s.mixotroph) makers.push(i);
+    if (s.abilities.includes('E_STARCH_SECRETION')) enzyme.push(i);
+  });
+  return { makers, enzyme };
 }
 
 function inspectCell(world: World, cell: number): CellInspect {
