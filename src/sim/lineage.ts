@@ -446,6 +446,8 @@ export interface LineageRecordRow {
   readonly mutLocus: number;
   readonly mutDelta: number;
   readonly mutModule: string | null;
+  /** The gained or lost module's name from the world's recorded content (D-0034 label ruling), with `mutModule`. */
+  readonly mutModuleName?: string | null;
 }
 
 export interface LineageMember {
@@ -517,6 +519,7 @@ function recordRow(world: World, birthId: number): LineageRecordRow | null {
     mutLocus: get('mutLocus')!,
     mutDelta: get('mutDelta')!,
     mutModule: mod >= 0 ? (world.content.modules[mod]?.id ?? null) : null,
+    mutModuleName: mod >= 0 ? (world.content.modules[mod]?.name ?? null) : null,
   };
 }
 

@@ -35,7 +35,7 @@ import type { SlotModes } from './protocol';
 import { buildSaveFile, loadSaveFile, SaveFileError, saveMetaVariant } from '@persist/saveFile';
 import { saveMetaEvolution, saveMetaRegistry, type SaveFile, type SaveMetaEvolution, type SaveMetaRegistry } from '@persist/saveFile';
 import { AUTOSAVE_SLOT, type SaveStore, type SlotInfo } from '@persist/store';
-import { SaveStore as SaveStoreClass } from '@persist/store';
+import { holdsSave, SaveStore as SaveStoreClass, type SaveRequest } from '@persist/store';
 import { isCheckpointSlot } from '@persist/store';
 import { branchName, branchWorldId, CHECKPOINT_INTERVAL_TICKS, CheckpointRing, type StorageEstimate } from '@persist/checkpoints';
 import { interventionSeconds, putJournalEntry, regionalTraitSeries, traitAvailability } from '@sim/history';
@@ -76,6 +76,9 @@ const NOT_DONE: Readonly<Record<KeepAction, string>> = {
   import: 'the file was not opened',
   duplicate: 'the copy was not made',
 };
+
+/** A save file as buildSaveFile builds it (text, checksum, file). */
+type BuiltFile = Awaited<ReturnType<typeof buildSaveFile>>;
 
 /** How the keep step is asked to keep a dish (D-0033). */
 interface KeepOptions {
@@ -283,6 +286,8 @@ export class DishHost {
   private ringEnabled = false;
   private ringBusy = false;
   private ringKept = 0;
+  /** The autosave being handled (D-0033 fix round 3): autosaves run one after another. */
+  private autosaveTail: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly registry: ContentRegistry,
@@ -310,37 +315,27 @@ export class DishHost {
   async handleAsync(msg: ToWorker): Promise<void> {
     try {
       switch (msg.type) {
-        case 'saveSlot':
-        case 'autosave': {
+        case 'saveSlot': {
+          // A manual save always writes its slot (the store keeps the previous copy).
           const d = this.need(msg.dishId);
           if (!this.store) throw new Error('Saving is unavailable on this device.');
-          const slotId = msg.type === 'autosave' ? AUTOSAVE_SLOT : msg.slotId;
-          const name = msg.type === 'autosave' ? d.name : msg.name;
-          if (msg.type === 'saveSlot') d.name = name;
+          d.name = msg.name;
           const savedAt = this.iso();
-          // D-0033: the autosave remembers the slot its dish is bound to, so Continue reopens it bound again,
-          // and (fix round 1) that slot's record as it stands before this state is taken: Continue is bound
-          // again only while the slot still holds exactly that record, so an older Continue never replaces
-          // a newer save in the slot. Read first: the file below is serialized after it, never before.
-          const own = msg.type === 'autosave' ? this.ownSlots[d.id] : undefined;
-          const ownRecord = own !== undefined ? (await this.store.slot(own))?.current : undefined;
-          const built = await buildSaveFile(d.world, { name, savedAt, recipeId: d.world.content.provenance.recipeId });
-          const variant = built.file.meta.variant;
-          const info = await this.store.save({
-            slotId,
-            text: built.text,
-            checksum: built.checksum,
-            name,
-            tick: built.file.tick,
-            savedAt,
-            recipeId: d.world.content.provenance.recipeId,
-            ...(variant ? { variant } : {}),
-            ...slotMetaCopies(built.file),
-            worldId: built.file.state.worldId,
-            ...(own !== undefined && ownRecord !== undefined ? { activeSlot: own, activeRecord: ownRecord } : {}),
-          });
-          if (msg.type === 'saveSlot') this.ownSlots[d.id] = slotId;
-          this.post({ type: 'slotSaved', requestId: msg.requestId, slot: this.describeSlot(info) });
+          const built = await buildSaveFile(d.world, { name: msg.name, savedAt, recipeId: d.world.content.provenance.recipeId });
+          const info = await this.store.save(this.saveRequest(d, msg.slotId, msg.name, savedAt, built));
+          this.ownSlots[d.id] = msg.slotId;
+          this.post({ type: 'slotSaved', requestId: msg.requestId, slot: this.describeSlot(info), wrote: true });
+          return;
+        }
+        case 'autosave': {
+          // One autosave at a time (the 30 s interval, going to the background and leaving the page can
+          // ask together): each one compares with what the one before it wrote.
+          const turn = this.autosaveTail.then(() => this.autosave(msg));
+          this.autosaveTail = turn.then(
+            () => undefined,
+            () => undefined,
+          );
+          await turn;
           return;
         }
         case 'listSlots': {
@@ -1632,7 +1627,7 @@ export class DishHost {
    * the index can only err towards writing (e.g. an older index with a later tick than its file).
    * `built`: the file already built for this moment (the keep step writes that same file).
    */
-  private async holdsExactly(slotId: string, d: Dish, built?: Awaited<ReturnType<typeof buildSaveFile>>): Promise<boolean> {
+  private async holdsExactly(slotId: string, d: Dish, built?: BuiltFile): Promise<boolean> {
     const held = this.store ? await this.store.slot(slotId) : null;
     if (held === null || held.name !== d.name || held.tick !== d.world.tick) return false;
     const file = built ?? (await this.buildFor(d, this.iso()));
@@ -1756,22 +1751,69 @@ export class DishHost {
    * Write a built file of dish `d` to a slot exactly as saveSlot/autosave do. The autosave notes the
    * dish's active slot, with `activeRecord`: that slot's record as it stood when the state was taken.
    */
-  private async writeBuilt(d: Dish, slotId: string, savedAt: string, built: Awaited<ReturnType<typeof buildSaveFile>>, activeRecord?: string): Promise<SlotInfo> {
-    const variant = built.file.meta.variant;
+  private async writeBuilt(d: Dish, slotId: string, savedAt: string, built: BuiltFile, activeRecord?: string): Promise<SlotInfo> {
     const own = slotId === AUTOSAVE_SLOT ? this.ownSlots[d.id] : undefined;
-    return this.store!.save({
+    return this.store!.save(this.saveRequest(d, slotId, d.name, savedAt, built, own !== undefined && activeRecord !== undefined ? { slot: own, record: activeRecord } : undefined));
+  }
+
+  /**
+   * The store request that writes `built` (a file of dish `d`, named `name`) to `slotId`: the one shape
+   * every save, autosave and keep writes. For the autosave, `binding` is the named slot the dish is bound
+   * to and that slot's record when the state was taken (D-0033 fix round 1).
+   */
+  private saveRequest(d: Dish, slotId: string, name: string, savedAt: string, built: BuiltFile, binding?: { readonly slot: string; readonly record: string }): SaveRequest {
+    const variant = built.file.meta.variant;
+    return {
       slotId,
       text: built.text,
       checksum: built.checksum,
-      name: d.name,
+      name,
       tick: built.file.tick,
       savedAt,
       recipeId: d.world.content.provenance.recipeId,
       ...(variant ? { variant } : {}),
       ...slotMetaCopies(built.file),
       worldId: built.file.state.worldId,
-      ...(own !== undefined && activeRecord !== undefined ? { activeSlot: own, activeRecord } : {}),
-    });
+      ...(binding ? { activeSlot: binding.slot, activeRecord: binding.record } : {}),
+    };
+  }
+
+  /**
+   * An autosave event: every 30 s while a dish is open, going to the background, leaving the page
+   * (SPEC §14.2), and after a manual save or a recorded journal note. D-0033 fix round 3: Continue is
+   * written unless it already holds exactly the file this write would make. That is the test D-0033 (b)
+   * uses for keeping, never a dirty flag: a change path that forgot to set a flag would skip a changed
+   * dish, and the checksum cannot. "Exactly" is `holdsSave` (src/persistence/store.ts): Continue's current
+   * index record equals, field for field, the record this write would make, apart from the write time and
+   * the storage bookkeeping:
+   * - the same checksum over the canonical serialized world, so every change a save holds counts (a
+   *   tick, a command placed while paused, a rename or pin, a journal note, a preset change);
+   * - the same name;
+   * - the same binding (activeSlot and activeRecord, as the write would record them);
+   * - the same index copies (tick, recipe, world id, variant, evolution, registry).
+   * The file is built at every event, and nothing is written for an unchanged dish (the store stays
+   * byte-identical). The reply says whether it wrote.
+   */
+  private async autosave(msg: Extract<ToWorker, { type: 'autosave' }>): Promise<void> {
+    const d = this.need(msg.dishId);
+    if (!this.store) throw new Error('Saving is unavailable on this device.');
+    const name = d.name;
+    const savedAt = this.iso();
+    // D-0033: the autosave remembers the slot its dish is bound to, so Continue reopens it bound again,
+    // and (fix round 1) that slot's record as it stands before this state is taken: Continue is bound
+    // again only while the slot still holds exactly that record, so an older Continue never replaces
+    // a newer save in the slot. Read first: the file below is serialized after it, never before.
+    const own = this.ownSlots[d.id];
+    const ownRecord = own !== undefined ? (await this.store.slot(own))?.current : undefined;
+    const built = await buildSaveFile(d.world, { name, savedAt, recipeId: d.world.content.provenance.recipeId });
+    const req = this.saveRequest(d, AUTOSAVE_SLOT, name, savedAt, built, own !== undefined && ownRecord !== undefined ? { slot: own, record: ownRecord } : undefined);
+    const held = await this.store.slot(AUTOSAVE_SLOT);
+    if (held !== null && holdsSave(held, req)) {
+      this.post({ type: 'slotSaved', requestId: msg.requestId, slot: this.describeSlot(held), wrote: false });
+      return;
+    }
+    const info = await this.store.save(req);
+    this.post({ type: 'slotSaved', requestId: msg.requestId, slot: this.describeSlot(info), wrote: true });
   }
 
   /**
@@ -1816,13 +1858,13 @@ export class DishHost {
         } else {
           slotId = own !== undefined && own !== options.exclude ? own : await this.store.freeSlot();
           if (slotId === null) {
-            throw new WhatIfRefusal('slots-full', `All ten save slots are used, so "${d.name}" has nowhere to go. Export it as a file or choose a save to replace. Nothing has changed.`);
+            throw new WhatIfRefusal('slots-full', `All ten save slots are used, so “${d.name}” has nowhere to go. Export it as a file or choose a save to replace. Nothing has changed.`);
           }
         }
         try {
           written = await this.writeBuilt(d, slotId, savedAt, built);
         } catch (e) {
-          throw new WhatIfRefusal('save-failed', `"${d.name}" could not be saved, so ${NOT_DONE[options.action]}. Your saves are unchanged. (${e instanceof Error ? e.message : String(e)})`);
+          throw new WhatIfRefusal('save-failed', `“${d.name}” could not be saved, so ${NOT_DONE[options.action]}. Your saves are unchanged. (${e instanceof Error ? e.message : String(e)})`);
         }
         this.ownSlots[d.id] = slotId;
       }
@@ -2033,7 +2075,7 @@ export class DishHost {
     const packed = packEntities(w, null, null);
     const deposits = packDeposits(w, null);
     const overlay = d.overlay ? packOverlay(w, d.overlay, null) : null;
-    const events = visualEvents(w.events.ring, d.lastEventId);
+    const events = visualEvents(w.events.ring, d.lastEventId, w.content.modules);
     const lv = d.lineageView;
     const lineage: LineageMarks | null = lv ? { locus: lv.locus, branch: lv.branch, ...packLineageMarks(w, lv.locus, lv.branch) } : null;
     d.lastEventId = w.counters.nextEventId - 1;

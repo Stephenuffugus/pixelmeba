@@ -74,13 +74,18 @@ async function saveOverSlot1(page: Page): Promise<void> {
   await page.getByTestId('save-confirm').click();
   await page.getByRole('button', { name: 'Replace' }).click();
   await expect(page.getByTestId('save-confirm')).toHaveCount(0);
-  await expectToast(page, 'Saved "Little Living Garden".', mark);
+  await expectToast(page, 'Saved “Little Living Garden”.', mark);
+}
+
+/** A save's moment as Saved dishes and Home name it: the dish clock (D-0033 J; fix round 3). */
+function atClock(seconds: number): string {
+  return `at ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} dish time`;
 }
 
 /**
  * The app going to the background autosaves (src/ui/main.tsx): the page reports itself hidden once.
- * Resolves when Saved dishes lists Continue at that moment (no named slot is written). The seconds are
- * matched whole ("0 s simulated" is not "10 s simulated"; fix round 2).
+ * Resolves when Saved dishes lists Continue at that moment (no named slot is written). The moment is
+ * matched whole ("at 0:00 dish time" is not "at 10:00 dish time"; fix round 2).
  */
 async function backgroundAutosave(page: Page, seconds: number): Promise<void> {
   await page.evaluate(() => {
@@ -90,7 +95,7 @@ async function backgroundAutosave(page: Page, seconds: number): Promise<void> {
   });
   await openSavedDishes(page);
   const row = page.locator('li[data-slot="autosave"]');
-  const moment = new RegExp(`(?:^|[^0-9])${seconds} s simulated`);
+  const moment = new RegExp(`(?:^|[^0-9])${atClock(seconds)}`);
   await expect
     .poll(
       async () => {
@@ -182,8 +187,9 @@ test('New Dish → Create keeps the changed Garden in a slot first and says so; 
   await openSavedDishes(page);
   const row = page.locator('li[data-slot="slot1"]');
   await expect(row).toContainText('Little Living Garden');
-  await expect(row).toContainText(`${t} s simulated`);
+  await expect(row).toContainText(atClock(t));
   await expect(row.getByTestId('slot-number')).toHaveText('Slot 1');
+  await expectTextAtLeast16px(page, '[data-testid="slot-moment"]'); // fix round 3 (D-0033 J): the dish clock, body size
   await expectNoSeriousA11yViolations(page);
 
   // "My dish" has not run: it rebuilds exactly, so opening the save writes nothing and says nothing
@@ -210,7 +216,7 @@ test('New Dish → Create keeps the changed Garden in a slot first and says so; 
   await expect(page.getByTestId('sim-time')).toHaveText(alive);
   await expectToast(page, 'Saved “My dish” to Slot 2 first. Opened “Little Living Garden” — paused where you left it.');
   await openSavedDishes(page);
-  await expect(page.locator('li[data-slot="slot2"]')).toContainText(`${mine} s simulated`);
+  await expect(page.locator('li[data-slot="slot2"]')).toContainText(atClock(mine));
   await expect(page.locator('li[data-slot="slot2"]').getByTestId('slot-number')).toHaveText('Slot 2');
 });
 
@@ -235,7 +241,7 @@ test('Play shelf Start keeps a changed dish first; a dish already saved exactly 
   await expectNewGarden(page);
   await expectToast(page, 'Saved “Little Living Garden” to Slot 2 first.', mark);
   await openSavedDishes(page);
-  await expect(page.locator('li[data-slot="slot2"]')).toContainText(`${t} s simulated`);
+  await expect(page.locator('li[data-slot="slot2"]')).toContainText(atClock(t));
   await expect(page.locator('li[data-slot]').filter({ has: page.getByTestId('slot-delete') })).toHaveCount(3); // slot 1, slot 2, autosave
 
   // Fix round 1 (player verifier MAJOR 1): an untouched Garden rebuilds exactly, so restarting it again
@@ -329,8 +335,8 @@ test('all ten slots used: starting shows the Keep sheet; Cancel keeps the dish o
   await expectNewGarden(page);
   await expectToast(page, 'Saved “Little Living Garden” to Slot 3 first, in place of “Little Living Garden” (0:00).');
   await openSavedDishes(page);
-  await expect(page.locator('li[data-slot="slot3"]')).toContainText(`${t} s simulated`);
-  await expect(page.locator('li[data-slot="slot4"]')).toContainText('0 s simulated');
+  await expect(page.locator('li[data-slot="slot3"]')).toContainText(atClock(t));
+  await expect(page.locator('li[data-slot="slot4"]')).toContainText(atClock(0));
 });
 
 test('all ten slots used, Saved dishes → Open its own save: that save cannot be replaced; export, then it opens (100 % text)', async ({ page }) => {
@@ -377,7 +383,7 @@ test('all ten slots used, Saved dishes → Open its own save: that save cannot b
   await expectToast(page, '“Little Living Garden” is in the file you exported. Opened “Little Living Garden” — paused where you left it.');
   await openSavedDishes(page);
   // All ten saves are as they were (0:00): no named slot was written for the dish that was open.
-  await expect(page.locator('li[data-slot^="slot"]').filter({ hasText: /(?:^|[^0-9])0 s simulated/ })).toHaveCount(10);
+  await expect(page.locator('li[data-slot^="slot"]').filter({ hasText: atClock(0) })).toHaveCount(10);
 });
 
 test('Saved dishes → Open another save keeps the changed open dish first, then opens the save as it was', async ({ page }) => {
@@ -397,7 +403,7 @@ test('Saved dishes → Open another save keeps the changed open dish first, then
   await expect(page.getByTestId('sim-time')).toHaveText(saved);
   await expectToast(page, 'Saved “Little Living Garden” to Slot 2 first. Opened “Little Living Garden” — paused where you left it.');
   await openSavedDishes(page);
-  await expect(page.locator('li[data-slot="slot2"]')).toContainText(`${t} s simulated`);
+  await expect(page.locator('li[data-slot="slot2"]')).toContainText(atClock(t));
 });
 
 test('Import over a running dish pauses it, keeps it first, then opens the file', async ({ page }, testInfo) => {
@@ -471,7 +477,7 @@ test('after a relaunch, starting a dish keeps the dish Continue holds first; New
   const alive = await page.getByTestId('sim-time').innerText();
   await backgroundAutosave(page, t); // only Continue holds it; no named slot
   await page.reload();
-  await expect(page.getByRole('region', { name: 'Continue' })).toContainText(`Little Living Garden — ${t} s simulated. Opens paused.`);
+  await expect(page.getByRole('region', { name: 'Continue' })).toContainText(`Little Living Garden — ${atClock(t)}. Opens paused.`);
 
   await page.getByTestId('home-new').click();
   const plan = page.getByTestId('new-dish-replaces');
@@ -485,7 +491,7 @@ test('after a relaunch, starting a dish keeps the dish Continue holds first; New
   await expectNewGarden(page);
   await expectToast(page, 'Saved “Little Living Garden” from Continue to Slot 1 first.');
   await openSavedDishes(page);
-  await expect(page.locator('li[data-slot="slot1"]')).toContainText(`${t} s simulated`);
+  await expect(page.locator('li[data-slot="slot1"]')).toContainText(atClock(t));
   // The new Garden has not run: opening Slot 1 writes nothing for it, and the dish is as it was left.
   await page.locator('li[data-slot="slot1"]').getByRole('button', { name: 'Open' }).click();
   await expect(page.getByTestId('sim-time')).toHaveText(alive);
@@ -505,7 +511,7 @@ test('Duplicate keeps the original first, says where it is, and the original ope
   await expectToast(page, 'Duplicated. You are now in the copy; the original was saved to Slot 1.');
   await runFor(page, 1);
   await openSavedDishes(page);
-  await expect(page.locator('li[data-slot="slot1"]')).toContainText(`${t} s simulated`);
+  await expect(page.locator('li[data-slot="slot1"]')).toContainText(atClock(t));
   await page.locator('li[data-slot="slot1"]').getByRole('button', { name: 'Open' }).click();
   await expect(title(page)).toHaveText('Little Living Garden');
   await expect(page.getByTestId('sim-time')).toHaveText(alive);
@@ -608,7 +614,7 @@ test('after a relaunch the dish Continue holds is kept once: the new Garden, lef
 
   // Launch 3: Home offers the Garden opened last; starting anew writes nothing and says nothing.
   await page.reload();
-  await expect(page.getByRole('region', { name: 'Continue' })).toContainText('Little Living Garden — 0 s simulated. Opens paused.');
+  await expect(page.getByRole('region', { name: 'Continue' })).toContainText(`Little Living Garden — ${atClock(0)}. Opens paused.`);
   mark = (await toasts(page)).length;
   await page.getByTestId('home-play').click();
   await page.getByTestId('start-garden').click();
@@ -617,7 +623,7 @@ test('after a relaunch the dish Continue holds is kept once: the new Garden, lef
   expect((await toasts(page)).slice(mark).filter((x) => x.includes('first'))).toEqual([]);
   await openSavedDishes(page);
   await expect(page.locator('li[data-slot^="slot"]')).toHaveCount(1); // Slot 1 only: no second copy
-  await expect(page.locator('li[data-slot="slot1"]')).toContainText(`${t} s simulated`);
+  await expect(page.locator('li[data-slot="slot1"]')).toContainText(atClock(t));
 });
 
 test('Saved dishes → Open the same save on two launches: the later Continue is kept once, and the save opens as it was both times', async ({
@@ -653,8 +659,8 @@ test('Saved dishes → Open the same save on two launches: the later Continue is
   expect((await toasts(page)).slice(mark).filter((x) => x.includes('first'))).toEqual([]);
   await openSavedDishes(page);
   await expect(page.locator('li[data-slot^="slot"]')).toHaveCount(2); // Slot 1 and Slot 2: no copy
-  await expect(page.locator('li[data-slot="slot1"]')).toContainText(`${s1} s simulated`);
-  await expect(page.locator('li[data-slot="slot2"]')).toContainText(`${t} s simulated`);
+  await expect(page.locator('li[data-slot="slot1"]')).toContainText(atClock(s1));
+  await expect(page.locator('li[data-slot="slot2"]')).toContainText(atClock(t));
 });
 
 test('a paired card started over a changed dish: the kept line is in the run setup panel (16 px), never a toast; Saved dishes lists the dish', async ({ page }) => {
@@ -683,4 +689,121 @@ test('a paired card started over a changed dish: the kept line is in the run set
   await openSavedDishes(page);
   await expect(page.locator('li[data-slot="slot1"]')).toContainText('Little Living Garden');
   await expect(page.locator('li[data-slot^="slot"]')).toHaveCount(1);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Fix round 3 (lead rulings on D-0033: E, J, K).
+
+/** What expectToastFits measures, taken the moment the toast appears (see watchToast). */
+interface ToastFit {
+  readonly zoom: boolean;
+  readonly shortAt200: boolean;
+  readonly fontSize: number;
+  readonly body: number;
+  readonly inside: boolean;
+  readonly clipped: boolean;
+  readonly bars: string[];
+  readonly blocked: string[];
+}
+
+/**
+ * Measure the dish screen's toast with exactly `text` the moment it appears (a MutationObserver, armed
+ * before the action that shows it): a toast lasts a few seconds, and a slow project can outlast it.
+ */
+async function watchToast(page: Page, text: string): Promise<void> {
+  await page.evaluate((want) => {
+    const w = window as unknown as { __toastFit: unknown };
+    w.__toastFit = null;
+    const measure = (el: HTMLElement) => {
+      const r = el.getBoundingClientRect();
+      const vp = el.closest('[data-testid="viewport"]')!.getBoundingClientRect();
+      const overlaps = (b: DOMRect) => r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top;
+      const blocked: string[] = [];
+      for (const c of Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"], a[href], input, select, textarea'))) {
+        const b = c.getBoundingClientRect();
+        if (b.width === 0 || b.height === 0 || c.closest('[inert]') || !overlaps(b)) continue;
+        const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+        if (hit && el.contains(hit)) blocked.push(c.getAttribute('aria-label') ?? c.textContent?.trim() ?? c.tagName);
+      }
+      const zoom = document.querySelector('.zoom-buttons');
+      return {
+        zoom: zoom !== null && overlaps(zoom.getBoundingClientRect()),
+        shortAt200: window.innerHeight <= 480 && document.documentElement.dataset.textScale === '2',
+        fontSize: parseFloat(getComputedStyle(el).fontSize),
+        body: parseFloat(getComputedStyle(document.documentElement).fontSize),
+        inside: r.top >= vp.top - 0.5 && r.bottom <= vp.bottom + 0.5 && r.left >= vp.left - 0.5 && r.right <= vp.right + 0.5,
+        clipped: el.scrollHeight - el.clientHeight > 1 || el.scrollWidth - el.clientWidth > 1,
+        bars: ['.topbar', '.bottombar'].filter((sel) => {
+          const bar = document.querySelector(sel);
+          return bar !== null && overlaps(bar.getBoundingClientRect());
+        }),
+        blocked,
+      };
+    };
+    const obs = new MutationObserver(() => {
+      const el = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="viewport"] .toast')).find((e) => e.textContent === want);
+      if (!el || w.__toastFit) return;
+      w.__toastFit = measure(el);
+      obs.disconnect();
+    });
+    obs.observe(document.body, { subtree: true, childList: true, characterData: true });
+  }, text);
+}
+
+/**
+ * The toast watchToast measured: body size (UX §4.1: at least 16 px; D-0033 E), wholly inside the dish
+ * view (no line clipped), clear of the top and bottom bars, and no control under it loses its press (the
+ * toast never takes a pointer that a visible control would get). It also keeps clear of the zoom buttons,
+ * except in a short window at 200 % text (a phone held sideways), where it uses the whole width of the
+ * dish view so that no word is cut off (the zoom buttons still take their presses).
+ */
+async function expectToastFits(page: Page): Promise<void> {
+  let m: ToastFit | null = null;
+  await expect
+    .poll(
+      async () => {
+        m = await page.evaluate(() => (window as unknown as { __toastFit: ToastFit | null }).__toastFit);
+        return m !== null;
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  const fit = m as unknown as ToastFit;
+  expect(fit.fontSize).toBeGreaterThanOrEqual(16);
+  expect(fit.fontSize).toBe(fit.body); // var(--fs-body): 1rem, which follows the text size setting
+  expect({ inside: fit.inside, clipped: fit.clipped, bars: fit.bars, blocked: fit.blocked }).toEqual({ inside: true, clipped: false, bars: [], blocked: [] });
+  if (!fit.shortAt200) expect(fit.zoom).toBe(false);
+}
+
+test('dish-screen toasts are body size and fit at 200 % text without covering a control; Saved dishes and Home name a save on the dish clock', async ({
+  page,
+}) => {
+  test.setTimeout(420_000);
+  await recordToasts(page);
+  await startGarden(page, { textScale: 2 });
+  const s1 = await runFor(page, 1);
+  // A manual save: the short toast, with curly quotes (D-0033 K).
+  const mark = (await toasts(page)).length;
+  await saveToFirstEmpty(page);
+  await expectToast(page, 'Saved “Little Living Garden”.', mark);
+  const t = await runFor(page, s1 + 1);
+  // Open Slot 1 over the changed dish: the longest keep line, as one toast.
+  await openSavedDishes(page);
+  await expect(page.locator('li[data-slot="slot1"]').getByTestId('slot-moment')).toContainText(atClock(s1));
+  await expect(page.locator('li[data-slot="autosave"]').getByTestId('slot-moment')).toContainText(/^at \d+:\d\d dish time · /);
+  await expectTextAtLeast16px(page, 'li[data-slot]');
+  await watchToast(page, 'Saved “Little Living Garden” to Slot 2 first. Opened “Little Living Garden” — paused where you left it.');
+  await page.locator('li[data-slot="slot1"]').getByRole('button', { name: 'Open' }).click();
+  await expectToastFits(page);
+  await expectNoHorizontalOverflow(page);
+  // Home's Continue card names the dish Continue holds on the dish clock (after a relaunch, no dish open).
+  await backgroundAutosave(page, s1);
+  await page.reload();
+  await expect(page.getByTestId('home-continue-text')).toHaveText(`Little Living Garden — ${atClock(s1)}. Opens paused.`);
+  await expectTextAtLeast16px(page, '[data-testid="home-continue-text"]');
+  await expectReachable(page.getByTestId('home-continue'));
+  await expectNoSeriousA11yViolations(page);
+  await page.getByRole('button', { name: 'Saved dishes' }).click();
+  await expect(page.locator('li[data-slot="slot2"]').getByTestId('slot-moment')).toContainText(atClock(t));
+  await expectNoSeriousA11yViolations(page);
 });

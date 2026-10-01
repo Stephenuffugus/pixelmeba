@@ -434,10 +434,10 @@ describe('checkpoint wording (fix round 2)', () => {
     expect(checkpointSettingText({ type: 'checkpoint', dishId: 'd', tick: 1200, ok: true, kept: 2 })).toBe(' Latest: at 2:00 dish time (2 kept).');
     const branch = { fromName: 'Little Living Garden', tick: 600 };
     expect(checkpointOpenedText(branch, 'Little Living Garden (from 1:00)')).toBe(
-      'Opened the automatic checkpoint of "Little Living Garden" at 1:00 as a new branch, "Little Living Garden (from 1:00)", paused. Continue now follows this branch.',
+      'Opened the automatic checkpoint of “Little Living Garden” at 1:00 as a new branch, “Little Living Garden (from 1:00)”, paused. Continue now follows this branch.',
     );
     expect(checkpointOpenedText(branch, 'Little Living Garden (from 1:00)', false)).toBe(
-      'Opened the automatic checkpoint of "Little Living Garden" at 1:00 as a new branch, "Little Living Garden (from 1:00)", paused. Continue could not be updated, so it still opens the dish it held before.',
+      'Opened the automatic checkpoint of “Little Living Garden” at 1:00 as a new branch, “Little Living Garden (from 1:00)”, paused. Continue could not be updated, so it still opens the dish it held before.',
     );
   });
 });

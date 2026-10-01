@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { SlotSummary } from '@worker/protocol';
 import { IconGuide, IconLab, IconNotebook, IconPlay, IconSave, IconSettings } from '../icons';
-import { dishInfo, getClient, loadSlot, route } from '../state';
+import { continueCardText, dishInfo, getClient, loadSlot, route } from '../state';
 import { evolution } from '../state';
 import { slotModesLine, worldModesLine } from '../strings/modes';
 import { journalUnseen } from '../journal';
@@ -38,9 +38,8 @@ export function Home() {
         ) : auto ? (
           <section class="card" aria-label="Continue">
             <h2>Continue</h2>
-            <p>
-              {auto.name} — {Math.floor(auto.tick / 10)} s simulated. Opens paused.
-            </p>
+            {/* D-0033 J: the dish clock, as Saved dishes names the same save. */}
+            <p data-testid="home-continue-text">{continueCardText(auto.name, auto.tick)}</p>
             {slotModesLine(auto.modes) ? (
               <p class="world-modes" data-testid="home-continue-modes">
                 {slotModesLine(auto.modes)}

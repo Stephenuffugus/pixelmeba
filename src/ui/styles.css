@@ -477,19 +477,56 @@ textarea {
   border-radius: 0;
   min-width: 56px;
 }
+/*
+ * A toast is a one-line result (UX §9 live region), never a control. D-0033 E (fix round 3): body text
+ * (UX §4.1: at least 16 px, so it grows with the text size); it takes no press, so a control under it
+ * always works; it stays inside the area it sits in, and its frame is in px so that at 200 % text the
+ * room goes to the words (the longest keep line fits a phone held sideways).
+ */
 .toast {
   position: absolute;
   left: 50%;
-  top: 0.75rem;
+  top: 0.5rem;
   transform: translateX(-50%);
   background: var(--text);
   color: var(--surface);
-  padding: 0.5rem 0.9rem;
+  padding: 8px 14px;
   border-radius: 999px;
-  font-size: var(--fs-small);
+  font-size: var(--fs-body);
+  line-height: 1.3;
   z-index: 8;
   box-shadow: var(--shadow);
-  max-width: 90%;
+  max-width: calc(100% - 1rem);
+  max-height: calc(100% - 1rem);
+  overflow: hidden;
+  pointer-events: none;
+}
+/*
+ * In the dish view a toast keeps clear of the zoom buttons' column (48 px buttons, 8 px from the edge),
+ * centred in the rest of the view.
+ */
+.viewport > .toast {
+  left: 0.5rem;
+  right: calc(48px + 16px);
+  transform: none;
+  margin-inline: auto;
+  width: fit-content;
+  max-width: none;
+}
+/*
+ * Except in a short window at 200 % text (a phone held sideways): beside the zoom buttons the longest
+ * lines would be cut off, so the toast uses the whole width of the dish view. It then lies over the zoom
+ * buttons, which keep taking their presses (a toast takes none).
+ */
+@media (max-height: 480px) {
+  :root[data-text-scale='2'] .viewport > .toast {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    margin-inline: 0;
+    width: max-content;
+    max-width: calc(100% - 1rem);
+  }
 }
 .prompt {
   pointer-events: none;

@@ -228,8 +228,10 @@ export function deltaText(r: LineageRecordRow, loci: readonly LineageLocus[]): s
   if (r.mutFlags & MUT_QUANT && r.mutDelta !== 0) out.push(`inherited ${lower(loci[r.mutLocus]?.name ?? 'a trait')} ${signed(r.mutDelta)}`);
   if (r.mutFlags & MUT_POLICY_ESTABLISHED) out.push('began mixing its foods by weight');
   else if (r.mutFlags & MUT_PREF) out.push('inherited a shifted food preference');
-  if (r.mutFlags & MUT_MODULE_GAIN && r.mutModule) out.push(`gained ${r.mutModule}`);
-  if (r.mutFlags & MUT_MODULE_LOSS && r.mutModule) out.push(`lost ${r.mutModule}`);
+  // The ability by its recorded content name, with its id (D-0034 label ruling: "gained Reserve chamber (E05)").
+  const ability = r.mutModule ? (r.mutModuleName ? `${r.mutModuleName} (${r.mutModule})` : r.mutModule) : null;
+  if (r.mutFlags & MUT_MODULE_GAIN && ability) out.push(`gained ${ability}`);
+  if (r.mutFlags & MUT_MODULE_LOSS && ability) out.push(`lost ${ability}`);
   return out.length > 0 ? out.join(', ') : 'no inherited change';
 }
 

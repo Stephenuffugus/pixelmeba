@@ -199,14 +199,14 @@ test('observe: regional trait graphs and table, automatic checkpoint at 4×, ope
   await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
   await expect(
     page.getByRole('status').filter({
-      hasText: 'Opened the automatic checkpoint of "Little Living Garden" at 1:00 as a new branch, "Little Living Garden (from 1:00)", paused. Continue now follows this branch.',
+      hasText: 'Opened the automatic checkpoint of “Little Living Garden” at 1:00 as a new branch, “Little Living Garden (from 1:00)”, paused. Continue now follows this branch.',
     }),
   ).toBeVisible();
   // It does, at once (fix round 2: Continue used to keep the old dish until the branch ran): after a
   // reload, Continue opens the branch at 1:00.
   await page.reload();
   const continueCard = page.getByRole('region', { name: 'Continue' });
-  await expect(continueCard).toContainText('Little Living Garden (from 1:00) — 60 s simulated. Opens paused.');
+  await expect(continueCard).toContainText('Little Living Garden (from 1:00) — at 1:00 dish time. Opens paused.');
   await page.getByTestId('home-continue').click();
   await expect(page.getByTestId('dish-screen')).toBeVisible();
   await expect(page.getByTestId('sim-time')).toContainText('1:00');

@@ -197,7 +197,7 @@ describe('D-0033: every replacing action keeps the open dish first', () => {
       const r = await act(h, auto('cur'));
       if (r.ok) throw new Error('expected a refusal');
       expect(r.reply.code).toBe('slots-full');
-      expect(r.reply.message).toBe('All ten save slots are used, so "FIRST_DISH_V1" has nowhere to go. Export it as a file or choose a save to replace. Nothing has changed.');
+      expect(r.reply.message).toBe('All ten save slots are used, so “FIRST_DISH_V1” has nowhere to go. Export it as a file or choose a save to replace. Nothing has changed.');
       expect(h.storeState()).toBe(stored);
       expect(h.host.activeDishId).toBe('cur');
       expect(h.world('cur').tick).toBe(tick);
@@ -219,7 +219,7 @@ describe('D-0033: every replacing action keeps the open dish first', () => {
       const r = await act(h, auto('cur'));
       if (r.ok) throw new Error('expected a refusal');
       expect(r.reply.code).toBe('save-failed');
-      expect(r.reply.message).toMatch(/^"FIRST_DISH_V1" could not be saved, so the (new dish|experiment|file|saved dish) was not (started|opened)\. Your saves are unchanged\. \(simulated write failure\)$/);
+      expect(r.reply.message).toMatch(/^“FIRST_DISH_V1” could not be saved, so the (new dish|experiment|file|saved dish) was not (started|opened)\. Your saves are unchanged\. \(simulated write failure\)$/);
       expect(h.storeState()).toBe(stored);
       expect(h.host.activeDishId).toBe('cur');
       expect(h.hash('cur')).toBe(before);
@@ -939,7 +939,7 @@ describe('Fix round 1: with no dish open, the dish Continue holds is kept first 
     const r = await ACTIONS.open(s, none());
     if (r.ok) throw new Error('expected a refusal');
     expect(r.reply).toMatchObject({ code: 'save-failed', fromContinue: true });
-    expect(r.reply.message).toBe('"FIRST_DISH_V1" could not be saved, so the saved dish was not opened. Your saves are unchanged. (simulated write failure)');
+    expect(r.reply.message).toBe('“FIRST_DISH_V1” could not be saved, so the saved dish was not opened. Your saves are unchanged. (simulated write failure)');
     expect(s.storeState()).toBe(stored);
     expect(s.host.activeDishId).toBeNull();
     const again = await ACTIONS.open(s, none());
@@ -1014,7 +1014,7 @@ describe('Fix round 1: Duplicate keeps the original first (player verifier MINOR
     failing.backend.failNextCommit = true;
     const d = await duplicate(failing, auto('cur'));
     expect(d).toMatchObject({ type: 'keepRefused', code: 'save-failed' });
-    expect((d as Of<'keepRefused'>).message).toBe('"FIRST_DISH_V1" could not be saved, so the copy was not made. Your saves are unchanged. (simulated write failure)');
+    expect((d as Of<'keepRefused'>).message).toBe('“FIRST_DISH_V1” could not be saved, so the copy was not made. Your saves are unchanged. (simulated write failure)');
     expect(failing.host.world('copy')).toBeNull();
   });
 });

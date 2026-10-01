@@ -4,6 +4,7 @@
  * updated slot pointer land together or not at all, so a failed write can never lose the previous
  * save. Records are gzip-compressed save-file text.
  */
+import { canonicalJson } from '@sim/hash';
 import { gunzipText, gzipText } from './compress';
 import type { SaveMetaVariant } from './saveFile';
 import type { SaveMetaEvolution, SaveMetaRegistry } from './saveFile';
@@ -105,6 +106,64 @@ export interface SaveRequest {
 
 let recordCounter = 0;
 
+/**
+ * What only a write decides about a slot's index record: the write time and the storage bookkeeping
+ * (the record ids and the compressed size).
+ */
+export interface SlotBookkeeping {
+  readonly savedAt: string;
+  readonly current: string;
+  readonly previous: string | null;
+  readonly bytes: number;
+}
+
+/**
+ * The index record `SaveStore.save(req)` writes, given what only the write decides (D-0033 fix round 3).
+ * `save` builds its record with this function, so a comparison made with it (`holdsSave`) covers every
+ * field a write sets, including any field added later.
+ */
+export function slotRecordFor(req: SaveRequest, book: SlotBookkeeping): SlotInfo {
+  return {
+    slotId: req.slotId,
+    name: req.name,
+    tick: req.tick,
+    savedAt: book.savedAt,
+    recipeId: req.recipeId,
+    current: book.current,
+    previous: book.previous,
+    bytes: book.bytes,
+    checksum: req.checksum,
+    ...(req.variant ? { variant: req.variant } : {}),
+    ...(req.evolution ? { evolution: req.evolution } : {}),
+    ...(req.registry ? { registry: req.registry } : {}),
+    ...(req.worldId !== undefined ? { worldId: req.worldId } : {}),
+    ...(req.activeSlot !== undefined && req.slotId === AUTOSAVE_SLOT ? { activeSlot: req.activeSlot } : {}),
+    ...(req.activeRecord !== undefined && req.activeSlot !== undefined && req.slotId === AUTOSAVE_SLOT ? { activeRecord: req.activeRecord } : {}),
+  };
+}
+
+/**
+ * D-0033 fix round 3: `held` (a slot's current index record) is exactly the record `save(req)` would
+ * write now, apart from the write time and the storage bookkeeping (`SlotBookkeeping`). That covers:
+ * - the checksum: the save file's SHA-256 over the canonical serialized world (state, history with the
+ *   journal, command log, lineage and branch records, provenance; the tick and world id are in it);
+ * - the name (save meta, outside the checksum);
+ * - for the autosave, the binding: `activeSlot` and `activeRecord`, both absent when it is bound to none;
+ * - the index copies: tick, recipeId, worldId and the meta copies variant, evolution and registry.
+ * Compared field for field as canonical JSON; a field `held` has and the write would not set (an older
+ * or newer index) makes them differ. The index is trusted as D-0033's 'saved' rule trusts it: the
+ * records themselves are not read.
+ */
+export function holdsSave(held: SlotInfo, req: SaveRequest): boolean {
+  if (held.slotId !== req.slotId) return false;
+  const want = slotRecordFor(req, { savedAt: held.savedAt, current: held.current, previous: held.previous, bytes: held.bytes });
+  try {
+    return canonicalJson(want) === canonicalJson(held);
+  } catch {
+    return false; // not comparable (a malformed index value): treated as different, so it is written
+  }
+}
+
 export class SaveStore {
   /** The backend is shared with the checkpoint ring, which writes through the same atomic commit (P2.8). */
   constructor(readonly backend: StorageBackend) {}
@@ -123,23 +182,7 @@ export class SaveStore {
     const data = await gzipText(req.text);
     const recordId = `${req.slotId}:${req.savedAt}:${(++recordCounter).toString(36)}`;
     const old = await this.backend.getSlot(req.slotId);
-    const info: SlotInfo = {
-      slotId: req.slotId,
-      name: req.name,
-      tick: req.tick,
-      savedAt: req.savedAt,
-      recipeId: req.recipeId,
-      current: recordId,
-      previous: old?.current ?? null,
-      bytes: data.byteLength,
-      checksum: req.checksum,
-      ...(req.variant ? { variant: req.variant } : {}),
-      ...(req.evolution ? { evolution: req.evolution } : {}),
-      ...(req.registry ? { registry: req.registry } : {}),
-      ...(req.worldId !== undefined ? { worldId: req.worldId } : {}),
-      ...(req.activeSlot !== undefined && req.slotId === AUTOSAVE_SLOT ? { activeSlot: req.activeSlot } : {}),
-      ...(req.activeRecord !== undefined && req.activeSlot !== undefined && req.slotId === AUTOSAVE_SLOT ? { activeRecord: req.activeRecord } : {}),
-    };
+    const info = slotRecordFor(req, { savedAt: req.savedAt, current: recordId, previous: old?.current ?? null, bytes: data.byteLength });
     // The record older than the retained predecessor is removed in the same transaction.
     const deleteRecords = old?.previous ? [old.previous] : [];
     await this.backend.commit({ putRecords: [{ recordId, data, checksum: req.checksum }], putSlots: [info], deleteRecords, deleteSlots: [] });

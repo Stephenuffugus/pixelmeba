@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { SlotSummary, WhatIfPlan } from '@worker/protocol';
 import { IconBack } from '../icons';
 import { busy, getClient, importFile, keepPlanNow, loadSlot, route, showToast } from '../state';
-import { dishClock, dishInfo, meta } from '../state';
+import { atDishTime, dishClock, dishInfo, meta } from '../state';
 import { savedIdeaLine, slotNumber } from '../strings/whatif';
 import { slotModesLine } from '../strings/modes';
 import { keepPlanText } from '../strings/keep';
@@ -90,8 +90,9 @@ export function Saves() {
                       {slotModesLine(s.modes)}
                     </div>
                   ) : null}
-                  <div class="sub">
-                    {Math.floor(s.tick / 10)} s simulated · {when(s.savedAt)}
+                  {/* D-0033 J: the dish clock, as the checkpoint rows and the Keep sheet name a save's moment. */}
+                  <div class="sub" data-testid="slot-moment">
+                    {atDishTime(s.tick)} · {when(s.savedAt)}
                   </div>
                 </div>
                 {/* D-0033: an open dish is kept first (Open never writes into the save it opens). */}
@@ -274,7 +275,7 @@ function CheckpointList({
                   </div>
                 ) : null}
                 <div class="sub">
-                  at {at} dish time · {when(s.savedAt)}
+                  {atDishTime(s.tick)} · {when(s.savedAt)}
                 </div>
               </div>
               {confirmOpen === s.slotId && held ? (

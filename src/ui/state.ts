@@ -223,6 +223,12 @@ export function getRenderer(): DishRenderer | null {
   return renderer;
 }
 
+/** The open dish's recorded module names by id (its world's content, never this build's catalog). */
+function moduleNamesOf(info: DishInfo): (id: string) => string | undefined {
+  const modules = info.registry?.modules ?? [];
+  return (id) => modules.find((m) => m.id === id)?.name;
+}
+
 function onSnapshot(s: SnapshotMsg): void {
   const cmp = compareState.value;
   if (cmp && (s.dishId === cmp.aDishId || s.dishId === cmp.bDishId)) {
@@ -233,7 +239,7 @@ function onSnapshot(s: SnapshotMsg): void {
   if (s.geometry) lastGeometrySnapshot = s;
   lastSnapshot = s;
   renderer?.applySnapshot(s);
-  if (dishInfo.value) pushFeed(s.events, dishInfo.value.speciesNames);
+  if (dishInfo.value) pushFeed(s.events, dishInfo.value.speciesNames, moduleNamesOf(dishInfo.value));
   if (s.evolution) {
     evolution.value = s.evolution;
     syncEvolutionFeed(s.evolution);
@@ -304,20 +310,13 @@ function newDishId(): string {
   return `dish-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
 }
 
-/** No tick of the open dish has been autosaved yet (Continue holds another dish, or none). */
-const NOT_AUTOSAVED = -1;
-/** The tick of the open dish that Continue holds (the last autosave of it), or NOT_AUTOSAVED. */
-let lastAutosaveTick = NOT_AUTOSAVED;
-
 /**
- * Show a dish that was just opened or started. `continueHolds`: Continue already holds exactly this dish
- * at this moment (it was opened from Continue itself), so the next autosave has nothing to write until
- * it changes. Any other dish Continue does not hold yet: the next autosave (every 30 s, going to the
- * background, leaving the page) writes it even at an unchanged tick, so Continue is the last dish
- * (UX §2 "Home ─ Continue (last dish …)"). D-0033 fix round 2: a dish opened and left unrun used to leave
- * Continue on the dish before it, which Home then offered after the next launch.
+ * Show a dish that was just opened or started. The next autosave (every 30 s, going to the background,
+ * leaving the page) writes it to Continue unless Continue already holds exactly its file, so Continue is
+ * the last dish (UX §2 "Home ─ Continue (last dish …)"; D-0033 fix round 2) and a dish opened from
+ * Continue itself is not written again until it changes (the worker decides: see autosave).
  */
-function enterDish(info: DishInfo, promptText: string | null, continueHolds = false): void {
+function enterDish(info: DishInfo, promptText: string | null): void {
   clearFeed();
   evolution.value = null;
   batch(() => {
@@ -334,31 +333,35 @@ function enterDish(info: DishInfo, promptText: string | null, continueHolds = fa
     route.value = { name: 'dish' };
   });
   renderer?.setSpecies(info.speciesIds, info.speciesAssets);
-  lastAutosaveTick = continueHolds ? info.tick : NOT_AUTOSAVED;
   // P2.8: a dish opened from a save or a file brings its journal entries into this device's Notebook.
   void syncDishJournal(info.dishId);
 }
 
 /**
- * Autosave the active dish if it changed since the last autosave, or was never autosaved since it opened
- * (SPEC §14.2; enterDish). `force`: write even at an unchanged tick (a manual save is an autosave event
- * too, and a change made while paused — Add Life, a rename — keeps the tick: Continue must still follow
- * it; D-0033 fix round 1).
+ * An autosave event for the open dish (SPEC §14.2: every 30 s while it is open, going to the background,
+ * leaving the page; a manual save and a comparison's completion too). D-0033 fix round 3: the worker
+ * builds the dish's file and writes Continue unless Continue already holds exactly that file (same
+ * checksum over the canonical serialized world, same name, same binding; host `autosave`). The UI no
+ * longer skips an event because the tick has not moved: a change made while paused (Add Life, a Lab
+ * stroke, a rename or pin, a journal note, an evolution-setting change) keeps the tick, and it reaches
+ * Continue at the next event. An unchanged dish is never written again. Resolves false when the write
+ * failed (the previous Continue is intact).
  */
-export async function autosave(force = false): Promise<boolean> {
+export async function autosave(): Promise<boolean> {
   const info = dishInfo.value;
-  const m = meta.value;
-  if (!info || !m || (!force && m.tick === lastAutosaveTick)) return true;
+  if (!info) return true; // no dish open: nothing to autosave
   try {
-    const written = await getClient().autosave(info.dishId);
-    // The moment the worker wrote (the meta read above may still be the previous dish's), and only for
-    // the dish it wrote: another dish opened meanwhile is still not autosaved.
-    if (dishInfo.value?.dishId === info.dishId) lastAutosaveTick = written.tick;
+    await getClient().autosave(info.dishId);
     return true;
   } catch (e) {
     showToast(`Autosave failed; your previous save is intact. (${(e as Error).message})`, 4000);
     return false;
   }
+}
+
+/** The toast after a manual save (D-0033 K: a quoted dish name takes curly quotes). */
+export function savedToastText(name: string, continueUpdated: boolean): string {
+  return continueUpdated ? `Saved “${name}”.` : `Saved “${name}”, but Continue could not be updated; it still opens your previous autosave.`;
 }
 
 export async function saveToSlot(slotId: string, name: string): Promise<boolean> {
@@ -367,12 +370,12 @@ export async function saveToSlot(slotId: string, name: string): Promise<boolean>
   try {
     const s = await getClient().saveSlot(info.dishId, slotId, name);
     dishInfo.value = { ...info, name: s.name };
-    // A manual save is an autosave event too (SPEC §14.2), so Continue opens this same moment, even when
-    // the tick has not moved since the last autosave (D-0033 fix round 1: a Continue older than the slot
-    // it names is never bound to it again). Confirm only once both writes have landed: leaving the page
-    // right after "Saved" must not lose Continue.
-    if (await autosave(true)) showToast(`Saved "${s.name}".`);
-    else showToast(`Saved "${s.name}", but Continue could not be updated; it still opens your previous autosave.`, 4000);
+    // A manual save is an autosave event too (SPEC §14.2), so Continue opens this same moment (D-0033 fix
+    // round 1: a Continue older than the slot it names is never bound to it again; the slot's new record
+    // is a new binding, so the autosave writes). Confirm only once both writes have landed: leaving the
+    // page right after "Saved" must not lose Continue.
+    const continueUpdated = await autosave();
+    showToast(savedToastText(s.name, continueUpdated), continueUpdated ? 2600 : 4000);
     return true;
   } catch (e) {
     showToast(`Couldn't save; your previous save is intact. (${(e as Error).message})`, 4000);
@@ -396,17 +399,15 @@ export async function loadSlot(slotId: string, label = 'the saved dish'): Promis
       if (!r.ok) return r;
       const { info, usedPredecessor, branch } = r;
       if (old && old.dishId !== info.dishId) c.dispose(old.dishId);
-      // Continue holds exactly the dish opened from it (not an older copy read from its predecessor).
-      enterDish(info, null, slotId === 'autosave' && !usedPredecessor);
+      // The next autosave writes it unless Continue already holds exactly its file (opened from Continue
+      // itself, not from its predecessor): the worker compares (D-0033 fix round 3).
+      enterDish(info, null);
       // P2.8: an automatic checkpoint is not where the player left a dish: it opens as a new branch.
       if (branch) {
         // P2.8 fix round 2: Continue follows the branch from the moment it opens, as the confirm and the
         // toast say (not only at the next autosave).
         const followed = await c.autosave(info.dishId).then(
-          (written) => {
-            if (dishInfo.value?.dishId === info.dishId) lastAutosaveTick = written.tick;
-            return true;
-          },
+          () => true,
           () => false,
         );
         showToast(withKeptLine(r.kept, checkpointOpenedText(branch, info.name, followed), false), 6000);
@@ -1508,6 +1509,19 @@ export function dishClock(tick: number): string {
 }
 
 /**
+ * A save's moment as Saved dishes (Continue, the named slots and the automatic checkpoints) and Home's
+ * Continue card say it, on the dish clock (D-0033 J: one time format per save; was "5 s simulated").
+ */
+export function atDishTime(tick: number): string {
+  return `at ${dishClock(tick)} dish time`;
+}
+
+/** Home's Continue card while no dish is open: the dish Continue holds and its moment (D-0033 J). */
+export function continueCardText(name: string, tick: number): string {
+  return `${name} — ${atDishTime(tick)}. Opens paused.`;
+}
+
+/**
  * Settings' line about this session's latest automatic checkpoint (empty before the first). After a
  * refused or failed one it says what is still kept, and never claims earlier ones when there are none
  * (fix round 2).
@@ -1556,9 +1570,9 @@ export function keepJournalWithDish(entry: JournalEntry): void {
     .catch(() => undefined);
 }
 
-/** What opening an automatic checkpoint did, in words (Saved dishes → Open). */
+/** What opening an automatic checkpoint did, in words (Saved dishes → Open; D-0033 K: curly quotes). */
 export function checkpointOpenedText(branch: { readonly fromName: string; readonly tick: number }, name: string, followed = true): string {
-  return `Opened the automatic checkpoint of "${branch.fromName}" at ${dishClock(branch.tick)} as a new branch, "${name}", paused. ${
+  return `Opened the automatic checkpoint of “${branch.fromName}” at ${dishClock(branch.tick)} as a new branch, “${name}”, paused. ${
     followed ? 'Continue now follows this branch.' : 'Continue could not be updated, so it still opens the dish it held before.'
   }`;
 }

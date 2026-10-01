@@ -149,7 +149,11 @@ export function packOverlay(world: World, id: OverlayId, out: Float32Array | nul
   return { data: buf, max };
 }
 
-export function visualEvents(events: readonly SimEvent[], sinceId: number): VisualEvent[] {
+/**
+ * Events for the snapshot. `modules`: the world's recorded module list (D-0034 label ruling), so a
+ * 'mutation' event carries its recorded descriptor with the module's id, and the feed names the ability.
+ */
+export function visualEvents(events: readonly SimEvent[], sinceId: number, modules: readonly { readonly id: string }[] = []): VisualEvent[] {
   const out: VisualEvent[] = [];
   for (const ev of events) {
     if (ev.id <= sinceId) continue;
@@ -172,6 +176,15 @@ export function visualEvents(events: readonly SimEvent[], sinceId: number): Visu
       birthId: ev.birthId ?? 0,
       ...(ev.cause !== undefined ? { cause: ev.cause } : {}),
       ...(typeof ev.detail?.branch === 'number' ? { branch: ev.detail.branch } : {}),
+      ...(ev.type === 'mutation' && typeof ev.detail?.flags === 'number'
+        ? {
+            mutation: {
+              flags: ev.detail.flags,
+              delta: typeof ev.detail.delta === 'number' ? ev.detail.delta : 0,
+              module: typeof ev.detail.module === 'number' && ev.detail.module >= 0 ? (modules[ev.detail.module]?.id ?? null) : null,
+            },
+          }
+        : {}),
     });
   }
   return out;

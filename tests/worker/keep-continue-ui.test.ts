@@ -12,6 +12,9 @@
  *   next autosave, even at an unchanged tick (Continue then holds exactly that dish, bound to the slot
  *   it was opened from, the very file the slot holds);
  * - a dish opened from Continue itself is not written again until it changes (Continue holds it).
+ * Fix round 3: every autosave event now reaches the worker, which writes only when Continue does not
+ * already hold exactly the dish's file (tests/worker/keep-autosave.test.ts); so "not written" is read
+ * from the store (Continue's record and every byte), not from the requests the UI sent.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type * as UiState from '../../src/ui/state';
@@ -68,6 +71,16 @@ const openWorld = () => host.world(ui.dishInfo.value!.dishId)!;
 const openHash = () => stateHash(openWorld());
 /** Autosave requests the UI sent since `from`. */
 const autosavesSince = (from: number) => sent.slice(from).filter((m) => m.type === 'autosave').length;
+/** Everything the store holds, every record's bytes included: equal means nothing was written. */
+const storeBytes = () =>
+  JSON.stringify({
+    slots: Object.keys(backend.slots)
+      .sort()
+      .map((id) => backend.slots[id]),
+    records: Object.keys(backend.records)
+      .sort()
+      .map((id) => [id, Buffer.from(backend.records[id]!.data).toString('base64')]),
+  });
 
 async function runTicks(n: number): Promise<void> {
   for (let k = 0; k < n; k++) ui.stepOnce();
@@ -96,10 +109,10 @@ describe('Continue follows the dish a replacing action opened (D-0033 fix round 
     expect(now.tick).toBe(0);
     expect(now.hash).toBe(openHash());
     expect(now.hash).not.toBe(old.hash);
-    // Written once: the next autosave at the same tick has nothing new to write.
-    const again = sent.length;
+    // Written once: the next autosave at the same tick has nothing new to write (nothing is written).
+    const again = storeBytes();
     expect(await ui.autosave()).toBe(true);
-    expect(autosavesSince(again)).toBe(0);
+    expect(storeBytes()).toBe(again);
   });
 
   it('a named save opened and left unrun becomes Continue at the next autosave: the same file, bound to its slot', async () => {
@@ -119,16 +132,16 @@ describe('Continue follows the dish a replacing action opened (D-0033 fix round 
 
   it('a dish opened from Continue itself is not written again until it changes', async () => {
     const before = await continueNow();
-    const mark = sent.length;
+    const bytes = storeBytes();
     expect(await ui.loadSlot(AUTOSAVE_SLOT, 'Little Living Garden')).toEqual({ kind: 'done' });
     await flush();
     expect(await ui.autosave()).toBe(true);
-    expect(autosavesSince(mark)).toBe(0);
+    expect(storeBytes()).toBe(bytes); // fix round 3: the event reaches the worker, which writes nothing
     expect((await continueNow()).record).toBe(before.record);
     // Once it changes, it is written as before.
     await runTicks(2);
     expect(await ui.autosave()).toBe(true);
-    expect(autosavesSince(mark)).toBe(1);
+    expect((await continueNow()).record).not.toBe(before.record);
     expect((await continueNow()).tick).toBe(14);
   });
 

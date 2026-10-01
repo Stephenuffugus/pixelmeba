@@ -260,9 +260,14 @@ export class SimClient {
     return msg.slot;
   }
 
-  async autosave(dishId: string): Promise<SlotSummary> {
+  /**
+   * An autosave event (SPEC §14.2). The worker builds the dish's file and writes Continue unless Continue
+   * already holds exactly that file (D-0033 fix round 3); `wrote` says which. Either way Continue then
+   * holds this dish as it is now.
+   */
+  async autosave(dishId: string): Promise<{ readonly slot: SlotSummary; readonly wrote: boolean }> {
     const msg = await this.request<Extract<FromWorker, { type: 'slotSaved' }>>((requestId) => ({ type: 'autosave', requestId, dishId }));
-    return msg.slot;
+    return { slot: msg.slot, wrote: msg.wrote };
   }
 
   async listSlots(): Promise<{ slots: readonly SlotSummary[]; persistent: boolean }> {

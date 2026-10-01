@@ -155,7 +155,7 @@ test('What if?: Garden → R-G3 preview and Details → Start a new paused dish 
     .getByRole('listitem')
     .filter({ has: page.getByText('Dinner farther away', { exact: true }) });
   await expect(row).toHaveCount(1);
-  await expect(row).toContainText(`${ran} s simulated`);
+  await expect(row).toContainText(`at ${Math.floor(ran / 60)}:${String(ran % 60).padStart(2, '0')} dish time`); // D-0033 J: the dish clock
   // Fix round 2 (item 7e): the list names the idea from the slot index, without opening the dish.
   await expect(row.getByTestId('slot-variant')).toHaveText('What if? · Dinner farther away (R-G3 rev 1)');
   const size = await row

@@ -246,6 +246,12 @@ export interface VisualEvent {
   readonly cause?: number;
   /** Branch id for branchEstablished / branchExtinct (P2.3). */
   readonly branch?: number;
+  /**
+   * 'mutation' only: the birth's recorded mutation descriptor (D-0034 label ruling), so the feed names a
+   * module gained or lost. `flags` are the MUT_* bits (@sim/mutation), `delta` the quantitative change,
+   * `module` the gained or lost module's id from the world's recorded content (null when none).
+   */
+  readonly mutation?: { readonly flags: number; readonly delta: number; readonly module: string | null };
 }
 
 export interface DishInfo {
@@ -577,7 +583,18 @@ export type FromWorker =
       readonly paused?: boolean;
       readonly request?: ToWorker['type'];
     }
-  | { readonly type: 'slotSaved'; readonly requestId: number; readonly slot: SlotSummary }
+  | {
+      readonly type: 'slotSaved';
+      readonly requestId: number;
+      /** The slot as it now stands (for an autosave that wrote nothing, Continue as it already was). */
+      readonly slot: SlotSummary;
+      /**
+       * Whether anything was written. A manual save always writes. An autosave (D-0033 fix round 3) writes
+       * Continue unless Continue already holds exactly the file it would write (host `autosave`; store
+       * `holdsSave`): then `wrote` is false and the store is unchanged.
+       */
+      readonly wrote: boolean;
+    }
   | { readonly type: 'slots'; readonly requestId: number; readonly slots: readonly SlotSummary[]; readonly persistent: boolean }
   | {
       readonly type: 'loaded';
