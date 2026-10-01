@@ -77,20 +77,21 @@ describe('P2.2 fixture: registry imports', () => {
     const reg = registry();
     const { text } = await savedGarden();
     const file = JSON.parse(text) as SaveFile;
-    const e07 = reg.modules.E07!; // Light seeker (CT §7.1): real content, Phase 3, not simulated in this build
+    // Signal glow (CT §7.1): real content, Phase 5, not simulated in this build (E07 was the example until P3.7 implemented it).
+    const e07 = reg.modules.E02!;
     const state = file.state as unknown as Editable;
     state.content.modules = [...state.content.modules, e07].sort((a, b) => a.id.localeCompare(b.id));
     state.content.manifest.enabledModules = state.content.modules.map((m) => m.id);
-    // A Sunbead (A01, eligible for E07) carries it.
-    const a01 = state.genomes.findIndex((g) => g.ancestor === 'A01');
-    state.genomes[a01] = { ...state.genomes[a01]!, modules: ['E07'] };
+    // A Sprinter (B01, eligible for E02) carries it.
+    const a01 = state.genomes.findIndex((g) => g.ancestor === 'B01');
+    state.genomes[a01] = { ...state.genomes[a01]!, modules: ['E02'] };
     const bad = await restamp(file);
 
     const err = await loadSaveFile(bad).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(SaveFileError);
     expect(err).toMatchObject({ kind: 'content' });
     expect((err as Error).message).toBe(
-      'This dish uses the extra ability "Light seeker" (E07), which this version of Pixelmeba cannot simulate. Nothing was loaded.',
+      'This dish uses the extra ability "Signal glow" (E02), which this version of Pixelmeba cannot simulate. Nothing was loaded.',
     );
 
     // Through the worker's import path: an error reply with that message, no dish, the open dish untouched.
@@ -105,7 +106,7 @@ describe('P2.2 fixture: registry imports', () => {
     host.handle({ type: 'importDish', requestId: 2, text: bad, newDishId: 'imported' });
     const r = await reply(out, 2);
     expect(r).toMatchObject({ type: 'error', paused: false, request: 'importDish' });
-    expect(r.type === 'error' ? r.message : '').toContain('"Light seeker" (E07)');
+    expect(r.type === 'error' ? r.message : '').toContain('"Signal glow" (E02)');
     expect(host.world('imported')).toBeNull();
     expect(stateHash(host.world('open')!)).toBe(before);
     expect(host.activeDishId).toBe('open');

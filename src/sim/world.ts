@@ -20,6 +20,8 @@ import { createHistory, type History } from './history';
 import type { Command } from './commands';
 import { createBranchBook, type BranchBook } from './branches';
 import type { FoodObject } from './objects';
+import type { FungalFlowObs } from './fungalTransport';
+import { createReactionCells, type ReactionCells } from './reactions';
 import type { SampleSlot } from './sampleSlot';
 
 /**
@@ -126,6 +128,19 @@ export interface World {
   readonly catalysisCells: Float32Array;
   /** Cumulative carbon converted by each enzyme (observation, saved). */
   readonly conversionTotals: { starch: number; oil: number; protein: number };
+  /**
+   * Per cell and enzyme, carbon converted and bound nutrient moved in the current and the last whole
+   * second (P3.6 reaction ledger; src/sim/reactions.ts). Observation only, like catalysisCells: never
+   * read by the simulation, not hashed, not saved.
+   */
+  readonly reactionCells: ReactionCells;
+  /**
+   * P3.6 F02 transport: per slot, carbon sent and received along transport links over the last second
+   * and the last 10 s, and to/from whom (src/sim/fungalTransport.ts). Observation only: never read by
+   * the simulation, never hashed or saved; null until a transfer first happens; a slot's record is
+   * cleared when its segment dies, divides or the slot is reused.
+   */
+  fungalFlow: FungalFlowObs | null;
   /** Finite food objects (SPEC §5.1; schema 4), ordered by id; at most 128 (src/sim/objects.ts). */
   readonly objects: FoodObject[];
   /** The single held sample (SPEC §10.5; schema 4), or null (src/sim/sampleSlot.ts). */
@@ -188,6 +203,8 @@ export function createEmptyWorld(opts: {
     conversionTally: { starch: 0, oil: 0, protein: 0 },
     catalysisCells: new Float32Array(CELL_COUNT),
     conversionTotals: { starch: 0, oil: 0, protein: 0 },
+    reactionCells: createReactionCells(),
+    fungalFlow: null,
     objects: [],
     sample: null,
   };

@@ -204,7 +204,7 @@ export const POST_G2_STORE_CANON: Readonly<Record<string, (world: World, value: 
   sample: (world: World, value: unknown) => canonSample(world, value as SampleSlot),
 });
 /** Post-g2 world properties that are derived caches (rebuilt from state, never saved): never hashed. */
-export const POST_G2_DERIVED_KEYS: readonly string[] = Object.freeze([]);
+export const POST_G2_DERIVED_KEYS: readonly string[] = Object.freeze(['reactionCells', 'fungalFlow']);
 /** The value a post-g2 WorldSettings key has in a world that never set it (absent counts as default too). */
 export const POST_G2_SETTINGS_DEFAULTS: Readonly<Record<string, unknown>> = Object.freeze({});
 
@@ -222,7 +222,8 @@ function canonSample(world: World, s: SampleSlot): unknown {
       const v = r.cols[name];
       cols[name] = kind ? map.index(kind, v) : v;
     }
-    return { birthId: r.cols.birthId, cols };
+    // P3.5 (D-0043): Cancel restores each row into its original slot, so the slot is future state.
+    return { birthId: r.cols.birthId, slot: r.slot, cols };
   });
   const genomes = s.genomes.map((g) => ({ key: map.genome(g.index) })).sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   return { txId: s.txId, seq: s.seq, mode: s.mode, origin: s.origin, radius: s.radius, rows, cells: s.cells, objects: s.objects, genomes };

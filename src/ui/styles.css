@@ -443,6 +443,28 @@ textarea {
   text-align: center;
 }
 
+/* P3.6: inspector sentences and the reaction ledger are body text (16 px), never the small grid. */
+.inspector-line {
+  font-size: var(--fs-body);
+  margin: 0.25rem 0;
+}
+.reaction-ledger {
+  margin-top: 0.75rem;
+  font-size: var(--fs-body);
+}
+.reaction-ledger h3 {
+  font-size: var(--fs-body);
+  margin: 0 0 0.25rem;
+}
+.reaction-ledger p {
+  margin: 0.1rem 0;
+  font-size: var(--fs-body);
+}
+.reaction-row + .reaction-row {
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--surface-3);
+}
 .kv {
   display: grid;
   grid-template-columns: minmax(0, auto) minmax(0, 1fr);
@@ -1310,6 +1332,37 @@ html[data-text-scale='2'] .lab-cat span {
 }
 .sw-inh_photo {
   background: repeating-linear-gradient(45deg, #2f6a2f 0 2px, #c9e6c0 2px 5px);
+}
+/* P3.6: soluble broth (food) and the enzyme materials (chemistry): a hexagon-ish notch pattern per enzyme. */
+.sw-m01 {
+  background: radial-gradient(circle at 50% 50%, #fff3e6 0 20%, transparent 22%), repeating-radial-gradient(circle at 50% 50%, #e0a36a 0 3px, #f4d2ad 3px 5px);
+}
+.sw-m03,
+.sw-m04,
+.sw-m05,
+.sw-m09 {
+  border-radius: 6px;
+}
+.sw-m03 {
+  background: repeating-linear-gradient(60deg, #8a7a3a 0 2px, #f4efdc 2px 6px);
+}
+.sw-m04 {
+  background: repeating-linear-gradient(60deg, #9c7a12 0 2px, #fbe9a8 2px 6px);
+}
+.sw-m05 {
+  background: repeating-linear-gradient(60deg, #8f3f4c 0 2px, #f6dde2 2px 6px);
+}
+.sw-m09 {
+  background: repeating-linear-gradient(60deg, #444444 0 2px, transparent 2px 6px), repeating-linear-gradient(-60deg, #444444 0 2px, #e6e6e6 2px 6px);
+}
+/* P3.6: food objects (one per tap) are squarer than brushed foods: a pellet with a sugar core, a leaf wafer with a vein. */
+.sw-m10 {
+  border-radius: 6px;
+  background: radial-gradient(circle at 50% 50%, #fff6d8 0 22%, transparent 24%), radial-gradient(circle at 50% 50%, #f3c95c 0 46%, #8a6d4b 48%);
+}
+.sw-m11 {
+  border-radius: 2px 10px;
+  background: linear-gradient(135deg, transparent 0 46%, #f4efdc 46% 54%, transparent 54%), linear-gradient(135deg, #c9bd93 0 50%, #d99ba6 50%);
 }
 .lab-options {
   display: flex;
@@ -2667,4 +2720,40 @@ html[data-text-scale='2'] .lab-cat span {
 html[data-text-scale='1.5'] .tab-context,
 html[data-text-scale='2'] .tab-context {
   display: block;
+}
+/* P3.5 sample panel: over the dish (both views) while sampling or while a sample is held. */
+.sample-panel {
+  position: absolute;
+  top: 3.25rem;
+  left: 8px;
+  right: calc(48px + 16px);
+  margin-inline: auto;
+  max-width: 30rem;
+  max-height: 60%;
+  overflow: auto;
+  background: rgba(245, 244, 239, 0.97);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  box-shadow: var(--shadow);
+  padding: 10px 12px;
+  font-size: var(--fs-body);
+  z-index: 5;
+}
+.sample-panel h2 {
+  font-size: var(--fs-body);
+  margin: 0 0 0.25rem;
+}
+.sample-panel p {
+  margin: 0.25rem 0;
+}
+.sample-panel ul {
+  margin: 0.25rem 0;
+  padding-left: 1.25rem;
+}
+.sample-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 0.5rem;
 }

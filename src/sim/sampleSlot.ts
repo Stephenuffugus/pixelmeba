@@ -14,7 +14,8 @@
 import { ENTITY_COLUMNS, type ColumnName } from './entities';
 import { FIELD_DEFS, isFieldId, type FieldId } from './fields';
 import { base64ToBytes, canonicalJson, typedToBase64 } from './hash';
-import { foodObjectProblem, objectTotals, type FoodObject } from './objects';
+import { cellIndex, inBounds, inMask, isLabRadius, ST_BEAD, ST_NONE } from './grid';
+import { foodObjectProblem, foodObjectsProblem, objectTotals, type FoodObject } from './objects';
 import type { SavedGenome } from './serialize';
 
 export const SAMPLE_MODES = ['life', 'dissolved', 'deposits', 'all'] as const;
@@ -229,6 +230,135 @@ export interface SampleCheckContext {
   readonly speciesIds: readonly string[];
   /** The world's genome table. */
   readonly genomes: readonly SavedGenome[];
+  /**
+   * P3.5 (D-0043, SPEC §14.3): the world's entity columns over [0, highWater), so a held row's slot and
+   * birthId can be checked against the living organisms (Cancel restores into that slot).
+   */
+  readonly entities?: { readonly alive: ArrayLike<number>; readonly birthId: ArrayLike<number>; readonly highWater: number };
+  /**
+   * P3.5 fix 1: where the sample would go back to on Cancel. The grid's structure codes (held cells and
+   * objects must be open dish cells), the world's own food objects and object counter (held objects
+   * must not clash with them), the command counter and log (the take is the latest command) and the
+   * birth counter (a held organism was born here).
+   */
+  readonly world?: {
+    readonly structure: ArrayLike<number>;
+    readonly objects: readonly FoodObject[];
+    readonly nextObjectId: number;
+    readonly nextSeq: number;
+    readonly nextBirthId: number;
+    readonly log: readonly LoggedCommand[];
+  };
+}
+
+/** The part of a logged command the sample check reads. */
+interface LoggedCommand {
+  readonly seq: number;
+  readonly payload: { readonly kind: string };
+}
+
+/** Pools a held row may never hold negative (as the save import checks for living organisms). */
+const NONNEGATIVE_COLUMNS = ['B', 'N', 'E', 'H', 'age', 'mealC', 'mealN', 'boundMineral', 'jacketMineral'] as const;
+
+/** Held references that must resolve to another held row and be mutual (a prey link may be stale; D-0050). */
+const HELD_REFS: readonly (readonly [ColumnName, ColumnName, ColumnName | null])[] = [
+  ['hostSlot', 'hostBirthId', 'parasiteSlot'],
+  ['parasiteSlot', 'parasiteBirthId', 'hostSlot'],
+  ['fLink0', 'fLinkB0', null],
+  ['fLink1', 'fLinkB1', null],
+  ['fLink2', 'fLinkB2', null],
+  ['fLink3', 'fLinkB3', null],
+  ['aLink0', 'aLinkB0', null],
+  ['aLink1', 'aLinkB1', null],
+];
+
+/**
+ * P3.5 (D-0043): rows that could not be restored by Cancel: a negative pool, an unknown life state, a
+ * slot or birthId shared with a living organism or another held row, or a link or host pair that does
+ * not lead, mutually, to another held row (a sample holds whole units only).
+ */
+function heldRowsProblem(held: SampleSlot, ctx: SampleCheckContext): string | null {
+  const slots: number[] = [];
+  const births: number[] = [];
+  for (const r of held.rows) {
+    for (const k of NONNEGATIVE_COLUMNS) if (r.cols[k] < 0) return `a sample row has a negative ${k}`;
+    const life = r.cols.lifeState;
+    if (!Number.isInteger(life) || life < 0 || life > 3) return 'a sample row has an unknown life state';
+    if (slots.includes(r.slot)) return 'two sample rows share a slot';
+    if (births.includes(r.cols.birthId)) return 'two sample rows share a birth identity';
+    slots.push(r.slot);
+    births.push(r.cols.birthId);
+    const e = ctx.entities;
+    if (e) {
+      if (r.slot < e.highWater && e.alive[r.slot] === 1) return 'a sample row’s slot is taken by a living organism';
+      for (let i = 0; i < e.highWater; i++)
+        if (e.alive[i] === 1 && e.birthId[i] === r.cols.birthId) return 'a sample row shares a birth identity with a living organism';
+    }
+  }
+  for (const r of held.rows) {
+    const pr = r.cols.preySlot;
+    if (!Number.isInteger(pr) || pr < -1 || pr >= 6000) return 'a sample row has a prey link outside the dish';
+    for (const [sc, bc, back] of HELD_REFS) {
+      const p = r.cols[sc];
+      if (p === -1) continue;
+      const partner = held.rows.find((x) => x.slot === p);
+      if (!partner || partner.cols.birthId !== r.cols[bc] || p === r.slot) return 'a sample row is linked to an organism the sample does not hold';
+      if (back) {
+        if (partner.cols[back] !== r.slot) return 'a held host and parasite do not refer to each other';
+      } else {
+        const birthCol = (c: string) => c.replace(/^fLink/, 'fLinkB').replace(/^aLink/, 'aLinkB') as ColumnName;
+        const family = sc.startsWith('fLink') ? ['fLink0', 'fLink1', 'fLink2', 'fLink3'] : ['aLink0', 'aLink1'];
+        if (!family.some((f) => partner.cols[f as ColumnName] === r.slot && partner.cols[birthCol(f)] === r.cols.birthId))
+          return 'a held link is not symmetric';
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * P3.5 fix 1: whether Cancel could put the sample back. Held cells must be distinct, open (no stone or
+ * wall) cells inside the dish; held rows' centres inside the dish with birthIds below the birth counter;
+ * held objects must pass the world objects' own checks together with the world's objects (unique
+ * ascending ids below the counter, one per cell, in the dish and off structures); the take's seq must be
+ * at most the command counter, and every logged command from it on must be the take or a transfer
+ * attempt (Cancel drops those entries and returns the counter to that seq).
+ */
+function heldPlacementProblem(held: SampleSlot, ctx: SampleCheckContext): string | null {
+  const w = ctx.world;
+  if (!w) return null;
+  const [ox, oy] = held.origin;
+  if (!inBounds(ox, oy)) return 'the sample origin lies outside the dish area';
+  const seen: number[] = [];
+  for (const c of held.cells) {
+    const x = ox + c.dx;
+    const y = oy + c.dy;
+    if (!inBounds(x, y) || !inMask(x, y)) return `a sample cell lies outside the dish (offset ${c.dx}, ${c.dy})`;
+    const i = cellIndex(x, y);
+    const st = w.structure[i];
+    if (st !== ST_NONE && st !== ST_BEAD) return `a sample cell lies on a stone or wall (offset ${c.dx}, ${c.dy})`;
+    if (seen.includes(i)) return 'two sample cells share a cell';
+    seen.push(i);
+  }
+  for (const r of held.rows) {
+    const x = Math.floor(r.cols.x);
+    const y = Math.floor(r.cols.y);
+    if (!inBounds(x, y) || !inMask(x, y)) return 'a sample row lies outside the dish';
+    if (!Number.isInteger(r.cols.birthId) || r.cols.birthId < 0 || !(r.cols.birthId < w.nextBirthId))
+      return 'a sample row has a birth identity the dish never gave';
+  }
+  const merged = [...w.objects, ...held.objects].sort((a, b) => a.id - b.id);
+  const objects = foodObjectsProblem(merged, w.structure, w.nextObjectId);
+  if (objects) return `a sample food object clashes with the dish (${objects})`;
+  if (!Number.isInteger(w.nextSeq) || held.seq > w.nextSeq) return 'the sample’s command sequence lies ahead of the dish';
+  const log: readonly LoggedCommand[] = Array.isArray(w.log) ? w.log : [];
+  for (const cmd of log) {
+    if (!(Number(cmd?.seq) >= held.seq)) continue;
+    const kind: unknown = cmd.payload?.kind;
+    if (!(kind === 'sampleTransfer' || (kind === 'sampleTake' && cmd.seq === held.seq)))
+      return 'the sample’s command is not the dish’s latest';
+  }
+  return null;
 }
 
 const GENOME_COLUMNS = ['genome', 'refGenome', 'propG0', 'propG1'] as const;
@@ -250,7 +380,7 @@ export function savedSampleProblem(raw: unknown, ctx: SampleCheckContext): strin
     return `the sample has an unknown mode ${String(s.mode)}`;
   if (!Array.isArray(s.origin) || s.origin.length !== 2 || !s.origin.every((v) => Number.isInteger(v)))
     return 'the sample has an invalid origin';
-  if (!Number.isInteger(s.radius) || s.radius < 0 || s.radius > 6) return 'the sample has an invalid radius';
+  if (!isLabRadius(s.radius)) return 'the sample has an invalid radius';
   let held: SampleSlot;
   try {
     if (!s.rows || !Number.isInteger(s.rows.count) || s.rows.count < 0 || s.rows.count > 6000)
@@ -286,6 +416,10 @@ export function savedSampleProblem(raw: unknown, ctx: SampleCheckContext): strin
     if (ctx.genomes[r.cols.genome]!.ancestor !== ctx.speciesIds[sp])
       return "a sample row's genome belongs to another species";
   }
+  const rowsProblem = heldRowsProblem(held, ctx);
+  if (rowsProblem) return rowsProblem;
+  const placement = heldPlacementProblem(held, ctx);
+  if (placement) return placement;
   for (const g of held.genomes) {
     if (!Number.isInteger(g.index) || g.index < 0 || g.index >= ctx.genomes.length)
       return 'the sample carries an unknown genome';

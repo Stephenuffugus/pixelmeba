@@ -1,0 +1,25 @@
+{
+  "id": "BROKEN_CATALYST_V1",
+  "revision": 1,
+  "name": "Broken catalyst",
+  "habitatId": "WATER_GARDEN",
+  "seed": 204,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {"center": [45, 64], "radius": 6, "substrate": "water", "add": {"starch": 0.5, "nutrient": 0.2}, "label": "Starch and nutrient patch"}
+  ],
+  "founders": [
+    {"species": "B06", "count": 20, "center": [45, 64], "radius": 6},
+    {"species": "B01", "count": 20, "center": [45, 64], "radius": 6}
+  ],
+  "labels": [],
+  "question": "What happens to the shared lunch when the enzyme is weakened?",
+  "expectedObservationsText": "The Shared lunch dish under its own seed: twenty Crumbsmiths and twenty Sprinters on a starch patch. The experiment card copies it and adds enzyme breaker over the patch in copy B only.",
+  "phase": 3
+}

@@ -12,7 +12,9 @@
  * 4. Then parasite attachment (parasites.ts) and host-specific infection (viruses.ts), P3.4.
  *
  * Contact kinds on the 'contact' stream (saved worlds depend on them; never renumber): 1 attack (here),
- * 2 parasite attachment (parasites.ts KIND_PARASITE), 3 infection unit order (viruses.ts KIND_INFECT).
+ * 2 parasite attachment (parasites.ts KIND_PARASITE), 3 infection unit order (viruses.ts KIND_INFECT),
+ * 4 reserved for E12 (adhesion.ts resolves pairs by birthId and draws nothing).
+ * 5. Then E12 link formation (adhesion.ts formAdhesionLinks).
  */
 import { CONTACT_DISTANCE, GRID_H, GRID_W, MEAL_CAP_MULTIPLE } from './constants';
 import { emit } from './events';
@@ -20,6 +22,7 @@ import { cellIndex } from './grid';
 import { recordDeath } from './lineage';
 import { removeAllLinks } from './links';
 import { attachParasites, releaseHostPair } from './parasites';
+import { formAdhesionLinks, severOnRemoval } from './adhesion';
 import { infectHosts } from './viruses';
 import { onDeath } from './branches';
 import { hungryPredator, preyAllowed } from './movement';
@@ -41,6 +44,7 @@ export function stageContacts(world: World): void {
   // SPEC §3.2 row 5: predation, then parasite attachment, then host-specific infection.
   attachParasites(world);
   infectHosts(world);
+  formAdhesionLinks(world); // E12 link formation (adhesion.ts), after infection (SPEC §3.2 row 5)
 }
 
 function predationContacts(world: World): void {
@@ -151,6 +155,7 @@ export function consumePrey(world: World, pred: number, prey: number): void {
   releaseHostPair(world, prey); // SPEC §6.8, §7.4: an attached parasite is released alive
   const preySp = c.species[prey]!;
   world.history.pendingDeaths[preySp] = (world.history.pendingDeaths[preySp] ?? 0) + 1;
+  severOnRemoval(world, prey); // E12: its colony partners start their relink lockout (adhesion.ts)
   removeAllLinks(world, prey); // SPEC §6.8: incident links leave both endpoints
   world.ents.free(prey);
   markField(world, 'detritus');

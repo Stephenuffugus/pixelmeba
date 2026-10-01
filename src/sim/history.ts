@@ -34,6 +34,11 @@ export interface HistorySample {
   readonly interventions: number;
   /** Detritus carbon over the dish (P2.8, schema 3). Absent on samples recorded by older builds. */
   readonly debrisTotal?: number;
+  /**
+   * P3.6: carbon moved along F02 transport links during this second (a minute summary: the sum of its
+   * seconds). Present only on samples of a dish whose species form transport links; no schema change.
+   */
+  readonly fungalTransfer?: number;
 }
 
 /**
@@ -82,6 +87,8 @@ export interface History {
   pendingDeaths: number[];
   pendingInterventions: number;
   pendingCapacity: boolean;
+  /** P3.6: carbon moved along F02 transport links so far this second (absent until the first transfer). */
+  pendingFungalTransfer?: number;
   compacted: boolean;
   /** Regional trait samples (P2.8). */
   traits: TraitHistory;
@@ -129,6 +136,10 @@ function summarize(samples: readonly HistorySample[]): HistorySample {
     interventions: samples.reduce((a, s) => a + s.interventions, 0),
     // A stock: the end-of-minute value, when that sample recorded one.
     ...(last.debrisTotal !== undefined ? { debrisTotal: last.debrisTotal } : {}),
+    // A flow: the minute's total over the seconds that recorded one.
+    ...(samples.some((s) => s.fungalTransfer !== undefined)
+      ? { fungalTransfer: samples.reduce((a, s) => a + (s.fungalTransfer ?? 0), 0) }
+      : {}),
   };
 }
 
@@ -523,6 +534,8 @@ function sampleProblem(s: unknown, speciesCount: number): string | null {
     if (!isFiniteNumber(s[k])) return `has a non-numeric ${k}`;
   if (typeof s.capacityLimited !== 'boolean') return 'has a malformed capacity flag';
   if (s.debrisTotal !== undefined && !isFiniteNumber(s.debrisTotal)) return 'has a non-numeric debrisTotal';
+  if (s.fungalTransfer !== undefined && !(isFiniteNumber(s.fungalTransfer) && s.fungalTransfer >= 0))
+    return 'has a malformed fungalTransfer';
   return null;
 }
 
@@ -556,6 +569,8 @@ export function historyProblem(raw: unknown, speciesCount: number): string | nul
   }
   if (!isFiniteNumber(raw.pendingInterventions)) return 'pendingInterventions is not a number';
   if (typeof raw.pendingCapacity !== 'boolean' || typeof raw.compacted !== 'boolean') return 'a history flag is malformed';
+  if (raw.pendingFungalTransfer !== undefined && !(isFiniteNumber(raw.pendingFungalTransfer) && raw.pendingFungalTransfer >= 0))
+    return 'pendingFungalTransfer is malformed';
   const t = raw.traits;
   if (t !== undefined) {
     if (!isRecord(t) || !Array.isArray(t.recent) || !Array.isArray(t.minutes) || typeof t.compacted !== 'boolean')

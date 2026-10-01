@@ -8,7 +8,8 @@
  *  - E03 pays its full entry (10 E), rest (0.01 E/s replacing all upkeep) and wake (5 E) costs.
  *  - A module loss frees no material; energy above a daughter's new cap dissipates, ledgered.
  *  - The 0.02 E/s surcharge per carried module is charged exactly once per tick (and not at all
- *    while Resting, where the rest rule replaces it).
+ *    while Resting, where the rest rule replaces it); P3.7: the same for E09 and E10 (registryWith the
+ *    shipped manifest plus E09/E10 until the lead enables them).
  * Test-only state (energy or biomass set directly) is labelled where used; material overrides are
  * logged as ledger inputs so conservation checks stay exact.
  */
@@ -30,7 +31,9 @@ import { step } from '../../src/sim/tick';
 import { rebuildIndex } from '../../src/sim/spatial';
 import { speciesIndex, type World } from '../../src/sim/world';
 import { loadRawPacksFs } from '../../tools/lib/content-fs';
-import { aliveOf, clearWater, setField } from '../helpers/world';
+import { aliveOf, clearWater, registry, setField } from '../helpers/world';
+import { registryWith } from '../helpers/registry';
+import { realizeRecipe } from '../../src/sim/recipes';
 
 type Energy = World['ledger']['energy'];
 
@@ -335,6 +338,35 @@ describe('P2.1 module accounting', () => {
     expect(B.w.ledger.energy.upkeep).toBeCloseTo(0.03 * DT * ticks, 10);
     expect(B.w.ledger.energy.maintenance).toBeCloseTo(A.w.ledger.energy.maintenance, 10);
     expect(B.w.ledger.energy.secretion).toBe(0);
+    expect(A.w.ledger.energy.surcharge).toBe(0);
+  });
+
+  it('P3.7: E09 and E10 each add their 0.02 E/s surcharge exactly once per tick (no protein, no body to build: neither acts)', () => {
+    const reg = registryWith({ enabledModules: [...registry().manifest.enabledModules, 'E09', 'E10'].sort() });
+    const make = (mods: readonly string[]) => {
+      const base = reg.recipes.FIRST_DISH_V1!;
+      const w = realizeRecipe(
+        reg,
+        { ...base, id: 'TEST_E09_E10_SURCHARGE', removeStones: true, fieldPatches: [], founders: [], scheduledCommands: [], backgroundOverrides: { sugar: 0 }, mutationPreset: 'fixed' },
+        { worldId: 'surcharge' },
+      );
+      const s = placeWith(w, 'B04', 64.5, 64.5, mods);
+      return { w, s };
+    };
+    const A = make([]);
+    const B = make(['E09', 'E10']);
+    expect(profileOf(B.w, B.s).surcharge - profileOf(A.w, A.s).surcharge).toBeCloseTo(2 * 0.02, 12);
+    const ticks = 150;
+    for (let t = 1; t <= ticks; t++) {
+      step(A.w);
+      step(B.w);
+      const dE = A.w.ents.cols.E[A.s]! - B.w.ents.cols.E[B.s]!;
+      expect(dE).toBeCloseTo(2 * 0.02 * DT * t, 10);
+    }
+    expect(B.w.ledger.energy.surcharge).toBeCloseTo(2 * 0.02 * DT * ticks, 10);
+    expect(B.w.ledger.energy.maintenance).toBeCloseTo(A.w.ledger.energy.maintenance, 10);
+    expect(B.w.ledger.energy.secretion).toBe(0);
+    expect(B.w.ledger.energy.construction).toBe(0);
     expect(A.w.ledger.energy.surcharge).toBe(0);
   });
 });

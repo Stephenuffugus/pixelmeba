@@ -20,9 +20,9 @@ import { emit, milestone } from './events';
 import { FLAG } from './entities';
 import { cellIndex, inBounds, inMask } from './grid';
 import { recordBirth, recordDivisionEnd } from './lineage';
-import { addFungalLink, rekeyLinks } from './links';
+import { rekeyLinks } from './links';
 import { onDivision as onParasiteDivision } from './parasites';
-import { beginFungalBirths, branchLinkKind, fungalPlacement } from './fungi';
+import { beginFungalBirths, branchLinkRefused, fungalPlacement, joinBranch } from './fungi';
 import { canOccupy, initialDecisionTimer } from './movement';
 import { onDaughter, onParentEnds } from './branches';
 import { proposeDaughters } from './mutation';
@@ -31,6 +31,8 @@ import { profileOf } from './profiles';
 import { R } from './reasons';
 import { detFloat, STREAMS } from './rng';
 import { entityCell, rebuildIndex } from './spatial';
+import { onAnchorDivision } from './anchor';
+import { onAdhesionDivision } from './adhesion';
 import type { World } from './world';
 
 /** Neighbor order used after crowding (DECISIONS D-0002): E, S, W, N, NE, SE, SW, NW, own cell. */
@@ -186,10 +188,12 @@ export function stageBirths(world: World): void {
       capacityHit = true;
       continue;
     }
-    commitDivision(world, i, slot, target);
+    // Parent and daughter segments are joined (SPEC §7.2, §7.7) unless the parent already has 4 links:
+    // then the daughter is placed unlinked and the birth event says so (fungi.ts joinBranch).
+    const unlinked = fungal && branchLinkRefused(world, i);
+    commitDivision(world, i, slot, target, unlinked ? { link: 'degree' } : undefined);
     if (fungal) {
-      // Parent and daughter segments are joined (SPEC §7.2); the target held no segment, so neither is at 4 links.
-      addFungalLink(world, i, slot, branchLinkKind(world.species[c.species[i]!]!));
+      joinBranch(world, i, slot);
       fungi.occupied[target] = 1;
       fungi.count++;
     }
@@ -201,7 +205,13 @@ export function stageBirths(world: World): void {
   for (let i = 0; i < e.highWater; i++) if (c.alive[i] === 1) c.flags[i] = c.flags[i]! & ~FLAG.justBorn;
 }
 
-function commitDivision(world: World, i: number, slot: number, targetCell: number): void {
+function commitDivision(
+  world: World,
+  i: number,
+  slot: number,
+  targetCell: number,
+  birthDetail?: Readonly<Record<string, number | string>>,
+): void {
   const c = world.ents.cols;
   const prof = profileOf(world, i);
   const sp = world.species[c.species[i]!]!;
@@ -297,6 +307,8 @@ function commitDivision(world: World, i: number, slot: number, targetCell: numbe
   const b1 = world.counters.nextBirthId++;
   c.birthId[i] = b0;
   rekeyLinks(world, i, parentBirth); // partners stored the parent's birthId (SPEC §9.19: F02 links follow branching)
+  onAdhesionDivision(world, i); // SPEC §9.19: colony links removed, both daughters start unlinked (adhesion.ts)
+  onAnchorDivision(world, i); // SPEC §9.19: E04 attachment resets; the new daughter's slot starts cleared (anchor.ts)
   onParasiteDivision(world, i, slot, parentBirth); // the retained daughter keeps its host/parasite pair (SPEC §7.4; parasites.ts)
   c.birthId[slot] = b1;
   const spIdx = c.species[i]!;
@@ -344,7 +356,14 @@ function commitDivision(world: World, i: number, slot: number, targetCell: numbe
     species: spIdx,
     birthId: b0,
     cell: parentCell,
-    detail: { parent: parentBirth, daughterA: b0, daughterB: b1, changedA: g0 !== parentGenome ? 1 : 0, changedB: g1 !== parentGenome ? 1 : 0 },
+    detail: {
+      parent: parentBirth,
+      daughterA: b0,
+      daughterB: b1,
+      changedA: g0 !== parentGenome ? 1 : 0,
+      changedB: g1 !== parentGenome ? 1 : 0,
+      ...birthDetail,
+    },
   });
   milestone(world.events, 'firstDivision', tick);
   milestone(world.events, `firstDivision:${world.species[spIdx]!.id}`, tick);

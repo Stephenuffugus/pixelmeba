@@ -37,7 +37,13 @@ export const MODULE_REQUIRED_PARAMS: Readonly<Record<string, readonly string[]>>
     'drySeconds',
     'wakeConditionSeconds',
   ],
+  E04: ['attachSeconds', 'minEnergy', 'attachedUpkeep', 'detachNoIntakeSeconds', 'detachEnergy', 'lockoutSeconds'],
   E05: ['capacityBonus', 'upkeepPerSecond'],
+  E06: ['lightHalf', 'ceilingFactor'],
+  E07: ['baseSpeed', 'lightSensing', 'moveCostFactor', 'brighterBy'],
+  E09: ['emitRate', 'minEnergy', 'emitCost', 'localCap'],
+  E10: ['minEnergy', 'minBodyMultiple', 'filmCap', 'rate', 'energyPerCarbon'],
+  E12: ['linkDistance', 'linkSeconds', 'minEnergy', 'linkCost', 'maxLinks', 'maxComponent', 'perLinkUpkeep', 'severNoIntakeSeconds', 'severEnergy', 'severDistance', 'lockoutSeconds'],
 };
 
 /** Categories that can never carry a supplementary module (SPEC §9). */

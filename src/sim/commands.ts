@@ -22,6 +22,9 @@ import { rebuildIndex } from './spatial';
 import { initFounder } from './branches';
 import { applyLineage, isIntervention, type LineageOp } from './specimens';
 import { detFloat, detPermutation, STREAMS } from './rng';
+import { placeFoodObject } from './objects';
+import { sampleDiscard, sampleTake, sampleTransfer, type SamplePayload } from './sample';
+import { cleanWater, type CleanWaterPayload } from './tools';
 import { applyHabitatEdit, LAB_MAX_POINTS, LAB_MAX_STROKE_SAMPLES, type HabitatEditPayload, type HabitatMoved, type HabitatSkips } from './structures';
 import type { World, WorldSettings } from './world';
 import { speciesIndex } from './world';
@@ -34,7 +37,13 @@ export type CommandPayload =
   | { kind: 'setLid'; lid: WorldSettings['lid'] }
   | { kind: 'setMutationPreset'; preset: WorldSettings['mutationPreset'] }
   /** Branch names and pins, saving and spawning specimens (P2.3; semantics in specimens.ts). */
-  | ({ readonly kind: 'lineage' } & LineageOp);
+  | ({ readonly kind: 'lineage' } & LineageOp)
+  /** Finite food objects (P3.6; semantics in objects.ts placeFoodObject): one M10 pellet or M11 wafer in the cell under (x, y). */
+  | { kind: 'placeObject'; materialId: string; x: number; y: number }
+  /** Sample Take, Transfer and Discard (P3.5; semantics in sample.ts; Begin and Cancel are host-level, D-0037). */
+  | SamplePayload
+  /** Clean water replacement (P3.5; semantics in tools.ts): one stroke, a fraction of 0.25, 0.5 or 1. */
+  | CleanWaterPayload;
 
 export interface CommandResult {
   readonly accepted: number;
@@ -127,6 +136,23 @@ function applyCommand(world: World, cmd: Command): void {
     case 'eraseStructure':
       result = applyHabitatEdit(world, p);
       break;
+    case 'placeObject':
+      result = placeFoodObject(world, p.materialId, p.x, p.y);
+      break;
+    case 'sampleTake':
+      result = sampleTake(world, cmd, p);
+      break;
+    case 'sampleTransfer':
+      result = sampleTransfer(world, p);
+      break;
+    case 'sampleDiscard':
+      result = sampleDiscard(world);
+      break;
+    case 'cleanWater': {
+      const bad = invalidDepositStroke(p.points, p.radius);
+      result = bad ? { accepted: 0, rejected: 0, note: bad } : cleanWater(world, p, strokeCells(p.points, p.radius));
+      break;
+    }
   }
   cmd.result = result;
   world.commands.log.push(cmd);

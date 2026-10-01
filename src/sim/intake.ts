@@ -35,12 +35,42 @@ import { markField } from './transport';
 import { subtractPool } from './ledger';
 import { edibleFilmAt, filmWeight, orderedFilmRequest, weightedFilmRequest } from './film';
 import { commitHostDrains, reserveHostDrains } from './parasites';
+import { debrisRequest } from './debrisFeeder';
+import type { Profile } from './phenotype';
 
 const K = 6; // max requests per organism
 const ROUTE_NONE = 0;
 const ROUTE_FIELD = 1;
 const ROUTE_MEAL = 2;
 const ROUTE_PHOTO = 3;
+/** E08 carriers with no held meal eating local detritus (debrisFeeder.ts); converted like the field route. */
+const ROUTE_DETRITUS = 4;
+
+/**
+ * Photosynthetic light response (SPEC §6.5): linear in effective light, or for an E06 carrier
+ * min(1, light / lightHalf) (SPEC §9 E06).
+ */
+export function photoLightResponse(prof: Profile, light: number): number {
+  const shade = prof.shade;
+  return shade === null ? light : Math.min(1, light / shade.lightHalf);
+}
+
+/**
+ * Share of the ancestral ceiling (budget) the photosynthetic CO2 request may reach before avail(CO2):
+ * the light response, times E06's ceiling factor (0.70) for a carrier. The feeding locus is already in
+ * Profile.q, so the reduced ceiling gets the inherited feeding investment.
+ */
+export function photoCeilingShare(prof: Profile, light: number): number {
+  const shade = prof.shade;
+  return shade === null ? light : shade.ceilingFactor * Math.min(1, light / shade.lightHalf);
+}
+
+/** Whether this organism's stage 6 route this tick was photosynthesis and it fixed carbon (E06 "active now"). */
+export function photosynthesizedThisTick(world: World, i: number): boolean {
+  const c = world.ents.cols;
+  const sp = world.species[c.species[i]!]!;
+  return sp.photosynthetic && !sp.mixotroph && (c.flags[i]! & FLAG.feeding) !== 0;
+}
 
 const route = new Uint8Array(AGENT_CAP);
 const reqCount = new Uint8Array(AGENT_CAP);
@@ -117,7 +147,7 @@ function intakeBody(world: World): void {
     mealReq[i] = 0;
     carbonIn[i] = 0;
     if (c.alive[i] !== 1) continue;
-    c.flags[i] = c.flags[i]! & ~(FLAG.feeding | FLAG.usableIntake);
+    c.flags[i] = c.flags[i]! & ~(FLAG.feeding | FLAG.usableIntake | FLAG.detritusIntake);
     c.limitCode[i] = R.NONE;
     c.limitValue[i] = 0;
     if (!isIntakeEligible(world, i)) continue;
@@ -140,9 +170,19 @@ function intakeBody(world: World): void {
       mealReq[i] = Math.min(c.mealC[i]!, budget);
       continue;
     }
+    // E08 (debrisFeeder.ts): with no held meal, local detritus (and its bound N) under the ordinary budget.
+    if (prof.debrisFeeder) {
+      const dr = debrisRequest(world, prof, c.mealC[i]!, cell, budget);
+      if (dr > 0) {
+        route[i] = ROUTE_DETRITUS;
+        addRequest(i, FIELD_INDEX.detritus, dr, cell);
+        continue;
+      }
+    }
     if (sp.photosynthetic && !sp.mixotroph) {
       const co2 = world.fields.co2![cell]!;
-      const req = Math.min(co2, budget * light[cell]! * availability(co2));
+      // E06 (SPEC §9): light response min(1, light / 0.35) and the ceiling × 0.70; other limits unchanged.
+      const req = prof.shade === null ? Math.min(co2, budget * light[cell]! * availability(co2)) : Math.min(co2, budget * photoCeilingShare(prof, light[cell]!) * availability(co2));
       route[i] = ROUTE_PHOTO;
       addRequest(i, FIELD_INDEX.co2, req, cell);
       if (req <= 0) c.limitCode[i] = light[cell]! <= 0 ? R.LIGHT_LIMITED : R.CO2_LIMITED;
@@ -333,13 +373,18 @@ function intakeBody(world: World): void {
       c.lastIntakeTick[i] = world.tick;
       c.intakeAccum[i]! += Cs;
       c.flags[i] = c.flags[i]! | FLAG.feeding;
+      if (route[i] === ROUTE_DETRITUS) c.flags[i] = c.flags[i]! | FLAG.detritusIntake;
       if (Cs >= USABLE_INTAKE_FRACTION * prof.q * DT) c.flags[i] = c.flags[i]! | FLAG.usableIntake;
       milestone(world.events, 'firstIntake', world.tick);
     }
 
     // Leading constraint for the inspector: smallest supplied fraction wins.
     const budget = budgetArr[i]!;
-    const access = budget > 0 ? C / budget : 1;
+    // An E06 carrier's food access is the CO2 it got against its light-shaped photosynthetic ceiling, so
+    // its light response below is compared with the other supplied fractions on equal terms.
+    const shaded = route[i] === ROUTE_PHOTO && prof.shade !== null;
+    const accessBase = shaded ? budget * photoCeilingShare(prof, light[cell]!) : budget;
+    const access = accessBase > 0 ? C / accessBase : 1;
     let code: number = R.NONE;
     let value = 1;
     if (route[i] === ROUTE_MEAL) {
@@ -357,16 +402,17 @@ function intakeBody(world: World): void {
       code = R.OXYGEN_LIMITED;
       value = fracO;
     }
-    if (route[i] === ROUTE_PHOTO && light[cell]! < value) {
+    // The carrier's light response (raw light without E06) competes; the measured light is what the Lab prints.
+    if (route[i] === ROUTE_PHOTO && photoLightResponse(prof, light[cell]!) < value) {
       code = R.LIGHT_LIMITED;
-      value = light[cell]!;
+      value = photoLightResponse(prof, light[cell]!);
     }
     if ((c.flags[i]! & FLAG.overCapacity) !== 0 && 0.5 <= value) {
       code = R.CROWDING_INTAKE_HALVED;
       value = 0.5;
     }
     c.limitCode[i] = code;
-    c.limitValue[i] = value;
+    c.limitValue[i] = code === R.LIGHT_LIMITED ? light[cell]! : value;
   }
 
   // Reserved host drains commit after the ordinary commit (their products are not consumed this stage).

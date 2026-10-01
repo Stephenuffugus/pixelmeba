@@ -1,7 +1,7 @@
 /**
  * P3.7 stage 8 reservation order (SPEC §3.2 stage 8, §3.3; D04 §2 C08 and §9; actions.ts).
  *
- *  - The shipped table is fixed: native producers by NativeAbility index, then E01; test tables are
+ *  - The shipped table is fixed: natives by NativeAbility index, then E01, E09, E10; test tables are
  *    built from copies and never change it.
  *  - Mandatory costs come before optional ones, natives before modules, modules ascend — proved with
  *    synthetic, test-only actions passed to stageStructures (never shipped content).
@@ -122,14 +122,14 @@ describe('P3.7 stage 8: the action table', () => {
     expect(() => moduleAction('X01', always, () => R.NONE)).toThrow(/not a module id/);
   });
 
-  it('the shipped table: native starch, oil, protein producers, biofilm (wave 2), then E01 — frozen and untouched by test tables', () => {
+  it('the shipped table: native starch, oil, protein producers, biofilm (wave 2), then E01, E09, E10 — frozen and untouched by test tables', () => {
     const shape = (t: readonly Stage8Action[]) => t.map((a) => `${a.tier}:${a.key}:${a.id}`);
     const before = shape(STAGE8_ACTIONS);
-    expect(before).toEqual(['native:E_STARCH_SECRETION:0', 'native:E_OIL_SECRETION:1', 'native:E_PROTEIN_SECRETION:2', 'native:BIOFILM:3', 'module:E01:1']);
+    expect(before).toEqual(['native:E_STARCH_SECRETION:0', 'native:E_OIL_SECRETION:1', 'native:E_PROTEIN_SECRETION:2', 'native:BIOFILM:3', 'module:E01:1', 'module:E09:9', 'module:E10:10']);
     expect(Object.isFrozen(STAGE8_ACTIONS)).toBe(true);
     const log: LogRow[] = [];
     const t = buildActionTable([testModule(log, 'E04'), ...STAGE8_ACTIONS, testNative(log, 'SIGNAL_GLOW'), testMandatory(log, 'M', 0)]);
-    expect(shape(t)).toEqual(['mandatory:M:0', ...before.slice(0, 4), 'native:SIGNAL_GLOW:5', 'module:E01:1', 'module:E04:4']);
+    expect(shape(t)).toEqual(['mandatory:M:0', ...before.slice(0, 4), 'native:SIGNAL_GLOW:5', 'module:E01:1', 'module:E04:4', 'module:E09:9', 'module:E10:10']);
     expect(shape(STAGE8_ACTIONS)).toEqual(before);
     expect(() => buildActionTable([testModule(log, 'E04'), testModule(log, 'E04')])).toThrow(/duplicate/);
   });

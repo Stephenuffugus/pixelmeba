@@ -42,9 +42,9 @@ test('experiments: Notebook → Experiment A → paired run with the change on B
   await seedSettings(page, { showPrompts: false });
   await openExperiments(page);
 
-  // The seven cards, each with its question; Experiment C carries its label.
+  // The eleven cards (seven Phase 2, four Phase 3), each with its question; Experiment C carries its label.
   const cards = page.locator('[data-testid^="experiment-card-EXP_"]');
-  await expect(cards).toHaveCount(7);
+  await expect(cards).toHaveCount(11);
   await expect(page.getByRole('heading', { name: 'Why variation can matter' })).toBeVisible();
   const expC = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Why variation can matter' }) });
   await expect(expC.getByTestId('experiment-label')).toHaveText('Seeded traits demonstration');

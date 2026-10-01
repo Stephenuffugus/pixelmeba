@@ -5,7 +5,7 @@
  * substrate lies in its cell or a four-neighbor cell, and local activity is below the cap; it pays
  * the emit cost per second into ledger.energy.secretion. The numbers come from the producer's
  * profile: CT constants for a native producer, the world's recorded module parameters for a carrier
- * (E01 starch; E09 protein from wave 4).
+ * (E01 starch; E09 protein).
  *
  * This replaced the Phase 2 starch-only code with the same comparisons, in the same order, with the
  * same float operations, so native B06 and E01 carriers behave bit-identically (the g2 replay and
@@ -29,6 +29,15 @@ export const PRODUCER_FIELDS: Readonly<Record<ProducerSlot, { readonly substrate
   oil: Object.freeze({ substrate: 'oil', activity: 'eOil' }),
   protein: Object.freeze({ substrate: 'protein', activity: 'eProtein' }),
 });
+
+/**
+ * The `secreting` column is a producer bit set (PROPOSED DECISION, W4-16 alternative): each producer
+ * ORs its own bit when it released this tick — starch 1, oil 2, protein 4 — so an organism with two
+ * producers (a native starch producer that gained E09, or an E01 + E09 carrier) shows which one
+ * released. Starch stays 1, so B06 and E01 carriers (and every g2 hash) are unchanged. FLAG.secreting
+ * stays the OR of the bits. stageStructures clears the column every tick for every living organism.
+ */
+export const PRODUCER_BIT: Readonly<Record<ProducerSlot, number>> = Object.freeze({ starch: 1, oil: 2, protein: 4 });
 
 /** Whether a deposited substrate lies in `cell` or one of its four neighbors. */
 export function substrateNear(sub: Float64Array, cell: number): boolean {
@@ -75,11 +84,13 @@ export function producerApplies(slot: ProducerSlot, source: ProducerRules['sourc
 
 /**
  * The producer action for `slot`: secrete, then record the outcome in secretionCode and the
- * secreting column/flag. An organism with two producers shows SECRETING if either secreted this tick
- * (a later refusal never hides an earlier success), otherwise the last producer's refusal.
+ * secreting bit set/flag. An organism with two producers shows SECRETING if either secreted this tick
+ * (a later refusal never hides an earlier success), otherwise the last producer's refusal; each
+ * producer sets only its own PRODUCER_BIT.
  */
 export function producerRun(slot: ProducerSlot): Stage8Action['run'] {
   const pair = PRODUCER_FIELDS[slot];
+  const bit = PRODUCER_BIT[slot];
   return (ctx) => {
     const rules = rulesOf(ctx.profile, slot);
     if (rules === null) throw new Error(`stage 8: organism slot ${ctx.i} has no ${slot} producer rules`);
@@ -88,9 +99,9 @@ export function producerRun(slot: ProducerSlot): Stage8Action['run'] {
     const outcome = secrete(ctx, rules, pair.activity, pair.substrate);
     if (outcome === R.SECRETING) {
       c.secretionCode[i] = outcome;
-      c.secreting[i] = 1;
+      c.secreting[i] = c.secreting[i]! | bit;
       c.flags[i] = c.flags[i]! | FLAG.secreting;
-    } else if (c.secreting[i] !== 1) {
+    } else if (c.secreting[i] === 0) {
       c.secretionCode[i] = outcome;
     }
     return outcome;

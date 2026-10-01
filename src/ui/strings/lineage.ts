@@ -177,9 +177,27 @@ export function ruleLines(rules: LineageRules | null): string[] {
     const [va, vb] = pair(x, y, minDp);
     out.push(`Game rule: ${text(vb, va)}.`);
   };
-  num(a.sensing, b.sensing, 0, (v, w) => `it senses food up to ${v} cells away (ancestor: ${w})`);
+  // E07 (P3.7): a light seeker senses light, not food, and pays per second while it swims, not per cell.
+  if (a.sensesLight === true || b.sensesLight === true) {
+    if (a.sensesLight !== b.sensesLight || differs(a.sensing, b.sensing)) {
+      const [va, vb] = pair(a.sensing, b.sensing, 0);
+      const what = (p: LineageProfile) => (p.sensesLight === true ? 'light' : 'food');
+      const anc = a.sensesLight === b.sensesLight ? va : a.sensing > 0 ? `${what(a)} up to ${va} cells` : 'none';
+      out.push(`Game rule: it senses ${what(b)} up to ${vb} cells away (ancestor: ${anc}).`);
+    }
+  } else num(a.sensing, b.sensing, 0, (v, w) => `it senses food up to ${v} cells away (ancestor: ${w})`);
   num(a.speed, b.speed, 2, (v, w) => `it moves up to ${v} cells per second (ancestor: ${w})`);
-  num(a.moveCostPerCell, b.moveCostPerCell, 2, (v, w) => `each cell it moves costs ${v} energy (ancestor: ${w})`);
+  if (a.moveCostPerSecond !== undefined || b.moveCostPerSecond !== undefined) {
+    const perSecond = (v: string) => `moving costs ${v} energy per second`;
+    const other = (p: LineageProfile, v: string) =>
+      p.moveCostPerSecond !== undefined ? perSecond(v) : p.moveCostPerCell > 0 ? `each cell moved costs ${v} energy` : 'it did not move on its own';
+    const [va, vb] = pair(a.moveCostPerSecond ?? a.moveCostPerCell, b.moveCostPerSecond ?? b.moveCostPerCell, 2);
+    if (b.moveCostPerSecond !== undefined) {
+      if (a.moveCostPerSecond === undefined || differs(a.moveCostPerSecond, b.moveCostPerSecond))
+        out.push(`Game rule: ${perSecond(vb)} (ancestor: ${a.moveCostPerSecond !== undefined ? va : other(a, va)}).`);
+    } else if (b.moveCostPerCell > 0) out.push(`Game rule: each cell it moves costs ${vb} energy (ancestor: ${other(a, va)}).`);
+    else out.push(`Game rule: it does not move on its own (ancestor: ${other(a, va)}).`);
+  } else num(a.moveCostPerCell, b.moveCostPerCell, 2, (v, w) => `each cell it moves costs ${v} energy (ancestor: ${w})`);
   num(a.intake, b.intake, 2, (v, w) => `it takes in at most ${v} carbon per second (ancestor: ${w})`);
   num(a.maintenance, b.maintenance, 2, (v, w) => `its maintenance costs ${v} energy per second (ancestor: ${w})`);
   // Upkeep comes from modules, whose lines above already quote it.

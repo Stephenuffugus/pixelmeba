@@ -18,6 +18,8 @@ import {
   ERASE_STRUCTURE,
   FALLBACK_MATERIAL_COPY,
   FOOD_MATERIALS,
+  FOOD_OBJECTS,
+  OBJECT_COPY,
   habitatList,
   LAB_CATEGORIES,
   LAB_TEXT,
@@ -60,6 +62,19 @@ import {
   IconWater,
 } from './LabTrayIcons';
 import { inSentence } from './LabTrayNames';
+import {
+  beginSample,
+  cleanFraction,
+  endSession,
+  heldSample,
+  isSessionTool,
+  labSession,
+  sampleMode,
+  type LabSessionId,
+} from './SampleSession';
+import { CLEAN_WATER_FRACTIONS, type CleanWaterFraction } from '@sim/tools';
+import { SAMPLE_MODES } from '@sim/sampleSlot';
+import { CLEAN_WATER_LABELS, SAMPLE_MODE_HINTS, SAMPLE_MODE_LABELS, TOOLS_COPY } from '../strings/tools';
 import { OverlayPicker } from './OverlayPicker';
 import {
   dietLine,
@@ -124,10 +139,17 @@ export function trayItems(category: LabCategory): TrayItem[] {
     case 'chemistry': {
       // In the tray's own order (CT §5.1), only what this dish's recorded content enables.
       const allowed = category === 'food' ? FOOD_MATERIALS : CHEMISTRY_MATERIALS;
-      return allowed.flatMap((id) => {
+      const items = allowed.flatMap((id) => {
         const m = info.materials.find((x) => x.id === id);
         return m ? [{ id: `material:${m.id}` as LabToolId, name: m.name, icon: <Swatch id={m.id} /> }] : [];
       });
+      // P3.6: finite food objects (one per tap) follow the brushed foods, when this dish records them.
+      if (category === 'food')
+        for (const id of FOOD_OBJECTS) {
+          const m = info.materials.find((x) => x.id === id && x.kind === 'object');
+          if (m) items.push({ id: `object:${m.id}` as LabToolId, name: m.name, icon: <Swatch id={m.id} /> });
+        }
+      return items;
     }
     case 'habitat':
       // Only the paints this dish's recorded content has (content is data; D-0024).
@@ -135,20 +157,67 @@ export function trayItems(category: LabCategory): TrayItem[] {
         const Icon = HABITAT_ICONS[id];
         return { id, name: itemCopy(id)?.name ?? id, icon: <Icon /> };
       });
-    case 'tools':
+    case 'tools': {
       // Only the structures this dish's recorded manifest enables.
-      return (structureTools(info) as StructureToolId[]).map((id) => {
+      const items: TrayItem[] = (structureTools(info) as StructureToolId[]).map((id) => {
         const Icon = STRUCTURE_ICONS[id];
         return { id, name: itemCopy(id)?.name ?? id, icon: <Icon /> };
       });
+      // P3.5 (D-0037): Sample and Clean water on every world, g2-recorded ones included; Transfer while a
+      // sample is held.
+      items.push({ id: 'sample', name: TOOLS_COPY.sampleName, icon: <IconSampleTool /> });
+      if (heldSample.value !== null) items.push({ id: 'transfer', name: TOOLS_COPY.transferName, icon: <IconTransferTool /> });
+      items.push({ id: 'cleanWater', name: TOOLS_COPY.cleanWaterName, icon: <IconCleanWaterTool /> });
+      return items;
+    }
     default:
       return [];
   }
 }
 
+/** P3.5 tray icons (inline, 24 px, currentColor; meaning is always also in the label). */
+function IconSampleTool() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="10" cy="10" r="6" stroke-dasharray="3 2" />
+      <path d="M14.5 14.5 20 20" />
+    </svg>
+  );
+}
+function IconTransferTool() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="7" cy="12" r="3" />
+      <path d="M12 12h9M17 8l4 4-4 4" />
+    </svg>
+  );
+}
+function IconCleanWaterTool() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M12 3c3 4 6 7.5 6 11a6 6 0 0 1-12 0c0-3.5 3-7 6-11z" />
+      <path d="M9 15h6" />
+    </svg>
+  );
+}
+
+/** A Tools-tray session item picked (P3.5): Sample begins (pauses the dish); the others take the next gesture. */
+function pickSession(id: LabSessionId): void {
+  if (id === 'sample') {
+    if (labSession.value === 'sample') return;
+    endSession();
+    void beginSample();
+    return;
+  }
+  endSession();
+  labSession.value = id;
+}
+
 /** Which tray a tool lives in. */
 export function categoryOf(id: LabToolId): LabCategory {
+  if (isSessionTool(id)) return 'tools';
   if (id.startsWith('life:')) return 'life';
+  if (id.startsWith('object:')) return 'food';
   if (id.startsWith('material:'))
     return CHEMISTRY_MATERIALS.includes(id.slice('material:'.length)) ? 'chemistry' : 'food';
   if (id.startsWith('paint:') || id.startsWith('shade:')) return 'habitat';
@@ -253,6 +322,23 @@ export function itemCopy(id: LabToolId): ItemCopy | null {
     };
   }
   if (id === 'erase') return structureTools(info).includes('erase') ? ERASE_STRUCTURE : null;
+  // P3.5: player tools offered on every world (D-0037).
+  if (id === 'sample' || id === 'transfer') {
+    const c = TOOLS_COPY.sample;
+    return { name: id === 'sample' ? TOOLS_COPY.sampleName : TOOLS_COPY.transferName, purpose: c.purpose, habitats: c.habitats, dose: id === 'sample' ? c.dose : TOOLS_COPY.transferHint, changes: c.changes, unchanged: c.unchanged, watch: c.watch };
+  }
+  if (id === 'cleanWater') {
+    const c = TOOLS_COPY.cleanWater;
+    return { name: TOOLS_COPY.cleanWaterName, purpose: c.purpose, habitats: c.habitats, dose: c.dose(CLEAN_WATER_LABELS[String(cleanFraction.value)] ?? ''), changes: c.changes, unchanged: c.unchanged, watch: c.watch };
+  }
+  if (id.startsWith('object:')) {
+    // P3.6: a food object, named and summarised by the dish's recorded content.
+    const mid = id.slice('object:'.length);
+    const j = info.materials.findIndex((m) => m.id === mid && m.kind === 'object');
+    const c = OBJECT_COPY[mid];
+    if (j < 0 || !c) return null;
+    return { name: info.materials[j]!.name, purpose: info.materialSummaries?.[j] ?? '', ...c };
+  }
   return null;
 }
 
@@ -263,6 +349,7 @@ function Segmented<T extends number>({
   onPick,
   prefix = '',
   testid,
+  format,
 }: {
   label: string;
   values: readonly T[];
@@ -270,6 +357,8 @@ function Segmented<T extends number>({
   onPick: (v: T) => void;
   prefix?: string;
   testid: string;
+  /** P3.5: how a value reads on its button (default: the number). */
+  format?: (v: T) => string;
 }) {
   return (
     <div class="lab-option">
@@ -286,7 +375,7 @@ function Segmented<T extends number>({
             data-testid={`${testid}-${v}`}
           >
             {prefix}
-            {v}
+            {format ? format(v) : v}
           </button>
         ))}
       </div>
@@ -297,7 +386,7 @@ function Segmented<T extends number>({
 function ItemDetails({ id }: { id: LabToolId }) {
   const copy = itemCopy(id);
   if (!copy) return null;
-  const brush = brushRule(id) !== null || id.startsWith('life:');
+  const brush = brushRule(id) !== null || id.startsWith('life:') || id === 'sample';
   const t = LAB_TEXT.details;
   const info = dishInfo.value;
   // The species' diet line (UX §4.3; W2-13), from the dish's own records.
@@ -377,7 +466,36 @@ function ToolOptions({ id }: { id: LabToolId }) {
       );
     }
   }
-  if (brushRule(id) !== null || id.startsWith('life:'))
+  // P3.5: what Sample takes, and how much water Clean water replaces.
+  if (id === 'sample')
+    opts.push(
+      <div key="mode" class="lab-option">
+        <span class="lab-option-label" id="sample-mode-label">
+          {TOOLS_COPY.modeLabel}
+        </span>
+        <div class="segmented" role="group" aria-labelledby="sample-mode-label">
+          {SAMPLE_MODES.map((m) => (
+            <button key={m} class="btn" aria-pressed={sampleMode.value === m} title={SAMPLE_MODE_HINTS[m]} onClick={() => (sampleMode.value = m)} data-testid={`sample-mode-${m}`}>
+              {SAMPLE_MODE_LABELS[m]}
+            </button>
+          ))}
+        </div>
+        <p class="lab-sub">{SAMPLE_MODE_HINTS[sampleMode.value]}</p>
+      </div>,
+    );
+  if (id === 'cleanWater')
+    opts.push(
+      <Segmented<CleanWaterFraction>
+        key="fraction"
+        label={TOOLS_COPY.fractionLabel}
+        values={CLEAN_WATER_FRACTIONS}
+        value={cleanFraction.value}
+        onPick={(v) => (cleanFraction.value = v)}
+        testid="clean-fraction"
+        format={(v) => CLEAN_WATER_LABELS[String(v)] ?? String(v)}
+      />,
+    );
+  if (brushRule(id) !== null || id.startsWith('life:') || id === 'sample')
     opts.push(
       <Segmented
         key="radius"
@@ -523,7 +641,8 @@ function ObserveActions() {
 export function LabTray({ category }: { category: LabCategory }) {
   const cat = LAB_CATEGORIES.find((c) => c.id === category)!;
   const items = trayItems(category);
-  const selected = labTool.value;
+  // P3.5: a Tools-tray session (Sample, Transfer, Clean water) is the selected item while it runs.
+  const selected = labSession.value ?? labTool.value;
   const inThisTray = selected !== 'inspect' && categoryOf(selected) === category;
   return (
     <section
@@ -559,7 +678,7 @@ export function LabTray({ category }: { category: LabCategory }) {
                     key={it.id}
                     class="btn lab-item"
                     aria-pressed={selected === it.id}
-                    onClick={() => selectLabTool(it.id)}
+                    onClick={() => (isSessionTool(it.id) ? pickSession(it.id) : selectLabTool(it.id))}
                     data-testid={`lab-item-${it.id}`}
                   >
                     {it.icon}

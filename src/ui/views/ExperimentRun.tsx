@@ -49,6 +49,11 @@ function armTitles(card: ExperimentCardView): { readonly a: string; readonly b: 
       return { a: 'A · with the later additions', b: 'B · without the later additions' };
     case 'shade':
       return { a: 'A · as written', b: 'B · shaded' };
+    case 'omitFounders': {
+      // P3.6 (E203): "B · without Brothmakers" (the species' name, plural).
+      const f = card.founders[ch.founderIndex];
+      return { a: 'A · as written', b: f ? `B · without ${card.speciesNames[f.speciesId] ?? f.speciesId}s` : 'B · without one founder group' };
+    }
     default:
       return { a: 'A · as written', b: "B · with the card's change" };
   }

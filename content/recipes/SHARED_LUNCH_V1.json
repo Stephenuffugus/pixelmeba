@@ -1,0 +1,25 @@
+{
+  "id": "SHARED_LUNCH_V1",
+  "revision": 1,
+  "name": "Shared lunch",
+  "habitatId": "WATER_GARDEN",
+  "seed": 201,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {"center": [45, 64], "radius": 6, "substrate": "water", "add": {"starch": 0.5, "nutrient": 0.2}, "label": "Starch and nutrient patch"}
+  ],
+  "founders": [
+    {"species": "B06", "count": 20, "center": [45, 64], "radius": 6},
+    {"species": "B01", "count": 20, "center": [45, 64], "radius": 6}
+  ],
+  "labels": [],
+  "question": "Who eats the sugar a Crumbsmith's enzyme makes?",
+  "expectedObservationsText": "Twenty Crumbsmiths and twenty Sprinters share a starch patch. Neither can eat starch; Crumbsmiths release enzyme that turns it into sugar, and the sugar is free for anyone nearby, Sprinters included. The cell inspector's reaction ledger shows the starch converted and sugar made in each cell.",
+  "phase": 3
+}

@@ -23,6 +23,7 @@
  * - Iteration is by ascending position and ascending slot; nothing here draws randomness.
  */
 import type { ColumnName } from './entities';
+import { emit } from './events';
 import type { World } from './world';
 
 export const LINK_VISUAL = 1;
@@ -267,7 +268,21 @@ function hasAnyLink(world: World, i: number): boolean {
  */
 export function removeAllLinks(world: World, i: number): void {
   if (!hasAnyLink(world, i)) return;
-  removeAllIn(world, fungal(world), i);
+  // P3.6: one 'linkBroken' event per valid fungal link, named by the removed organism (fungalTransport.ts).
+  const t = fungal(world);
+  const c = world.ents.cols;
+  for (let k = 0; k < t.slot.length; k++) {
+    const p = t.slot[k]![i]!;
+    if (p < 0 || !world.ents.refValid(p, t.birth[k]![i]!)) continue;
+    emit(world.events, world.counters, {
+      tick: world.tick,
+      type: 'linkBroken',
+      species: c.species[i]!,
+      birthId: c.birthId[i]!,
+      detail: { kind: 'fungal', link: t.kind![k]![i] === LINK_TRANSPORT ? 'transport' : 'visual', partner: c.birthId[p]! },
+    });
+  }
+  removeAllIn(world, t, i);
   removeAllIn(world, adhesion(world), i);
 }
 

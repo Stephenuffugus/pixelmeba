@@ -5,11 +5,12 @@
 import { hostInfo, parasiteInfo } from '@sim/parasites';
 import { infectionInfo } from '@sim/viruses';
 import { fungalNetwork } from '@sim/fungi';
+import { fungalFlowOf, transferredThisSecond } from '@sim/fungalTransport';
 import { CELL_COUNT, GRID_W } from '@sim/constants';
 import { allDivisionBlockers, divisionBlocker, divisionNeeds } from '@sim/births';
 import { FLAG } from '@sim/entities';
 import type { SimEvent } from '@sim/events';
-import { FIELD_IDS, type FieldId } from '@sim/fields';
+import { FIELD_DEFS, FIELD_IDS, type FieldId } from '@sim/fields';
 import { STRUCTURE_NAMES, SUBSTRATE_NAMES } from '@sim/grid';
 import { hungryPredator } from '@sim/movement';
 import { childrenOf, field as lineageField, has as lineageHas } from '@sim/lineage';
@@ -17,9 +18,11 @@ import { profileOf } from '@sim/profiles';
 import { R } from '@sim/reasons';
 import { PREY_NONE } from '@sim/species';
 import { worldHasSystem } from '@sim/gates';
+import { accessibleCarbonLastSecond, reactionInCell, reactionInDish, type ReactionEnzyme } from '@sim/reactions';
 import { exposureBreakdown, lightFactors, salinityIndex } from '@sim/chemistry';
 import { dormancySummary, moduleSummaries, reserveBand, upkeepNow } from '@sim/moduleView';
 import { founderOriginOf } from '@sim/founders';
+import { PRODUCER_BIT } from '@sim/secretion';
 import { entityCell, forEachInCell } from '@sim/spatial';
 import { response, SHOULDER_PH, SHOULDER_SALINITY, SHOULDER_WARMTH } from '@sim/suitability';
 import { entitySuitabilityAt } from '@sim/crossing';
@@ -32,10 +35,12 @@ import {
   CUE2_MOD_E06,
   CUE2_MOD_E07,
   CUE2_MOD_E08,
+  CUE2_DETRITUS_INTAKE,
   CUE2_MOD_E09,
   CUE2_MOD_E10,
   CUE2_MOD_E12,
   CUE2_PARASITIZED,
+  CUE2_RELEASING_PROTEIN,
   CUE2_SEEKING_LIGHT,
   DEPOSIT_FILM_BAND,
   E_CUE2,
@@ -46,6 +51,7 @@ import {
   LINKMASK_E,
   LINKMASK_N,
   LINKMASK_S,
+  LINKMASK_TRANSFER,
   LINKMASK_W,
   type SnapshotObject,
   CUE_CAPACITY_BLOCKED,
@@ -80,6 +86,7 @@ import {
   type FamilyRelation,
   type InspectorPayload,
   type OverlayId,
+  type ReactionRow,
   type Selection,
   type VisualEvent,
 } from './protocol';
@@ -138,8 +145,8 @@ export function packEntities(world: World, ents: Float32Array | null, ids: Uint3
 /**
  * Phase 3 cue bits (protocol 2, CUE2_*) of one living organism, read from authoritative state only: an
  * infection, a live parasite pair, an E04 anchor, a valid adhesion link, the Phase 3 modules in its
- * genome (like CUE_MOD_E0x), and E07 seeking light (an E07 carrier that is moving). DETRITUS_INTAKE and
- * RELEASING_PROTEIN stay 0 until wave 4 adds their FLAG bits.
+ * genome (like CUE_MOD_E0x), and E07 seeking light (an E07 carrier that is moving). RELEASING_PROTEIN is
+ * the protein bit of the secreting bit set (secretion.ts PRODUCER_BIT); DETRITUS_INTAKE is FLAG.detritusIntake.
  */
 function cue2Of(world: World, i: number, mods: readonly string[], flags: number): number {
   const c = world.ents.cols;
@@ -149,6 +156,8 @@ function cue2Of(world: World, i: number, mods: readonly string[], flags: number)
   const p = c.parasiteSlot[i]!;
   if (p >= 0 && e.refValid(p, c.parasiteBirthId[i]!)) cue2 |= CUE2_PARASITIZED;
   if (c.anchorState[i] === 1) cue2 |= CUE2_ANCHORED;
+  // Released protein enzyme this tick (the protein bit of the secreting bit set: E09 or native B08).
+  if ((c.secreting[i]! & PRODUCER_BIT.protein) !== 0) cue2 |= CUE2_RELEASING_PROTEIN;
   if ((c.aLink0[i]! >= 0 && e.refValid(c.aLink0[i]!, c.aLinkB0[i]!)) || (c.aLink1[i]! >= 0 && e.refValid(c.aLink1[i]!, c.aLinkB1[i]!))) cue2 |= CUE2_LINKED;
   if (mods.length > 0) {
     if (mods.includes('E04')) cue2 |= CUE2_MOD_E04;
@@ -157,7 +166,10 @@ function cue2Of(world: World, i: number, mods: readonly string[], flags: number)
       cue2 |= CUE2_MOD_E07;
       if (flags & FLAG.moving) cue2 |= CUE2_SEEKING_LIGHT;
     }
-    if (mods.includes('E08')) cue2 |= CUE2_MOD_E08;
+    if (mods.includes('E08')) {
+      cue2 |= CUE2_MOD_E08;
+      if (flags & FLAG.detritusIntake) cue2 |= CUE2_DETRITUS_INTAKE; // recorded detritus intake this tick (stage 6)
+    }
     if (mods.includes('E09')) cue2 |= CUE2_MOD_E09;
     if (mods.includes('E10')) cue2 |= CUE2_MOD_E10;
     if (mods.includes('E12')) cue2 |= CUE2_MOD_E12;
@@ -176,7 +188,8 @@ const FUNGAL_LINK_COLUMNS = [
  * E_LINKMASK of one organism: the direction of each live fungal link (partner reference valid), from
  * the partner's cell relative to its own (four-neighbour cells; y grows south): N 1, E 2, S 4, W 8.
  * A partner that is not a four-neighbour (never made by the rules) counts on its dominant axis.
- * Bit 4 (a transport transfer this second) stays 0 until wave 3's F02 transport.
+ * Bit 4 (LINKMASK_TRANSFER): the segment sent or received carbon along a transport link during the
+ * last dish second (P3.6, src/sim/fungalTransport.ts; observation only).
  */
 function linkMaskOf(world: World, i: number): number {
   const c = world.ents.cols;
@@ -190,6 +203,7 @@ function linkMaskOf(world: World, i: number): number {
     if (Math.abs(dx) >= Math.abs(dy)) mask |= dx > 0 ? LINKMASK_E : LINKMASK_W;
     else mask |= dy > 0 ? LINKMASK_S : LINKMASK_N;
   }
+  if (mask !== 0 && transferredThisSecond(world, i)) mask |= LINKMASK_TRANSFER;
   return mask;
 }
 
@@ -309,8 +323,9 @@ export function packDeposits(world: World, out: Uint8Array | null): Uint8Array {
   return buf;
 }
 
-export function packOverlay(world: World, id: OverlayId, out: Float32Array | null): { data: Float32Array; max: number } | null {
+export function packOverlay(world: World, id: OverlayId, out: Float32Array | null, selection: Selection | null = null): { data: Float32Array; max: number } | null {
   const buf = out && out.length === CELL_COUNT ? out : new Float32Array(CELL_COUNT);
+  if (id === 'foodAccess') return { data: buf, max: packFoodAccess(world, buf, selection) };
   let src: Float64Array | undefined;
   if (id === 'light') src = world.derived.light;
   else if (id === 'ph') src = world.derived.ph;
@@ -323,6 +338,42 @@ export function packOverlay(world: World, id: OverlayId, out: Float32Array | nul
     if (v > max) max = v;
   }
   return { data: buf, max };
+}
+
+/**
+ * P3.6 food-access overlay (SPEC §10.8; observation only). With an organism selected: per cell, the
+ * carbon of the pools its species can eat (its foods, plus film when it digests film in a film world:
+ * the same list as the inspector's "Food here"). Otherwise: the carbon enzymes made accessible in each
+ * cell during the last whole second (src/sim/reactions.ts). Returns the maximum.
+ */
+export function packFoodAccess(world: World, out: Float32Array, selection: Selection | null): number {
+  const slot = selection?.kind === 'entity' ? findSlotByBirth(world, selection.birthId) : -1;
+  if (slot < 0) return accessibleCarbonLastSecond(world, out);
+  out.fill(0);
+  const pools: Float64Array[] = [];
+  const scale: number[] = [];
+  for (const f of foodPoolsOf(world, slot)) {
+    const arr = world.fields[f];
+    if (!arr) continue;
+    pools.push(arr);
+    scale.push(FIELD_DEFS[f].carbonPerUnit ?? 1);
+  }
+  let max = 0;
+  for (let i = 0; i < CELL_COUNT; i++) {
+    let v = 0;
+    for (let k = 0; k < pools.length; k++) v += pools[k]![i]! * scale[k]!;
+    out[i] = v;
+    if (v > max) max = v;
+  }
+  return max;
+}
+
+/** The pools an organism can eat now: its foods, plus film for a film digester in a film world (D-0038). */
+function foodPoolsOf(world: World, slot: number): FieldId[] {
+  const sp = world.species[world.ents.cols.species[slot]!]!;
+  const out: FieldId[] = [...profileOf(world, slot).foods];
+  if (sp.def.digestsFilm && world.fields.film !== undefined && worldHasSystem(world, 'film')) out.push('film');
+  return out;
 }
 
 /**
@@ -346,7 +397,8 @@ export function visualEvents(
       ev.type !== 'conversion' &&
       ev.type !== 'mutation' &&
       ev.type !== 'branchEstablished' &&
-      ev.type !== 'branchExtinct'
+      ev.type !== 'branchExtinct' &&
+      ev.type !== 'objectEmptied'
     )
       continue;
     out.push({
@@ -427,6 +479,7 @@ function inspectEntity(world: World, slot: number): EntityInspect {
   // P3.3: a film digester in a film world also eats the film here, as detritus (D-0038).
   if (sp.def.digestsFilm && world.fields.film !== undefined && worldHasSystem(world, 'film')) foodHere.push({ food: 'film', amount: world.fields.film[cell]! });
   const network = fungalNetwork(world, slot);
+  const transfer = fungalFlowOf(world, slot);
   const blockers = divisionBlocker(world, slot) === R.NONE ? allDivisionBlockers(world, slot) : allDivisionBlockers(world, slot);
   // P2.2: from recorded lineage only (a module seeded at creation vs inherited vs gained here).
   const origin = founderOriginOf(world, birthId);
@@ -509,6 +562,7 @@ function inspectEntity(world: World, slot: number): EntityInspect {
     dormancy: dormancySummary(world, slot),
     founderOrigin: origin,
     ...(network ? { network } : {}),
+    ...(transfer ? { transfer } : {}),
     ...(world.fields.film !== undefined && worldHasSystem(world, 'film') ? { filmHere: world.fields.film[cell]! } : {}),
     ...parasiteAndInfection(world, slot),
   };
@@ -569,7 +623,97 @@ function inspectCell(world: World, cell: number): CellInspect {
     load: world.derived.cellLoad[cell]!,
     // P3.1 (SPEC §12.1): the chemistry and light readings, by the simulation's own rules (@sim/chemistry).
     ...chemistryLines(world, cell),
+    ...reactionLines(world, cell),
+    ...objectLine(world, cell),
   };
+}
+
+/** P3.6: the cell's finite food object, if any: its kind and remaining inventory (C per pool, bound N). */
+export function objectLine(world: World, cell: number): Pick<CellInspect, 'object'> {
+  const o = world.objects.find((ob) => ob.cell === cell);
+  if (!o) return {};
+  const pools: { sugar?: number; starch?: number; protein?: number } = {};
+  if (o.pools.sugar !== undefined) pools.sugar = o.pools.sugar;
+  if (o.pools.starch !== undefined) pools.starch = o.pools.starch;
+  if (o.pools.protein !== undefined) pools.protein = o.pools.protein;
+  return { object: { id: o.id, kind: o.kind, pools, n: o.n } };
+}
+
+/** Enzyme → its fields (SPEC §5.3; the rules in @sim/conversion and the producer slots in @sim/secretion). */
+const REACTION_FIELDS: readonly { readonly enzyme: ReactionEnzyme; readonly activity: FieldId; readonly substrate: FieldId; readonly product: ReactionRow['product'] }[] = [
+  { enzyme: 'starch', activity: 'eStarch', substrate: 'starch', product: 'sugar' },
+  { enzyme: 'oil', activity: 'eOil', substrate: 'oil', product: 'metabolite' },
+  { enzyme: 'protein', activity: 'eProtein', substrate: 'protein', product: 'broth' },
+];
+
+/** The four-neighbour cells of `cell` inside the grid, the cell itself first. */
+function cellAndNeighbours(cell: number): number[] {
+  const x = cell % GRID_W;
+  const out = [cell];
+  if (x + 1 < GRID_W) out.push(cell + 1);
+  if (x > 0) out.push(cell - 1);
+  if (cell + GRID_W < CELL_COUNT) out.push(cell + GRID_W);
+  if (cell - GRID_W >= 0) out.push(cell - GRID_W);
+  return out;
+}
+
+/**
+ * Species ids (ascending species index) of living organisms that released `enzyme` in the last tick
+ * (their producer bit in the `secreting` bit set, secretion.ts PRODUCER_BIT; native or module rules),
+ * in `cell` or a four-neighbour: SPEC §5.3's emit neighbourhood. A producer that is only nearby (E ≤ 35,
+ * no substrate, saturated, just arrived, not Active) is not credited: "Made here by …" needs a recorded
+ * release, otherwise the row says "Enzyme present" (honest labels).
+ */
+export function producersNear(world: World, enzyme: ReactionEnzyme, cell: number): string[] {
+  const c = world.ents.cols;
+  const bit = PRODUCER_BIT[enzyme];
+  const found = new Uint8Array(world.species.length);
+  for (const k of cellAndNeighbours(cell)) {
+    forEachInCell(world, k, (s) => {
+      if (c.alive[s] !== 1 || (c.secreting[s]! & bit) === 0) return;
+      const prof = profileOf(world, s);
+      const rules = enzyme === 'starch' ? prof.starch : enzyme === 'oil' ? prof.oil : prof.protein;
+      if (rules !== null) found[c.species[s]!] = 1;
+    });
+  }
+  const out: string[] = [];
+  for (let k = 0; k < found.length; k++) if (found[k] === 1) out.push(world.species[k]!.id);
+  return out;
+}
+
+/**
+ * P3.6 reaction ledger rows (SPEC §12.1): every enzyme with activity in this cell or conversion here
+ * in the last whole second. Absent when the world allocates no enzyme field.
+ */
+export function reactionLines(world: World, cell: number): Pick<CellInspect, 'reactions'> {
+  const rows: ReactionRow[] = [];
+  let any = false;
+  const breaker = world.fields.breaker?.[cell] ?? 0;
+  for (const r of REACTION_FIELDS) {
+    const act = world.fields[r.activity];
+    const sub = world.fields[r.substrate];
+    if (!act || !sub) continue;
+    any = true;
+    const here = reactionInCell(world, r.enzyme, cell);
+    const a = act[cell]!;
+    if (!(a > 0) && !(here.c > 0)) continue;
+    const dish = reactionInDish(world, r.enzyme);
+    rows.push({
+      enzyme: r.enzyme,
+      product: r.product,
+      activity: a,
+      effectiveActivity: a / (1 + breaker),
+      breaker,
+      substrate: sub[cell]!,
+      converted: here.c,
+      nMoved: here.n,
+      dishConverted: dish.c,
+      dishNMoved: dish.n,
+      cumulative: world.conversionTotals[r.enzyme],
+      madeBy: producersNear(world, r.enzyme, cell),
+    });
+  }
+  return any ? { reactions: rows } : {};
 }
 
 function chemistryLines(world: World, cell: number): Pick<CellInspect, 'salinity' | 'oxygen' | 'lightBase' | 'shade' | 'exposure'> {

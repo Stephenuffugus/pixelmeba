@@ -138,7 +138,7 @@ describe('completion copy says what completing each kind of card does (SPEC §13
   it('paired cards: the copies run to their stopping point and the dish is unchanged; one dish: the world keeps running', () => {
     const reg = registry();
     const cards = experimentCatalog(reg).map((d) => experimentCardView(reg, d));
-    expect(cards.filter((c) => c.paired).map((c) => c.id)).toEqual(['EXP_102', 'EXP_106', 'EXP_A', 'EXP_B', 'EXP_C']);
+    expect(cards.filter((c) => c.paired).map((c) => c.id)).toEqual(['EXP_102', 'EXP_106', 'EXP_203', 'EXP_204', 'EXP_A', 'EXP_B', 'EXP_C']);
     for (const card of cards) {
       const text = completionText(card);
       expect(text, card.id).toContain(`your Journal gets a stamp: “${card.journalStamp}”.`);

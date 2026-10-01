@@ -24,6 +24,7 @@ import { inheritedLead, LOCUS_NAMES, locusNote } from '../strings/inherited';
 import { actionLabel, dormancyChip, dormancyLines, energyCapText, LIFE_ACTIVE, moduleText, originChip, upkeepText } from '../strings/modules';
 import { founderStartText, moduleSourceText } from '../strings/modes';
 import { openLineage } from './LineageState';
+import { ReactionLedger } from './ReactionLedger';
 import { paintName, structureName } from './LabTrayNames';
 import { dishView } from '../views/LabView';
 import { PAINT_TARGETS, PLACEABLE_STRUCTURES, type PaintTarget, type PlaceableStructure } from '@sim/grid';
@@ -114,6 +115,36 @@ function networkText(name: string, n: NonNullable<EntityInspect['network']>): st
   const seg = (k: number) => `${k} ${k === 1 ? 'segment' : 'segments'}`;
   const threads = `${n.threads} separate ${n.threads === 1 ? 'thread' : 'threads'}`;
   return `${name}: ${seg(n.segments)} in ${threads}; this one has ${seg(n.thisThread)}.`;
+}
+
+/**
+ * P3.6: what an F02 segment passed along its transport links (measured, fungalTransport.ts): "Sent 0.120
+ * carbon to 2 linked segments in the last 10 s. Received 0.040 carbon from 1 linked segment in the last
+ * 10 s." Energy is never shared, so only carbon is named.
+ */
+function transferText(t: NonNullable<EntityInspect['transfer']>): string {
+  const seg = (k: number) => `${k} linked ${k === 1 ? 'segment' : 'segments'}`;
+  const win = `in the last ${t.windowSeconds} s`;
+  const parts: string[] = [];
+  if (t.sentC > 0) parts.push(`Sent ${t.sentC.toFixed(3)} carbon to ${seg(t.sentTo)} ${win}.`);
+  if (t.receivedC > 0) parts.push(`Received ${t.receivedC.toFixed(3)} carbon from ${seg(t.receivedFrom)} ${win}.`);
+  return parts.length > 0 ? parts.join(' ') : `No carbon moved along its links ${win}.`;
+}
+
+/**
+ * P3.6 (SPEC §5.1): the cell's food object and what it still holds, named from the dish's content:
+ * "Leaf wafer: 5.400 starch C, 3.600 protein C and 0.900 N left." Numbers are the worker's (game units).
+ */
+function objectText(o: NonNullable<CellView['object']>): string {
+  const name = dishInfo.value?.materials.find((m) => m.kind === 'object' && m.target === o.kind)?.name ?? o.kind;
+  const parts: string[] = [];
+  for (const pool of ['sugar', 'starch', 'protein'] as const) {
+    const v = o.pools[pool];
+    if (v !== undefined) parts.push(`${v.toFixed(3)} ${pool} C`);
+  }
+  parts.push(`${o.n.toFixed(3)} N`);
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0];
+  return `${name}: ${list} left.`;
 }
 
 /** "0.08 (habitat 0.80 × shade 0.10)" (SPEC §4.4: the inspector shows every light factor). */
@@ -499,6 +530,22 @@ function EntityView({ e }: { e: EntityInspect }) {
                   ) : null}
                 </section>
               ) : null}
+              {/* P3.6 (wave 2 verify MINOR): film and network sentences are body text (16 px), not the small grid. */}
+              {e.filmHere !== undefined && e.filmHere > 0 ? (
+                <p class="inspector-line">
+                  Biofilm here: <span data-testid="film-here">{e.filmHere.toFixed(3)} carbon in this cell</span>.
+                </p>
+              ) : null}
+              {e.network ? (
+                <p class="inspector-line" data-testid="fungal-network">
+                  {networkText(name, e.network)}
+                </p>
+              ) : null}
+              {e.transfer ? (
+                <p class="inspector-line" data-testid="fungal-transfer">
+                  {transferText(e.transfer)}
+                </p>
+              ) : null}
               <dl class="kv">
                 <dt>Food here</dt>
                 <dd>
@@ -514,18 +561,6 @@ function EntityView({ e }: { e: EntityInspect }) {
                 <dd>{amount(e.intakeLastSecond)} carbon</dd>
                 <dt>Conditions</dt>
                 <dd>{Math.round(e.suitability * 100)} % suitable</dd>
-                {e.filmHere !== undefined && e.filmHere > 0 ? (
-                  <>
-                    <dt>Biofilm here</dt>
-                    <dd data-testid="film-here">{e.filmHere.toFixed(3)} carbon in this cell</dd>
-                  </>
-                ) : null}
-                {e.network ? (
-                  <>
-                    <dt>Network</dt>
-                    <dd data-testid="fungal-network">{networkText(name, e.network)}</dd>
-                  </>
-                ) : null}
                 {e.predation ? (
                   <>
                     <dt>Hunting</dt>
@@ -677,6 +712,12 @@ export function InspectorSheet() {
             <dl class="kv">
               <dt>Ground</dt>
               <dd>{groundName(p.cell.substrate, p.cell.structure)}</dd>
+              {p.cell.object ? (
+                <>
+                  <dt>Food object</dt>
+                  <dd data-testid="cell-object">{objectText(p.cell.object)}</dd>
+                </>
+              ) : null}
               <dt>pH</dt>
               <dd data-testid="cell-ph">{cellNumber(p.cell.ph, 2)}</dd>
               {p.cell.salinity !== undefined ? (
@@ -714,6 +755,7 @@ export function InspectorSheet() {
                   : p.cell.residents.map((r) => dishInfo.value?.speciesNames[dishInfo.value.speciesIds.indexOf(r.speciesId)] ?? r.speciesId).join(', ')}
               </dd>
             </dl>
+            {p.cell.reactions ? <ReactionLedger rows={p.cell.reactions} /> : null}
           </>
         ) : null}
         {p.kind === 'gone' && p.gone ? (

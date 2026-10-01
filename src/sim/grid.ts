@@ -247,12 +247,23 @@ export function sealsCell(st: number): boolean {
  * - 'structure' a stone, wall or bead is in the way (paint and placement skip it);
  * - 'organism'  a live organism occupies it (structures never overlap live organisms);
  * - 'habitat'   the organism being added cannot live on this substrate (Life brush only);
+ * - 'object'    a finite food object lies here (P3.6: structures never cover one; one object per cell);
  * - 'noop'      nothing here for this edit (erasing a cell that has no structure).
  */
-export type BrushCellOutcome = 'ok' | 'rim' | 'structure' | 'organism' | 'habitat' | 'noop';
-export type LabBrushRule = 'material' | 'substrate' | 'shade' | 'place' | 'erase';
+export type BrushCellOutcome = 'ok' | 'rim' | 'structure' | 'organism' | 'habitat' | 'object' | 'noop';
+/** 'object' is the food-object tap (P3.6, objects.ts placeFoodObject): one cell, never blocked by organisms. */
+export type LabBrushRule = 'material' | 'substrate' | 'shade' | 'place' | 'erase' | 'object';
 
-export function brushCellOutcome(rule: LabBrushRule, structure: number, occupied: boolean): Exclude<BrushCellOutcome, 'habitat'> {
+/**
+ * `hasObject`: the cell holds a finite food object (P3.6). A stone, wall or bead is never placed on one
+ * (structures.ts applyHabitatEdit), and a second object is never placed beside it in the same cell.
+ */
+export function brushCellOutcome(
+  rule: LabBrushRule,
+  structure: number,
+  occupied: boolean,
+  hasObject = false,
+): Exclude<BrushCellOutcome, 'habitat'> {
   if (structure === ST_OUTSIDE) return 'rim';
   switch (rule) {
     case 'material':
@@ -265,9 +276,14 @@ export function brushCellOutcome(rule: LabBrushRule, structure: number, occupied
       return 'ok';
     case 'place':
       if (structure !== ST_NONE) return 'structure';
+      if (hasObject) return 'object';
       return occupied ? 'organism' : 'ok';
     case 'erase':
       return isPlacedStructure(structure) ? 'ok' : 'noop';
+    case 'object':
+      // Any structure refuses (createObject: open cells only); live organisms never block an object.
+      if (structure !== ST_NONE) return 'structure';
+      return hasObject ? 'object' : 'ok';
   }
 }
 

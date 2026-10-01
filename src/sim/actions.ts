@@ -33,6 +33,10 @@ import type { Ledger } from './ledger';
 import type { Profile } from './phenotype';
 import { producerApplies, producerRun } from './secretion';
 import { biofilmApplies, biofilmRun } from './film';
+import { matrixApplies, matrixRun } from './matrixBuilder';
+import { advanceIntakeClock } from './intakeClock';
+import { anchorStep } from './anchor';
+import { adhesionRelease } from './adhesion';
 import type { World } from './world';
 
 export type ActionTier = 'mandatory' | 'native' | 'module';
@@ -91,10 +95,12 @@ export function buildActionTable(actions: readonly Stage8Action[]): readonly Sta
 }
 
 /**
- * The shipped table, written in canonical order (checked at load). Wave 2 adds native BIOFILM (3);
- * wave 4 adds E09 and E10. The native producers apply only to a producer whose rules are native, the
- * module producers only to one whose rules came from that module (a module never duplicates a native
- * ability, SPEC §9), so a native B06 and an E01 carrier each run exactly one starch action.
+ * The shipped table, written in canonical order (checked at load): the native producers E_STARCH (0),
+ * E_OIL (1), E_PROTEIN (2), native BIOFILM (3), then modules E01 (starch release), E09 (protein
+ * release, secretion.ts) and E10 (matrix builder, matrixBuilder.ts). The native producers apply only
+ * to a producer whose rules are native, the module producers only to one whose rules came from that
+ * module (a module never duplicates a native ability, SPEC §9), so a native B06 and an E01 carrier
+ * each run exactly one starch action. Where the other modules act is listed in structures.ts.
  */
 const SHIPPED: readonly Stage8Action[] = [
   nativeAction('E_STARCH_SECRETION', producerApplies('starch', 'native'), producerRun('starch')),
@@ -102,6 +108,8 @@ const SHIPPED: readonly Stage8Action[] = [
   nativeAction('E_PROTEIN_SECRETION', producerApplies('protein', 'native'), producerRun('protein')),
   nativeAction('BIOFILM', biofilmApplies, biofilmRun),
   moduleAction('E01', producerApplies('starch', 'E01'), producerRun('starch')),
+  moduleAction('E09', producerApplies('protein', 'E09'), producerRun('protein')),
+  moduleAction('E10', matrixApplies, matrixRun),
 ];
 
 export const STAGE8_ACTIONS: readonly Stage8Action[] = buildActionTable(SHIPPED);
@@ -180,8 +188,10 @@ export class ActionContext {
  * until the links/anchor rules land (wave 4: E04 anchors, E12 links, F02 links on rest); it runs for
  * every living organism, Active or not, because resting releases anchors.
  */
-export function releaseInvalidLinks(_world: World, _i: number, _prof: Profile): void {
-  // Intentionally empty in this wave (no shipped world has links or anchors yet).
+export function releaseInvalidLinks(world: World, i: number, prof: Profile): void {
+  advanceIntakeClock(world, i, prof); // D-0035 usable-intake clock (E04/E12 carriers only), before the checks that read it
+  anchorStep(world, i, prof); // E04 surface anchor: detach, lockout, attach (anchor.ts)
+  adhesionRelease(world, i, prof); // E12 colony links: sever on module loss, rest, no intake, low E, separation (adhesion.ts)
 }
 
 /** Run the mandatory and optional table entries for one Active organism, in table order. */

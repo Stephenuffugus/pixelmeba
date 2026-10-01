@@ -57,6 +57,7 @@ import { dishView, handleViewKey, labGestures, LabViewToggle } from './LabView';
 import { labTray } from './LabView';
 import { LabToolbar, LabTrayHost } from './LabToolbar';
 import { OverlayLegend } from '../panels/OverlayLegend';
+import { SamplePanel } from '../panels/SamplePanel';
 import type { Speed } from '@worker/protocol';
 
 function formatTime(tick: number): string {
@@ -243,6 +244,7 @@ export function DishScreen() {
         <DiscoveryCard />
         {dishView.value === 'lab' ? <OverlayLegend floating /> : null}
         {dishView.value === 'lab' ? <LabTrayHost /> : null}
+        <SamplePanel />
         {candidates.value ? <CandidateList /> : null}
         {m?.capacityReached ? <div class="capacity-banner">Simulation capacity reached — a limit of the game, not the ecosystem.</div> : null}
         {toast.value ? (

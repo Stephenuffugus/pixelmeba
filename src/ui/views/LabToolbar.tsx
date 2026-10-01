@@ -106,7 +106,7 @@ function StripInfo() {
     const hint =
       id === 'inspect'
         ? LAB_TEXT.inspectHint
-        : id.startsWith('life:')
+        : id.startsWith('life:') || id.startsWith('object:')
           ? LAB_TEXT.lifeHint
           : LAB_TEXT.brushHint;
     return <span class="lab-hint">{hint}</span>;

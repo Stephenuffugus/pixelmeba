@@ -61,10 +61,10 @@ function harness() {
 const IDS = { compareId: 'xp1', aDishId: 'xp1-A', bDishId: 'xp1-B' };
 
 describe('Notebook → Experiments: the catalog', () => {
-  it('lists the seven cards with every part SPEC §13.2 names, from recorded content', () => {
+  it('lists the eleven cards with every part SPEC §13.2 names, from recorded content', () => {
     const h = harness();
     const cards = h.ask('experimentCatalog', (requestId) => ({ type: 'experimentCatalog', requestId })).cards;
-    expect(cards.map((c) => c.id)).toEqual(['EXP_101', 'EXP_102', 'EXP_103', 'EXP_106', 'EXP_A', 'EXP_B', 'EXP_C']);
+    expect(cards.map((c) => c.id)).toEqual(['EXP_101', 'EXP_102', 'EXP_103', 'EXP_106', 'EXP_201', 'EXP_202', 'EXP_203', 'EXP_204', 'EXP_A', 'EXP_B', 'EXP_C']);
     for (const c of cards) {
       for (const text of [c.question, c.recipeName, c.intervention, c.predictedTradeoff, c.confounds, c.journalStamp]) expect(text.length, c.id).toBeGreaterThan(0);
       expect(c.measurements.length).toBeGreaterThan(0);

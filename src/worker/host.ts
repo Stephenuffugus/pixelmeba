@@ -31,6 +31,7 @@ import { evolutionState, isMutationPreset, ratesFor } from '@sim/mutation';
 import { founderSummary } from '@sim/founders';
 import { creationFounders } from '@sim/founders';
 import { computeTotals } from '@sim/ledger';
+import { cancelSample, heldSummary, SAMPLE_HELD_REFUSAL, selectSample } from '@sim/sample';
 import type { NewDishPreview, RegistryInfo } from './protocol';
 import type { SlotModes } from './protocol';
 import { buildSaveFile, loadSaveFile, SaveFileError, saveMetaVariant } from '@persist/saveFile';
@@ -196,6 +197,8 @@ interface Dish {
   undoLabels?: { readonly commandId: string; readonly payload: CommandPayload }[];
   /** A single-arm experiment card running on this dish (P2.5): its gate is watched while it runs. */
   experiment?: SingleArmExperiment | null;
+  /** P3.5 (D-0037): the stateHash Sample Begin recorded (worker state; null after a reload or Cancel). */
+  sampleBeginHash?: string | null;
   /**
    * D-0033 fix round 1: the dish Continue holds, loaded only so a replacing action can keep it while no
    * dish is open. Never registered, never run. The autosave is written for it only to bind it to the
@@ -268,7 +271,9 @@ const MAX_BACKLOG_TICKS = 20;
 /** A fresh rollback checkpoint every 30 simulated seconds (serialize ≈ 20 ms at 700 organisms). */
 const CHECKPOINT_TICKS = 300;
 /** Requests that change a world and are rolled back if they throw part-way. */
-const MUTATING = new Set<ToWorker['type']>(['command', 'step', 'undo']);
+const MUTATING = new Set<ToWorker['type']>(['command', 'step', 'undo', 'sampleCancel']);
+/** P3.5: the only commands a dish accepts while it holds a sample (D-0037). */
+const WHILE_HELD = new Set<CommandPayload['kind']>(['sampleTransfer', 'sampleDiscard']);
 /** Upper bound on comparison pairs per pump at 'max' pacing (the work budget usually stops sooner). */
 const MAX_COMPARE_PAIRS_PER_PUMP = 400;
 
@@ -572,6 +577,7 @@ export class DishHost {
       case 'setSpeed': {
         const d = this.need(msg.dishId);
         if (d.failed || d.arm) return; // a comparison arm's time is driven only by the comparison
+        if (msg.speed !== 0 && this.refuseWhileHeld(d, 'setSpeed')) return;
         d.speed = msg.speed;
         d.acc = 0;
         this.sendSnapshot(d);
@@ -580,6 +586,7 @@ export class DishHost {
       case 'step': {
         const d = this.need(msg.dishId);
         if (d.failed || d.arm) return;
+        if (this.refuseWhileHeld(d, 'step')) return;
         d.speed = 0;
         this.stepDish(d);
         this.sendSnapshot(d);
@@ -589,6 +596,13 @@ export class DishHost {
         const d = this.need(msg.dishId);
         if (d.arm) {
           this.armCommand(d, msg);
+          return;
+        }
+        // P3.5 (D-0037): while a sample is held only Transfer and Discard change the dish; anything else
+        // is refused before applyNow, so it takes no sequence number and the vacated slots stay free.
+        if (!WHILE_HELD.has(msg.payload.kind) && this.refuseWhileHeld(d, 'command', msg.requestId)) return;
+        if (msg.payload.kind === 'sampleTake' && d.speed !== 0) {
+          this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: null, error: 'Pause the dish before taking a sample.' });
           return;
         }
         const before = msg.undoable ? serializeWorld(d.world) : null;
@@ -606,6 +620,8 @@ export class DishHost {
           d.undoLabels = [];
         } else if (d.undo && msg.payload.kind === 'lineage' && !isIntervention(msg.payload)) (d.undoLabels ??= []).push({ commandId: msg.commandId, payload: msg.payload });
         d.replay.push({ tick, commandId: msg.commandId, payload: msg.payload });
+        // P3.5: a selected organism lifted into the sample is no longer in the dish (it is not dead either).
+        if (msg.payload.kind === 'sampleTake' && changed && d.selection?.kind === 'entity') d.selection = null;
         this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: cmd.result ?? null });
         this.sendSnapshot(d);
         return;
@@ -614,6 +630,13 @@ export class DishHost {
         const d = this.need(msg.dishId);
         if (d.arm) {
           this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: null, error: 'Comparison copies are not rewound; clear the change on B instead.' });
+          return;
+        }
+        // P3.5 (D-0037): Undo while a sample is held acts as Cancel.
+        if (d.world.sample !== null) {
+          this.cancelHeldSample(d);
+          this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: null });
+          this.sendSnapshot(d);
           return;
         }
         if (!d.undo) {
@@ -796,6 +819,46 @@ export class DishHost {
           this.comparison = null;
         }
         this.post({ type: 'done', requestId: msg.requestId });
+        return;
+      }
+      case 'sampleBegin': {
+        const d = this.need(msg.dishId);
+        if (d.arm) {
+          this.post({ type: 'error', dishId: d.id, requestId: msg.requestId, message: 'Comparison copies take no samples; sample the dish itself.', lastValidTick: d.world.tick, paused: false, request: msg.type });
+          return;
+        }
+        if (this.refuseWhileHeld(d, 'sampleBegin', undefined, msg.requestId)) return;
+        // Begin (D-0037): pause and record the pre-begin hash. Nothing in the world changes.
+        d.speed = 0;
+        d.acc = 0;
+        const hash = stateHash(d.world);
+        d.sampleBeginHash = hash;
+        this.post({ type: 'sampleBegun', requestId: msg.requestId, dishId: d.id, hash, tick: d.world.tick });
+        this.sendSnapshot(d);
+        return;
+      }
+      case 'samplePreview': {
+        // Read-only: exactly what a take here would hold, with the whole-unit check (sample.ts).
+        const d = this.need(msg.dishId);
+        const sel = selectSample(d.world, msg.x, msg.y, msg.radius, msg.mode);
+        this.post({
+          type: 'samplePreview',
+          requestId: msg.requestId,
+          dishId: d.id,
+          preview: { mode: sel.mode, radius: sel.radius, origin: sel.origin, cells: sel.cells, organisms: sel.slots.length, objects: sel.objectIds.length, c: sel.c, n: sel.n, m: sel.m, missing: sel.missing },
+        });
+        return;
+      }
+      case 'sampleCancel': {
+        const d = this.need(msg.dishId);
+        if (d.world.sample === null) {
+          this.post({ type: 'error', dishId: d.id, requestId: msg.requestId, message: 'No sample is held.', lastValidTick: d.world.tick, paused: false, request: msg.type });
+          return;
+        }
+        const beginHash = d.sampleBeginHash ?? null;
+        this.cancelHeldSample(d);
+        this.post({ type: 'sampleCancelled', requestId: msg.requestId, dishId: d.id, hash: stateHash(d.world), tick: d.world.tick, beginHash });
+        this.sendSnapshot(d);
         return;
       }
       case 'release':
@@ -1093,6 +1156,7 @@ export class DishHost {
     if (this.comparison) throw new Error('A comparison is already open; finish or delete it first.');
     const src = this.need(msg.sourceDishId);
     if (src.arm) throw new Error('A comparison copy cannot start another comparison.');
+    if (src.world.sample !== null) throw new Error(SAMPLE_HELD_REFUSAL);
     if (msg.aDishId === msg.bDishId || this.dishes[msg.aDishId] || this.dishes[msg.bDishId]) throw new Error('comparison dish ids must be new and distinct');
     // Blocking panel (UX §2): the source pauses; the UI restores its prior speed when the comparison closes.
     const priorSpeed = src.speed;
@@ -1169,6 +1233,8 @@ export class DishHost {
     if (d.arm.role === 'A') return refuse('A is the baseline and never receives changes; queue the change on B.');
     if (c.experiment) return refuse("This experiment's one change is already on B; it takes no other change.");
     if (c.status !== 'setup') return refuse('Changes can only be queued on B before the run starts.');
+    const k = msg.payload.kind;
+    if (k === 'sampleTake' || k === 'sampleTransfer' || k === 'sampleDiscard') return refuse('Comparison copies take no samples; sample the dish itself.');
     let result: Intervention['result'];
     try {
       result = applyNow(d.world, msg.commandId, msg.payload).result ?? null;
@@ -2017,6 +2083,37 @@ export class DishHost {
   }
 
   /** Advance the active dish according to wall-clock time. Call frequently (≈ every 16 ms). */
+  /**
+   * P3.5 (D-0037): while the dish holds a sample, refuse a request that would change it or run time,
+   * before anything is applied (no command sequence number is taken). Posts the refusal: an `ack` with
+   * the error for a command (so its promise resolves), and an `error` notice the UI shows. True when refused.
+   */
+  private refuseWhileHeld(d: Dish, request: ToWorker['type'], commandRequestId?: number, requestId?: number): boolean {
+    if (d.world.sample === null) return false;
+    if (commandRequestId !== undefined) this.post({ type: 'ack', requestId: commandRequestId, dishId: d.id, result: null, error: SAMPLE_HELD_REFUSAL });
+    this.post({ type: 'error', dishId: d.id, ...(requestId !== undefined ? { requestId } : {}), message: SAMPLE_HELD_REFUSAL, lastValidTick: d.world.tick, paused: false, request });
+    if (d.speed !== 0) d.speed = 0;
+    this.sendSnapshot(d);
+    return true;
+  }
+
+  /**
+   * P3.5 Cancel (D-0037): the exact inverse of the take (sample.ts cancelSample, which also drops the
+   * take from the command log and returns nextSeq), then the host's command state as Undo leaves it: a
+   * fresh rollback checkpoint, no replay and no undo slot.
+   */
+  private cancelHeldSample(d: Dish): void {
+    cancelSample(d.world);
+    d.checkpoint = serializeWorld(d.world);
+    d.replay = [];
+    d.undo = null;
+    d.undoLabels = [];
+    d.speed = 0;
+    d.acc = 0;
+    d.sampleBeginHash = null;
+    d.lastEventId = d.world.counters.nextEventId - 1;
+  }
+
   private checkpoint(d: Dish): void {
     d.checkpoint = serializeWorld(d.world);
     d.replay = [];
@@ -2058,6 +2155,7 @@ export class DishHost {
     const d = this.active ? this.dishes[this.active] : undefined;
     if (!d) return;
     let ran = 0;
+    if (d.speed > 0 && d.world.sample !== null) d.speed = 0; // P3.5: a held sample keeps time paused
     if (d.speed > 0 && !d.failed) {
       d.acc += (elapsed / 1000) * 10 * d.speed;
       if (d.acc > MAX_BACKLOG_TICKS) d.acc = MAX_BACKLOG_TICKS;
@@ -2100,7 +2198,7 @@ export class DishHost {
     // Protocol 2: adhesion links and food objects, read from authoritative state only.
     const links = packLinks(w);
     const objects = packObjects(w);
-    const overlay = d.overlay ? packOverlay(w, d.overlay, null) : null;
+    const overlay = d.overlay ? packOverlay(w, d.overlay, null, d.selection) : null;
     const events = visualEvents(w.events.ring, d.lastEventId, w.content.modules, lociOfBirth(w));
     const lv = d.lineageView;
     const lineage: LineageMarks | null = lv ? { locus: lv.locus, branch: lv.branch, ...packLineageMarks(w, lv.locus, lv.branch) } : null;
@@ -2141,6 +2239,8 @@ export class DishHost {
       evolution: { ...evolutionState(w), creation: creationFounders(w) },
       // P3.1: the lid setting now in effect (the Habitat tray's lid toggle shows it).
       lid: w.settings.lid,
+      // P3.5: the held sample (the UI offers Transfer, Cancel and Discard while it is held).
+      sample: heldSummary(w),
     };
     const transfer: Transferable[] = [packed.ents.buffer, packed.ids.buffer, deposits.buffer, links.buffer];
     if (overlay) transfer.push(overlay.data.buffer);

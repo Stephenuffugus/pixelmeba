@@ -5,6 +5,7 @@
 import { TICKS_PER_SECOND } from './constants';
 import { maskCells } from './grid';
 import { debrisTotal, pushSample, recordTraitSample } from './history';
+import { worldHasTransport } from './fungalTransport';
 import type { World } from './world';
 import { compactLineage } from './lineage';
 
@@ -46,6 +47,8 @@ export function stagePublish(world: World): void {
   const h = world.history;
   // P2.8: the dish's debris total (detritus carbon), recorded with every sample from schema 3 on.
   const debris = debrisTotal(world);
+  // P3.6: carbon moved along F02 transport links this second, only in a dish whose species form them.
+  const transfer = worldHasTransport(world) ? (h.pendingFungalTransfer ?? 0) : undefined;
   pushSample(h, {
     second: nextTick / TICKS_PER_SECOND,
     count,
@@ -58,7 +61,9 @@ export function stagePublish(world: World): void {
     capacityLimited: h.pendingCapacity,
     interventions: h.pendingInterventions,
     ...(debris !== undefined ? { debrisTotal: debris } : {}),
+    ...(transfer !== undefined ? { fungalTransfer: transfer } : {}),
   });
+  delete h.pendingFungalTransfer;
   // P2.8: regional trait sample every 10 simulated seconds (observation only).
   recordTraitSample(world, nextTick);
   h.pendingBirths.fill(0);

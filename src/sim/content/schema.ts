@@ -284,6 +284,11 @@ export const ExperimentChangeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('omitScheduled'), indexes: z.array(int.min(0)).min(1) }).strict(),
   z.object({ kind: z.literal('shade'), factor: z.literal(0.1) }).strict(),
   z.object({ kind: z.literal('commands'), atSecond: nonneg, commands: z.array(ExperimentCommandSchema).min(1) }).strict(),
+  /**
+   * P3.6 (E203): B is realized without this recipe founder group. Only the LAST group is accepted, so
+   * every earlier group keeps arm A's cells and birthIds (founders are placed group by group).
+   */
+  z.object({ kind: z.literal('omitFounders'), founderIndex: int.min(0) }).strict(),
 ]);
 export type ExperimentChange = z.infer<typeof ExperimentChangeSchema>;
 

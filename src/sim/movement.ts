@@ -42,6 +42,10 @@ import { PREY_ANY, PREY_FREE, PREY_IN_SEDIMENT, PREY_NONE, type SpeciesRT } from
 import { SUB_SEDIMENT } from './grid';
 import { R } from './reasons';
 import { followHosts, isParasiteSpecies, parasiteMove } from './parasites';
+import { isAnchored } from './anchor';
+import { adhesionLinked } from './adhesion';
+import { brightEnough, lightScore } from './lightSeeker';
+import { withDebrisScore } from './debrisFeeder';
 import type { World } from './world';
 
 const HEADING_E = 0;
@@ -180,7 +184,17 @@ function foodScore(world: World, prof: Profile, cell: number, energy: number): n
     const s = 0.5 * avail(world.fields.starch[cell]!);
     if (s > best) best = s;
   }
-  return best;
+  // P3.6: the same term for oil (native B07) and protein (native B08, E09 carriers) producers.
+  if (prof.oil !== null && energy > prof.oil.minEnergy && world.fields.oil) {
+    const s = 0.5 * avail(world.fields.oil[cell]!);
+    if (s > best) best = s;
+  }
+  if (prof.protein !== null && energy > prof.protein.minEnergy && world.fields.protein) {
+    const s = 0.5 * avail(world.fields.protein[cell]!);
+    if (s > best) best = s;
+  }
+  // E08 carriers (debrisFeeder.ts): the larger of this score and the detritus score, never the sum.
+  return withDebrisScore(world, prof, cell, best);
 }
 
 /** Scores within this tolerance are equal (SPEC §6.4: all equal within 1e-9 ⇒ wander). */
@@ -212,6 +226,9 @@ function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile): void 
   // within two consecutive water cells; its own cell counts while it is crossing.
   const crosser = crossesWater(sp);
   const cross = crosser ? startCount(world, slot, sp, own) : -1;
+  // E07 (lightSeeker.ts): F is effective light, and only its own cell and cells brighter by brighterBy are candidates.
+  const seeker = prof.lightSeeker !== null;
+  let brighter = 0;
   for (let y = cy - r; y <= cy + r; y++) {
     for (let x = cx - r; x <= cx + r; x++) {
       if (!inBounds(x, y) || !inMask(x, y)) continue;
@@ -220,8 +237,9 @@ function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile): void 
         if (!crosser || !crossableWater(world, cell)) continue;
         if (cell === own && !crossingCompatible(world, slot, sp, cell)) continue;
       }
+      if (seeker && cell !== own && !brightEnough(world, prof, own, cell)) continue;
       if (cell !== own && traceFraction(world, sp, px, py, x + 0.5, y + 0.5, cross) < 1) continue;
-      const F = foodScore(world, prof, cell, c.E[slot]!);
+      const F = seeker ? lightScore(world, cell) : foodScore(world, prof, cell, c.E[slot]!);
       const S = (crosser ? suitabilityAt(world, sp, prof, cell, true) : suitabilityAt(world, sp, prof, cell)).value;
       const others = load[cell]! - (cell === own ? selfLoad : 0);
       const C = Math.min(1, Math.max(0, others) / CELL_SOFT_CAPACITY);
@@ -229,11 +247,17 @@ function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile): void 
       scores[count] = score;
       cells[count] = cell;
       count++;
+      if (cell !== own) brighter++;
       if (score > bestScore) bestScore = score;
       if (score < minScore) minScore = score;
     }
   }
-  if (count === 0 || bestScore - minScore < SCORE_EPS) {
+  // A light seeker never wanders: with nothing brighter in reach it stays (SPEC §9 E07).
+  if (seeker && brighter === 0) {
+    c.moveMode[slot] = MOVE_NONE;
+    return;
+  }
+  if (count === 0 || (!seeker && bestScore - minScore < SCORE_EPS)) {
     c.moveMode[slot] = MOVE_WANDER;
     return;
   }
@@ -344,7 +368,17 @@ export function stageSenseAndMove(world: World): void {
       c.flags[i] = c.flags[i]! & ~(FLAG.moving | FLAG.hunting);
       continue;
     }
-    if (!sp.selfPropelled || prof.speed <= 0 || (c.flags[i]! & FLAG.attached) !== 0) continue;
+    if (!prof.selfPropelled || prof.speed <= 0 || (c.flags[i]! & FLAG.attached) !== 0) continue;
+    // E04 (anchor.ts): an anchored organism does not self-propel and pays no movement cost.
+    if (isAnchored(world, i)) {
+      c.flags[i] = c.flags[i]! & ~(FLAG.moving | FLAG.hunting);
+      continue;
+    }
+    // E12 (adhesion.ts): a linked colony member does not self-propel.
+    if (adhesionLinked(world, i)) {
+      c.flags[i] = c.flags[i]! & ~(FLAG.moving | FLAG.hunting);
+      continue;
+    }
 
     const step = prof.speed * DT;
     // X01 parasites (parasites.ts): an attached one rides its host; a free one pursues a host in range.
@@ -394,6 +428,8 @@ export function stageSenseAndMove(world: World): void {
       const y0 = c.y[i]!;
       applyStep(world, i, sp, x0, y0, x0 + Math.cos(angle) * step, y0 + Math.sin(angle) * step);
     }
+    // E07: the seeking cue (FLAG.moving) shows only on a tick it actually moved.
+    if (prof.lightSeeker !== null && c.movedThisTick[i] === 0) c.flags[i] = c.flags[i]! & ~FLAG.moving;
   }
   followHosts(world); // attached parasites take their host's position at no cost (parasites.ts)
   rebuildIndex(world);

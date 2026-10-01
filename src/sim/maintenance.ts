@@ -7,7 +7,6 @@ import {
   HEAL_MIN_SUITABILITY,
   HEAL_RATE,
   INHIBITOR_DAMAGE,
-  MOVE_COST_PER_CELL,
   STARVATION_DAMAGE,
   STRESS_DAMAGE,
   STRESS_THRESHOLD,
@@ -23,6 +22,9 @@ import { profileOf } from './profiles';
 import { R } from './reasons';
 import { entityCell } from './spatial';
 import { inhibitorExposure } from './suitability';
+import { anchorUpkeepPerSecond } from './anchor';
+import { adhesionUpkeepPerSecond, severOnRemoval } from './adhesion';
+import { movementCost } from './lightSeeker';
 import type { World } from './world';
 
 /** Exponential weighting for "damage over the final ~10 s" attribution (DECISIONS D-0004). */
@@ -43,9 +45,13 @@ export function stageMaintenance(world: World): void {
     // upkeep (E05) is added once. While Resting a flat rest maintenance replaces all of it (§7.6).
     const rest = c.lifeState[i] === LIFE_RESTING ? prof.dormancy : null;
     const surcharge = rest ? 0 : prof.surcharge * DT;
-    const upkeep = rest ? 0 : prof.upkeep * DT;
-    const maint = rest ? rest.restMaintenance * DT : (prof.m + prof.upkeep) * DT;
-    const move = MOVE_COST_PER_CELL * c.movedThisTick[i]! * prof.motilityFactor;
+    // E04 attached upkeep (anchor.ts; 0 unless anchored) is separate upkeep, ledgered as 'upkeep'.
+    // E12 link upkeep (adhesion.ts; perLinkUpkeep × incident links) is added to it.
+    const anchorUp = rest ? 0 : anchorUpkeepPerSecond(world, i, prof) + adhesionUpkeepPerSecond(world, i, prof);
+    const upkeep = rest ? 0 : (prof.upkeep + anchorUp) * DT;
+    const maint = rest ? rest.restMaintenance * DT : (prof.m + prof.upkeep + anchorUp) * DT;
+    // Per-cell distance cost, or an E07 carrier's per-second cost on ticks it moved (lightSeeker.ts).
+    const move = movementCost(world, i, prof);
     const E0 = Math.max(0, c.E[i]!);
     const paidMaint = Math.min(maint, E0);
     const paidMove = Math.min(move, E0 - paidMaint);
@@ -161,6 +167,7 @@ export function killEntity(world: World, i: number, cause: number): void {
   const sp = c.species[i]!;
   world.history.pendingDeaths[sp] = (world.history.pendingDeaths[sp] ?? 0) + 1;
   releaseHostPair(world, i); // SPEC §6.8, §7.4: an attached parasite is released alive (parasites.ts)
+  severOnRemoval(world, i); // E12: its colony partners start their relink lockout (adhesion.ts)
   removeAllLinks(world, i); // SPEC §6.8: incident links leave both endpoints
   world.ents.free(i);
 }

@@ -1,0 +1,40 @@
+{
+  "id": "EXP_204",
+  "seed": 204,
+  "title": "Broken catalyst",
+  "question": "What happens to the shared lunch when the enzyme is weakened?",
+  "recipeId": "BROKEN_CATALYST_V1",
+  "intervention": "Make a copy of this dish and add enzyme breaker (4 per cell) over the whole starch patch in copy B only. Run both for 120 seconds and compare the starch converted.",
+  "predictedTradeoff": "Breaker divides every enzyme's effective activity by (1 + breaker), so copy B should convert less starch while the Crumbsmiths pay the same to release enzyme. The breaker also spreads and fades, so the difference may shrink.",
+  "measurements": [
+    "interventionAccepted",
+    "converted.starch",
+    "field.starch",
+    "field.sugar",
+    "consumed.sugar",
+    "intake.B06",
+    "intake.B01",
+    "alive.B06",
+    "alive.B01"
+  ],
+  "stoppingSeconds": 120,
+  "confounds": "Breaker spreads out of the patch and loses 1 % per second, so its effect is strongest at the start. Less sugar changes how the organisms move and feed, so later encounters differ between the copies: this is one paired run, not proof of a general effect.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "runSeconds", "arm": "A", "op": "gte", "value": 120, "label": "Both copies ran 120 s"}
+      ]
+    }
+  },
+  "paired": true,
+  "change": {
+    "kind": "commands",
+    "atSecond": 0,
+    "commands": [
+      {"kind": "deposit", "materialId": "M09", "points": [[45.5, 64.5]], "radius": 6, "dose": 4}
+    ]
+  },
+  "completion": {"journalStamp": "Compared a shared lunch with and without enzyme breaker", "playerSteps": ["viewComparison"]},
+  "phase": 3
+}

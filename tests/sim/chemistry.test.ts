@@ -309,6 +309,7 @@ describe('Lab materials: deposits, companions and the ledger (SPEC §2.3, §3.4;
       'INH_BACT',
       'INH_FUNG',
       'INH_PHOTO',
+      'M01',
       'METABOLITE',
       'NUTRIENT',
       'OIL',

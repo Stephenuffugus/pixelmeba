@@ -130,6 +130,42 @@
       "g2Digest": "38baac85155444f5",
       "currentDigest": "38baac85155444f5",
       "changedBy": []
+    },
+    {
+      "id": "SHARED_LUNCH_V1",
+      "kind": "recipe",
+      "recipe": "SHARED_LUNCH_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "0c312485379ed15d",
+      "changedBy": []
+    },
+    {
+      "id": "OIL_NEIGHBORHOOD_V1",
+      "kind": "recipe",
+      "recipe": "OIL_NEIGHBORHOOD_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "4ce88e76450e4b03",
+      "changedBy": []
+    },
+    {
+      "id": "PROTEIN_CHAIN_V1",
+      "kind": "recipe",
+      "recipe": "PROTEIN_CHAIN_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "3754a631f383dd83",
+      "changedBy": []
+    },
+    {
+      "id": "BROKEN_CATALYST_V1",
+      "kind": "recipe",
+      "recipe": "BROKEN_CATALYST_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "0143728607d74854",
+      "changedBy": []
     }
   ]
 }

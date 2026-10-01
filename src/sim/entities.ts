@@ -222,6 +222,8 @@ export const FLAG = {
   /** This tick's intake reached 1 % of its intake ceiling (USABLE_INTAKE_FRACTION; set in stage 6). */
   usableIntake: 1 << 11,
   // 1 << 12 and 1 << 13 are reserved for Phase 3 wave 4 (E04/E12); the foundation adds no flag.
+  /** This tick's intake came from local detritus through E08 (debris feeder; set in stage 6, cleared with feeding). */
+  detritusIntake: 1 << 13,
 } as const;
 
 /** Life states (SPEC §6.1, §7.6). Saved in the lifeState column: append only. */
@@ -276,6 +278,21 @@ export class EntityStore {
     if (i + 1 > this.highWater) this.highWater = i + 1;
     this.freeHint = i + 1;
     return i;
+  }
+
+  /**
+   * Allocate exactly `slot` (P3.5 Sample Cancel and Discard put held organisms back into the slots
+   * they came from; D-0037). Throws when the slot is out of range or alive. Caller fills columns.
+   * Every slot below freeHint stays alive, so lowest-free-first allocation is unchanged.
+   */
+  allocateAt(slot: number): void {
+    if (!Number.isInteger(slot) || slot < 0 || slot >= this.capacity) throw new Error(`allocateAt(): slot ${slot} is out of range`);
+    if (this.cols.alive[slot] === 1) throw new Error(`allocateAt(): slot ${slot} is alive`);
+    this.clearSlot(slot);
+    this.cols.alive[slot] = 1;
+    this.count++;
+    if (slot + 1 > this.highWater) this.highWater = slot + 1;
+    if (slot === this.freeHint) this.freeHint = slot + 1;
   }
 
   free(slot: number): void {

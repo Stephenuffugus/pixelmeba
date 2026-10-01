@@ -471,7 +471,13 @@ function phase3StateProblem(s: WorldState, cols: Record<string, ArrayLike<number
   const structure = base64ToBytes(s.grid.structure.b64);
   const objects = foodObjectsProblem(s.objects ?? [], structure, next as number);
   if (objects) return `The dish's food objects cannot be loaded (${objects}).`;
-  const sample = savedSampleProblem(s.sample ?? null, { speciesIds, genomes: s.genomes ?? [] });
+  const sample = savedSampleProblem(s.sample ?? null, {
+    speciesIds,
+    genomes: s.genomes ?? [],
+    entities: { alive: cols.alive!, birthId: cols.birthId!, highWater: hw },
+    // P3.5: where Cancel would put the sample back (cells, objects, the command and birth counters).
+    world: { structure, objects: s.objects ?? [], nextObjectId: next as number, nextSeq: s.commands.nextSeq, nextBirthId: s.counters.nextBirthId, log: s.commands.log },
+  });
   if (sample) return `The held sample cannot be loaded (${sample}).`;
   return null;
 }

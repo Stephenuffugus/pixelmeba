@@ -8,7 +8,8 @@
  *
  * - Single-arm cards realize the recipe and run it.
  * - Paired cards realize arm A (the recipe as written) and arm B, which differs by exactly the
- *   declared change: a setup difference before tick 0 (`omitPatch`, `omitScheduled`, `shade`), or
+ *   declared change: a setup difference before tick 0 (`omitPatch`, `omitScheduled`, `shade`,
+ *   `omitFounders` — the recipe's last founder group only), or
  *   commands applied to B through the ordinary command path at `atSecond`, after both arms were
  *   duplicated from one serialized state. Both arms then advance as one paired run.
  *
@@ -275,6 +276,12 @@ export function experimentProblems(def: ExperimentDef, recipe: RecipeDef | undef
   if (def.paired && ch.kind === 'none') bad('change', 'a paired card declares the one change arm B receives');
   if (!def.paired && ch.kind !== 'none') bad('change', 'only paired cards declare a change');
   if (ch.kind === 'omitPatch' && recipe && ch.patchIndex >= recipe.fieldPatches.length) bad('change.patchIndex', `recipe ${recipe.id} has no field patch ${ch.patchIndex}`);
+  // P3.6: only the last founder group may be omitted, so every earlier group keeps arm A's cells and birthIds.
+  if (ch.kind === 'omitFounders' && recipe) {
+    if (ch.founderIndex >= recipe.founders.length) bad('change.founderIndex', `recipe ${recipe.id} has no founder group ${ch.founderIndex}`);
+    else if (ch.founderIndex !== recipe.founders.length - 1)
+      bad('change.founderIndex', `only the last founder group (${recipe.founders.length - 1}) can be omitted, so the other groups keep their places and birth ids`);
+  }
   if (ch.kind === 'omitScheduled')
     ch.indexes.forEach((k, i) => {
       if (recipe && k >= recipe.scheduledCommands.length) bad(`change.indexes.${i}`, `recipe ${recipe.id} has no scheduled command ${k}`);
@@ -524,14 +531,16 @@ export function realizeExperimentArms(registry: ContentRegistry, idOrDef: string
     const A = realize(ids.A ?? `${def.id}-single`);
     return { def, recipe, A, B: null, obsA: new ArmObserver(A, { pools }), obsB: null, startTick: 0, baselineHash: null, interventions: [] };
   }
-  if (ch.kind === 'omitPatch' || ch.kind === 'omitScheduled' || ch.kind === 'shade') {
+  if (ch.kind === 'omitPatch' || ch.kind === 'omitScheduled' || ch.kind === 'shade' || ch.kind === 'omitFounders') {
     const A = realize(ids.A ?? `${def.id}-A`);
     const B =
       ch.kind === 'omitPatch'
         ? realize(ids.B ?? `${def.id}-B`, (r) => ({ ...r, fieldPatches: r.fieldPatches.filter((_, i) => i !== ch.patchIndex) }))
-        : ch.kind === 'omitScheduled'
-          ? realize(ids.B ?? `${def.id}-B`, (r) => ({ ...r, scheduledCommands: r.scheduledCommands.filter((_, i) => !ch.indexes.includes(i)) }))
-          : realize(ids.B ?? `${def.id}-B`);
+        : ch.kind === 'omitFounders'
+          ? realize(ids.B ?? `${def.id}-B`, (r) => ({ ...r, founders: r.founders.filter((_, i) => i !== ch.founderIndex) }))
+          : ch.kind === 'omitScheduled'
+            ? realize(ids.B ?? `${def.id}-B`, (r) => ({ ...r, scheduledCommands: r.scheduledCommands.filter((_, i) => !ch.indexes.includes(i)) }))
+            : realize(ids.B ?? `${def.id}-B`);
     if (ch.kind === 'shade') applyWholeDishShade(B, ch.factor);
     const omittedPatch = ch.kind === 'omitPatch' ? ch.patchIndex : null;
     return { def, recipe, A, B, obsA: new ArmObserver(A, { pools }), obsB: new ArmObserver(B, { pools, omittedPatch }), startTick: 0, baselineHash: null, interventions: [] };

@@ -1,19 +1,32 @@
 /**
- * Stage 8 — state and structures (SPEC §3.2, §3.3, §5.3; D04 §2 C08 and §9; P3.7). Per living
- * organism, in ascending slot order:
- *   1. mandatory transitions: dormancy (SPEC §7.6, every living organism), then the release of
- *      invalid links/anchors (actions.ts releaseInvalidLinks; a no-op until wave 4);
- *   2. Active organisms only: the action table (actions.ts STAGE8_ACTIONS) — mandatory table entries,
- *      native optional actions by action ID (the NativeAbility enum index), then modules E01…E17
- *      ascending. Each checks the energy and body carbon remaining after earlier reservations,
- *      reserves its full cost and either commits at once (secretion.ts) or submits a shared
- *      construction request. Nothing is retried; no later action is refunded.
- * After the per-organism pass: shared construction (construction.ts: proportional film headroom,
- * one snapshot, one commit, unused reservations returned), then the F02 transport pass
- * (`fungalTransportPass`), then births in stage 9.
+ * Stage 8 — state and structures (SPEC §3.2, §3.3, §5.3, §7.1, §9; D04 §2 C08 and §9; D-0045; P3.7).
+ * Per living organism, in ascending slot order:
+ *   1. mandatory transitions, for every living organism (Active or not): dormancy (SPEC §7.6), then
+ *      actions.ts releaseInvalidLinks — the D-0035 usable-intake clock (E04/E12 carriers), E04
+ *      anchoring (detach, lockout, attach; anchor.ts) and the E12 severance of invalid adhesion links;
+ *   2. Active organisms only: the action table (actions.ts STAGE8_ACTIONS), in this final order —
+ *        mandatory table entries (none ship; Phase 7 life-stage transitions go here),
+ *        native optional actions by action ID = NativeAbility enum index:
+ *          E_STARCH_SECRETION 0, E_OIL_SECRETION 1, E_PROTEIN_SECRETION 2, BIOFILM 3,
+ *        modules ascending: E01 starch release, E09 protein release (secretion.ts), E10 matrix
+ *          builder (matrixBuilder.ts).
+ *      Each checks the energy and body carbon remaining after earlier commits and reservations, and
+ *      either commits at once (secretion: 0.40 E/s) or reserves its full cost for the shared
+ *      construction pass (BIOFILM, E10). Nothing is retried; no later action is refunded.
+ * After the per-organism pass: shared construction (construction.ts: one film snapshot, proportional
+ * 0.50 headroom shared by B02 and every E10 builder, one commit, energy charged per accepted carbon,
+ * unused reservations returned), then the F02 transport pass (`fungalTransportPass`), then births in
+ * stage 9.
  *
- * secreting and FLAG.secreting are reset for every living organism before dormancy; a non-Active
- * organism is skipped before any producer writes secretionCode, so it keeps its last value.
+ * The other modules act outside this table, where their rule belongs: E04 anchoring and E12 severance
+ * in the release hook above (the usable-intake clock first); E04 (anchored speed 0) and E07 (light
+ * seeking) in movement (stage 4) with their upkeep and swimming cost in stage 7; E06 (shade collector)
+ * and E08 (debris feeder) in intake (stage 6); E12 links formed in stage 5 and their upkeep in stage 7;
+ * E03 through the dormancy step; E05 as capacity in the profile with its upkeep in stage 7.
+ *
+ * secreting (a producer bit set: starch 1, oil 2, protein 4; secretion.ts PRODUCER_BIT) and
+ * FLAG.secreting are reset for every living organism before dormancy; a non-Active organism is skipped
+ * before any producer writes secretionCode, so it keeps its last value.
  */
 import { CELL_COUNT, GRID_H, GRID_W } from './constants';
 import { FLAG, LIFE_ACTIVE } from './entities';
@@ -21,6 +34,8 @@ import { FIELD_DEFS, FIELD_IDS } from './fields';
 import { dormancyStep } from './dormancy';
 import { ActionContext, releaseInvalidLinks, runActions, STAGE8_ACTIONS, type Stage8Action } from './actions';
 import { constructionPass } from './construction';
+import { recordMatrixBuilt } from './matrixBuilder';
+import { fungalTransport } from './fungalTransport';
 import type { MaterialDef } from './content/schema';
 import {
   brushCellOutcome,
@@ -48,10 +63,10 @@ import type { World } from './world';
 
 /**
  * The F02 fungal transport pass (SPEC §7.7; D04 §9): one simultaneous pass after shared construction
- * and before births, reading post-construction body pools. A no-op until wave 3 implements it.
+ * and before births, reading post-construction body pools (src/sim/fungalTransport.ts).
  */
-export function fungalTransportPass(_world: World): void {
-  // Intentionally empty in this wave (no shipped world has fungal transport links yet).
+export function fungalTransportPass(world: World): void {
+  fungalTransport(world);
 }
 
 /**
@@ -75,7 +90,7 @@ export function stageStructures(world: World, actions: readonly Stage8Action[] =
     runActions(ctx, actions, i, prof);
   }
   // Shared construction, then F02 transport, both before births.
-  constructionPass(world, ctx.requests);
+  recordMatrixBuilt(world, constructionPass(world, ctx.requests)); // E10 "active now" (observation only)
   fungalTransportPass(world);
 }
 
@@ -138,6 +153,8 @@ export interface HabitatSkips {
   readonly organism: number;
   /** Cells a stone or wall would seal with no open neighbor to take their contents. */
   readonly enclosed: number;
+  /** Cells holding a finite food object (P3.6); present only when some were skipped. */
+  readonly object?: number;
 }
 
 /** Conserved material a new stone or wall moved into neighboring open cells (totals unchanged). */
@@ -267,11 +284,15 @@ export function applyHabitatEdit(world: World, p: HabitatEditPayload): HabitatEd
   const g = world.grid;
   const rule = habitatEditRule(p.kind);
   const occupied = rule === 'place' ? occupiedCells(world) : null;
-  const skipped = { rim: 0, structure: 0, organism: 0, enclosed: 0 };
+  const skipped: { rim: number; structure: number; organism: number; enclosed: number; object?: number } = { rim: 0, structure: 0, organism: 0, enclosed: 0 };
+  // P3.6: a stone, wall or bead is never placed on a finite food object (one store lookup per cell).
+  const objectCells = rule === 'place' && world.objects.length > 0 ? new Uint8Array(CELL_COUNT) : null;
+  if (objectCells) for (const ob of world.objects) objectCells[ob.cell] = 1;
   const ok: number[] = [];
   for (const cell of strokeFootprint(p.points, p.radius)) {
-    const o = brushCellOutcome(rule, g.structure[cell]!, occupied !== null && occupied[cell] === 1);
+    const o = brushCellOutcome(rule, g.structure[cell]!, occupied !== null && occupied[cell] === 1, objectCells !== null && objectCells[cell] === 1);
     if (o === 'ok') ok.push(cell);
+    else if (o === 'object') skipped.object = (skipped.object ?? 0) + 1;
     else if (o !== 'noop') skipped[o]++;
   }
   let changed = false;
@@ -323,7 +344,7 @@ export function applyHabitatEdit(world: World, p: HabitatEditPayload): HabitatEd
     }
   }
   if (changed) g.geometryVersion++;
-  const rejected = skipped.rim + skipped.structure + skipped.organism + skipped.enclosed;
+  const rejected = skipped.rim + skipped.structure + skipped.organism + skipped.enclosed + (skipped.object ?? 0);
   const note =
     applied > 0
       ? null

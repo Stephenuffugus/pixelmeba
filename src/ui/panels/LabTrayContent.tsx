@@ -120,6 +120,8 @@ export function toolAvailable(info: DishInfo, id: LabToolId): boolean {
   if (id === 'inspect') return true;
   if (id.startsWith('life:')) return info.speciesIds.includes(id.slice('life:'.length));
   if (id.startsWith('material:')) return info.materials.some((m) => m.id === id.slice('material:'.length));
+  // P3.6: a food object tool needs that object material in this dish's recorded content.
+  if (id.startsWith('object:')) return info.materials.some((m) => m.id === id.slice('object:'.length) && m.kind === 'object');
   if (id.startsWith('paint:') || id.startsWith('shade:')) return habitatTools(info).includes(id);
   return structureTools(info).includes(id);
 }

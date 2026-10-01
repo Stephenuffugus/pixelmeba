@@ -1,0 +1,38 @@
+{
+  "id": "EXP_203",
+  "seed": 203,
+  "title": "Protein chain",
+  "question": "Can Creambuds live on protein that only Brothmakers can open?",
+  "recipeId": "PROTEIN_CHAIN_V1",
+  "intervention": "Make a copy of this dish without the 20 Brothmakers. The Creambuds start in the same places in both copies. Run both for 180 seconds and compare the broth made and the Creambuds' intake.",
+  "predictedTradeoff": "Brothmakers spend energy on protein enzyme and drink the broth themselves, so they compete with the Creambuds they feed. Without them no broth is made at all.",
+  "measurements": [
+    "patchInput.0",
+    "converted.protein",
+    "field.protein",
+    "field.broth",
+    "consumed.broth",
+    "intake.Y02",
+    "intake.B08",
+    "alive.Y02",
+    "alive.B08",
+    "births.Y02",
+    "deaths.Y02",
+    "biomass.Y02"
+  ],
+  "stoppingSeconds": 180,
+  "confounds": "The protein carries its own bound nutrient (0.10 per carbon), which moves into the broth; the Water Garden's free nutrient is also there in both copies. Brothmakers drink broth too. After the copies differ, every encounter differs: this is one paired run, not proof of a general effect.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "converted.protein", "arm": "A", "op": "gt", "value": 0, "label": "Broth was made from protein in copy A"},
+        {"measure": "intake.Y02", "arm": "A", "op": "gt", "value": 0, "label": "Creambuds drank broth in copy A"}
+      ]
+    }
+  },
+  "paired": true,
+  "change": {"kind": "omitFounders", "founderIndex": 1},
+  "completion": {"journalStamp": "Compared Creambuds with and without Brothmakers", "playerSteps": ["viewComparison"]},
+  "phase": 3
+}
