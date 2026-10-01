@@ -1,5 +1,19 @@
 # Resume point — read this first after a restart
 
+> **Update 2026‑10‑01 ≈ 00:55 UTC — RESUMED (owner: "code all night", back ≈ 12:00 UTC). START HERE if this session died.**
+> g2-close-2 was restructured to save a stage (the separate re-verify of fix round 2 is folded into the round‑3
+> re-verify): two workflows run at once —
+> `docs/agent/g2-keep-fix3.workflow.js.txt` (fixer in the main tree, port 4191: carry-overs 1–5 — paused changes
+> reach Continue by checksum, one time format, curly quotes, 16 px toasts, ability names in gain lines; report
+> `docs/reports/reviews/g2-close/keep-dish-fix3.md`) and `docs/agent/g2-comprehension-review.workflow.js.txt`
+> (read-only reviewer on a `git archive HEAD` snapshot in tmp/review-src, port 4195; writes tools/review-g2.mjs,
+> docs/reports/comprehension-g2.md, docs/reports/img/g2/).
+> **Next:** lead commits fix3 → re-verify rounds 2+3 (saves + player lenses, read-only) → comprehension fixes
+> (labels/hierarchy only) → re-run review → lead integration (check + full e2e) → G2 ritual + tag `g2` →
+> Phase 3 (four lead choices of g3-plan-recheck.md, preflight with world schema 4, waves).
+> If the session died mid-run: `git status`; keep uncommitted fixer work on a LOCAL `wip/` branch (never push
+> it); read the reports; rerun only what is missing.
+
 > **Update 2026‑09‑29 ≈ 13:50 UTC — PAUSED FOR A BREAK (owner's request). START HERE.**
 > State: `main` clean and pushed. g2-close part 1 is committed: "keep the open dish first" (D‑0033:
 > build, two verifier lenses, two fix rounds) in `7962785`, the P2.9 tuning report (D‑0034) in `9c087bc`,

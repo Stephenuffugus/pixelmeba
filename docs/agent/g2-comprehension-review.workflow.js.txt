@@ -1,0 +1,32 @@
+export const meta = {
+  name: 'g2-comprehension-review',
+  description: 'G2 gate comprehension self-review (D06 §18): five tester tasks from a cold start, on a snapshot build of HEAD, with a reproducible Playwright tool and screenshots',
+  phases: [{ title: 'Review', detail: 'read-only on src; snapshot build of HEAD on port 4195' }],
+}
+
+const REVIEW_PORT = 4195
+
+const PRE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Phase 2 tasks P2.1–P2.9 are committed on main. Canonical rules: docs/PIXELMEBA_IMPLEMENTATION_SPEC.md, docs/CONTENT_TABLES.md, docs/ARCHITECTURE.md, docs/UX_SPEC.md, docs/CONFLICT_REGISTER.md; docs/DECISIONS.md holds rulings through D-0034 (read the titles). Do NOT run git add/commit/stash/checkout/reset/rm/restore; do not delete files you did not create. Another agent (a fixer) edits src/ and tests/ in this working tree AT THE SAME TIME as you: never edit src/, tests/ or content/, and never build or test from the working tree — use the snapshot below. Never run prettier/format. The machine has 2 CPUs shared with that agent: long commands with run_in_background and an until-loop wait (never a bare sleep). Stop only your own port when done (lsof -t -i :<port> | xargs -r kill; never pkill -f).`
+
+const KNOWN = `Known and being fixed right now by the other agent (lead rulings; do not report these as new problems; list them once under a heading "Known, being fixed" with what you saw): (1) a change made while paused at an unchanged tick reaches Continue only at the next tick/save; (2) Saved dishes' named rows and Home's Continue card say "5 s simulated" while checkpoint rows say "at 0:05 dish time" (becoming the dish clock everywhere); (3) some sentences quote a dish name with straight quotes, others with curly quotes (becoming curly everywhere); (4) toasts are 14 px (becoming 16 px); (5) a module gain shows in the event feed as "…inherited a different trait." and in the birth record as "gained E05" (becoming "A Sunbead offspring gained Reserve chamber." and "gained Reserve chamber (E05)").`
+
+const REVIEW_TASK = `ASSIGNMENT: the G2 gate's comprehension self-review (BUILD_DIRECTIVE "G2 gate — evidence": "Self-review against D6 §18 comprehension tasks (write the five tester tasks and confirm each is achievable in ≤ 10 min from a cold start)"). Read D06 §18 "Comprehension session" and "Return evidence rather than a verdict" (docs/source/D06-core-experience-evolution-pacing-and-build-priorities.md lines 385–396), UX_SPEC §3 (first minutes, What if?, comparison), docs/reports/opening-loop-g1.md (the G1 review, same style) and tools/review-opening-loop.mjs.
+
+SNAPSHOT — review the committed build, never the working tree:
+  rm -rf tmp/review-src && mkdir -p tmp/review-src && git archive HEAD | tar -x -C tmp/review-src && ln -s /workspaces/pixelmeba/node_modules tmp/review-src/node_modules
+  (cd tmp/review-src && npx vite build --outDir /workspaces/pixelmeba/tmp/dist-review --emptyOutDir)
+  npx vite preview --outDir tmp/dist-review --port ${REVIEW_PORT} --strictPort --host 127.0.0.1   (run_in_background; wait until it answers)
+Record the reviewed commit (git rev-parse --short HEAD at snapshot time) in the report.
+
+${KNOWN}
+
+1. Write the five tester tasks from D06 §18: the session task "Make a dish change, show why it changed, and preserve another version to compare", and the four questions (identify one food source; one cause of population change; one inherited trait; one difference between the two dishes), plus distinguishing a temporary state from an inherited trait (D06's second directional target). Phrase them as a tester would receive them (no UI names that give the answer away).
+2. Perform each task from a COLD START (fresh browser context, empty storage, default settings as a first-time player gets them — prompts on) in the snapshot build, acting as a player who has never seen the design: navigate ONLY by what is on screen (role, accessible name, visible text — no test ids, no reading the source to find the way), record every step, what the screen said (quote it), the simulated and real time taken, and screenshots, at desktop 1440×900 and phone portrait 360×800 (and one task at phone landscape 800×360 and one at 200 % text). A task passes only if a naive player can do it in ≤ 10 minutes of real interaction using only what the screen offers (running at a faster speed is allowed; say which). Write tools/review-g2.mjs so the run is reproducible against any served build (arguments: base URL, width, height, tag, text scale; Playwright library like the G1 tool; screenshots in docs/reports/img/g2/). Write docs/reports/comprehension-g2.md: the reviewed commit; per task the steps, quotes, times, pass/fail, and the screen where any difficulty arose; then D06's four separate headings "mechanically correct", "understood", "interesting", "fast enough"; the "Known, being fixed" list; and state plainly that this is a self-review by the build agent, not the five-tester session, which remains an owner item (D06 §18 asks the team to recruit testers).
+3. Return every comprehension problem you hit as BLOCKER (a task cannot be done in ≤ 10 min) / MAJOR (done only with luck or by reading something misleading) / MINOR (friction), each with the screen, what was said, and a concrete proposed change to labels, hierarchy or event evidence (D06: "If comprehension fails, revise labels, hierarchy or event evidence before adding another system") — never a mechanics change, never a number or content-value change. Every proposed wording must stay true to measured state (honest labels: "coincided with" until a recorded mechanism supports "because"; a temporary state is not inherited).
+You own: tools/review-g2.mjs, docs/reports/comprehension-g2.md, docs/reports/img/g2/**, tmp/review-src/, tmp/dist-review/. Stop port ${REVIEW_PORT} when done.`
+
+const REVIEW_SCHEMA = { type: 'object', properties: { commit: { type: 'string' }, tasksPassed: { type: 'number' }, tasksTotal: { type: 'number' }, problems: { type: 'array', items: { type: 'string' } }, summary: { type: 'string' } }, required: ['commit', 'tasksPassed', 'tasksTotal', 'problems', 'summary'] }
+
+phase('Review')
+const review = await agent(`${PRE}\n\n${REVIEW_TASK}`, { label: 'review:comprehension', phase: 'Review', schema: REVIEW_SCHEMA })
+return { review }
