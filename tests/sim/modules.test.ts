@@ -15,6 +15,7 @@ import { realizeRecipe } from '../../src/sim/recipes';
 import { deserializeWorld, serializeWorld } from '../../src/sim/serialize';
 import type { World } from '../../src/sim/world';
 import { clearWater, registry } from '../helpers/world';
+import { G2_LISTS, registryWith } from '../helpers/registry';
 
 function genome(w: World, ancestor: string, modules: string[] = []) {
   return w.genomes.get(w.genomes.intern({ ...neutralGenome(ancestor), modules }));
@@ -45,7 +46,12 @@ describe('P2.1 module registry', () => {
   it('the Phase 2 manifest enables exactly E01, E03 and E05, all implemented', () => {
     const reg = registry();
     expect(reg.manifest.enabledModules).toEqual(['E01', 'E03', 'E05']);
-    expect(reg.manifest.buildPhase).toBe(2);
+    // The Phase 2 manifest is the g2 build's (tests/fixtures/saves/g2-manifest.json); the shipped one
+    // moved to build phase 3 in the Phase 3 preflight (D-0036).
+    const g2 = registryWith(G2_LISTS);
+    expect(g2.manifest.buildPhase).toBe(2);
+    expect(g2.manifest.enabledModules).toEqual(['E01', 'E03', 'E05']);
+    for (const id of g2.manifest.enabledModules) expect(IMPLEMENTED_MODULES).toContain(id);
     for (const id of reg.manifest.enabledModules) expect(IMPLEMENTED_MODULES).toContain(id);
     const w = clearWater();
     expect(w.content.modules.map((m) => m.id)).toEqual(['E01', 'E03', 'E05']);

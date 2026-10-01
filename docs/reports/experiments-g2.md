@@ -672,3 +672,19 @@ wave does not move the store because P2.8 extends it next.
   detail (the dish view has no experiment panel yet).
 - The History sheet charts sugar, nutrient and oxygen totals but not debris, although EXP_103, its
   recipe text and the Debris material say to open it "to see the debris total".
+
+## 7. Phase 3 preflight (2026‑10‑01): the wave A numbers are Phase 2 numbers
+
+The Preflight bumps `content/manifest.json` to buildPhase 3 and contentVersion 2 (D‑0036), and Phase 3
+then enables more species, systems and modules. So that §4's checks keep testing the Phase 2 content
+they recorded, every card run in the six wave A card tests (`runCard`, `runTwiceIdentical`,
+`expectReplayIdentical`, `untouchedRecipeHash` in `tests/experiments/helpers.ts`) and the three recorded
+comparisons in `tests/sim/comparison.test.ts` now realize their worlds under ONE registry,
+`registryWith(G2_LISTS)` (`tests/helpers/registry.ts`): the g2 build's manifest lists with buildPhase 2
+and contentVersion 1, read from `tests/fixtures/saves/g2-manifest.json`. The golden file
+`tests/experiments/golden/wave-a-measurements.json` is unchanged and its stamps still record
+contentVersion 1. A stamp made by this build under the shipped manifest (in the app, or
+`runExperiment(registry(), …)`) records contentVersion 2. Under the shipped manifest the numbers may
+move as Phase 3 enables more content (the wave 4 module flip changes the module draws of Phase 2
+recipes); the trajectory fence's check (b) records each such move under a decision, while these tests
+keep checking the g2 numbers.

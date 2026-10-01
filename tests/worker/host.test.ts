@@ -27,7 +27,8 @@ describe('worker host (P1.3)', () => {
     const h = harness();
     h.host.handle({ type: 'create', requestId: 1, dishId: 'd1', source: { kind: 'recipe', recipeId: 'FIRST_DISH_V1' } });
     const ready = h.out.find((m) => m.type === 'ready');
-    expect(ready && ready.type === 'ready' && ready.info.speciesIds).toEqual(['A01', 'B01', 'B04', 'B06', 'P01']);
+    // The dish's species are the shipped manifest's (Phase 3 preflight: no literal list to move as phases enable species).
+    expect(ready && ready.type === 'ready' && ready.info.speciesIds).toEqual(registry().manifest.enabledSpecies);
     const snap = h.snapshots()[0]!;
     expect(snap.count).toBe(56);
     expect(snap.tick).toBe(0);

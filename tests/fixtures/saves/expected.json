@@ -1,0 +1,46 @@
+{
+  "about": "Recorded by the g2 build (tools/make-g2-saves.ts) through loadSaveFile: stateHash at load, stateHash after replayTicks more ticks, and trajectoryDigest(world, \"g2\") at that tick. Re-recorded only by tools/fence-update.ts --g2 --reason D-00xx.",
+  "replayTicks": 1000,
+  "saves": {
+    "first-dish-t3000.pixelmeba.gz": {
+      "hashAtLoad": "c7435142acec100f",
+      "hashPlus1000": "69102ffe9ccaa0c3",
+      "digestPlus1000": "5730917ce3ec53f6"
+    },
+    "starch-unlock-t900.pixelmeba.gz": {
+      "hashAtLoad": "bddc0f67875dcb2c",
+      "hashPlus1000": "4c97234ff95d7e6b",
+      "digestPlus1000": "13510998deeba33e"
+    },
+    "starch-unlock-e01-carriers-t900.pixelmeba.gz": {
+      "hashAtLoad": "c92f0ff288a14bca",
+      "hashPlus1000": "2870aa3df927ac56",
+      "digestPlus1000": "0b2ff8f4f0f0d818"
+    },
+    "reserve-compare-t600.pixelmeba.gz": {
+      "hashAtLoad": "fb2ce41de1482a6d",
+      "hashPlus1000": "f39c6bc9c9299d94",
+      "digestPlus1000": "511bb6986c24f1a8"
+    },
+    "first-dish-accelerated-varied-t6000.pixelmeba.gz": {
+      "hashAtLoad": "ee073c6c27155294",
+      "hashPlus1000": "3a03f82d42957309",
+      "digestPlus1000": "31d7651c01cbd987"
+    },
+    "exp106-arm-b-t300.pixelmeba.gz": {
+      "hashAtLoad": "2a4e5da67da9f3c5",
+      "hashPlus1000": "e733f3188567f37c",
+      "digestPlus1000": "280d70b0b6d8f402"
+    },
+    "first-dish-lab-edits-t1200.pixelmeba.gz": {
+      "hashAtLoad": "6b5f63580a14b9e5",
+      "hashPlus1000": "518687f34f4ddc1b",
+      "digestPlus1000": "b8666f9b56412af0"
+    },
+    "e03-dormancy-t500.pixelmeba.gz": {
+      "hashAtLoad": "61fc5113a7f03000",
+      "hashPlus1000": "515d29a72ec2ba70",
+      "digestPlus1000": "0b06eeb388afcb79"
+    }
+  }
+}

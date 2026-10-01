@@ -182,8 +182,19 @@ export interface ValidationResult {
   readonly issues: readonly ContentIssue[];
 }
 
+export interface ValidateOptions {
+  /**
+   * Tests only (tests/helpers/registry.ts registryWith): accept an enabled species whose native
+   * ability, or an enabled module, the simulation does not implement yet, so a builder can test
+   * content another builder of the same wave is implementing. Off by default; never set by the app,
+   * the content validator or a save import.
+   */
+  readonly allowUnimplemented?: boolean;
+}
+
 /** Validate raw packs. Returns a registry only when there are no errors. */
-export function validateContent(raw: RawPacks): ValidationResult {
+export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): ValidationResult {
+  const allowUnimplemented = opts.allowUnimplemented === true;
   const issues: ContentIssue[] = [];
   const err = (file: string, path: string, message: string) => issues.push({ severity: 'error', file, path, message });
   const warn = (file: string, path: string, message: string) =>
@@ -326,7 +337,7 @@ export function validateContent(raw: RawPacks): ValidationResult {
       if (s === undefined) return err(mf, `enabledSpecies.${i}`, `unknown species "${id}"`);
       if (s.phase > m.buildPhase) err(mf, `enabledSpecies.${i}`, `"${id}" belongs to phase ${s.phase} (build phase ${m.buildPhase})`);
       s.nativeAbilities.forEach((a) => {
-        if (!IMPLEMENTED_NATIVE_ABILITIES.includes(a))
+        if (!allowUnimplemented && !IMPLEMENTED_NATIVE_ABILITIES.includes(a))
           err(species.files[id]!, 'nativeAbilities', `enabled species uses "${a}", which the simulation does not implement yet`);
       });
       s.prey.forEach((p) => {
@@ -337,7 +348,7 @@ export function validateContent(raw: RawPacks): ValidationResult {
       const mod = modules.map[id];
       if (mod === undefined) return err(mf, `enabledModules.${i}`, `unknown module "${id}"`);
       if (mod.phase > m.buildPhase) err(mf, `enabledModules.${i}`, `"${id}" belongs to phase ${mod.phase}`);
-      if (!IMPLEMENTED_MODULES.includes(id)) err(mf, `enabledModules.${i}`, `"${id}" is not implemented by the simulation yet`);
+      if (!allowUnimplemented && !IMPLEMENTED_MODULES.includes(id)) err(mf, `enabledModules.${i}`, `"${id}" is not implemented by the simulation yet`);
       const missing = missingModuleParams(mod);
       if (missing.length > 0) err(modules.files[id]!, 'params', `enabled module ${id} is missing ${missing.join(', ')}`);
       // The dormancy machine subtracts these costs unconditionally once its energy gates pass, so the

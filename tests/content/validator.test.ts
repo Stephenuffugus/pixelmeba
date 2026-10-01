@@ -61,23 +61,25 @@ describe('content validation (P0.2)', () => {
     expect(errs.some((e) => e.file === 'content/species/B01copy.json' && e.message.includes('file name must match id'))).toBe(true);
   });
 
+  // Phase 3 preflight (g3-plan-recheck W2-02 (b)): the subjects are Phase 5 records (B09's SIGNAL_GLOW,
+  // B10), which no Phase 3 or 4 build enables or implements, so these cases keep testing the rule.
   it('refuses to enable a species whose native ability is not implemented', () => {
     const errs = errorsOf(
       mutate(raw, 'manifest', 'manifest.json', (d) => {
-        d.enabledSpecies = [...(d.enabledSpecies as string[]), 'B02'].sort();
+        d.enabledSpecies = [...(d.enabledSpecies as string[]), 'B09'].sort();
         d.buildPhase = 7;
       }),
     );
-    expect(errs.some((e) => e.file === 'content/species/B02.json' && e.message.includes('BIOFILM'))).toBe(true);
+    expect(errs.some((e) => e.file === 'content/species/B09.json' && e.message.includes('SIGNAL_GLOW'))).toBe(true);
   });
 
   it('refuses a shipped recipe that uses content outside the manifest', () => {
     const errs = errorsOf(
       mutate(raw, 'recipes', 'FIRST_DISH_V1.json', (d) => {
-        (d.founders as { species: string }[])[0]!.species = 'B03';
+        (d.founders as { species: string }[])[0]!.species = 'B10';
       }),
     );
-    expect(errs).toContainEqual(expect.objectContaining({ path: 'founders.0.species', message: '"B03" is not enabled in this build' }));
+    expect(errs).toContainEqual(expect.objectContaining({ path: 'founders.0.species', message: '"B10" is not enabled in this build' }));
   });
 
   it('module eligibility never includes a native equivalent', () => {

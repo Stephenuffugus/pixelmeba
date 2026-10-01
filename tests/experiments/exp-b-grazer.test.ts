@@ -38,9 +38,10 @@ describe('Experiment B — What changes when a grazer arrives (FIRST_DISH_V1 r1,
     expect(r.B!.startHash).not.toBe(r.baselineHash);
   });
 
+  // Re-runs the recipe and both copies to 300 s: over 2 minutes on a loaded 2-CPU machine.
   it('replays identically; copy A is the untouched garden, FIRST_DISH_V1 run straight to 300 s', () => {
     expectReplayIdentical(r);
-  });
+  }, 600_000);
 
   it('records the grazers as an external input and every capture as one predation death', () => {
     const A = r.A.measurements;

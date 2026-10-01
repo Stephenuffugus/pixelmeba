@@ -61,6 +61,7 @@ import { validateContent, type RawFile, type RawPacks } from '../../src/sim/cont
 import { loadRawPacksFs } from '../../tools/lib/content-fs';
 import { FakeClockHost } from '../helpers/host';
 import { aliveOf, clearWater, place, registry, setField } from '../helpers/world';
+import { G2_LISTS, registryWith } from '../helpers/registry';
 import type { DishInfo } from '../../src/worker/protocol';
 import { describeChange } from '../../src/ui/panels/CompareText';
 import { habitatEditOutcome, livesHereText } from '../../src/ui/strings/lab';
@@ -900,7 +901,7 @@ describe('Lab content comes from the world (P2.7)', () => {
     ]);
     const late = { file: 'content/structures/STONE.json', data: { ...stone, phase: 5 } };
     expect(errors((r) => ({ ...r, structures: r.structures.map((f) => (f.file.endsWith('STONE.json') ? late : f)) }))).toEqual([
-      'content/manifest.json → enabledStructures.1: "STONE" belongs to phase 5 (build phase 2)',
+      `content/manifest.json → enabledStructures.1: "STONE" belongs to phase 5 (build phase ${(base.manifest.data as { buildPhase: number }).buildPhase})`,
     ]);
     const bad = { file: 'content/structures/STONE.json', data: { ...stone, guide: { summary: '' } } };
     expect(errors((r) => ({ ...r, structures: r.structures.map((f) => (f.file.endsWith('STONE.json') ? bad : f)) })).length).toBeGreaterThan(0);
@@ -999,9 +1000,13 @@ describe('Life brush preview (P2.7)', () => {
 // no organism or device; which of the dish's organisms live in a substrate is computed from the
 // world's species records. Every name a player reads is the content name, never an internal code.
 
-/** The DishInfo the worker sends for a new Garden (the Lab trays' only source). */
+/**
+ * The DishInfo the worker sends for a new Garden (the Lab trays' only source), built from the g2
+ * content set so the Garden's species and their sentences below stay Phase 2's (Phase 3 preflight,
+ * g3-plan-recheck W2-02 (g), W2-03).
+ */
 function gardenInfo(): DishInfo {
-  const h = new FakeClockHost();
+  const h = new FakeClockHost(registryWith(G2_LISTS));
   h.create('garden-words', { kind: 'recipe', recipeId: 'FIRST_DISH_V1' });
   const ready = h.out.find((m) => m.type === 'ready');
   if (!ready || ready.type !== 'ready') throw new Error('no ready');

@@ -3,6 +3,7 @@
  * does with postMessage, and read its replies synchronously.
  */
 import type { CommandPayload, CommandResult } from '../../src/sim/commands';
+import type { ContentRegistry } from '../../src/sim/content/registry';
 import type { World } from '../../src/sim/world';
 import { DishHost } from '../../src/worker/host';
 import type { DishSource, FromWorker, Speed } from '../../src/worker/protocol';
@@ -19,8 +20,9 @@ export class FakeClockHost {
   private speed: Speed = 0;
   private req = 0;
 
-  constructor() {
-    this.host = new DishHost(registry(), (m) => this.out.push(m), { now: () => this.now });
+  /** `reg`: the content the host builds dishes from (default: the shipped registry). */
+  constructor(reg: ContentRegistry = registry()) {
+    this.host = new DishHost(reg, (m) => this.out.push(m), { now: () => this.now });
   }
 
   create(dishId: string, source: DishSource): void {

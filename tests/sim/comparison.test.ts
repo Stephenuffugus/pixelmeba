@@ -18,6 +18,7 @@ import { PAIRED_RUN_LABEL, runPairedComparison, shannonIndex, type CompareSpeed,
 import { DishHost } from '../../src/worker/host';
 import type { FromWorker, ToWorker } from '../../src/worker/protocol';
 import { registry } from '../helpers/world';
+import { G2_LISTS, registryWith } from '../helpers/registry';
 import { expectWaveAComparison } from '../experiments/golden';
 
 const REG = registry();
@@ -166,7 +167,7 @@ describe('comparison engine (P2.4)', () => {
     expect(new Set(hashesA).size).toBe(1);
     expect(new Set(hashesB).size).toBe(1);
     expect(hashesA[0]).not.toBe(hashesB[0]);
-  }, 60_000);
+  }, 600_000); // three paired 60 s runs: over a minute on a loaded 2-CPU machine
 
   it('Stop ends both arms at the same tick, with or without a horizon', () => {
     for (const horizon of [null, 600] as const) {
@@ -404,19 +405,22 @@ describe('comparison engine (P2.4)', () => {
 
 describe('one paired-run measurement model (SPEC §13.4): the comparison engine and experiment cards share it', () => {
   it('reproduces every number wave A recorded for three comparisons (hunters, feed, starch)', () => {
-    const hunters = realizeRecipe(REG, 'FIRST_DISH_V1', { worldId: 'cmp-results' });
+    // Wave A's numbers are Phase 2 numbers: the worlds are realized under the g2 lists (Phase 3
+    // preflight, D-0036; g3-plan-recheck G4), so later phases' manifests never move them.
+    const G2 = registryWith(G2_LISTS);
+    const hunters = realizeRecipe(G2, 'FIRST_DISH_V1', { worldId: 'cmp-results' });
     run(hunters, 120);
     expectWaveAComparison(
       'hunters',
       runPairedComparison(serializeWorld(hunters), [{ commandId: 'add-hunters', payload: { kind: 'inoculate', speciesId: 'P01', x: 48.5, y: 64.5, radius: 3, count: 5 } }], 450).results,
     );
-    const feed = realizeRecipe(REG, 'FIRST_DISH_V1', { worldId: 'cmp-feed' });
+    const feed = realizeRecipe(G2, 'FIRST_DISH_V1', { worldId: 'cmp-feed' });
     run(feed, 57);
     expectWaveAComparison('feed', runPairedComparison(serializeWorld(feed), [{ commandId: 'feed-b', payload: { kind: 'deposit', materialId: 'SUGAR', points: [[40.5, 64.5]], radius: 3, dose: 0.5 } }], 600).results);
-    const starch = realizeRecipe(REG, 'STARCH_UNLOCK_V1', { worldId: 'cmp-starch' });
+    const starch = realizeRecipe(G2, 'STARCH_UNLOCK_V1', { worldId: 'cmp-starch' });
     expectWaveAComparison(
       'starch',
       runPairedComparison(serializeWorld(starch), [{ commandId: 'starch-b', payload: { kind: 'deposit', materialId: 'STARCH', points: [[60.5, 64.5]], radius: 2, dose: 0.5 } }], 300).results,
     );
-  }, 60_000);
+  }, 600_000); // three paired runs (45 s, 60 s, 30 s): over a minute on a loaded 2-CPU machine
 });

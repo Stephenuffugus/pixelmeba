@@ -400,7 +400,8 @@ describe('invalid variants are refused by content validation, with the file and 
   it('a shipped variant cannot start from a later-phase recipe', () => {
     const errs = errorsOf(mutateRaw(RAW, 'recipes', 'FIRST_DISH_V1.json', (d) => (d.phase = 5)));
     expect(errs.filter((e) => e.file.startsWith('content/variants/'))).toHaveLength(4);
-    expect(errs).toContainEqual({ severity: 'error', file: G1, path: 'sourceId', message: 'source recipe "FIRST_DISH_V1" belongs to phase 5 (build phase 2)' });
+    // The build phase comes from the shipped manifest (Phase 3 preflight, W1-09: it moves with each phase).
+    expect(errs).toContainEqual({ severity: 'error', file: G1, path: 'sourceId', message: `source recipe "FIRST_DISH_V1" belongs to phase 5 (build phase ${REG.manifest.buildPhase})` });
   });
 });
 
@@ -416,8 +417,9 @@ describe('creation refuses invalid variants with a readable message (never crops
     const e3 = await refusal(realizeVariant(withContent({ variants: { 'R-G1': { ...g1, sourceRevision: 3 } } }), 'R-G1'));
     expect([e3.code, e3.message]).toEqual(['source-revision', 'R-G1 was written for FIRST_DISH_V1 revision 3, but this build has revision 1.']);
 
-    const e4 = await refusal(realizeVariant(withContent({ variants: { 'R-G1': { ...g1, requiredCapabilities: ['core', 'viruses'] } } }), 'R-G1'));
-    expect([e4.code, e4.message]).toEqual(['unsupported', 'R-G1 needs "viruses", which this build does not enable.']);
+    // 'developmental' stays off until Phase 7 (Phase 3 preflight, W2-02 (d): 'viruses' arrives in Phase 3).
+    const e4 = await refusal(realizeVariant(withContent({ variants: { 'R-G1': { ...g1, requiredCapabilities: ['core', 'developmental'] } } }), 'R-G1'));
+    expect([e4.code, e4.message]).toEqual(['unsupported', 'R-G1 needs "developmental", which this build does not enable.']);
 
     const g3 = REG.variants['R-G3']!;
     const e5 = await refusal(realizeVariant(withContent({ variants: { 'R-G3': { ...g3, patch: { kind: 'patchMove', patchIndex: 0, center: [80, 80] } } } }), 'R-G3'));

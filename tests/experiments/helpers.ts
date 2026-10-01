@@ -1,4 +1,13 @@
-/** Shared helpers for the experiment fixtures (BUILD_DIRECTIVE P2.5). */
+/**
+ * Shared helpers for the experiment fixtures (BUILD_DIRECTIVE P2.5).
+ *
+ * The card runs (runCard, runTwiceIdentical, expectReplayIdentical, untouchedRecipeHash and the checks
+ * on their results) share ONE registry, g2Registry() = registryWith(G2_LISTS): the Phase 2 content
+ * set with the g2 contentVersion 1 that wave A's golden stamps record (Phase 3 preflight, D-0036;
+ * g3-plan-recheck G4, W2-02 (f)). Later phases' manifest edits (species, systems, the version bump,
+ * the module flip) therefore never move these Phase 2 numbers; a change to Phase 2 content or rules
+ * still does. registry() stays the shipped registry for tests about what this build ships.
+ */
 import { expect } from 'vitest';
 import type { ContentRegistry, RawPacks } from '../../src/sim/content/registry';
 import { canonicalJson } from '../../src/sim/hash';
@@ -7,10 +16,16 @@ import { loadRawPacksFs, loadRegistryFs } from '../../tools/lib/content-fs';
 import { realizeRecipe } from '../../src/sim/recipes';
 import { stateHash } from '../../src/sim/serialize';
 import { run } from '../../src/sim/tick';
+import { G2_LISTS, registryWith } from '../helpers/registry';
 
 let cached: ContentRegistry | null = null;
 export function registry(): ContentRegistry {
   return (cached ??= loadRegistryFs());
+}
+
+/** The Phase 2 content set every card run in these fixtures uses (one registry, contentVersion 1). */
+export function g2Registry(): ContentRegistry {
+  return registryWith(G2_LISTS);
 }
 
 export function rawPacks(): RawPacks {
@@ -33,14 +48,14 @@ export function mutate(raw: RawPacks, collection: keyof RawPacks, file: string, 
  * commands ⇒ same measurements, hashes, timeline and gate). Returns the first run.
  */
 export function runTwiceIdentical(id: string): ExperimentResult {
-  const first = runExperiment(registry(), id);
-  const second = runExperiment(registry(), id);
+  const first = runExperiment(g2Registry(), id);
+  const second = runExperiment(g2Registry(), id);
   expect(canonicalJson(second)).toBe(canonicalJson(first));
   return first;
 }
 
 export function runCard(id: string): ExperimentResult {
-  return runExperiment(registry(), id);
+  return runExperiment(g2Registry(), id);
 }
 
 /**
@@ -51,7 +66,7 @@ export function runCard(id: string): ExperimentResult {
  */
 export function expectReplayIdentical(r: ExperimentResult): void {
   expect(r.A.endHash).toBe(untouchedRecipeHash(r.experimentId, r.endTick));
-  const arms = realizeExperimentArms(registry(), r.experimentId);
+  const arms = realizeExperimentArms(g2Registry(), r.experimentId);
   expect(stateHash(arms.A)).toBe(r.A.startHash);
   if (r.B) {
     expect(stateHash(arms.B!)).toBe(r.B.startHash);
@@ -84,7 +99,7 @@ export function expectGateReached(r: ExperimentResult): void {
   for (const c of r.gate.clauses) expect(s.values[`${c.arm}:${c.measure}`]).toBe(c.actual);
   // Completion never stops the world: the run continued to the stopping point.
   expect(r.stoppedAtGate).toBe(false);
-  expect(r.endTick).toBe(Math.round(registry().experiments[r.experimentId]!.stoppingSeconds * 10));
+  expect(r.endTick).toBe(Math.round(g2Registry().experiments[r.experimentId]!.stoppingSeconds * 10));
   expect(r.label).toBe(r.paired ? 'this paired run' : 'this run');
 }
 
@@ -93,7 +108,7 @@ export function expectEqualArms(r: ExperimentResult): void {
   expect(r.B).not.toBeNull();
   expect(r.A.measurements.runSeconds).toBe(r.B!.measurements.runSeconds);
   expect(r.A.timeline.map((s) => s.second)).toEqual(r.B!.timeline.map((s) => s.second));
-  const ids = registry().experiments[r.experimentId]!.measurements;
+  const ids = g2Registry().experiments[r.experimentId]!.measurements;
   expect(Object.keys(r.A.reported).sort()).toEqual([...ids].sort());
   expect(Object.keys(r.B!.reported).sort()).toEqual([...ids].sort());
 }
@@ -107,7 +122,7 @@ export function speciesAt(sample: TimelineSample, id: string) {
  * Arm A must equal it: observation never changes a world, and A is the recipe as written.
  */
 export function untouchedRecipeHash(experimentId: string, ticks: number): string {
-  const reg = registry();
+  const reg = g2Registry();
   const def = reg.experiments[experimentId]!;
   const w = realizeRecipe(reg, def.recipeId, { seed: def.seed });
   run(w, ticks);

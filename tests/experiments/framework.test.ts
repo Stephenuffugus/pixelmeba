@@ -106,9 +106,10 @@ describe('experiment validation names the file and field', () => {
     has(errorsOf(mutate(raw, 'experiments', 'EXP_C.json', (d) => (d.change = { kind: 'omitScheduled', indexes: [0, 5] }))), 'experiments/EXP_C.json', 'change.indexes.1');
     has(errorsOf(mutate(raw, 'experiments', 'EXP_C.json', (d) => (d.change = { kind: 'omitScheduled', indexes: [2, 2] }))), 'experiments/EXP_C.json', 'change.indexes.1');
     has(errorsOf(mutate(raw, 'experiments', 'EXP_C.json', (d) => (d.change = { kind: 'omitScheduled', indexes: [] }))), 'experiments/EXP_C.json', 'change.indexes');
-    // Species outside this build's manifest cannot be introduced by a shipped card.
+    // Species outside this build's manifest cannot be introduced by a shipped card (P05 is Phase 5, so
+    // no Phase 3 or 4 manifest enables it; Phase 3 preflight, W2-02 (c)).
     has(
-      errorsOf(mutate(raw, 'experiments', 'EXP_106.json', (d) => ((d.change as { commands: { speciesId: string }[] }).commands[0]!.speciesId = 'P02'))),
+      errorsOf(mutate(raw, 'experiments', 'EXP_106.json', (d) => ((d.change as { commands: { speciesId: string }[] }).commands[0]!.speciesId = 'P05'))),
       'experiments/EXP_106.json',
       'change.commands.0.speciesId',
     );

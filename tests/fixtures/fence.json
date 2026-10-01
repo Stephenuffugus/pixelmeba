@@ -1,0 +1,135 @@
+{
+  "about": "Phase 3 trajectory fence (tests/helpers/fence.ts). ticks: the dish tick at which the world is digested. g2Digest: trajectoryDigest(world, 'g2') under registryWith(G2_LISTS), permanent (check (a)); currentDigest: trajectoryDigest(world, 'full') under the shipped manifest (check (b)); changedBy: the DECISIONS ids under which a recorded digest changed. Written only by tools/fence-update.ts.",
+  "entries": [
+    {
+      "id": "CLEANING_CREW_V1",
+      "kind": "recipe",
+      "recipe": "CLEANING_CREW_V1",
+      "ticks": 1200,
+      "g2Digest": "fe6811d8b1d15c1e",
+      "currentDigest": "fe6811d8b1d15c1e",
+      "changedBy": []
+    },
+    {
+      "id": "FIRST_DISH_V1",
+      "kind": "recipe",
+      "recipe": "FIRST_DISH_V1",
+      "ticks": 1200,
+      "g2Digest": "d239a74834432569",
+      "currentDigest": "d239a74834432569",
+      "changedBy": []
+    },
+    {
+      "id": "FOOD_TRAIL_V1",
+      "kind": "recipe",
+      "recipe": "FOOD_TRAIL_V1",
+      "ticks": 1200,
+      "g2Digest": "cdee38c8f99c59fb",
+      "currentDigest": "cdee38c8f99c59fb",
+      "changedBy": []
+    },
+    {
+      "id": "LIGHT_AND_LIFE_V1",
+      "kind": "recipe",
+      "recipe": "LIGHT_AND_LIFE_V1",
+      "ticks": 1200,
+      "g2Digest": "1baf2031c7ef9446",
+      "currentDigest": "1baf2031c7ef9446",
+      "changedBy": []
+    },
+    {
+      "id": "PREDATOR_BALANCE_V1",
+      "kind": "recipe",
+      "recipe": "PREDATOR_BALANCE_V1",
+      "ticks": 1200,
+      "g2Digest": "2e948c7d70aff634",
+      "currentDigest": "2e948c7d70aff634",
+      "changedBy": []
+    },
+    {
+      "id": "RESERVE_COMPARE_V1",
+      "kind": "recipe",
+      "recipe": "RESERVE_COMPARE_V1",
+      "ticks": 1200,
+      "g2Digest": "158effd1d6af2d0e",
+      "currentDigest": "158effd1d6af2d0e",
+      "changedBy": []
+    },
+    {
+      "id": "STARCH_UNLOCK_V1",
+      "kind": "recipe",
+      "recipe": "STARCH_UNLOCK_V1",
+      "ticks": 1200,
+      "g2Digest": "aea5ac258a76932b",
+      "currentDigest": "aea5ac258a76932b",
+      "changedBy": []
+    },
+    {
+      "id": "STARCH_UNLOCK_V1+E01",
+      "kind": "recipe",
+      "recipe": "STARCH_UNLOCK_V1",
+      "transform": "e01Carriers",
+      "ticks": 1200,
+      "g2Digest": "da6b2cdd897f3f35",
+      "currentDigest": "da6b2cdd897f3f35",
+      "changedBy": []
+    },
+    {
+      "id": "R-G1",
+      "kind": "variant",
+      "variant": "R-G1",
+      "ticks": 1200,
+      "g2Digest": "c81e848f7f7e473b",
+      "currentDigest": "c81e848f7f7e473b",
+      "changedBy": []
+    },
+    {
+      "id": "R-G2",
+      "kind": "variant",
+      "variant": "R-G2",
+      "ticks": 1200,
+      "g2Digest": "6c848a77d1b2291a",
+      "currentDigest": "6c848a77d1b2291a",
+      "changedBy": []
+    },
+    {
+      "id": "R-G3",
+      "kind": "variant",
+      "variant": "R-G3",
+      "ticks": 1200,
+      "g2Digest": "dc005e7482cbe7ae",
+      "currentDigest": "dc005e7482cbe7ae",
+      "changedBy": []
+    },
+    {
+      "id": "EXP_102:B",
+      "kind": "experimentArm",
+      "experiment": "EXP_102",
+      "arm": "B",
+      "ticks": 1200,
+      "g2Digest": "71243b58a813fc60",
+      "currentDigest": "71243b58a813fc60",
+      "changedBy": []
+    },
+    {
+      "id": "EXP_106:B",
+      "kind": "experimentArm",
+      "experiment": "EXP_106",
+      "arm": "B",
+      "ticks": 1200,
+      "g2Digest": "ff6ad77181041eea",
+      "currentDigest": "ff6ad77181041eea",
+      "changedBy": []
+    },
+    {
+      "id": "EXP_B:B",
+      "kind": "experimentArm",
+      "experiment": "EXP_B",
+      "arm": "B",
+      "ticks": 1800,
+      "g2Digest": "38baac85155444f5",
+      "currentDigest": "38baac85155444f5",
+      "changedBy": []
+    }
+  ]
+}
