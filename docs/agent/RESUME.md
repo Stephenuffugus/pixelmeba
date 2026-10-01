@@ -19,7 +19,11 @@
 > `tools/make-g2-saves.ts` there (saves must be byte-identical), runs check, merges. `docs/agent/g3-wave-tasks.workflow.js.txt`
 > writes `docs/agent/g3-wave-{1..6}.tasks.js.txt` (TASKS for the one runner `docs/agent/g3-runner.workflow.js.txt`;
 > run a wave by importing the tasks file with node and passing `{wave, state, tasks}` as the Workflow `args`).
-> Lead choices recorded: D‑0035…D‑0039 (`3902fd9`). If the worktree is gone after a restart: `git worktree prune`,
+> **01:15 UTC — owner: usage is limited; work lean.** The wave-task workflow was STOPPED (no files written;
+> do not rerun it). Write a wave's task file only right before that wave runs (one writer, effort 'high', no
+> checker). Next stages use one agent each where possible: one saves-lens re-verifier for fix3 (effort 'high'),
+> one comprehension fixer only if the review finds BLOCKER/MAJOR, the review re-run by the lead with
+> `node tools/review-g2.mjs`. Lead choices recorded: D‑0035…D‑0039 (`3902fd9`). If the worktree is gone after a restart: `git worktree prune`,
 > check whether branch `p3-preflight` has commits/changes, else rerun the preflight script.
 
 > **Update 2026‑09‑29 ≈ 13:50 UTC — PAUSED FOR A BREAK (owner's request). START HERE.**
