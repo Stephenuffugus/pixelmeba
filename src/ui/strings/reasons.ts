@@ -20,6 +20,8 @@ const secs = (v?: number) => (v === undefined || !Number.isFinite(v) ? 'some' : 
  * accumulation of the 0.1 s tick (2.0000000000004 reads "2").
  */
 export const secondsLeft = (v?: number): string => (v === undefined || !Number.isFinite(v) ? 'some' : String(Math.max(0, Math.ceil(v - 1e-6))));
+/** A drain rate in C/s with at most three decimals and no trailing zeros (0.02, 0.015). */
+const rate = (v?: number) => (v === undefined || !Number.isFinite(v) ? 'an unknown amount of' : String(Number(v.toFixed(3))));
 const pct = (v?: number) => (v === undefined || !Number.isFinite(v) ? 'an unknown share' : `${Math.round(v * 100)} %`);
 
 const EXPLORE: Record<ReasonName, string> = {
@@ -124,6 +126,12 @@ function lab(name: ReasonName, ctx: ReasonContext): string {
       return 'Its cell is over capacity, so births wait.';
     case 'ENERGY_ZERO':
       return 'Energy 0: losing 4 health per second.';
+    case 'INFECTED':
+      // UX §5.2 Lab wording: the virus's name and the whole seconds left until lysis (P3.4).
+      return `Infected by ${ctx.speciesName ?? 'a virus'}; lysis in ${secondsLeft(ctx.value)}s.`;
+    case 'PARASITIZED':
+      // UX §5.2 Lab wording: the attached parasite's name and its measured drain over the last second (P3.4).
+      return `${ctx.speciesName ?? 'A parasite'} draining ${rate(ctx.value)} C/s.`;
     case 'RESTING_FOOD_SCARCE':
       // UX §5.2 wording; the measured value is how long the wake conditions have held so far.
       return `Resting because food stayed scarce; wakes after 10 s of food and energy ≥ 5 (${secs(ctx.value)} s so far).`;

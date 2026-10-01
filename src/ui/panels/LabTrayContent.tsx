@@ -23,7 +23,8 @@ import {
   type PlaceableStructure,
   type SubstrateName,
 } from '@sim/grid';
-import type { DishInfo } from '@worker/protocol';
+import type { DishInfo, SpeciesDiet } from '@worker/protocol';
+import { LIFE_COPY } from '../strings/lab';
 import type { LabToolId } from '../views/LabView';
 
 type Glob<T> = Record<string, T>;
@@ -141,6 +142,8 @@ export function editLabel(info: DishInfo, kind: 'paint' | 'place', which: string
  */
 export function lifeBrushFor(info: DishInfo, speciesId: string): LifeBrush | null {
   const i = info.speciesIds.indexOf(speciesId);
+  // A phage dose fills fields, not cells an organism occupies (W2-14).
+  if (i >= 0 && info.speciesDiets?.[i]?.metabolism === 'viral') return { habitatMask: 0, attached: false, viral: true };
   const habitats = i < 0 ? undefined : info.speciesHabitats?.[i];
   const attachment = i < 0 ? undefined : info.speciesAttachment?.[i];
   if (!habitats || attachment === undefined) return null;
@@ -148,4 +151,84 @@ export function lifeBrushFor(info: DishInfo, speciesId: string): LifeBrush | nul
   return attachment === null
     ? { habitatMask: habitatMaskOf(habitats), attached: false }
     : { habitatMask: habitatMaskOf(habitats), attached: true, surfaces: [...attachment] };
+}
+
+/** The diet symbol a species tile shows next to its diet line (UX §4.3). */
+export type DietSymbol = 'light' | 'eats' | 'hunts' | 'drains' | 'infects' | 'none';
+
+export interface DietLine {
+  readonly symbol: DietSymbol;
+  readonly text: string;
+}
+
+function listAnd(items: readonly string[]): string {
+  if (items.length === 0) return '';
+  return items.length === 1 ? items[0]! : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]!}`;
+}
+
+/** This dish's diet record for a species, or null when the worker sent none. */
+export function dietOf(info: DishInfo, speciesId: string): SpeciesDiet | null {
+  const i = info.speciesIds.indexOf(speciesId);
+  return i < 0 ? null : (info.speciesDiets?.[i] ?? null);
+}
+
+/** Whether a species is a phage (its Life brush adds units per cell, not organisms; W2-14). */
+export function isPhage(info: DishInfo, speciesId: string): boolean {
+  return dietOf(info, speciesId)?.metabolism === 'viral';
+}
+
+/**
+ * The short diet line of a species tile (UX §4.3; W2-13), from the dish's own species records
+ * (DishInfo.speciesDiets) and names: "Eats sugar, then protein.", "Makes food from light.",
+ * "Hunts Sprinter and Dusk (Crumbsmith only free-swimming), and 9 kinds not in this dish.",
+ * "Drains Sunbead.", "Infects Sprinter." Prey and hosts this dish does not record are counted, never
+ * named; a prey requirement is always stated ('free' → "only free-swimming", 'inSediment' → "only in
+ * sediment"). Null when the dish sent no diet for the species.
+ */
+export function dietLine(info: DishInfo, speciesId: string): DietLine | null {
+  const d = dietOf(info, speciesId);
+  if (!d) return null;
+  const copy = LIFE_COPY.diet;
+  const nameOf = (id: string): string | null => {
+    const j = info.speciesIds.indexOf(id);
+    return j < 0 ? null : (info.speciesNames[j] ?? id);
+  };
+  const foods = d.foods.map((f) => copy.foods[f] ?? f);
+  const targets = (verb: string, ids: readonly string[]): string => {
+    const present = ids.map(nameOf).filter((n): n is string => n !== null);
+    const absent = ids.length - present.length;
+    if (present.length === 0) return copy.noneHere(verb, absent);
+    return `${verb} ${listAnd(absent > 0 ? [...present, copy.absent(absent)] : present)}.`;
+  };
+  if (d.metabolism === 'viral') return { symbol: 'infects', text: targets('Infects', d.hosts) };
+  if (d.metabolism === 'hostDrain') return { symbol: 'drains', text: targets('Drains', d.hosts) };
+  if (d.metabolism === 'photosynthesis') return { symbol: 'light', text: copy.light };
+  if (d.metabolism === 'mixotroph') return { symbol: 'light', text: copy.mixotroph(listAnd(foods)) };
+  if (d.prey.length > 0) {
+    const plain: string[] = [];
+    const free: string[] = [];
+    const sediment: string[] = [];
+    let absent = 0;
+    for (const p of d.prey) {
+      const n = nameOf(p.id);
+      if (n === null) absent++;
+      else if (p.requires === 'free') free.push(n);
+      else if (p.requires === 'inSediment') sediment.push(n);
+      else plain.push(n);
+    }
+    if (plain.length + free.length + sediment.length === 0) return { symbol: 'hunts', text: copy.noneHere('Hunts', absent) };
+    const qualified = [
+      ...(free.length > 0 ? [`${listAnd(free)} ${copy.free}`] : []),
+      ...(sediment.length > 0 ? [`${listAnd(sediment)} ${copy.inSediment}`] : []),
+    ];
+    let text = plain.length > 0 ? listAnd(plain) : qualified.join('; ');
+    if (plain.length > 0 && qualified.length > 0) text += ` (${qualified.join('; ')})`;
+    if (absent > 0) text += `, and ${copy.absent(absent)}`;
+    return { symbol: 'hunts', text: `Hunts ${text}.` };
+  }
+  if (foods.length > 0 || d.digestsFilm) {
+    const list = foods.length > 0 ? foods.join(', then ') : copy.foods.film!;
+    return { symbol: 'eats', text: copy.eats(list, d.metabolism === 'anaerobic', d.digestsFilm && foods.length > 0) };
+  }
+  return { symbol: 'none', text: copy.nothing };
 }

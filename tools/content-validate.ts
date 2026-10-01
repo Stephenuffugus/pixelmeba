@@ -155,6 +155,14 @@ export const FEATURE_FRAMES: Readonly<Record<string, { readonly frames: number; 
   glow_center: { frames: 2, states: 'dim, glow' },
   jacket_rim: { frames: 4, states: 'jacket levels 0–3' },
   cache_marker: { frames: 4, states: 'cache fill bands 0–3' },
+  // Phase 3 (SPEC §9 visuals, UX §6.2; W2-29): each state the renderer can show from E_CUE2.
+  anchor_foot: { frames: 1, states: 'foot while anchored' },
+  shade_patch: { frames: 1, states: 'dark interior patch' },
+  light_trail: { frames: 1, states: 'two trailing pixels while moving toward light' },
+  debris_granule: { frames: 2, states: 'granule, granule pulse on detritus intake' },
+  protein_notches: { frames: 2, states: 'paired notches, pale release marks' },
+  matrix_edge: { frames: 4, states: 'film bands 0–3' },
+  adhesion_link: { frames: 1, states: 'link pixels while linked' },
 };
 export const FEATURE_SIZE = 16;
 export const FEATURE_HEADINGS = 4;
@@ -168,6 +176,52 @@ export function featureFrameKey(layer: string, frame: number, heading: number): 
 export function enabledMarks(registry: { readonly manifest: { readonly enabledModules: readonly string[] }; readonly modules: Readonly<Record<string, { readonly visualLayer: string }>> }): AtlasMarkRef[] {
   return [...registry.manifest.enabledModules].sort().map((id) => ({ moduleId: id, layer: registry.modules[id]!.visualLayer }));
 }
+
+/**
+ * World tiles (UX §6.2 "Film: isolated, edge, center, eroding", §6.5 food object outlines that shrink
+ * with inventory; wave 2 art-features): one cell per 16×16 frame, one heading, keyed `tile/<id>/<frame>`
+ * in the manifest's `tiles` table. Kept independent of art/src like the tables above.
+ */
+export const TILE_FRAMES: Readonly<Record<string, { readonly frames: number; readonly states: string }>> = {
+  film: { frames: 4, states: 'isolated, edge, center, eroding' },
+  pellet: { frames: 4, states: 'fill quartiles 0–3' },
+  wafer: { frames: 4, states: 'fill quartiles 0–3' },
+  stain: { frames: 1, states: 'emptied object stain' },
+};
+export const TILE_SIZE = 16;
+
+/** What needs one world tile: the system or material that enables it, and the tile id. */
+export interface AtlasTileRef {
+  readonly owner: string;
+  readonly tile: string;
+}
+
+/** Atlas key of one world-tile frame (the renderer looks up exactly this; see src/render/world3.ts). */
+export function tileFrameKey(tile: string, frame: number): string {
+  return `tile/${tile}/${frame}`;
+}
+
+/**
+ * The world tiles the manifest's content needs: film textures with the film system, the pellet with
+ * M10, the wafer with M11, and the emptied-object stain with either.
+ */
+export function enabledTiles(registry: { readonly manifest: { readonly enabledSystems: readonly string[]; readonly enabledMaterials: readonly string[] } }): AtlasTileRef[] {
+  const m = registry.manifest;
+  const out: AtlasTileRef[] = [];
+  if (m.enabledSystems.includes('film')) out.push({ owner: 'film system', tile: 'film' });
+  if (m.enabledMaterials.includes('M10')) out.push({ owner: 'M10', tile: 'pellet' });
+  if (m.enabledMaterials.includes('M11')) out.push({ owner: 'M11', tile: 'wafer' });
+  if (m.enabledMaterials.includes('M10') || m.enabledMaterials.includes('M11')) out.push({ owner: m.enabledMaterials.includes('M10') ? 'M10' : 'M11', tile: 'stain' });
+  return out;
+}
+
+/** Every world tile this build knows (art-build checks them all, enabled or not). */
+export const ALL_TILES: readonly AtlasTileRef[] = [
+  { owner: 'film system', tile: 'film' },
+  { owner: 'M10', tile: 'pellet' },
+  { owner: 'M11', tile: 'wafer' },
+  { owner: 'M10', tile: 'stain' },
+];
 
 export const ATLAS_FILE = 'public/atlas/manifest.json';
 
@@ -193,7 +247,7 @@ export function pngSize(png: Uint8Array): { width: number; height: number } | nu
 export function checkAtlas(
   atlas: unknown,
   species: readonly AtlasSpeciesRef[],
-  opts: { file?: string; png?: Uint8Array | null; marks?: readonly AtlasMarkRef[] } = {},
+  opts: { file?: string; png?: Uint8Array | null; marks?: readonly AtlasMarkRef[]; tiles?: readonly AtlasTileRef[] } = {},
 ): ContentIssue[] {
   const file = opts.file ?? ATLAS_FILE;
   const issues: ContentIssue[] = [];
@@ -312,6 +366,29 @@ export function checkAtlas(
     }
   }
 
+  // World tiles (UX §6.2 film, §6.5 food objects): listed in `tiles`, TILE_SIZE, one heading, every frame.
+  const tiles = isObj(atlas.tiles) ? atlas.tiles : null;
+  for (const ref of opts.tiles ?? []) {
+    const who = `${ref.owner} (tile ${ref.tile})`;
+    const base = `tiles.${ref.tile}`;
+    const need = TILE_FRAMES[ref.tile];
+    const entry = tiles?.[ref.tile];
+    if (!isObj(entry)) {
+      err(base, `${who} has no world tile in the atlas (run npm run art:build)`);
+      continue;
+    }
+    if (entry.size !== TILE_SIZE) err(`${base}.size`, `${who}: tile frame size ${String(entry.size)}, expected ${TILE_SIZE}`);
+    const n = isInt(entry.frames) ? entry.frames : 0;
+    const required = need?.frames ?? 1;
+    if (n < required) err(`${base}.frames`, `${who}: tile has ${n} frame(s), needs ${required}${need ? ` (${need.states})` : ''}`);
+    for (let i = 0; i < n; i++) {
+      const key = tileFrameKey(ref.tile, i);
+      const f = frames[key];
+      if (!f) err(`frames[${key}]`, `${who}: missing frame "${key}"`);
+      else if (f.w !== TILE_SIZE || f.h !== TILE_SIZE) err(`frames[${key}]`, `${who}: frame "${key}" is ${String(f.w)}×${String(f.h)}, expected ${TILE_SIZE}×${TILE_SIZE}`);
+    }
+  }
+
   if (opts.png !== undefined) {
     const image = typeof atlas.image === 'string' ? atlas.image : 'organisms.png';
     if (opts.png === null) err('image', `atlas image "${image}" is missing (run npm run art:build)`);
@@ -347,6 +424,7 @@ async function main(): Promise<void> {
   const atlasFile = rel.startsWith('..') ? atlasPath : rel;
   let atlasFrames = 0;
   let marks: AtlasMarkRef[] = [];
+  let tilesNeeded: AtlasTileRef[] = [];
   if (registry) {
     if (!existsSync(atlasPath)) {
       issues.push({ severity: 'error', file: atlasFile, path: '', message: 'atlas manifest is missing (run npm run art:build)' });
@@ -363,7 +441,8 @@ async function main(): Promise<void> {
         const png = existsSync(pngPath) ? new Uint8Array(readFileSync(pngPath)) : null;
         const refs = registry.manifest.enabledSpecies.map((id) => atlasSpeciesRef(registry.species[id]!));
         marks = enabledMarks(registry);
-        issues.push(...checkAtlas(atlas, refs, { file: atlasFile, png, marks }));
+        tilesNeeded = enabledTiles(registry);
+        issues.push(...checkAtlas(atlas, refs, { file: atlasFile, png, marks, tiles: tilesNeeded }));
         atlasFrames = isObj(atlas) && Array.isArray(atlas.frames) ? atlas.frames.length : 0;
       }
     }
@@ -395,7 +474,7 @@ async function main(): Promise<void> {
     `content ok · contentHash ${hash} · species ${r.speciesIds.length} (enabled ${r.manifest.enabledSpecies.length}) · ` +
       `materials ${r.materialIds.length} · modules ${r.moduleIds.length} · habitats ${r.habitatIds.length} · structures ${r.structureIds.length} · ` +
       `recipes ${r.recipeIds.length} · experiments ${r.experimentIds.length} · variants ${r.variantIds.length} · ` +
-      `atlas ${atlasFile} complete for ${r.manifest.enabledSpecies.length} enabled species and ${marks.length} enabled module marks (${marks.map((m) => m.layer).join(', ')}; ${atlasFrames} frames)`,
+      `atlas ${atlasFile} complete for ${r.manifest.enabledSpecies.length} enabled species and ${marks.length} enabled module marks (${marks.map((m) => m.layer).join(', ')}) and ${tilesNeeded.length} world tiles (${tilesNeeded.map((t) => t.tile).join(', ')}; ${atlasFrames} frames)`,
   );
 }
 

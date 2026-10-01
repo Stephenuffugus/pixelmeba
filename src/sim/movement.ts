@@ -26,9 +26,22 @@ import type { Profile } from './phenotype';
 import { det, detFloat, STREAMS } from './rng';
 import { entityCell, forEachInCell, rebuildIndex } from './spatial';
 import { habitatCompatible, suitabilityAt } from './suitability';
+import {
+  crossableWater,
+  crossesWater,
+  crossingCompatible,
+  enterCell,
+  entitySuitabilityAt,
+  startCount,
+  STEP_E,
+  STEP_N,
+  STEP_S,
+  STEP_W,
+} from './crossing';
 import { PREY_ANY, PREY_FREE, PREY_IN_SEDIMENT, PREY_NONE, type SpeciesRT } from './species';
 import { SUB_SEDIMENT } from './grid';
 import { R } from './reasons';
+import { followHosts, isParasiteSpecies, parasiteMove } from './parasites';
 import type { World } from './world';
 
 const HEADING_E = 0;
@@ -47,11 +60,17 @@ export function canOccupy(world: World, sp: SpeciesRT, cell: number): boolean {
 
 const EPS = 1e-6;
 
+/** The crossing state (src/sim/crossing.ts) at the end of the last crossing trace (cross ≥ 0). */
+let traceCount = 0;
+
 /**
  * Fraction of the segment (x0,y0)→(x1,y1) that can be travelled before entering a cell the species
- * cannot occupy. Grid DDA over every crossed cell.
+ * cannot occupy. Grid DDA over every crossed cell. `cross` ≥ 0 makes it a crossing trace for a
+ * SEDIMENT_WATER_CROSSING species starting from that crossing state (crossing.ts enterCell decides
+ * each cell, so a third water cell is refused); −1 (the default) is the habitat rule exactly.
  */
-export function traceFraction(world: World, sp: SpeciesRT, x0: number, y0: number, x1: number, y1: number): number {
+export function traceFraction(world: World, sp: SpeciesRT, x0: number, y0: number, x1: number, y1: number, cross = -1): number {
+  traceCount = cross;
   let cx = Math.floor(x0);
   let cy = Math.floor(y0);
   const ex = Math.floor(x1);
@@ -69,18 +88,26 @@ export function traceFraction(world: World, sp: SpeciesRT, x0: number, y0: numbe
   let tMaxY = stepY > 0 ? (cy + 1 - y0) / dy : stepY < 0 ? (y0 - cy) / -dy : Infinity;
   for (let guard = 0; guard < 64; guard++) {
     let t: number;
+    let dir: number;
     if (tMaxX < tMaxY) {
       t = tMaxX;
       cx += stepX;
       tMaxX += tDeltaX;
+      dir = stepX > 0 ? STEP_E : STEP_W;
     } else {
       t = tMaxY;
       cy += stepY;
       tMaxY += tDeltaY;
+      dir = stepY > 0 ? STEP_S : STEP_N;
     }
     if (t > 1) return 1;
-    if (!inBounds(cx, cy) || !inMask(cx, cy) || !canOccupy(world, sp, cellIndex(cx, cy))) {
-      return Math.max(0, t - EPS / len);
+    if (!inBounds(cx, cy) || !inMask(cx, cy)) return Math.max(0, t - EPS / len);
+    if (cross < 0) {
+      if (!canOccupy(world, sp, cellIndex(cx, cy))) return Math.max(0, t - EPS / len);
+    } else {
+      const next = enterCell(world, sp, cellIndex(cx, cy), traceCount, dir);
+      if (next < 0) return Math.max(0, t - EPS / len);
+      traceCount = next;
     }
     if (cx === ex && cy === ey) return 1;
   }
@@ -181,14 +208,21 @@ function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile): void 
   // Two passes: find max/min, then pick among ties deterministically.
   const scores = SCORE_SCRATCH;
   const cells = CELL_SCRATCH;
+  // P04 (crossing.ts): open water cells are candidates while the straight crossing trace reaches them
+  // within two consecutive water cells; its own cell counts while it is crossing.
+  const crosser = crossesWater(sp);
+  const cross = crosser ? startCount(world, slot, sp, own) : -1;
   for (let y = cy - r; y <= cy + r; y++) {
     for (let x = cx - r; x <= cx + r; x++) {
       if (!inBounds(x, y) || !inMask(x, y)) continue;
       const cell = cellIndex(x, y);
-      if (!canOccupy(world, sp, cell)) continue;
-      if (cell !== own && traceFraction(world, sp, px, py, x + 0.5, y + 0.5) < 1) continue;
+      if (!canOccupy(world, sp, cell)) {
+        if (!crosser || !crossableWater(world, cell)) continue;
+        if (cell === own && !crossingCompatible(world, slot, sp, cell)) continue;
+      }
+      if (cell !== own && traceFraction(world, sp, px, py, x + 0.5, y + 0.5, cross) < 1) continue;
       const F = foodScore(world, prof, cell, c.E[slot]!);
-      const S = suitabilityAt(world, sp, prof, cell).value;
+      const S = (crosser ? suitabilityAt(world, sp, prof, cell, true) : suitabilityAt(world, sp, prof, cell)).value;
       const others = load[cell]! - (cell === own ? selfLoad : 0);
       const C = Math.min(1, Math.max(0, others) / CELL_SOFT_CAPACITY);
       const score = SCORE_FOOD * F + SCORE_SUIT * S - SCORE_CROWD * C;
@@ -244,7 +278,9 @@ function moveToward(world: World, slot: number, sp: SpeciesRT, tx: number, ty: n
 
 function applyStep(world: World, slot: number, sp: SpeciesRT, x0: number, y0: number, x1: number, y1: number): void {
   const c = world.ents.cols;
-  const t = traceFraction(world, sp, x0, y0, x1, y1);
+  const from = entityCell(x0, y0);
+  const cross = crossesWater(sp) ? startCount(world, slot, sp, from) : -1;
+  const t = traceFraction(world, sp, x0, y0, x1, y1, cross);
   let nx = x0 + (x1 - x0) * t;
   let ny = y0 + (y1 - y0) * t;
   // Stay strictly inside the last valid cell.
@@ -257,6 +293,8 @@ function applyStep(world: World, slot: number, sp: SpeciesRT, x0: number, y0: nu
   const moved = Math.hypot(nx - x0, ny - y0);
   c.x[slot] = nx;
   c.y[slot] = ny;
+  // A crosser records its consecutive water cells whenever it changes cell (0 back on its habitat).
+  if (cross >= 0 && entityCell(nx, ny) !== from) c.waterCrossed[slot] = traceCount;
   c.movedThisTick[slot] = moved;
   c.heading[slot] = headingFor(nx - x0, ny - y0, c.heading[slot]!);
   if (moved > 0) c.flags[slot] = c.flags[slot]! | FLAG.moving;
@@ -277,7 +315,9 @@ export function stageSenseAndMove(world: World): void {
 
     // Suitability at the current cell (also drives stress display state).
     const cell = entityCell(c.x[i]!, c.y[i]!);
-    const suit = suitabilityAt(world, sp, prof, cell);
+    // Back on its habitat (e.g. water painted over to sediment), a crosser's water count resets.
+    if (c.waterCrossed[i] !== 0 && crossesWater(sp) && habitatCompatible(world, sp, cell)) c.waterCrossed[i] = 0;
+    const suit = entitySuitabilityAt(world, i, sp, prof, cell);
     c.suitability[i] = suit.value;
     // Stressed shows after 3 continuous seconds below threshold and clears after 3 continuous
     // seconds recovered (D01 §4).
@@ -307,6 +347,8 @@ export function stageSenseAndMove(world: World): void {
     if (!sp.selfPropelled || prof.speed <= 0 || (c.flags[i]! & FLAG.attached) !== 0) continue;
 
     const step = prof.speed * DT;
+    // X01 parasites (parasites.ts): an attached one rides its host; a free one pursues a host in range.
+    if (isParasiteSpecies(sp) && parasiteMove(world, i, sp, prof, startX, startY, (tx, ty, stop) => moveToward(world, i, sp, tx, ty, step, stop), DECISION_INTERVAL_TICKS)) continue;
 
     // Predators pursue a valid target every tick; decisions re-acquire on schedule.
     if (sp.isPredator) {
@@ -353,6 +395,7 @@ export function stageSenseAndMove(world: World): void {
       applyStep(world, i, sp, x0, y0, x0 + Math.cos(angle) * step, y0 + Math.sin(angle) * step);
     }
   }
+  followHosts(world); // attached parasites take their host's position at no cost (parasites.ts)
   rebuildIndex(world);
 }
 

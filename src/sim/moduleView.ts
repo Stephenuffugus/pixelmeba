@@ -48,9 +48,23 @@ export function moduleSummaries(world: World, i: number): ModuleSummary[] {
   const scale = raw > 0 ? profileOf(world, i).surcharge / raw : 1;
   return defs.map((def) => {
     const id = def.id;
-    const activeNow = id === 'E01' ? c.secreting[i] === 1 : id === 'E03' ? c.lifeState[i] !== LIFE_ACTIVE : id === 'E05';
-    return { id, name: def.name, surchargePerSecond: def.surchargePerSecond * scale, params: { ...def.params }, activeNow };
+    return { id, name: def.name, surchargePerSecond: def.surchargePerSecond * scale, params: { ...def.params }, activeNow: moduleActiveNow(world, i, id) };
   });
+}
+
+/** Whether a carried module is doing its job this tick (the module card's "active now"); one case per module. */
+function moduleActiveNow(world: World, i: number, id: string): boolean {
+  const c = world.ents.cols;
+  switch (id) {
+    case 'E01':
+      return c.secreting[i] === 1;
+    case 'E03':
+      return c.lifeState[i] !== LIFE_ACTIVE;
+    case 'E05':
+      return true;
+    default:
+      return false;
+  }
 }
 
 export interface UpkeepSummary {

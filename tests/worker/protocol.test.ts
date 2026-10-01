@@ -12,8 +12,50 @@ import { stateHash } from '../../src/sim/serialize';
 import { run, step } from '../../src/sim/tick';
 import { SimClient, WorkerRequestError, type WorkerErrorNotice, type WorkerLike } from '../../src/worker/client';
 import { DishHost } from '../../src/worker/host';
-import { PROTOCOL_VERSION, type FromWorker, type ToWorker } from '../../src/worker/protocol';
-import { registry } from '../helpers/world';
+import {
+  CUE2_ANCHORED,
+  CUE2_DETRITUS_INTAKE,
+  CUE2_INFECTED,
+  CUE2_LINKED,
+  CUE2_MOD_E04,
+  CUE2_MOD_E06,
+  CUE2_MOD_E07,
+  CUE2_MOD_E10,
+  CUE2_MOD_E12,
+  CUE2_PARASITIZED,
+  CUE2_RELEASING_PROTEIN,
+  CUE2_SEEKING_LIGHT,
+  DEPOSIT_FILM_BAND,
+  E_CUE2,
+  E_LINKMASK,
+  E_X,
+  E_Y,
+  ENT_STRIDE,
+  FILM_ERODING,
+  FILM_LEVEL_MASK,
+  ID_STRIDE,
+  LINK_KIND_ADHESION,
+  LINK_STRIDE,
+  LINKMASK_DIRS,
+  LINKMASK_E,
+  LINKMASK_N,
+  LINKMASK_S,
+  LINKMASK_TRANSFER,
+  LINKMASK_W,
+  PROTOCOL_VERSION,
+  type FromWorker,
+  type ToWorker,
+} from '../../src/worker/protocol';
+import { DEPOSIT_BANDS, packDeposits, packEntities, packLinks, packObjects } from '../../src/worker/snapshot';
+import { introduceOrganism } from '../../src/sim/commands';
+import { CELL_COUNT } from '../../src/sim/constants';
+import { FLAG } from '../../src/sim/entities';
+import { cellIndex, SUB_GEL } from '../../src/sim/grid';
+import { FUNGAL_SLOT_COLUMNS, FUNGAL_BIRTH_COLUMNS, LINK_VISUAL } from '../../src/sim/links';
+import { rebuildIndex } from '../../src/sim/spatial';
+import { speciesIndex, type World } from '../../src/sim/world';
+import { linkAdhesion, linkFungal, place, placeObject, registry, setField } from '../helpers/world';
+import { registryWith } from '../helpers/registry';
 
 const RECIPE = { kind: 'recipe', recipeId: 'FIRST_DISH_V1' } as const;
 const SUGAR: CommandPayload = { kind: 'deposit', materialId: 'SUGAR', points: [[64.5, 64.5]], radius: 3, dose: 0.1 };
@@ -244,8 +286,11 @@ describe('worker protocol (P1.3)', () => {
   });
 
   describe('protocol version', () => {
-    it('exports protocol version 1 (ARCH §7)', () => {
-      expect(PROTOCOL_VERSION).toBe(1);
+    it('exports protocol version 2 (ARCH §7; D-0036: bumped once by wave 2 for the Phase 3 snapshot fields)', () => {
+      expect(PROTOCOL_VERSION).toBe(2);
+      expect(ENT_STRIDE).toBe(14);
+      expect([E_CUE2, E_LINKMASK]).toEqual([12, 13]);
+      expect(DEPOSIT_BANDS).toBe(7);
     });
 
     it('every packet in both directions carries protocolVersion', async () => {
@@ -376,6 +421,170 @@ describe('worker protocol (P1.3)', () => {
       expect(h.of('error')).toHaveLength(1);
       expect(h.hash('d1', 5)).toBe(before);
       expect(h.host.world('d1')!.commands.log.map((c) => c.commandId)).toEqual(['ok']);
+    });
+  });
+
+  /**
+   * Protocol 2 packing (W2-23): E_CUE2 and E_LINKMASK for every entity, adhesion links, food objects and
+   * the film band, from a hand-built world. The species and systems are enabled through registryWith
+   * with allowUnimplemented: E04, E06, E07, E10 and E12 are wave 4 modules (no rule runs here; the packer
+   * reads only the genome and the columns, set as labelled test state).
+   */
+  describe('protocol 2 packing (Phase 3 snapshot fields)', () => {
+    function phase3World(): World {
+      const shipped = registry();
+      const m = shipped.manifest;
+      const reg = registryWith(
+        {
+          enabledSpecies: [...new Set([...m.enabledSpecies, 'A01', 'B01', 'F01', 'V01', 'X01'])].sort(),
+          enabledSystems: [...new Set([...m.enabledSystems, 'film', 'fungi', 'parasites', 'viruses'] as const)].sort(),
+          enabledModules: [...new Set([...m.enabledModules, 'E04', 'E06', 'E07', 'E10', 'E12'])].sort(),
+        },
+        { allowUnimplemented: true },
+      );
+      const base = reg.recipes.FIRST_DISH_V1!;
+      return realizeRecipe(reg, { ...base, id: 'TEST_P3_PACK', removeStones: true, fieldPatches: [], founders: [], scheduledCommands: [], backgroundOverrides: { sugar: 0 }, mutationPreset: 'fixed' }, { worldId: 'p3-pack' });
+    }
+
+    function withModules(w: World, speciesId: string, x: number, y: number, modules: readonly string[]): number {
+      const slot = introduceOrganism(w, speciesIndex(w, speciesId), cellIndex(Math.floor(x), Math.floor(y)), 'test', { modules, exactCenter: true });
+      expect(slot, `${speciesId} ${modules.join(',')}`).toBeGreaterThanOrEqual(0);
+      rebuildIndex(w);
+      return slot;
+    }
+
+    function record(w: World, slot: number, packed = packEntities(w, null, null)): Float32Array {
+      const b = w.ents.cols.birthId[slot]!;
+      for (let k = 0; k < packed.count; k++) if (packed.ids[k * ID_STRIDE] === b) return packed.ents.subarray(k * ENT_STRIDE, (k + 1) * ENT_STRIDE);
+      throw new Error(`slot ${slot} not packed`);
+    }
+
+    /** The link table's own answer: the direction of every valid fungal link of `slot` (N 1, E 2, S 4, W 8). */
+    function maskFromTable(w: World, slot: number): number {
+      const c = w.ents.cols;
+      let mask = 0;
+      for (let k = 0; k < 4; k++) {
+        const j = c[FUNGAL_SLOT_COLUMNS[k]!][slot]!;
+        if (j < 0 || !w.ents.refValid(j, c[FUNGAL_BIRTH_COLUMNS[k]!][slot]!)) continue;
+        const dx = Math.floor(c.x[j]!) - Math.floor(c.x[slot]!);
+        const dy = Math.floor(c.y[j]!) - Math.floor(c.y[slot]!);
+        mask |= dx === 1 ? LINKMASK_E : dx === -1 ? LINKMASK_W : dy === 1 ? LINKMASK_S : LINKMASK_N;
+      }
+      return mask;
+    }
+
+    it('a hand-built world decodes to the link table, the expected cue bits, links, objects and film', () => {
+      const w = phase3World();
+      const c = w.ents.cols;
+      // Three F01 segments on gel: a at (30, 40), b east of it, d south of it; a–b and a–d linked.
+      for (const [x, y] of [[30, 40], [31, 40], [30, 41], [32, 40]] as const) w.grid.substrate[cellIndex(x, y)] = SUB_GEL;
+      const a = place(w, 'F01', 30.5, 40.5);
+      const b = place(w, 'F01', 31.5, 40.5);
+      const d = place(w, 'F01', 30.5, 41.5);
+      const lone = place(w, 'F01', 32.5, 40.5);
+      linkFungal(w, a, b);
+      linkFungal(w, a, d, LINK_VISUAL);
+      // An infected Sprinter (labelled test state: what stage 5 would record).
+      const inf = place(w, 'B01', 60.5, 64.5);
+      c.infectedBy[inf] = 1;
+      // A Hitcher attached to a Sunbead (the pair columns as stage 5 writes them, parasite on the host).
+      const host = place(w, 'A01', 40.5, 64.5);
+      const par = place(w, 'X01', 40.5, 64.5);
+      c.hostSlot[par] = host;
+      c.hostBirthId[par] = c.birthId[host]!;
+      c.parasiteSlot[host] = par;
+      c.parasiteBirthId[host] = c.birthId[par]!;
+      // Module carriers: an anchored E04 + E10 Sprinter linked (E12) to another; a moving E07 Sunbead.
+      const anch = withModules(w, 'B01', 70.5, 64.5, ['E04', 'E10', 'E12']);
+      const mate = withModules(w, 'B01', 71.2, 64.5, ['E12']);
+      c.anchorState[anch] = 1;
+      linkAdhesion(w, anch, mate);
+      const seeker = withModules(w, 'A01', 80.5, 64.5, ['E07', 'E06']);
+      c.flags[seeker] = c.flags[seeker]! | FLAG.moving;
+      const plain = place(w, 'B01', 90.5, 64.5);
+      // A slow feeder pellet, partly used, and film in two cells.
+      const pellet = placeObject(w, cellIndex(50, 50), 'pellet', { sugar: 10 }, 1);
+      setField(w, 'film', cellIndex(20, 20), 0.25);
+      setField(w, 'film', cellIndex(21, 20), 0.5);
+
+      const packed = packEntities(w, null, null);
+      // Link masks equal the link table, for every fungal segment.
+      for (const s of [a, b, d, lone]) expect(record(w, s, packed)[E_LINKMASK]! & LINKMASK_DIRS, `segment ${s}`).toBe(maskFromTable(w, s));
+      expect([a, b, d, lone].map((s) => record(w, s, packed)[E_LINKMASK])).toEqual([LINKMASK_E | LINKMASK_S, LINKMASK_W, LINKMASK_N, 0]);
+      // No transfer bit before wave 3's F02 transport.
+      for (let k = 0; k < packed.count; k++) expect(packed.ents[k * ENT_STRIDE + E_LINKMASK]! & LINKMASK_TRANSFER).toBe(0);
+      // Cue bits from state only.
+      expect(record(w, inf, packed)[E_CUE2]).toBe(CUE2_INFECTED);
+      expect(record(w, host, packed)[E_CUE2]).toBe(CUE2_PARASITIZED);
+      expect(record(w, par, packed)[E_CUE2]).toBe(0);
+      expect(record(w, anch, packed)[E_CUE2]).toBe(CUE2_ANCHORED | CUE2_LINKED | CUE2_MOD_E04 | CUE2_MOD_E10 | CUE2_MOD_E12);
+      expect(record(w, mate, packed)[E_CUE2]).toBe(CUE2_LINKED | CUE2_MOD_E12);
+      expect(record(w, seeker, packed)[E_CUE2]).toBe(CUE2_MOD_E06 | CUE2_MOD_E07 | CUE2_SEEKING_LIGHT);
+      expect(record(w, plain, packed)[E_CUE2]).toBe(0);
+      // Reserved for wave 4: never set yet.
+      for (let k = 0; k < packed.count; k++) expect(packed.ents[k * ENT_STRIDE + E_CUE2]! & (CUE2_DETRITUS_INTAKE | CUE2_RELEASING_PROTEIN)).toBe(0);
+      // The parasite is packed exactly at its host's position (the renderer draws it over the host).
+      expect([record(w, par, packed)[E_X], record(w, par, packed)[E_Y]]).toEqual([record(w, host, packed)[E_X], record(w, host, packed)[E_Y]]);
+      // Adhesion links: each pair once, between the members' positions.
+      const links = packLinks(w);
+      expect(links.length).toBe(LINK_STRIDE);
+      expect([...links]).toEqual([c.x[anch], c.y[anch], c.x[mate], c.y[mate], LINK_KIND_ADHESION].map((v) => Math.fround(v!)));
+      // Food objects: cell centre and remaining C / full inventory (CT §5.2: M10 10 C).
+      expect(packObjects(w)).toEqual([{ id: pellet.id, x: 50.5, y: 50.5, kind: 'pellet', fill: 1 }]);
+      pellet.pools.sugar = 4;
+      expect(packObjects(w)[0]!.fill).toBeCloseTo(0.4, 12);
+      // Film band: level on a linear scale to the 0.50 C cap (127), not eroding on a first pack.
+      const dep = packDeposits(w, null);
+      expect(dep.length).toBe(DEPOSIT_BANDS * CELL_COUNT);
+      const film = (cell: number) => dep[DEPOSIT_FILM_BAND * CELL_COUNT + cell]!;
+      expect(film(cellIndex(20, 20))).toBe(64);
+      expect(film(cellIndex(21, 20))).toBe(127);
+      expect(film(cellIndex(22, 20))).toBe(0);
+    });
+
+    it('the film band marks eroding cells against the previous tick packed, and keeps the bits while paused', () => {
+      const w = phase3World();
+      setField(w, 'film', cellIndex(60, 60), 0.3);
+      setField(w, 'film', cellIndex(64, 60), 0.3);
+      const band = (dep: Uint8Array, x: number) => dep[DEPOSIT_FILM_BAND * CELL_COUNT + cellIndex(x, 60)]!;
+      expect(band(packDeposits(w, null), 60) & FILM_ERODING).toBe(0);
+      // The tick decays film (SPEC §7.1: 0.1 %/s into detritus): lower than at the last pack → eroding.
+      step(w);
+      // A builder topping the second cell back up (labelled test state) keeps it from eroding.
+      setField(w, 'film', cellIndex(64, 60), 0.3);
+      const after = packDeposits(w, null);
+      expect(band(after, 60) & FILM_ERODING).toBe(FILM_ERODING);
+      expect(band(after, 60) & FILM_LEVEL_MASK).toBe(76);
+      expect(band(after, 64) & FILM_ERODING).toBe(0);
+      // Packed again at the same tick (paused): unchanged.
+      expect(band(packDeposits(w, null), 60)).toBe(band(after, 60));
+      // A world without the film system packs an empty band.
+      const g2 = realizeRecipe(registry(), registry().recipes.FIRST_DISH_V1!, { worldId: 'nofilm' });
+      if (g2.fields.film === undefined) expect(packDeposits(g2, null).subarray(DEPOSIT_FILM_BAND * CELL_COUNT).every((v) => v === 0)).toBe(true);
+    });
+
+    it('a pooled buffer that held set bits packs 0 for a plain entity', () => {
+      const w = phase3World();
+      const plain = place(w, 'B01', 90.5, 64.5);
+      const ents = new Float32Array(64 * ENT_STRIDE).fill(65535);
+      const ids = new Uint32Array(64 * ID_STRIDE);
+      const packed = packEntities(w, ents, ids);
+      expect(packed.ents).toBe(ents); // reused, not reallocated
+      const r = record(w, plain, packed);
+      expect([r[E_CUE2], r[E_LINKMASK]]).toEqual([0, 0]);
+      expect(packLinks(w).length).toBe(0);
+      expect(packObjects(w)).toEqual([]);
+    });
+
+    it('every snapshot from the host carries links and objects (transferred with the other buffers)', () => {
+      const h = harness();
+      h.host.handle({ type: 'create', requestId: 1, dishId: 'd1', source: RECIPE });
+      h.host.handle({ type: 'step', dishId: 'd1' });
+      const snap = h.of('snapshot').at(-1)!;
+      expect(snap.links).toBeInstanceOf(Float32Array);
+      expect(Array.isArray(snap.objects)).toBe(true);
+      expect(snap.deposits.length).toBe(DEPOSIT_BANDS * CELL_COUNT);
+      expect(snap.ents.length % ENT_STRIDE).toBe(0);
     });
   });
 });

@@ -61,7 +61,16 @@ import {
 } from './LabTrayIcons';
 import { inSentence } from './LabTrayNames';
 import { OverlayPicker } from './OverlayPicker';
-import { habitatTools, paintRecord, shadeFactorOf, structureRecord, structureTools } from './LabTrayContent';
+import {
+  dietLine,
+  dishStructureIds,
+  habitatTools,
+  isPhage,
+  paintRecord,
+  shadeFactorOf,
+  structureRecord,
+  structureTools,
+} from './LabTrayContent';
 
 interface TrayItem {
   readonly id: LabToolId;
@@ -155,8 +164,20 @@ export function itemCopy(id: LabToolId): ItemCopy | null {
     const sp = id.slice('life:'.length);
     const i = info.speciesIds.indexOf(sp);
     if (i < 0) return null;
+    const name = info.speciesNames[i] ?? sp;
+    // A phage dose adds viral units to every covered cell, never organisms (SPEC §10.2; W2-14).
+    if (isPhage(info, sp))
+      return {
+        name,
+        purpose: info.speciesSummaries?.[i] ?? 'A virus recorded in this dish.',
+        habitats: LIFE_COPY.phageHabitats,
+        dose: LIFE_COPY.phageDose(labCount.value, name),
+        changes: LIFE_COPY.phageChanges,
+        unchanged: LIFE_COPY.phageUnchanged,
+        watch: LIFE_COPY.phageWatch,
+      };
     return {
-      name: info.speciesNames[i] ?? sp,
+      name,
       purpose: info.speciesSummaries?.[i] ?? 'An organism recorded in this dish.',
       habitats: habitatList(info.speciesHabitats?.[i], info.speciesAttachment?.[i]),
       dose: LIFE_COPY.dose(labCount.value),
@@ -193,7 +214,10 @@ export function itemCopy(id: LabToolId): ItemCopy | null {
       dose: BRUSH_COPY.substrate.dose,
       // The content rules text is true in every dish; who lives here comes from this dish's species.
       changes: rec.rules || rec.summary,
-      lives: livesHereText(sub, info.speciesNames, info.speciesHabitats, inSentence(rec.name)),
+      lives: livesHereText(sub, info.speciesNames, info.speciesHabitats, inSentence(rec.name), {
+        attachment: info.speciesAttachment,
+        structureIds: dishStructureIds(info),
+      }),
       unchanged: BRUSH_COPY.substrate.unchanged,
       watch: rec.example,
     };
@@ -275,12 +299,21 @@ function ItemDetails({ id }: { id: LabToolId }) {
   if (!copy) return null;
   const brush = brushRule(id) !== null || id.startsWith('life:');
   const t = LAB_TEXT.details;
+  const info = dishInfo.value;
+  // The species' diet line (UX §4.3; W2-13), from the dish's own records.
+  const diet = info && id.startsWith('life:') ? dietLine(info, id.slice('life:'.length)) : null;
   return (
     <section class="lab-details" aria-label={`${copy.name}: what it does`} data-testid="lab-details">
       <h3>{copy.name}</h3>
       <dl>
         <dt>{t.purpose}</dt>
         <dd>{copy.purpose}</dd>
+        {diet ? (
+          <>
+            <dt>{LIFE_COPY.dietLabel}</dt>
+            <dd data-testid="lab-diet">{diet.text}</dd>
+          </>
+        ) : null}
         <dt>{t.habitats}</dt>
         <dd>{copy.habitats}</dd>
         <dt>{t.dose}</dt>
@@ -311,7 +344,7 @@ function ToolOptions({ id }: { id: LabToolId }) {
     opts.push(
       <Segmented
         key="count"
-        label={LAB_TEXT.count}
+        label={info && isPhage(info, id.slice('life:'.length)) ? LIFE_COPY.phageCountLabel : LAB_TEXT.count}
         values={COUNTS}
         value={labCount.value}
         onPick={(v) => (labCount.value = v)}

@@ -1,29 +1,54 @@
 /**
  * The dish renderer (ARCH §9, UX §6–§7). Draws snapshots; never touches simulation state.
  *
- * Layers (bottom → top): dish substrates · deposits · overlay · wide-zoom aggregation · organisms
- * (one ParticleContainer over the organism atlas) · effects · selection. Positions interpolate
+ * Layers (bottom → top, UX §7.3): dish substrates · film tiles · deposits · food objects and stains ·
+ * overlay · wide-zoom aggregation · organisms and fungal segment tiles (one ParticleContainer over the
+ * organism atlas) · feature rims · status marks (infection glyph) · adhesion links · effects ·
+ * selection. Fungi are drawn as connection-mask tiles from E_LINKMASK, never through the body path;
+ * viruses have no body (their units are a density overlay). Positions interpolate
  * between the last two snapshots by entityId (the retained daughter keeps its entityId across a
  * division). Animation state comes only from snapshot flags and events.
  */
-import { Application, Container, Graphics, Particle, ParticleContainer, Rectangle, Sprite, Texture, TextureStyle } from 'pixi.js';
+import { Application, Container, Graphics, Particle, ParticleContainer, Rectangle, Sprite, Texture, TextureStyle, type IParticle } from 'pixi.js';
 import { CELL_COUNT, GRID_W, MASK_CX, MASK_CY, MASK_R } from '@sim/constants';
 import {
+  CUE2_MOD_E10,
   CUE_FEEDING,
   CUE_JUST_BORN,
   CUE_STRESSED,
+  DEPOSIT_FILM_BAND,
   E_CUE,
+  E_CUE2,
   E_FLAGS,
+  E_GROWTH,
   E_HEADING,
   E_LIFE,
+  E_LINKMASK,
   E_SPECIES,
   E_X,
   E_Y,
   ENT_STRIDE,
   ID_STRIDE,
+  LINK_STRIDE,
   type SnapshotMsg,
   type VisualEvent,
 } from '@worker/protocol';
+import {
+  drawKindOf,
+  filmAlpha,
+  filmLevel,
+  filmLevelBand,
+  filmTile,
+  fungalPick,
+  infectionGlyphShown,
+  objectFrame,
+  riderMarks,
+  stainAlpha,
+  tileFrameKey,
+  type AtlasTileLike,
+  type DrawKind,
+  type FungalPick,
+} from './world3';
 import { Camera, ZOOM_CLOSE, ZOOM_NEIGHBORHOOD } from './camera';
 import { DISH_PX_PER_CELL, DISH_TEX, paintAggregation, paintDeposits, paintDish, paintOverlay, repaintDepositCells, type DirtyRect } from './layers';
 import { speciesRgb } from './speciesColors';
@@ -64,14 +89,33 @@ export interface AtlasManifestLike {
   readonly frames: ReadonlyArray<{ key: string; x: number; y: number; w: number; h: number }>;
   /** Module feature marks by visual layer (ARCH §10.1); their frames are in `frames` as feature/<layer>/<heading>/<frame>. */
   readonly features?: Readonly<Record<string, AtlasFeatureLike>>;
+  /** World tiles (film, food objects, stain); frames in `frames` as tile/<id>/<frame> (src/render/world3.ts). */
+  readonly tiles?: Readonly<Record<string, AtlasTileLike>>;
 }
 
 interface Ghost {
   particle: Particle;
-  death: AnimTex;
+  /** A body's death dissolve, or null for a fungal segment's decaying tile (`still`). */
+  death: AnimTex | null;
+  /** decaying/e/<mask> of a fungal segment (drawn at one cell per tile, fading). */
+  still: Texture | null;
   /** Row into death.tex (0 for single-heading sprites). */
   row: number;
   start: number;
+}
+
+/** How long a dead fungal segment's decaying tile stays (it fades out; reduced motion: as other deaths). */
+const DECAY_MS = 1200;
+
+/** A fungal species' tiles, resolved once from the atlas manifest (ARCH §10.1, D-0046). */
+interface FungusTex {
+  /** mask/e/<0..15> and decaying/e/<0..15>, indexed by connection mask. */
+  readonly mask: readonly (Texture | undefined)[];
+  readonly decaying: readonly (Texture | undefined)[];
+  readonly tip: Texture | undefined;
+  readonly bud: Texture | undefined;
+  /** F02's transfer pulse (empty for F01). */
+  readonly pulse: readonly (Texture | undefined)[];
 }
 
 /** One animation's frame textures, resolved once from the atlas manifest (no per-frame string keys). */
@@ -85,6 +129,9 @@ interface AnimTex {
 
 /** Per species index: the animations the renderer can pick from. */
 interface SpeciesDraw {
+  /** body: organism animations; fungus: connection-mask tiles; virus: never drawn as a body. */
+  readonly kind: DrawKind;
+  readonly fungus: FungusTex | null;
   readonly headings: number;
   readonly size: number;
   readonly stress: AnimTex | null;
@@ -149,6 +196,29 @@ export class DishRenderer {
   private layerSize: Record<string, number> = {};
   private featurePool: Particle[] = [];
   private readonly picks: LayerPick[] = [];
+  /** Film tiles (UX §6.2), one particle per cell holding film, rebuilt when the film band changes. */
+  private filmParticles!: ParticleContainer;
+  private filmPool: Particle[] = [];
+  private filmPrev: Uint8Array | null = null;
+  /** Food objects (fill steps) and the fading stains of emptied ones (UX §6.5). */
+  private objectParticles!: ParticleContainer;
+  private objectPool: Particle[] = [];
+  private stains: { particle: Particle; start: number }[] = [];
+  /** Status marks above the feature rims: the infection glyph (SPEC §7.5, §10.8). */
+  private statusParticles!: ParticleContainer;
+  private statusPool: Particle[] = [];
+  /** Adhesion links between member positions (SPEC §9 E12 "thin pixel connections"). */
+  private readonly linksG = new Graphics();
+  private linksDrawn = false;
+  /** Observe tray: show the infection glyph on every infected host, not only the inspected one. */
+  private infectionMarkers = false;
+  /** The dish's virus glyph (v01_pinphage/glyph/e/0 in Phase 3), from its species list. */
+  private infectionGlyph: Texture | undefined;
+  /** Per snapshot entry: 1 = drawn after the other bodies (a parasite on its host). */
+  private rider = new Uint8Array(0);
+  private riders = 0;
+  private readonly riderScratch = { head: new Int32Array(CELL_COUNT), next: new Int32Array(64) };
+  private readonly fpick: FungalPick = { mask: 0, tip: false, bud: false, pulse: -1 };
   private readonly effects = new Container();
   private readonly selectionG = new Graphics();
   private readonly rim = new Graphics();
@@ -273,8 +343,31 @@ export class DishRenderer {
       roundPixels: false,
     });
     this.buildFeatureLayers(atlas);
+    const tileContainer = () =>
+      new ParticleContainer({
+        dynamicProperties: { position: true, uvs: true, color: true, vertex: true, rotation: false },
+        texture: atlas,
+        roundPixels: false,
+      });
+    this.filmParticles = tileContainer();
+    this.objectParticles = tileContainer();
+    this.statusParticles = tileContainer();
     this.drawRim();
-    this.world.addChild(this.dishSprite, this.depositSprite, this.overlaySprite, this.aggSprite, this.rim, this.particles, this.featureParticles, this.effects, this.selectionG);
+    this.world.addChild(
+      this.dishSprite,
+      this.filmParticles,
+      this.depositSprite,
+      this.objectParticles,
+      this.overlaySprite,
+      this.aggSprite,
+      this.rim,
+      this.particles,
+      this.featureParticles,
+      this.statusParticles,
+      this.linksG,
+      this.effects,
+      this.selectionG,
+    );
     this.buildBandRings();
     this.root.addChild(this.world);
     this.app.stage.addChild(this.root);
@@ -336,10 +429,30 @@ export class DishRenderer {
       }
       return { frames: a.frames, durationMs: a.durationMs, reducedMotionFrame: a.reducedMotionFrame, tex: rows };
     };
+    const frames = (asset: string, name: string, n: number): (Texture | undefined)[] => {
+      const out: (Texture | undefined)[] = [];
+      const count = Math.min(n, this.manifest.sprites[asset]?.animations[name]?.frames ?? 0);
+      for (let i = 0; i < count; i++) out.push(this.frames[`${asset}/${name}/e/${i}`]);
+      return out;
+    };
+    this.infectionGlyph = undefined;
     this.draws = this.speciesAssets.map((asset) => {
       const meta = asset ? this.manifest.sprites[asset] : undefined;
       if (!meta) return null;
+      const kind = drawKindOf(meta);
+      if (kind === 'virus') this.infectionGlyph ??= this.frames[`${asset}/glyph/e/0`];
       return {
+        kind,
+        fungus:
+          kind === 'fungus'
+            ? {
+                mask: frames(asset, 'mask', 16),
+                decaying: frames(asset, 'decaying', 16),
+                tip: this.frames[`${asset}/tip/e/0`],
+                bud: this.frames[`${asset}/bud/e/0`],
+                pulse: frames(asset, 'pulse', 2),
+              }
+            : null,
         headings: meta.headings,
         size: meta.size,
         stress: anim(asset, 'stress', meta.headings),
@@ -354,6 +467,11 @@ export class DishRenderer {
   setOptions(o: Partial<RendererOptions>): void {
     this.opts = { ...this.opts, ...o };
     this.overlaySprite.alpha = this.opts.overlayOpacity;
+  }
+
+  /** Observe tray "Infection markers" (SPEC §10.8): the glyph on every infected host while on. */
+  setInfectionMarkers(on: boolean): void {
+    this.infectionMarkers = on;
   }
 
   select(birthId: number | null, cell: number | null = null): void {
@@ -415,6 +533,7 @@ export class DishRenderer {
       }
       this.depositVersion++;
     }
+    this.applyFilm(s.deposits);
     if (s.overlay) {
       const ctx = this.overlayCanvas.getContext('2d')!;
       const img = (this.overlayImg ??= ctx.createImageData(GRID_W, GRID_W));
@@ -470,10 +589,92 @@ export class DishRenderer {
     this.curIndex = index;
     if (this.cur) this.interval = Math.min(400, Math.max(40, now - this.curAt));
     this.curAt = now;
+    if (this.rider.length < n) this.rider = new Uint8Array(Math.max(64, Math.ceil(n * 1.25)));
+    if (this.riderScratch.next.length < n) this.riderScratch.next = new Int32Array(this.rider.length);
+    this.riders = riderMarks(s.ents, n, this.rider, this.riderScratch);
     this.handleEvents(s.events, now);
     this.cur = s;
     this.lineage = s.lineage ?? null;
     this.aggDirty = true;
+  }
+
+  /**
+   * Film tiles (UX §6.2): one particle per cell with film, its tile from the four-neighbour mask and
+   * the eroding bit, its opacity from the film level. Rebuilt only when the film band changed.
+   */
+  private applyFilm(deposits: Uint8Array): void {
+    const base = DEPOSIT_FILM_BAND * CELL_COUNT;
+    const prev = this.filmPrev;
+    if (deposits.length < base + CELL_COUNT) {
+      if (prev) {
+        this.filmParticles.particleChildren.length = 0;
+        this.filmParticles.update();
+        this.filmPrev = null;
+      }
+      return;
+    }
+    let changed = !prev;
+    if (prev) for (let i = 0; i < CELL_COUNT && !changed; i++) changed = prev[i] !== deposits[base + i];
+    if (!changed) return;
+    this.filmPrev = deposits.slice(base, base + CELL_COUNT);
+    const list = this.filmParticles.particleChildren;
+    let n = 0;
+    for (let cell = 0; cell < CELL_COUNT; cell++) {
+      const t = filmTile(deposits, cell);
+      if (t < 0) continue;
+      const tex = this.frames[tileFrameKey('film', t)];
+      if (!tex) continue;
+      let p = this.filmPool[n];
+      if (!p) {
+        p = new Particle({ texture: tex, anchorX: 0.5, anchorY: 0.5 });
+        this.filmPool[n] = p;
+      }
+      const size = this.manifest.tiles?.film?.size ?? 16;
+      p.texture = tex;
+      p.x = (cell % GRID_W) + 0.5;
+      p.y = Math.floor(cell / GRID_W) + 0.5;
+      p.scaleX = 1 / size;
+      p.scaleY = 1 / size;
+      p.alpha = filmAlpha(filmLevel(deposits, cell));
+      list[n++] = p;
+    }
+    list.length = n;
+    this.filmParticles.update();
+  }
+
+  /** Food objects at their fill step, then the fading stains of emptied ones (UX §6.5). */
+  private drawObjects(s: SnapshotMsg, now: number): void {
+    const list = this.objectParticles.particleChildren;
+    let n = 0;
+    for (const o of s.objects ?? []) {
+      const tex = this.frames[tileFrameKey(o.kind, objectFrame(o.fill))];
+      if (!tex) continue;
+      let p = this.objectPool[n];
+      if (!p) {
+        p = new Particle({ texture: tex, anchorX: 0.5, anchorY: 0.5 });
+        this.objectPool[n] = p;
+      }
+      const size = this.manifest.tiles?.[o.kind]?.size ?? 16;
+      p.texture = tex;
+      p.x = o.x;
+      p.y = o.y;
+      p.scaleX = 1 / size;
+      p.scaleY = 1 / size;
+      list[n++] = p;
+    }
+    let live = 0;
+    for (const st of this.stains) {
+      const a = stainAlpha(now - st.start);
+      if (a <= 0) continue;
+      this.stains[live++] = st;
+      st.particle.alpha = a;
+      list[n++] = st.particle;
+    }
+    this.stains.length = live;
+    if (list.length !== n || n > 0) {
+      list.length = n;
+      this.objectParticles.update();
+    }
   }
 
   private paintAggregation(s: SnapshotMsg): void {
@@ -509,6 +710,16 @@ export class DishRenderer {
       const cx = (ev.cell % GRID_W) + 0.5;
       const cy = Math.floor(ev.cell / GRID_W) + 0.5;
       if (ev.type === 'birth' && !this.opts.reducedMotion) this.spawnEffect('split', cx, cy, 0.9, 380, now);
+      if (ev.type === 'objectEmptied') {
+        // A fading stain where a food object ran out (cosmetic; it blocks nothing).
+        const tex = this.frames[tileFrameKey('stain', 0)];
+        if (tex && ev.cell >= 0 && this.stains.length < 128) {
+          const size = this.manifest.tiles?.stain?.size ?? 16;
+          const particle = new Particle({ texture: tex, x: cx, y: cy, anchorX: 0.5, anchorY: 0.5, scaleX: 1 / size, scaleY: 1 / size });
+          this.stains.push({ particle, start: now });
+        }
+        continue;
+      }
       if (ev.type === 'death' && prev) {
         // The organism's last position in the previous snapshot, by birthId (first match).
         if (!byBirth) {
@@ -519,9 +730,18 @@ export class DishRenderer {
         if (k === undefined) continue;
         const o = k * ENT_STRIDE;
         const d = this.draws[prev.ents[o + E_SPECIES]!];
-        if (!d?.death) continue;
+        if (d?.kind === 'fungus') {
+          // A dead segment shows decaying/e/<mask> for its last link mask (there is no dying flag, W2-27).
+          const still = d.fungus?.decaying[(prev.ents[o + E_LINKMASK] ?? 0) & 15];
+          if (!still) continue;
+          // Centred on its cell like the live tile it replaces.
+          const p = new Particle({ texture: still, x: Math.floor(prev.ents[o + E_X]!) + 0.5, y: Math.floor(prev.ents[o + E_Y]!) + 0.5, anchorX: 0.5, anchorY: 0.5, scaleX: 1 / d.size, scaleY: 1 / d.size });
+          this.ghosts.push({ particle: p, death: null, still, row: 0, start: now });
+          continue;
+        }
+        if (!d?.death || d.kind !== 'body') continue;
         const p = new Particle({ texture: Texture.EMPTY, x: prev.ents[o + E_X]!, y: prev.ents[o + E_Y]!, anchorX: 0.5, anchorY: 0.5 });
-        this.ghosts.push({ particle: p, death: d.death, row: headingRow(d.headings, prev.ents[o + E_HEADING]!), start: now });
+        this.ghosts.push({ particle: p, death: d.death, still: null, row: headingRow(d.headings, prev.ents[o + E_HEADING]!), start: now });
       }
     }
   }
@@ -556,9 +776,11 @@ export class DishRenderer {
     this.aggSprite.visible = wide;
     this.particles.visible = !wide;
     this.featureParticles.visible = !wide;
+    this.statusParticles.visible = !wide;
     this.particles.alpha = 1;
     if (!s) return;
     if (wide && this.aggDirty) this.paintAggregation(s);
+    this.drawObjects(s, now);
 
     const alpha = Math.min(1, (now - this.curAt) / this.interval);
     const pxScale = cam.spritePixelScale();
@@ -568,10 +790,27 @@ export class DishRenderer {
     const draw = this.particles.visible && this.particles.alpha > 0;
     const list = this.particles.particleChildren;
     const flist = this.featureParticles.particleChildren;
+    const slist = this.statusParticles.particleChildren;
     const blist = this.bandParticles?.particleChildren;
     let n = 0;
     let nf = 0;
+    let ns = 0;
     let nb = 0;
+    /** One overlay frame (feature rim, fungal tip/bud/pulse, or status mark) into a pooled list. */
+    const overlay = (pool: Particle[], out: IParticle[], i: number, tex: Texture, x: number, y: number, sc: number, a: number): void => {
+      let fp = pool[i];
+      if (!fp) {
+        fp = new Particle({ texture: tex, anchorX: 0.5, anchorY: 0.5 });
+        pool[i] = fp;
+      }
+      fp.texture = tex;
+      fp.x = x;
+      fp.y = y;
+      fp.scaleX = sc;
+      fp.scaleY = sc;
+      if (fp.alpha !== a) fp.alpha = a;
+      out[i] = fp;
+    };
     if (draw) {
       const needed = s.count;
       while (this.pool.length < needed) {
@@ -597,85 +836,118 @@ export class DishRenderer {
       const curY = this.curY;
       const prevX = this.prevX;
       const prevY = this.prevY;
-      // Rebuild the particle list: live organisms, then ghosts.
-      for (let k = 0; k < needed; k++) {
-        const o = k * ENT_STRIDE;
-        const d = this.draws[ents[o + E_SPECIES]!];
-        if (!d) continue;
-        const x0 = prevX[k]!;
-        const y0 = prevY[k]!;
-        const x = x0 + (curX[k]! - x0) * alpha;
-        const y = y0 + (curY[k]! - y0) * alpha;
-        if (x < minX || x > maxX || y < minY || y > maxY) continue;
-        const flags = ents[o + E_FLAGS]!;
-        const cue = ents[o + E_CUE]!;
-        // Preparing/Resting/Waking hold a still, folded pose (UX §7.2): no locomotion or feeding frames.
-        const life = ents[o + E_LIFE]!;
-        const dormant = life !== 0;
-        const a = cue & CUE_STRESSED && d.stress ? d.stress : !dormant && cue & CUE_FEEDING && d.feed && !(flags & FLAG_MOVING) ? d.feed : (d.move ?? d.idle);
-        if (!a) continue;
-        const entityId = ids[k * ID_STRIDE + 1]!;
-        const phase = (entityId * 97) % 1000;
-        const idx = reduced || dormant ? a.reducedMotionFrame : Math.floor((now + phase) / a.durationMs) % a.frames;
-        const hRow = headingRow(d.headings, ents[o + E_HEADING]!);
-        const tex = a.tex[hRow]![idx];
-        const p = this.pool[k]!;
-        if (tex) p.texture = tex;
-        p.x = x;
-        p.y = y;
-        p.scaleX = scale;
-        p.scaleY = scale;
-        // Newborns fade in over their first snapshot; feeders glow very slightly brighter.
-        const born = cue & CUE_JUST_BORN ? 0.75 + 0.25 * alpha : 1;
-        if (p.alpha !== born) p.alpha = born;
-        const tint = dormant ? 0xc8c8c8 : cue & CUE_FEEDING ? 0xffffff : 0xf0f0f0;
-        if (this.poolTint[k] !== tint) {
-          p.tint = tint;
-          this.poolTint[k] = tint;
-        }
-        list[n++] = p;
-        // Trait overlay: a band ring in the legend's exact colour (the body keeps its own colours).
-        const band = this.traitColor(k);
-        if (band !== undefined && blist) {
-          blist[nb] = this.bandRing(nb, x, y, (scale * (d.size + TRAIT_RING_EXTRA)) / TRAIT_RING_PX, band, born);
-          nb++;
-        }
-        // Module feature layers: only marks the snapshot says are real for this organism.
-        const marks = featureLayers(cue, life, ids[k * ID_STRIDE] === this.selectedBirthId, this.picks);
-        for (let m = 0; m < marks; m++) {
-          const pick = this.picks[m]!;
-          const lt = this.layerTexture(pick.layer, pick.frame, hRow);
-          if (!lt) continue;
-          let fp = this.featurePool[nf];
-          if (!fp) {
-            fp = new Particle({ texture: lt, anchorX: 0.5, anchorY: 0.5 });
-            this.featurePool[nf] = fp;
+      const rider = this.rider;
+      // Rebuild the particle list: live organisms (riders — a parasite on its host — in a second pass,
+      // so they show over the host), then ghosts.
+      for (let pass = 0; pass < (this.riders > 0 ? 2 : 1); pass++) {
+        for (let k = 0; k < needed; k++) {
+          if (this.riders > 0 && rider[k] !== pass) continue;
+          const o = k * ENT_STRIDE;
+          const d = this.draws[ents[o + E_SPECIES]!];
+          // A virus has no body (its units are a density overlay, UX §6.2).
+          if (!d || d.kind === 'virus') continue;
+          const x0 = prevX[k]!;
+          const y0 = prevY[k]!;
+          const x = x0 + (curX[k]! - x0) * alpha;
+          const y = y0 + (curY[k]! - y0) * alpha;
+          if (x < minX || x > maxX || y < minY || y > maxY) continue;
+          const flags = ents[o + E_FLAGS]!;
+          const cue = ents[o + E_CUE]!;
+          const cue2 = ents[o + E_CUE2] ?? 0;
+          // Preparing/Resting/Waking hold a still, folded pose (UX §7.2): no locomotion or feeding frames.
+          const life = ents[o + E_LIFE]!;
+          const dormant = life !== 0;
+          const entityId = ids[k * ID_STRIDE + 1]!;
+          const phase = (entityId * 97) % 1000;
+          const selected = ids[k * ID_STRIDE] === this.selectedBirthId;
+          let tex: Texture | undefined;
+          let sc = scale;
+          let hRow = 0;
+          let fungal: FungalPick | null = null;
+          let px = x;
+          let py = y;
+          if (d.kind === 'fungus') {
+            // Fungal segments: the connection-mask tile of its live links, one cell per tile (D-0046),
+            // centred on its cell (not the segment's jittered position) so neighbouring arms meet.
+            fungal = fungalPick(ents[o + E_LINKMASK] ?? 0, ents[o + E_GROWTH]!, reduced, now + phase, this.fpick);
+            tex = d.fungus?.mask[fungal.mask];
+            sc = 1 / d.size;
+            px = Math.floor(x) + 0.5;
+            py = Math.floor(y) + 0.5;
+            if (!tex) continue;
+          } else {
+            const a = cue & CUE_STRESSED && d.stress ? d.stress : !dormant && cue & CUE_FEEDING && d.feed && !(flags & FLAG_MOVING) ? d.feed : (d.move ?? d.idle);
+            if (!a) continue;
+            const idx = reduced || dormant ? a.reducedMotionFrame : Math.floor((now + phase) / a.durationMs) % a.frames;
+            hRow = headingRow(d.headings, ents[o + E_HEADING]!);
+            tex = a.tex[hRow]![idx];
           }
-          fp.texture = lt;
-          fp.x = x;
-          fp.y = y;
-          const ms = featureMarkScale(scale, d.size, this.layerSize[pick.layer]);
-          fp.scaleX = ms;
-          fp.scaleY = ms;
-          if (fp.alpha !== born) fp.alpha = born;
-          flist[nf++] = fp;
+          const p = this.pool[k]!;
+          if (tex) p.texture = tex;
+          p.x = px;
+          p.y = py;
+          p.scaleX = sc;
+          p.scaleY = sc;
+          // Newborns fade in over their first snapshot; feeders glow very slightly brighter.
+          const born = cue & CUE_JUST_BORN ? 0.75 + 0.25 * alpha : 1;
+          if (p.alpha !== born) p.alpha = born;
+          const tint = dormant ? 0xc8c8c8 : cue & CUE_FEEDING ? 0xffffff : 0xf0f0f0;
+          if (this.poolTint[k] !== tint) {
+            p.tint = tint;
+            this.poolTint[k] = tint;
+          }
+          list[n++] = p;
+          // Trait overlay: a band ring in the legend's exact colour (the body keeps its own colours).
+          const band = this.traitColor(k);
+          if (band !== undefined && blist) {
+            blist[nb] = this.bandRing(nb, px, py, (sc * (d.size + TRAIT_RING_EXTRA)) / TRAIT_RING_PX, band, born);
+            nb++;
+          }
+          if (fungal && d.fungus) {
+            // Tip over a growing end (≤ 1 link), bud when ready to branch, F02 pulse only on a transfer.
+            if (fungal.tip && d.fungus.tip) overlay(this.featurePool, flist, nf++, d.fungus.tip, px, py, sc, born);
+            if (fungal.bud && d.fungus.bud) overlay(this.featurePool, flist, nf++, d.fungus.bud, px, py, sc, born);
+            const pt = fungal.pulse >= 0 ? d.fungus.pulse[fungal.pulse] : undefined;
+            if (pt) overlay(this.featurePool, flist, nf++, pt, px, py, sc, born);
+          } else {
+            // Module feature layers: only marks the snapshot says are real for this organism.
+            const cell = Math.floor(curY[k]!) * GRID_W + Math.floor(curX[k]!);
+            const filmBand = cue2 & CUE2_MOD_E10 && cell >= 0 && cell < CELL_COUNT ? filmLevelBand(filmLevel(s.deposits, cell)) : 0;
+            const pulseOn = Math.floor((now + phase) / 400) % 2 === 0;
+            const marks = featureLayers(cue, life, selected, this.picks, cue2, { filmBand, reduced, pulseOn });
+            for (let m = 0; m < marks; m++) {
+              const pick = this.picks[m]!;
+              const lt = this.layerTexture(pick.layer, pick.frame, hRow);
+              if (!lt) continue;
+              const ms = featureMarkScale(scale, d.size, this.layerSize[pick.layer]);
+              overlay(this.featurePool, flist, nf++, lt, x, y, ms, born);
+            }
+          }
+          // Status mark: the infection glyph on an inspected infected host, or on every one while the
+          // Infection markers toggle is on (SPEC §7.5, §10.8).
+          if (this.infectionGlyph && infectionGlyphShown(cue2, selected, this.infectionMarkers)) {
+            const off = (Math.max(d.size * sc, 16 * scale) * 0.35);
+            overlay(this.statusPool, slist, ns++, this.infectionGlyph, x + off, y - off, scale, 1);
+          }
         }
       }
     }
-    // Death dissolves (3–4 frames), then removed.
+    // Death dissolves (3–4 frames), and fading decaying tiles of dead fungal segments, then removed.
     let live = 0;
     for (const gh of this.ghosts) {
       const a = gh.death;
       const t = now - gh.start;
-      const total = reduced ? 600 : a.frames * a.durationMs;
+      const total = reduced ? 600 : a ? a.frames * a.durationMs : DECAY_MS;
       if (t > total) continue;
       this.ghosts[live++] = gh;
       if (!draw) continue;
-      const idx = reduced ? a.reducedMotionFrame : Math.floor(t / a.durationMs);
-      const tex = a.tex[gh.row]![Math.min(a.frames - 1, idx)];
-      if (tex) gh.particle.texture = tex;
-      gh.particle.scaleX = scale;
-      gh.particle.scaleY = scale;
+      if (a) {
+        const idx = reduced ? a.reducedMotionFrame : Math.floor(t / a.durationMs);
+        const tex = a.tex[gh.row]![Math.min(a.frames - 1, idx)];
+        if (tex) gh.particle.texture = tex;
+        gh.particle.scaleX = scale;
+        gh.particle.scaleY = scale;
+      } else gh.particle.alpha = reduced ? 1 : 1 - t / total;
       list[n++] = gh.particle;
     }
     this.ghosts.length = live;
@@ -684,6 +956,8 @@ export class DishRenderer {
       this.particles.update();
       flist.length = nf;
       this.featureParticles.update();
+      slist.length = ns;
+      this.statusParticles.update();
     }
     if (this.bandParticles && blist) {
       this.bandParticles.visible = draw && nb > 0;
@@ -692,6 +966,7 @@ export class DishRenderer {
         this.bandParticles.update();
       }
     }
+    this.drawLinks(s, draw, scale);
 
     // Effects.
     this.fx = this.fx.filter((e) => {
@@ -733,6 +1008,28 @@ export class DishRenderer {
       g.rect(x, y, 1, 1).stroke({ width: 2 / cam.zoom, color: 0xf2b84b });
     }
     this.drawLineage(s, alpha);
+  }
+
+  /**
+   * Adhesion links (SPEC §9 E12 "thin pixel connections"): a one-sprite-pixel line between the two
+   * members' snapshot positions, dark-edged so it reads on every substrate. Only links the snapshot
+   * reports; none at wide zoom (no bodies there either). Static (no pulse to replace in reduced motion).
+   */
+  private drawLinks(s: SnapshotMsg, draw: boolean, scale: number): void {
+    const g = this.linksG;
+    const L = s.links;
+    const has = draw && L !== undefined && L.length >= LINK_STRIDE;
+    if (!has) {
+      if (this.linksDrawn) g.clear();
+      this.linksDrawn = false;
+      return;
+    }
+    g.clear();
+    for (let i = 0; i + LINK_STRIDE <= L.length; i += LINK_STRIDE) g.moveTo(L[i]!, L[i + 1]!).lineTo(L[i + 2]!, L[i + 3]!);
+    g.stroke({ width: scale * 2.2, color: 0x2c3f49, alpha: 0.9 });
+    for (let i = 0; i + LINK_STRIDE <= L.length; i += LINK_STRIDE) g.moveTo(L[i]!, L[i + 1]!).lineTo(L[i + 2]!, L[i + 3]!);
+    g.stroke({ width: scale, color: 0xe8e1c9, alpha: 1 });
+    this.linksDrawn = true;
   }
 
   /** Organisms near a screen point, nearest first (then lower birthId). */

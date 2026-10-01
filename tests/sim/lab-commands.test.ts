@@ -58,6 +58,7 @@ import { canOccupy } from '../../src/sim/movement';
 import type { WorldState } from '../../src/sim/serialize';
 import { LAB_MAX_STROKE_SAMPLES, occupiedCells, shadeFactor } from '../../src/sim/structures';
 import { habitatCompatible } from '../../src/sim/suitability';
+import { phageCellAccepts } from '../../src/sim/viruses';
 import { run, step } from '../../src/sim/tick';
 import { transportCache } from '../../src/sim/transport';
 import type { World } from '../../src/sim/world';
@@ -995,12 +996,17 @@ describe('Life brush preview (P2.7)', () => {
     expect(mismatches).toBe(0);
   });
 
-  it.each(['B02', 'B13'])('%s (attached, built from its record) needs a surface: the preview equals canOccupy in every habitat, ground and structure (P3.2)', (id) => {
+  it.each(['B02', 'B13', 'F01'])('%s (attached, built from its record) needs a surface: the preview equals canOccupy in every habitat, ground and structure (P3.2; F01 W2-03)', (id) => {
     const reg = registry();
     const def = reg.species[id]!;
-    // Velvet lists beads; B13 does not, so a bead cell is refused to it by both the preview and the command.
-    if (id === 'B02') expect(def.attachment?.surfaces).toEqual(['gel', 'sediment', 'stoneEdge', 'bead', 'mesh']);
-    else expect(def.attachment?.surfaces).toEqual(['gel', 'sediment', 'mesh', 'stoneEdge']);
+    // Velvet and Threadlace list beads; B13 does not, so a bead cell is refused to it by both the
+    // preview and the command. Threadlace lists no stone edge, so open water beside stone is refused to it.
+    const surfaces: Record<string, string[]> = {
+      B02: ['gel', 'sediment', 'stoneEdge', 'bead', 'mesh'],
+      B13: ['gel', 'sediment', 'mesh', 'stoneEdge'],
+      F01: ['gel', 'sediment', 'bead', 'mesh'],
+    };
+    expect(def.attachment?.surfaces).toEqual(surfaces[id]);
     const [velvet] = buildSpeciesTable([def]);
     const rule = brushOf(def.habitats, def.attachment!.surfaces);
     for (const habitatId of ['WATER_GARDEN', 'GEL_COLONY', 'SEDIMENT_EDGE']) {
@@ -1055,6 +1061,68 @@ describe('Life brush preview (P2.7)', () => {
       expect(ok).toContain(cell);
       expect(w.grid.substrate[cell]).toBe(SUB_WATER);
     }
+  });
+
+  it('P04 Siltworm (sediment, crossing only while moving): the preview and the command refuse open water (P3.4, D-0007)', () => {
+    const w = clearWater({ habitatId: 'SEDIMENT_EDGE', removeStones: false, backgroundOverrides: {} });
+    const worm = w.species.find((s) => s.id === 'P04')!;
+    const life = brushOf(worm.def.habitats, worm.def.attachment?.surfaces ?? null);
+    const [checked, bad] = compare(w, worm, life);
+    expect(checked).toBe(CELL_COUNT);
+    expect(bad).toBe(0);
+    expect(lifeCellOutcome(ST_NONE, SUB_WATER, life, false)).toBe('habitat');
+    expect(lifeCellOutcome(ST_NONE, SUB_SEDIMENT, life, false)).toBe('ok');
+    const res = cmd(w, { kind: 'inoculate', speciesId: 'P04', x: 64.5, y: 40.5, radius: 3, count: 5 }); // open water
+    expect(res.accepted).toBe(0);
+  });
+
+  it('V01 Pinphage: the viral preview rule equals the dose command’s cell filter (phageCellAccepts) cell by cell, in every habitat (W2-14)', () => {
+    const viral: LifeBrush = { habitatMask: 0, attached: false, viral: true };
+    for (const habitatId of ['WATER_GARDEN', 'GEL_COLONY', 'SEDIMENT_EDGE']) {
+      const w = clearWater({ habitatId, removeStones: false, backgroundOverrides: {} });
+      cmd(w, { kind: 'placeStructure', structure: 'bead', points: [[30.5, 64.5], [64.5, 100.5]], radius: 1 });
+      cmd(w, { kind: 'placeStructure', structure: 'wall', points: [[90.5, 40.5], [100.5, 40.5]], radius: 1 });
+      cmd(w, { kind: 'placeStructure', structure: 'stone', points: [[80.5, 30.5]], radius: 3 });
+      let ok = 0;
+      let refused = 0;
+      for (let cell = 0; cell < CELL_COUNT; cell++) {
+        const preview = lifeCellOutcome(w.grid.structure[cell]!, w.grid.substrate[cell]!, viral, isStoneEdge(w.grid, cell)) === 'ok';
+        expect(preview, `${habitatId} ${cell}`).toBe(phageCellAccepts(w, cell));
+        if (preview) ok++;
+        else refused++;
+      }
+      expect(ok, habitatId).toBeGreaterThan(0);
+      expect(refused, habitatId).toBeGreaterThan(0);
+    }
+  });
+
+  it('livesHereText names attached species with the surfaces they need in open water, never as living in it (W2-03, D-0006)', () => {
+    const reg = registry();
+    const ids = ['B01', 'B02', 'F01', 'B13'];
+    const names = ids.map((id) => reg.species[id]!.name);
+    const habitats = ids.map((id) => [...reg.species[id]!.habitats]);
+    const attachment = ids.map((id) => {
+      const a = reg.species[id]!.attachment;
+      return a ? [...a.surfaces] : null;
+    });
+    expect(names).toEqual(['Sprinter', 'Velvet', 'Threadlace', 'Rampart']);
+    const lab = { attachment, structureIds: ['BEAD', 'STONE', 'WALL'] };
+    expect(livesHereText('water', names, habitats, 'water', lab)).toBe(
+      'Sprinter. Velvet lives in water only on stone edges or porous beads. Threadlace lives in water only on porous beads. Rampart lives in water only on stone edges.',
+    );
+    // Gel and sediment are surfaces in their own right for all three.
+    expect(livesHereText('gel', names, habitats, 'gel', lab)).toBe('Sprinter, Velvet, Threadlace and Rampart.');
+    // Without porous beads in the dish, Threadlace has no surface in open water at all.
+    expect(livesHereText('water', names, habitats, 'water', { attachment, structureIds: ['STONE', 'WALL'] })).toBe(
+      'Sprinter. Velvet and Rampart live in water only on stone edges. Threadlace cannot live in water.',
+    );
+    // The sentences never claim open water for an attached species.
+    for (const text of [livesHereText('water', names, habitats, 'water', lab)]) expect(text).not.toMatch(/^(Sprinter, )?Velvet[,.]/);
+    // Free-living dishes read exactly as before (no attachment given, or none recorded).
+    expect(livesHereText('water', ['Sunbead', 'Sprinter'], [['water'], ['water', 'gel', 'sediment']])).toBe('Sunbead and Sprinter.');
+    expect(livesHereText('gel', ['Sunbead', 'Sprinter'], [['water'], ['water', 'gel', 'sediment']], 'gel', { attachment: [null, null] })).toBe(
+      'Sprinter. Sunbead cannot live in gel.',
+    );
   });
 });
 

@@ -131,6 +131,9 @@ function describe(ev: VisualEvent, name: string, n: number, moduleName: ModuleNa
       return `A ${name} branch has no members left.`;
     case 'conversion':
       return 'Starch became sugar.';
+    case 'objectEmptied':
+      // Protocol 2 (wave 2 art-features): the event type exists; wave 3 food objects passes it through.
+      return n === 1 ? 'A food object ran out.' : `${n} food objects ran out.`;
   }
 }
 

@@ -21,6 +21,8 @@ import {
   O2_ATMOSPHERE,
 } from './constants';
 import { FIELD_DEFS, FIELD_IDS, type FieldId } from './fields';
+import { LIFE_ACTIVE } from './entities';
+import { FILM_DECAY_PER_SECOND } from './film';
 import { diffusionCoefficient, inMask, maskCells, SUB_SEDIMENT, SUB_WATER, transportOpen } from './grid';
 import type { World } from './world';
 
@@ -209,6 +211,48 @@ function decayActivity(world: World, id: FieldId, fraction: number): void {
   if (!any) world.derived.fieldActive[FIELD_INDEX[id]] = 0;
 }
 
+/**
+ * Film in stage 2 (SPEC §7.1, CT §12.6 and §13; P3.3), only where this world has the film fields
+ * (its recorded manifest enables the film system):
+ * - decay: each cell moves film × 0.001 × dt carbon into detritus and filmN × 0.001 × dt into
+ *   detritusN (an internal move; film keeps its N/C ratio);
+ * - the film builders' attachment clocks (`filmSeconds`, film.ts) reset for every organism that is
+ *   not Active, since stage 8 runs actions only for Active organisms ("continuous attached Active
+ *   seconds").
+ */
+function filmStage(world: World): void {
+  const film = world.fields.film;
+  const filmN = world.fields.filmN;
+  if (!film || !filmN) return;
+  const c = world.ents.cols;
+  for (let i = 0; i < world.ents.highWater; i++) {
+    if (c.filmSeconds[i] !== 0 && (c.alive[i] !== 1 || c.lifeState[i] !== LIFE_ACTIVE)) c.filmSeconds[i] = 0;
+  }
+  if (!isFieldActive(world, 'film') && !isFieldActive(world, 'filmN')) return;
+  const det = world.fields.detritus!;
+  const detN = world.fields.detritusN!;
+  const frac = FILM_DECAY_PER_SECOND * DT;
+  const cells = maskCells();
+  let moved = false;
+  for (let k = 0; k < cells.length; k++) {
+    const i = cells[k]!;
+    const v = film[i]!;
+    const n = filmN[i]!;
+    if (v === 0 && n === 0) continue;
+    const lostC = v * frac;
+    const lostN = n * frac;
+    film[i] = v - lostC;
+    filmN[i] = n - lostN;
+    det[i]! += lostC;
+    detN[i]! += lostN;
+    moved = true;
+  }
+  if (moved) {
+    markField(world, 'detritus');
+    markField(world, 'detritusN');
+  }
+}
+
 /** Viral units decay into detritus carbon (no nutrient) — SPEC §7.5. */
 function decayViral(world: World, id: 'v01' | 'v02'): void {
   const arr = world.fields[id];
@@ -325,6 +369,7 @@ export function stageEnvironment(world: World): void {
   decayActivity(world, 'rival', 0.02 * DT);
   decayViral(world, 'v01');
   decayViral(world, 'v02');
+  filmStage(world);
   neutralize(world);
   updateDerived(world);
 }

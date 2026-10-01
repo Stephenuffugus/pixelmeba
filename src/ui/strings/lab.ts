@@ -273,6 +273,36 @@ export const LIFE_COPY = {
   changes: 'Adds organisms with ordinary starting bodies; their carbon and nutrient are logged as an input.',
   unchanged: 'No food or nutrient comes with them. The rest of the dish is untouched.',
   watch: 'Only cells they can live in are used, and the number actually added is shown.',
+  /** The diet line's label in the Life tray details (W2-13). */
+  dietLabel: 'Diet',
+  /**
+   * Diet lines (UX §4.3, W2-13), derived from the dish's own species records by
+   * src/ui/panels/LabTrayContent.tsx dietLine. Food names are the trays' words for each food field.
+   */
+  diet: {
+    foods: { sugar: 'sugar', starch: 'starch', oil: 'oil', protein: 'protein', broth: 'broth', detritus: 'debris', metabolite: 'metabolite', film: 'film' } as Readonly<Record<string, string>>,
+    light: 'Makes food from light.',
+    mixotroph: (foods: string) => `Makes food from light; eats ${foods} when it is dim.`,
+    eats: (foods: string, anaerobic: boolean, film: boolean) =>
+      `Eats ${foods}${anaerobic ? ' without oxygen' : ''}${film ? ', and digests film' : ''}.`,
+    nothing: 'Eats nothing it can find in this dish.',
+    free: 'only free-swimming',
+    inSediment: 'only in sediment',
+    absent: (n: number) => `${n} kind${n === 1 ? '' : 's'} not in this dish`,
+    noneHere: (verb: string, n: number) => `${verb} ${n} kind${n === 1 ? '' : 's'}, none of them in this dish.`,
+  },
+  /** Phage doses (SPEC §10.2, W2-14): the count is viral units added to every covered cell. */
+  phageCountLabel: 'Units per cell',
+  phageDose: (count: number, name: string) => `Adds ${count} ${name} unit${count === 1 ? '' : 's'} to every covered cell.`,
+  phageTile: (count: number) => `${count} unit${count === 1 ? '' : 's'} per cell`,
+  phageCountNote: (name: string) => `For ${name}, this is the number of units added to every covered cell.`,
+  phageHabitats: 'Open cells inside the rim, and porous beads.',
+  phageChanges: 'Adds viral units to each covered cell, no organisms; their carbon (0.01 C per unit) is logged as an input.',
+  phageUnchanged: 'Units infect only their listed hosts. Nothing else in the dish is touched.',
+  phageWatch: 'Hosts nearby becoming infected. Without a host, units only decay.',
+  phageAdded: (count: number, name: string, cells: number) =>
+    `Added ${count} ${name} unit${count === 1 ? '' : 's'} ${cells === 1 ? 'to 1 cell' : `to each of ${cells} cells`}.`,
+  phageNone: (name: string) => `No open cells here for ${name}.`,
 };
 
 const SURFACE_NAMES: Readonly<Record<string, string>> = {
@@ -314,24 +344,69 @@ export function cannotLiveIn(
   return names.filter((_, i) => !(habitats[i] ?? []).includes(substrate));
 }
 
+function orText(items: readonly string[]): string {
+  if (items.length === 0) return '';
+  return items.length === 1 ? items[0]! : `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]!}`;
+}
+
+/** Structure record IDs that provide an attachment surface (CT §4: porous bead; attachment mesh S06). */
+const SURFACE_STRUCTURES: Readonly<Record<string, string>> = { bead: 'BEAD', mesh: 'S06' };
+
+/** What livesHereText may also know about the dish (W2-03). */
+export interface LivesHereOptions {
+  /** Each species' recorded attachment surfaces (null = free-living), in `names` order. */
+  readonly attachment?: readonly (readonly string[] | null)[] | undefined;
+  /** Structure record IDs the dish enables: a bead or mesh surface is named only when it can be there. */
+  readonly structureIds?: readonly string[] | undefined;
+}
+
 /**
  * The "Lives here in this dish" line of a habitat paint: the dish's organisms whose recorded habitats
  * include `substrate` (the simulation's habitat rule for an open cell, src/sim/suitability.ts
  * habitatCompatible), then those that cannot live there. Specifics come from the world's species
  * records, never from the paint's rules text; `label` is the paint's content name in a sentence.
+ * With `opts.attachment` (W2-03, D-0006): an attached species whose surfaces do not include this
+ * substrate is named with the surfaces it needs there ("Velvet lives in water only on stone edges or
+ * porous beads."), never as living in the open substrate; one with no such surface in this dish
+ * cannot live there.
  */
 export function livesHereText(
   substrate: string,
   names: readonly string[],
   habitats: readonly (readonly string[])[] | undefined,
   label = substrate,
+  opts: LivesHereOptions = {},
 ): string {
   if (!habitats || names.length === 0) return 'Not recorded for this dish.';
   const cannot = cannotLiveIn(substrate, names, habitats);
-  const can = names.filter((n) => !cannot.includes(n));
-  if (can.length === 0) return `None of this dish’s organisms can live in ${label}.`;
-  const rest = cannot.length > 0 ? ` ${listText(cannot)} cannot live in ${label}.` : '';
-  return `${listText(can)}.${rest}`;
+  const plain: string[] = [];
+  const onSurface = new Map<string, string[]>();
+  names.forEach((n, i) => {
+    if (!(habitats[i] ?? []).includes(substrate)) return;
+    const surfaces = opts.attachment?.[i];
+    if (!surfaces || surfaces.includes(substrate)) {
+      plain.push(n);
+      return;
+    }
+    const spots = surfaces.filter((s) => {
+      if (s === 'water' || s === 'gel' || s === 'sediment') return false;
+      const st = SURFACE_STRUCTURES[s];
+      return st === undefined || (opts.structureIds ?? []).includes(st);
+    });
+    if (spots.length === 0) {
+      cannot.push(n);
+      return;
+    }
+    const where = orText(spots.map((s) => SURFACE_NAMES[s] ?? s));
+    onSurface.set(where, [...(onSurface.get(where) ?? []), n]);
+  });
+  const ordered = names.filter((n) => cannot.includes(n));
+  if (plain.length === 0 && onSurface.size === 0) return `None of this dish’s organisms can live in ${label}.`;
+  const parts: string[] = [];
+  if (plain.length > 0) parts.push(`${listText(plain)}.`);
+  for (const [where, who] of onSurface) parts.push(`${listText(who)} ${who.length === 1 ? 'lives' : 'live'} in ${label} only on ${where}.`);
+  if (ordered.length > 0) parts.push(`${listText(ordered)} cannot live in ${label}.`);
+  return parts.join(' ');
 }
 
 // ------------------------------------------------------------------------------------ overlays
@@ -358,6 +433,9 @@ export const OVERLAYS: readonly { readonly id: string; readonly copy: OverlayCop
   { id: 'inhBact', copy: { name: 'Bacterial inhibitor', unit: 'units per cell' } },
   { id: 'inhFung', copy: { name: 'Fungal inhibitor', unit: 'units per cell' } },
   { id: 'inhPhoto', copy: { name: 'Photosynthetic inhibitor', unit: 'units per cell' } },
+  // P3.3/P3.4 (wave 2 art-features): density overlays of the film and Pinphage fields.
+  { id: 'film', copy: { name: 'Biofilm', unit: 'C per cell' } },
+  { id: 'v01', copy: { name: 'Pinphage', unit: 'units per cell' } },
 ];
 
 export function overlayCopy(id: string): OverlayCopy {
@@ -474,6 +552,8 @@ export const LAB_TEXT = {
   legendLow: 'low',
   legendHigh: 'high',
   noOverlay: 'No overlay. Pick one to colour the dish by a measured value.',
+  infectionMarkers: 'Infection markers',
+  infectionMarkersHint: 'Marks every infected organism. Looking never changes the dish.',
   charts: 'Charts and history',
   lineage: 'Family tree',
   snapshot: 'Snapshot (save)…',

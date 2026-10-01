@@ -130,6 +130,37 @@ export const P = {
   starchNotchLight: '#E8C27A',
   starchNotch: '#5B4420',
   glowCenter: '#C6F04D',
+  // Phase 3 feature layers (SPEC §9 visuals; wave 2 art-features)
+  anchorFoot: '#4A3B2A',
+  anchorFootLight: '#B9A57E',
+  shadePatch: '#2E4430',
+  shadePatchLight: '#5F7F55',
+  lightTrail: '#F7E7A1',
+  lightTrailDeep: '#C9A93E',
+  debrisGranule: '#6B5032',
+  debrisGranuleLight: '#C9A878',
+  proteinNotch: '#8E3B57',
+  proteinRelease: '#F7D6E0',
+  matrixEdge: '#3E7D70',
+  matrixEdgeLight: '#A9D3C7',
+  adhesionLink: '#2C3F49',
+  adhesionLinkLight: '#E8E1C9',
+
+  // World tiles (UX §6.2 film textures, §6.5 food object outlines; wave 2 art-features)
+  filmTeal: '#7FB9AB',
+  filmDeep: '#4F8F80',
+  filmLight: '#C4E3DA',
+  filmDull: '#9AAEA5',
+  pelletAmber: '#F0C45A',
+  pelletDeep: '#B98A2C',
+  pelletLight: '#FBE7AE',
+  pelletOutline: '#6B4F1D',
+  waferLeaf: '#A9A15A',
+  waferDeep: '#7C7838',
+  waferVein: '#D9CF8E',
+  waferOutline: '#4E4A22',
+  stain: '#C2B48C',
+  stainDeep: '#A99A70',
 } as const;
 
 export type ColorName = keyof typeof P;

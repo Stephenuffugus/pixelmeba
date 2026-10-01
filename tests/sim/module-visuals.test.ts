@@ -17,6 +17,18 @@ import { rebuildIndex } from '../../src/sim/spatial';
 import { run } from '../../src/sim/tick';
 import { speciesIndex, type World } from '../../src/sim/world';
 import {
+  CUE2_ANCHORED,
+  CUE2_DETRITUS_INTAKE,
+  CUE2_LINKED,
+  CUE2_MOD_E04,
+  CUE2_MOD_E06,
+  CUE2_MOD_E07,
+  CUE2_MOD_E08,
+  CUE2_MOD_E09,
+  CUE2_MOD_E10,
+  CUE2_MOD_E12,
+  CUE2_RELEASING_PROTEIN,
+  CUE2_SEEKING_LIGHT,
   CUE_MOD_E01,
   CUE_MOD_E03,
   CUE_MOD_E05,
@@ -28,10 +40,10 @@ import {
   ID_STRIDE,
 } from '../../src/worker/protocol';
 import { buildInspector, packEntities } from '../../src/worker/snapshot';
-import { FEATURE_LAYER_IDS, featureFrameKey, featureFrameKeys, featureLayers, featureMarkScale, type AtlasFeatureLike, type LayerPick } from '../../src/render/features';
+import { FEATURE_LAYER_IDS, featureFrameKey, featureFrameKeys, featureLayers, featureMarkScale, type AtlasFeatureLike, type FeatureLayerId, type LayerPick } from '../../src/render/features';
 import { FEATURE_LAYERS } from '../../art/src/layers/modules';
 import { orient, paletteRgba } from '../../art/src/sprite';
-import { featureFrameKey as validatorFrameKey } from '../../tools/content-validate';
+import { FEATURE_FRAMES, featureFrameKey as validatorFrameKey } from '../../tools/content-validate';
 import { loadRegistryFs, REPO_ROOT } from '../../tools/lib/content-fs';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -127,6 +139,8 @@ describe('P2.1 module visuals and inspector', () => {
     expect(FEATURE_LAYERS.map((l) => l.id)).toEqual([...FEATURE_LAYER_IDS]);
     expect(FEATURE_LAYERS.find((l) => l.id === 'reserve_pocket')!.frames).toHaveLength(4);
     expect(FEATURE_LAYERS.find((l) => l.id === 'resting_seam')!.frames).toHaveLength(3);
+    // Each layer carries at least the frames content:validate requires of it (W2-29).
+    for (const def of FEATURE_LAYERS) expect(def.frames.length, def.id).toBeGreaterThanOrEqual(FEATURE_FRAMES[def.id]?.frames ?? 1);
     let checked = 0;
     for (const def of FEATURE_LAYERS) {
       expect(manifest.features[def.id]).toEqual({ size: 16, headings: 4, anchor: [8, 8], frames: def.frames.length, frameNames: def.frameNames });
@@ -150,7 +164,10 @@ describe('P2.1 module visuals and inspector', () => {
         }
       });
     }
-    expect(checked).toBe(32); // (1 notch + 4 bands + 3 seam states) × 4 headings
+    // Every frame of every layer, in all four headings: (1 notch + 4 bands + 3 seam states) and the
+    // Phase 3 layers (foot 1, shade 1, trail 1, granule 2, notches 2, matrix 4, link 1) × 4 headings.
+    expect(checked).toBe(4 * FEATURE_LAYERS.reduce((sum, l) => sum + l.frames.length, 0));
+    expect(checked).toBe(80);
   });
 
   it('every mark the renderer can pick is an atlas frame, and each module draws its content visual layer', () => {
@@ -168,25 +185,48 @@ describe('P2.1 module visuals and inspector', () => {
       );
     }
     const picks: LayerPick[] = [];
-    let seen = 0;
+    // Every pick over every cue word, life state, film band and motion setting (collected once).
+    const seen = new Set<string>();
+    const CUE2_BITS = [CUE2_ANCHORED, CUE2_LINKED, CUE2_MOD_E04, CUE2_MOD_E06, CUE2_MOD_E07, CUE2_MOD_E08, CUE2_MOD_E09, CUE2_MOD_E10, CUE2_MOD_E12, CUE2_SEEKING_LIGHT, CUE2_DETRITUS_INTAKE, CUE2_RELEASING_PROTEIN];
     for (let bits = 0; bits < 8; bits++) {
       for (let band = 0; band < 4; band++) {
         const cue = (bits & 1 ? CUE_MOD_E01 : 0) | (bits & 2 ? CUE_MOD_E03 : 0) | (bits & 4 ? CUE_MOD_E05 : 0) | (band << CUE_RESERVE_BAND_SHIFT);
-        for (const life of [0, 1, 2, 3]) {
-          const n = featureLayers(cue, life, true, picks);
-          for (let m = 0; m < n; m++) {
-            for (let h = 0; h < 4; h++) expect(keys[picks[m]!.layer]?.[picks[m]!.frame]?.[h], `${picks[m]!.layer}/${picks[m]!.frame}`).toBe(featureFrameKey(picks[m]!.layer, picks[m]!.frame, h));
-            seen++;
-          }
+        for (let b2 = 0; b2 < 1 << CUE2_BITS.length; b2 += bits === 0 ? 1 : 97) {
+          const cue2 = CUE2_BITS.reduce((acc, bit, i) => (b2 & (1 << i) ? acc | bit : acc), 0);
+          for (const life of [0, 1, 2, 3])
+            for (const reduced of [false, true]) {
+              const n = featureLayers(cue, life, true, picks, cue2, { filmBand: band, reduced, pulseOn: (b2 & 1) === 0 });
+              for (let m = 0; m < n; m++) seen.add(`${picks[m]!.layer}|${picks[m]!.frame}`);
+            }
         }
       }
     }
-    expect(seen).toBeGreaterThan(0);
-    // A module's mark is the one its content record names (E01 → notch, E03 → seam, E05 → pocket).
+    for (const lf of seen) {
+      const [layer, frame] = lf.split('|') as [FeatureLayerId, string];
+      for (let h = 0; h < 4; h++) expect(keys[layer]?.[Number(frame)]?.[h], lf).toBe(featureFrameKey(layer, Number(frame), h));
+    }
+    // Every frame of every layer is reachable from some snapshot state (no dead art, no missing state).
+    const all = FEATURE_LAYER_IDS.flatMap((id) => keys[id]!.map((_, f) => `${id}|${f}`));
+    expect([...seen].sort()).toEqual(all.sort());
+    // A module's mark is the one its content record names, for every module with a layer in this build:
+    // E01 → notch, E03 → seam, E05 → pocket, and the Phase 3 E04, E06–E10, E12 (with the state each needs).
     const reg = loadRegistryFs();
+    const P3: readonly (readonly [string, number])[] = [
+      ['E04', CUE2_MOD_E04 | CUE2_ANCHORED],
+      ['E06', CUE2_MOD_E06],
+      ['E07', CUE2_MOD_E07 | CUE2_SEEKING_LIGHT],
+      ['E08', CUE2_MOD_E08],
+      ['E09', CUE2_MOD_E09],
+      ['E10', CUE2_MOD_E10],
+      ['E12', CUE2_MOD_E12 | CUE2_LINKED],
+    ];
     for (const [id, bit] of [['E01', CUE_MOD_E01], ['E03', CUE_MOD_E03], ['E05', CUE_MOD_E05]] as const) {
       expect(featureLayers(bit, 0, true, picks)).toBe(1);
       expect(picks[0]!.layer).toBe(reg.modules[id]!.visualLayer);
+    }
+    for (const [id, bits] of P3) {
+      expect(featureLayers(0, 0, true, picks, bits), id).toBe(1);
+      expect(picks[0]!.layer, id).toBe(reg.modules[id]!.visualLayer);
     }
     // A manifest without the table draws no marks rather than failing.
     expect(featureFrameKeys(undefined)).toEqual({});

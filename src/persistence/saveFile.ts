@@ -23,6 +23,7 @@ import type { Command } from '@sim/commands';
 import { ADHESION_LINK_MAX, ADHESION_SLOT_COLUMNS, FUNGAL_LINK_MAX, FUNGAL_SLOT_COLUMNS, linkProblem } from '@sim/links';
 import { foodObjectsProblem } from '@sim/objects';
 import { savedSampleProblem } from '@sim/sampleSlot';
+import { virusIdOfCode } from '@sim/viruses';
 
 export const SAVE_FORMAT = 'pixelmeba-save';
 export const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
@@ -328,7 +329,7 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
               ? new Uint16Array(bytes.buffer, 0, hw)
               : new Uint8Array(bytes.buffer, 0, hw);
     cols[name] = view;
-    for (let i = 0; i < hw; i++) if (!Number.isFinite(view[i]!)) fail('integrity', `Entity column ${name} has a non-finite value.`);
+    for (let i = 0; i < hw; i++) if (!Number.isFinite(view[i]!)) fail('integrity', `Entity column ${name} has a non-finite value. Nothing was loaded.`);
   }
   const genomes = s.genomes ?? [];
   const nonneg = ['B', 'N', 'E', 'H', 'age', 'mealC', 'mealN', 'boundMineral', 'jacketMineral'];
@@ -359,18 +360,24 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
     if (birthIds.has(b)) fail('integrity', 'Two organisms share a birth identity.');
     birthIds.add(b);
   }
-  // Cross-entity references must point at a living organism with the recorded birthId.
+  // Cross-entity references. Host and parasite links are kept mutual and current by the simulation
+  // (src/sim/parasites.ts releases them on every removal), so each must point at a living organism with
+  // the recorded birthId. A predator's prey link may be stale: a prey removed in this tick (taken by
+  // another predator, dead of age, starvation or lysis) stays named until the predator's next decision,
+  // which re-validates it (movement.ts refValid). The game saves such a link itself, so the import
+  // accepts it and refuses only a slot outside the entity table.
   const refPairs: [string, string][] = [
-    ['preySlot', 'preyBirthId'],
     ['hostSlot', 'hostBirthId'],
     ['parasiteSlot', 'parasiteBirthId'],
   ];
   for (let i = 0; i < hw; i++) {
     if (cols.alive![i] !== 1) continue;
+    const prey = cols.preySlot![i]!;
+    if (prey < -1 || prey >= AGENT_CAP) fail('integrity', 'A prey link points outside the dish. Nothing was loaded.');
     for (const [slotCol, birthCol] of refPairs) {
       const t = cols[slotCol]![i]!;
       if (t < 0) continue;
-      if (t >= hw || cols.alive![t] !== 1 || cols.birthId![t] !== cols[birthCol]![i]) fail('integrity', `A ${slotCol.replace('Slot', '')} link points at an organism that is not there.`);
+      if (t >= hw || cols.alive![t] !== 1 || cols.birthId![t] !== cols[birthCol]![i]) fail('integrity', `A ${slotCol.replace('Slot', '')} link points at an organism that is not there. Nothing was loaded.`);
     }
   }
   for (const g of genomes) {
@@ -390,12 +397,58 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
   // Schema 4 (Phase 3 foundation): links, finite food objects and the held sample.
   const phase3Error = phase3StateProblem(s, cols, hw, speciesIds);
   if (phase3Error) fail('integrity', `${phase3Error} Nothing was loaded.`);
+  // P3.4 (parasites and viruses): host/parasite pairs and infections must be ones the dish could hold.
+  const pairError = hostParasiteProblem(cols, hw, c.species, man.data.enabledSystems);
+  if (pairError) fail('integrity', `${pairError} Nothing was loaded.`);
   if (!Number.isInteger(s.tick) || s.tick < 0) fail('integrity', 'The tick is invalid.');
   if (!Number.isInteger(s.seed) || s.seed < 0) fail('integrity', 'The seed is invalid.');
 
   const expected = `sha256:${await sha256Hex(canonicalJson(original))}`;
   if (f.checksum !== expected) fail('checksum', 'The file is damaged or was edited (checksum mismatch).');
   return { ...(f as SaveFile), schemaVersion: SCHEMA_VERSION, state: s };
+}
+
+/**
+ * P3.4: the first problem with the dish's parasites and infections, as a player-facing sentence, or
+ * null. A host/parasite pair must be mutual (parasite.hostSlot/hostBirthId ↔ host.parasiteSlot/
+ * parasiteBirthId; the generic reference check above has already proved both point at living
+ * organisms), the host must be of a species the parasite's record lists in hostIds, an infection
+ * (infectedBy ≠ 0) needs the viruses system, and an infection timer must be a finite, non-negative
+ * number of seconds.
+ */
+function hostParasiteProblem(
+  cols: Record<string, ArrayLike<number>>,
+  hw: number,
+  species: readonly { readonly id: string; readonly name: string; readonly hostIds: readonly string[] }[],
+  systems: readonly string[],
+): string | null {
+  const viruses = systems.includes('viruses');
+  for (let i = 0; i < hw; i++) {
+    if (cols.alive![i] !== 1) continue;
+    const h = cols.hostSlot![i]!;
+    if (h >= 0) {
+      if (cols.parasiteSlot![h] !== i || cols.parasiteBirthId![h] !== cols.birthId![i]) return 'A parasite and its host do not refer to each other.';
+      const sp = species[cols.species![i]!]!;
+      if (!sp.hostIds.includes(species[cols.species![h]!]!.id)) return `A ${cleanName(sp.name)} is attached to an organism it cannot live on.`;
+    }
+    const p = cols.parasiteSlot![i]!;
+    if (p >= 0 && (cols.hostSlot![p] !== i || cols.hostBirthId![p] !== cols.birthId![i])) return 'A host and its parasite do not refer to each other.';
+    const code = cols.infectedBy![i]!;
+    if (code !== 0 && !viruses) return "An organism is infected, but this dish's rules have no viruses.";
+    if (code !== 0) {
+      // Only a virus this build simulates, present in this dish, infecting a species it lists in hostIds
+      // (lysis would otherwise fail 20 s after a load that reported success).
+      const virusId = virusIdOfCode(code);
+      const virus = virusId === null ? undefined : species.find((x) => x.id === virusId);
+      if (!virus) return 'An organism is infected by a virus this dish does not have.';
+      if (!virus.hostIds.includes(species[cols.species![i]!]!.id)) return `An organism is infected by ${cleanName(virus.name)}, which cannot infect it.`;
+    }
+    const t = cols.infectionTimer![i]!;
+    if (!Number.isFinite(t) || t < 0) return 'An infection timer is invalid.';
+    // The timer counts only during an infection; an uninfected organism holds exactly 0.
+    if (code === 0 && t !== 0) return 'An infection timer is set on an organism that is not infected.';
+  }
+  return null;
 }
 
 /**

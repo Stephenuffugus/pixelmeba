@@ -116,7 +116,8 @@ export interface DirtyRect {
 export function repaintDepositCells(img: ImageData, bands: Uint8Array, prev: Uint8Array, out: DirtyRect): DirtyRect {
   const S = DISH_PX_PER_CELL;
   const hasSugar = bands.length >= 5 * CELL_COUNT;
-  const nb = Math.min(bands.length, prev.length) / CELL_COUNT;
+  // The glyph bands only (starch … catalysis): film (band 6, protocol 2) is drawn as atlas tiles, not here.
+  const nb = Math.min(bands.length, prev.length, 6 * CELL_COUNT) / CELL_COUNT;
   let x0 = GRID_W;
   let y0 = GRID_W;
   let x1 = -1;
@@ -180,7 +181,7 @@ function paintDepositCell(img: ImageData, bands: Uint8Array, i: number, hasSugar
 }
 
 /** Colormaps per overlay kind; alpha is applied by the sprite (45 % default). */
-export type Colormap = 'food' | 'gas' | 'nutrient' | 'light' | 'ph' | 'activity' | 'deposit';
+export type Colormap = 'food' | 'gas' | 'nutrient' | 'light' | 'ph' | 'activity' | 'deposit' | 'viral';
 
 const RAMPS: Record<Colormap, readonly RGB[]> = {
   food: [[255, 247, 220], [247, 200, 90], [214, 120, 30]],
@@ -190,9 +191,12 @@ const RAMPS: Record<Colormap, readonly RGB[]> = {
   ph: [[200, 50, 60], [240, 240, 240], [60, 90, 200]],
   activity: [[250, 245, 255], [190, 140, 230], [110, 40, 170]],
   deposit: [[250, 245, 235], [210, 180, 130], [130, 90, 50]],
+  // Viral units (Phase 3 Pinphage): pale to the V01 glyph blue, then deep.
+  viral: [[238, 244, 252], [62, 123, 196], [30, 50, 110]],
 };
 
 export function colormapFor(id: string): Colormap {
+  if (id === 'v01' || id === 'v02') return 'viral';
   if (id === 'oxygen' || id === 'co2') return 'gas';
   if (id === 'nutrient' || id.endsWith('N')) return 'nutrient';
   if (id === 'light') return 'light';

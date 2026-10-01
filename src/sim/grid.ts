@@ -332,6 +332,11 @@ export interface LifeBrush {
    * for a free-living species. An attached species needs one of them in the cell (SPEC §2.2, D-0006).
    */
   readonly surfaces?: readonly string[];
+  /**
+   * A phage dose (metabolism 'viral', W2-14): units go into fields, never entities, so the brush
+   * accepts every cell a material brush accepts (open cells and porous beads) whatever the habitat.
+   */
+  readonly viral?: boolean;
 }
 
 /**
@@ -342,6 +347,8 @@ export interface LifeBrush {
  * four-adjacent to stone). A cell without one of an attached species' surfaces is 'habitat'.
  */
 export function lifeCellOutcome(structure: number, substrate: number, life: LifeBrush, stoneEdge: boolean): BrushCellOutcome {
+  // Phage doses: the material brush's rule (src/sim/viruses.ts phageCellAccepts states the same rule).
+  if (life.viral === true) return brushCellOutcome('material', structure, false);
   if (structure === ST_OUTSIDE) return 'rim';
   if (structure !== ST_NONE && !(structure === ST_BEAD && life.attached)) return 'structure';
   const bit = substrate === SUB_WATER ? 1 : substrate === SUB_GEL ? 2 : substrate === SUB_SEDIMENT ? 4 : 0;

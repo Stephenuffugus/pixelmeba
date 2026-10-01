@@ -15,7 +15,8 @@ import { canonicalJson } from '@sim/hash';
 import { step } from '@sim/tick';
 import type { World } from '@sim/world';
 import { allocatedFieldIds } from '@sim/fields';
-import { buildFamily, buildInspector, lociOfBirth, packDeposits, packEntities, packOverlay, visualEvents } from './snapshot';
+import { worldHasSystem } from '@sim/gates';
+import { buildFamily, buildInspector, lociOfBirth, packDeposits, packEntities, packLinks, packObjects, packOverlay, visualEvents } from './snapshot';
 import { buildLineage, packLineageMarks } from '@sim/lineage';
 import type { LineageMarks, LineageView } from './protocol';
 import { stamp, type DishInfo, type DishSource, type Envelope, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
@@ -1927,6 +1928,14 @@ export class DishHost {
       speciesHabitats: w.species.map((s) => [...s.def.habitats]),
       speciesAttachment: w.species.map((s) => (s.def.attachment ? [...s.def.attachment.surfaces] : null)),
       speciesSummaries: w.species.map((s) => s.def.guide.summary),
+      // Diets for Add Life and the Life tray (W2-13): the world's own records; film only with its system.
+      speciesDiets: w.species.map((s) => ({
+        metabolism: s.def.metabolism,
+        foods: s.def.foodPriority.filter((f) => f !== 'film'),
+        prey: s.def.prey.map((p) => ({ id: p.id, requires: p.requires })),
+        hosts: [...s.def.hostIds],
+        digestsFilm: s.def.digestsFilm && worldHasSystem(w, 'film'),
+      })),
       materialSummaries: w.content.materials.map((mat) => mat.guide.summary),
       fieldIds: allocatedFieldIds(w.fields),
       // The world's own manifest decides which structure tools its Lab offers (D-0024), never this build's.
@@ -2088,6 +2097,9 @@ export class DishHost {
     this.lastSnapshot = this.clock.now();
     const packed = packEntities(w, null, null);
     const deposits = packDeposits(w, null);
+    // Protocol 2: adhesion links and food objects, read from authoritative state only.
+    const links = packLinks(w);
+    const objects = packObjects(w);
     const overlay = d.overlay ? packOverlay(w, d.overlay, null) : null;
     const events = visualEvents(w.events.ring, d.lastEventId, w.content.modules, lociOfBirth(w));
     const lv = d.lineageView;
@@ -2114,6 +2126,8 @@ export class DishHost {
       ents: packed.ents,
       ids: packed.ids,
       deposits,
+      links,
+      objects,
       overlay: overlay && d.overlay ? { id: d.overlay, data: overlay.data, max: overlay.max } : null,
       geometry,
       events,
@@ -2128,7 +2142,7 @@ export class DishHost {
       // P3.1: the lid setting now in effect (the Habitat tray's lid toggle shows it).
       lid: w.settings.lid,
     };
-    const transfer: Transferable[] = [packed.ents.buffer, packed.ids.buffer, deposits.buffer];
+    const transfer: Transferable[] = [packed.ents.buffer, packed.ids.buffer, deposits.buffer, links.buffer];
     if (overlay) transfer.push(overlay.data.buffer);
     if (lineage) transfer.push(lineage.marks.buffer as ArrayBuffer);
     if (geometry) transfer.push(geometry.substrate.buffer, geometry.structure.buffer, geometry.shade.buffer);

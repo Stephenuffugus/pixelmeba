@@ -176,6 +176,18 @@ const NATIVE_DORMANCY: DormancyRules = Object.freeze({
   wakeConditionSeconds: DORMANCY_WAKE_CONDITION_SECONDS,
 });
 
+/**
+ * Native B02 film deposition (SPEC §7.1, CT §12.6; P3.3; film.ts): E above 40, 0.05 body C per second,
+ * never below B0'. No energy per carbon: SPEC §7.1 and CT §12.6 name none (E10's 2 E/C is its own).
+ */
+const NATIVE_FILM_BUILDER: BuilderRules = Object.freeze({
+  source: 'native',
+  minEnergy: 40,
+  ratePerSecond: 0.05,
+  bodyFloor: 1.0,
+  energyPerC: 0,
+});
+
 function param(mod: ModuleRT, key: string): number {
   const v = mod.params[key];
   if (v === undefined || !Number.isFinite(v)) throw new Error(`module ${mod.id} has no parameter "${key}"`);
@@ -314,6 +326,6 @@ export function deriveProfile(sp: SpeciesRT, genome: Genome, modules: readonly M
     dormancy,
     oil: null,
     protein: null,
-    builder: null,
+    builder: sp.abilities.includes('BIOFILM') ? NATIVE_FILM_BUILDER : null,
   };
 }

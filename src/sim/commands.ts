@@ -4,6 +4,8 @@
  * immediately as edit transactions at the current tick; a replay applies them at the same point
  * (the start of the next step), so both paths produce identical state.
  */
+import { fungalIntroductionRefused } from './fungi';
+import { dosePhage, isFieldVirus } from './viruses';
 import { CELL_SOFT_CAPACITY, GRID_H, GRID_W, INITIAL_ENERGY, INITIAL_HEALTH, INITIAL_NUTRIENT_RATIO } from './constants';
 import { emit, milestone } from './events';
 import { FLAG } from './entities';
@@ -252,6 +254,8 @@ function deposit(world: World, p: Extract<CommandPayload, { kind: 'deposit' }>):
 }
 
 function inoculate(world: World, cmd: Command, p: Extract<CommandPayload, { kind: 'inoculate' }>): CommandResult {
+  // A phage dose (SPEC §10.2; viruses.ts): units into cells, never an organism. accepted/rejected count cells.
+  if (isFieldVirus(p.speciesId)) return dosePhage(world, p.speciesId, p.x, p.y, p.radius, p.count);
   let spIdx: number;
   try {
     spIdx = speciesIndex(world, p.speciesId);
@@ -306,6 +310,9 @@ export function introduceOrganism(
     const problem = validateModuleSet(world, world.species[spIdx]!.id, [...opts.modules].sort());
     if (problem) throw new ModuleSetError(`cannot introduce ${world.species[spIdx]!.id}: ${problem}`);
   }
+  if (fungalIntroductionRefused(world, spIdx)) return -1; // 2,000 fungal segments (SPEC §2.5; fungi.ts)
+  // A field virus (V01) is units in a field, never an organism (SPEC §7.5, §10.2; viruses.ts dosePhage).
+  if (isFieldVirus(world.species[spIdx]!.id)) throw new Error(`cannot introduce ${world.species[spIdx]!.id}: a virus is dosed as field units`);
   const slot = e.allocate();
   if (slot < 0) return -1;
   const c = e.cols;

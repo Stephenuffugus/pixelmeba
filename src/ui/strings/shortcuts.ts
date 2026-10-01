@@ -4,7 +4,7 @@
  * recorded diet rules, reason codes and measured values — never from art or guesses. Explore
  * wording; no claims such as "adapted", "immune" or "superior".
  */
-import { PHOTO_SUGAR_FRACTION } from '@sim/constants';
+import { FUNGAL_CAP, PHOTO_SUGAR_FRACTION } from '@sim/constants';
 import { R, reasonName } from '@sim/reasons';
 import type { EntityInspect, FamilyAnswer, FamilyMember } from '@worker/protocol';
 import { reasonText } from './reasons';
@@ -171,6 +171,9 @@ function blockerDetail(e: EntityInspect, code: number): string {
       return `Age ${Math.floor(e.age)} s of ${Math.ceil(e.divisionNeeds.age)} s.`;
     case R.DIV_BLOCK_STATE:
       return `Can't split while ${lifeStateWhile(e.lifeState)}.`;
+    case R.DIV_BLOCK_CAPACITY:
+      // A fungal segment meets the fungal limit first (FUNGAL_CAP; SPEC §7.2), not the 6,000 organism limit.
+      return e.network ? `Fungal segment limit reached (${FUNGAL_CAP.toLocaleString('en-US')} across all fungi). This is a limit of the game, not the ecosystem.` : reasonText(code, 'lab');
     default:
       return reasonText(code, 'lab');
   }

@@ -3,7 +3,8 @@
  *   npx vite --port 4175 → http://127.0.0.1:4175/tools/asset-preview.html
  * Loads the shipped atlas (public/atlas/organisms.png + manifest.json) and shows every sprite in
  * every animation and heading, animated and as frame strips, every module feature mark in every
- * frame and heading (alone and over bodies, as the dish draws it), with grayscale and color-vision
+ * frame and heading (alone and over bodies, as the dish draws it), every world tile (film textures and
+ * a film patch, food object fill steps, the emptied stain), with grayscale and color-vision
  * simulations, and a dense mixed group at neighborhood scale. Nearest-neighbour everywhere.
  * A development tool: it never touches simulation state and is not part of the production build.
  */
@@ -45,6 +46,8 @@ interface AtlasManifest {
   readonly sprites: Readonly<Record<string, AtlasSprite>>;
   /** Module feature marks by visual layer (ARCH §10.1); frames keyed feature/<layer>/<heading>/<frame>. */
   readonly features?: Readonly<Record<string, AtlasFeature>>;
+  /** World tiles (film, food objects, stain; one cell per frame); frames keyed tile/<id>/<frame>. */
+  readonly tiles?: Readonly<Record<string, { readonly size: number; readonly frames: number; readonly frameNames?: readonly string[] }>>;
   readonly frames: readonly AtlasFrame[];
 }
 
@@ -487,6 +490,92 @@ function buildMarks(): void {
   }
 }
 
+// ---------- world tiles (film, food objects) ----------
+
+/**
+ * A film patch as the dish draws it (src/render/world3.ts filmTile): '#' film, 'e' eroding film, '.'
+ * none; each cell's tile from its four neighbours, opacity rising toward the patch centre.
+ */
+const FILM_PATCH = ['..........', '.#.....##.', '......###.', '..####.##.', '..#####...', '..##e#e...', '...#ee....', '..........'];
+
+/** One card per world tile: every frame, then (film) a patch drawn edge to edge with the dish's opacities. */
+function buildTiles(): void {
+  const root = $('tiles');
+  root.replaceChildren();
+  const s = state.scale;
+  for (const [id, tile] of Object.entries(manifest.tiles ?? {})) {
+    const card = document.createElement('article');
+    card.className = 'card';
+    card.dataset.tile = id;
+    const head = document.createElement('header');
+    const h3 = document.createElement('h3');
+    h3.textContent = id;
+    const meta = document.createElement('span');
+    meta.className = 'anim-meta';
+    meta.textContent = `${tile.frames} frame${tile.frames === 1 ? '' : 's'} · ${tile.size}×${tile.size} · one cell per frame, never rotated`;
+    head.append(h3, meta);
+    card.append(head);
+    const row = document.createElement('div');
+    row.className = 'headings';
+    const missing: string[] = [];
+    for (let i = 0; i < tile.frames; i++) {
+      const key = `tile/${id}/${i}`;
+      if (!frames[key]) missing.push(String(i));
+      const cell = document.createElement('div');
+      cell.className = 'heading';
+      const label = document.createElement('div');
+      label.className = 'h-label';
+      label.textContent = `${i} · ${tile.frameNames?.[i] ?? ''}`;
+      const canvas = document.createElement('canvas');
+      canvas.className = 'stage';
+      canvas.setAttribute('aria-label', `${id} frame ${i}`);
+      cell.append(label, canvas);
+      row.append(cell);
+      const pad = 2;
+      const ctx = sizeCanvas(canvas, tile.size * s + pad * 2, tile.size * s + pad * 2);
+      strips.push(() => {
+        ctx.fillStyle = groundColor();
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        drawFrame(ctx, key, pad, pad, s);
+      });
+    }
+    card.append(row);
+    if (id === 'film') {
+      const canvas = document.createElement('canvas');
+      canvas.className = 'stage';
+      canvas.setAttribute('aria-label', 'film patch: isolated, edge, center and eroding tiles edge to edge, opacity by film level');
+      card.append(canvas);
+      const t = tile.size * s;
+      const cols = FILM_PATCH[0]!.length;
+      const ctx = sizeCanvas(canvas, cols * t, FILM_PATCH.length * t);
+      const at = (x: number, y: number): string => FILM_PATCH[y]?.[x] ?? '.';
+      strips.push(() => {
+        ctx.fillStyle = groundColor();
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        for (let y = 0; y < FILM_PATCH.length; y++)
+          for (let x = 0; x < cols; x++) {
+            const c = at(x, y);
+            if (c === '.') continue;
+            const n = [at(x, y - 1), at(x + 1, y), at(x, y + 1), at(x - 1, y)].filter((v) => v !== '.').length;
+            const frame = c === 'e' ? 3 : n === 0 ? 0 : n === 4 ? 2 : 1;
+            // The dish's opacity rule (world3.ts filmAlpha) for a level that rises toward the middle.
+            const level = Math.min(127, 30 + 24 * n);
+            ctx.globalAlpha = 0.25 + 0.6 * (level / 127);
+            drawFrame(ctx, `tile/film/${frame}`, x * t, y * t, s);
+            ctx.globalAlpha = 1;
+          }
+      });
+    }
+    if (missing.length > 0) {
+      const warn = document.createElement('span');
+      warn.className = 'badge warn';
+      warn.textContent = `missing frames: ${missing.join(', ')}`;
+      head.append(warn);
+    }
+    root.append(card);
+  }
+}
+
 // ---------- dense group ----------
 
 function mulberry32(seed: number): () => number {
@@ -632,6 +721,7 @@ function wire(): void {
     buildSpecies();
     buildFungi();
     buildMarks();
+    buildTiles();
     redrawAll();
   });
   const ground = $<HTMLSelectElement>('ground');
@@ -698,7 +788,7 @@ async function main(): Promise<void> {
     const missingEnabled = [...enabledSpecies].filter((id) => !Object.values(manifest.sprites).some((s) => s.speciesId === id));
     const markless = moduleDefs.filter((m) => enabledModules.has(m.id) && !manifest.features?.[m.visualLayer]).map((m) => `${m.id} (${m.visualLayer})`);
     status.textContent =
-      `${sprites} sprites · ${Object.keys(manifest.features ?? {}).length} module marks · ${manifest.frames.length} frames · export ${manifest.exportHash.slice(0, 12)}` +
+      `${sprites} sprites · ${Object.keys(manifest.features ?? {}).length} module marks · ${Object.keys(manifest.tiles ?? {}).length} world tiles · ${manifest.frames.length} frames · export ${manifest.exportHash.slice(0, 12)}` +
       (missingEnabled.length > 0 ? ` · NO SPRITE for enabled ${missingEnabled.join(', ')}` : ' · every enabled species has a sprite') +
       (markless.length > 0 ? ` · NO MARK for enabled ${markless.join(', ')}` : ' · every enabled module has its mark');
     if (missingEnabled.length > 0 || markless.length > 0) status.className = 'error';
@@ -708,6 +798,7 @@ async function main(): Promise<void> {
     buildSpecies();
     buildFungi();
     buildMarks();
+    buildTiles();
     redrawAll();
     requestAnimationFrame(tick);
     document.body.dataset.ready = '1';

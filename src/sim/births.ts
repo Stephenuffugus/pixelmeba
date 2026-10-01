@@ -10,6 +10,7 @@
 import {
   AGENT_CAP,
   CELL_SOFT_CAPACITY,
+  FUNGAL_CAP,
   DIVISION_BIOMASS_MULTIPLE,
   DIVISION_MIN_ENERGY,
   DIVISION_MIN_HEALTH,
@@ -19,7 +20,9 @@ import { emit, milestone } from './events';
 import { FLAG } from './entities';
 import { cellIndex, inBounds, inMask } from './grid';
 import { recordBirth, recordDivisionEnd } from './lineage';
-import { rekeyLinks } from './links';
+import { addFungalLink, rekeyLinks } from './links';
+import { onDivision as onParasiteDivision } from './parasites';
+import { beginFungalBirths, branchLinkKind, fungalPlacement } from './fungi';
 import { canOccupy, initialDecisionTimer } from './movement';
 import { onDaughter, onParentEnds } from './branches';
 import { proposeDaughters } from './mutation';
@@ -124,6 +127,8 @@ export function stageBirths(world: World): void {
   const load = world.derived.cellLoad;
   const limit = e.highWater; // newborns created this stage are not revisited
   let capacityHit = false;
+  // Fungal segments (fungi.ts): occupied cells and the live count for the 2,000 subcap; null without fungi.
+  const fungi = beginFungalBirths(world);
   for (let i = 0; i < limit; i++) {
     if (c.alive[i] !== 1 || (c.flags[i]! & FLAG.justBorn) !== 0) continue;
     c.flags[i] = c.flags[i]! & ~FLAG.capacityBlocked;
@@ -133,6 +138,13 @@ export function stageBirths(world: World): void {
       continue;
     }
     if (e.count >= AGENT_CAP) {
+      c.divBlockCode[i] = R.DIV_BLOCK_CAPACITY;
+      c.flags[i] = c.flags[i]! | FLAG.capacityBlocked;
+      capacityHit = true;
+      continue;
+    }
+    const fungal = fungi !== null && world.species[c.species[i]!]!.fungal;
+    if (fungal && fungi.count >= FUNGAL_CAP) {
       c.divBlockCode[i] = R.DIV_BLOCK_CAPACITY;
       c.flags[i] = c.flags[i]! | FLAG.capacityBlocked;
       capacityHit = true;
@@ -162,7 +174,8 @@ export function stageBirths(world: World): void {
     }
     const halfB = c.B[i]! / 2;
     const daughterLoad = halfB / sp.def.b0;
-    const target = findPlacement(world, i, daughterLoad);
+    // Fungal segments branch onto a free four-neighbour cell (fungi.ts); everyone else per D-0002.
+    const target = fungal ? fungalPlacement(world, i, c.propG1[i]!, daughterLoad, fungi) : findPlacement(world, i, daughterLoad);
     if (target < 0) {
       c.divBlockCode[i] = R.DIV_BLOCK_PLACEMENT;
       continue;
@@ -174,6 +187,12 @@ export function stageBirths(world: World): void {
       continue;
     }
     commitDivision(world, i, slot, target);
+    if (fungal) {
+      // Parent and daughter segments are joined (SPEC §7.2); the target held no segment, so neither is at 4 links.
+      addFungalLink(world, i, slot, branchLinkKind(world.species[c.species[i]!]!));
+      fungi.occupied[target] = 1;
+      fungi.count++;
+    }
   }
   if (capacityHit) world.capacityHitThisTick = true;
   // Leave the index canonical at the tick boundary (daughters included), as a reload would.
@@ -278,6 +297,7 @@ function commitDivision(world: World, i: number, slot: number, targetCell: numbe
   const b1 = world.counters.nextBirthId++;
   c.birthId[i] = b0;
   rekeyLinks(world, i, parentBirth); // partners stored the parent's birthId (SPEC §9.19: F02 links follow branching)
+  onParasiteDivision(world, i, slot, parentBirth); // the retained daughter keeps its host/parasite pair (SPEC §7.4; parasites.ts)
   c.birthId[slot] = b1;
   const spIdx = c.species[i]!;
   const gen = parentInfo.generation + 1;

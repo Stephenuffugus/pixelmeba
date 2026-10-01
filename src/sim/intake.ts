@@ -33,6 +33,8 @@ import { AGENT_CAP } from './constants';
 import { milestone } from './events';
 import { markField } from './transport';
 import { subtractPool } from './ledger';
+import { edibleFilmAt, filmWeight, orderedFilmRequest, weightedFilmRequest } from './film';
+import { commitHostDrains, reserveHostDrains } from './parasites';
 
 const K = 6; // max requests per organism
 const ROUTE_NONE = 0;
@@ -105,6 +107,8 @@ function intakeBody(world: World): void {
   const load = world.derived.cellLoad;
   const light = world.derived.light;
   touched.length = 0;
+  // Host drains are reserved before any ordinary request (SPEC §3.2 row 6, §6.5; parasites.ts).
+  reserveHostDrains(world);
 
   // ---------------------------------------------------------------- 1. requests
   for (let i = 0; i < e.highWater; i++) {
@@ -161,6 +165,8 @@ function intakeBody(world: World): void {
         addRequest(i, FIELD_INDEX[foods[k]!], r, cell);
         rem -= r;
       }
+      // Film, eaten as detritus after the listed foods (D-0038; film.ts): no film here, no request.
+      addRequest(i, FIELD_INDEX.film, orderedFilmRequest(world, sp, cell, rem), cell);
     } else {
       const w = prof.weights;
       let W = 0;
@@ -170,6 +176,13 @@ function intakeBody(world: World): void {
         if (!f || f[cell]! <= 0) continue;
         anyPresent = true;
         W += w[k] ?? 0;
+      }
+      // Film with the detritus weight (D-0038; film.ts); counted only where edible film is present.
+      const filmP = edibleFilmAt(world, sp, cell);
+      const filmW = filmP > 0 ? filmWeight(prof) : 0;
+      if (filmP > 0) {
+        anyPresent = true;
+        W += filmW;
       }
       if (W <= 0) {
         c.limitCode[i] = anyPresent ? R.FOOD_EXCLUDED_BY_PREFERENCE : R.FOOD_NONE_COMPATIBLE;
@@ -185,6 +198,7 @@ function intakeBody(world: World): void {
         if (P <= 0 || wk <= 0) continue;
         addRequest(i, FIELD_INDEX[foods[k]!], Math.min(P, budget * (wk / W) * availability(P)), cell);
       }
+      addRequest(i, FIELD_INDEX.film, weightedFilmRequest(filmP, budget, filmW, W), cell);
     }
   }
 
@@ -354,6 +368,9 @@ function intakeBody(world: World): void {
     c.limitCode[i] = code;
     c.limitValue[i] = value;
   }
+
+  // Reserved host drains commit after the ordinary commit (their products are not consumed this stage).
+  commitHostDrains(world);
 
   if (anyConsumed) {
     markField(world, 'co2');

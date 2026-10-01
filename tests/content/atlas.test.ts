@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildAtlas } from '../../tools/art-build';
-import { atlasSpeciesRef, checkAtlas, enabledMarks, FEATURE_FRAMES, featureFrameKey, P3_SPRITES, pngSize, requiredFrames, type AtlasSpeciesRef } from '../../tools/content-validate';
+import { ALL_TILES, atlasSpeciesRef, checkAtlas, enabledMarks, enabledTiles, FEATURE_FRAMES, featureFrameKey, P3_SPRITES, pngSize, requiredFrames, TILE_FRAMES, type AtlasSpeciesRef } from '../../tools/content-validate';
 import { loadRegistryFs, REPO_ROOT } from '../../tools/lib/content-fs';
 
 interface Frame {
@@ -174,7 +174,8 @@ describe('atlas completeness (P1.4)', () => {
       expect(later('E17', 'cache_marker')).toEqual(['features.cache_marker.frames: E17 (cache_marker): mark has 1 frame(s), needs 4 (cache fill bands 0–3)']);
       expect(later('E02', 'glow_center')).toEqual(['features.glow_center.frames: E02 (glow_center): mark has 1 frame(s), needs 2 (dim, glow)']);
       // A layer the docs give no count for still needs one frame, and one is enough.
-      expect(later('E12', 'adhesion_link')).toEqual([]);
+      expect(FEATURE_FRAMES.settler_foot).toBeUndefined();
+      expect(later('E13', 'settler_foot')).toEqual([]);
     });
 
     it('reports a mark missing from the table, a short frame count, and a wrong size or heading count', () => {
@@ -207,10 +208,75 @@ describe('atlas completeness (P1.4)', () => {
       expect(JSON.stringify(a.manifest)).toBe(JSON.stringify(b.manifest));
       expect(Buffer.compare(a.png, Buffer.from(png))).toBe(0);
       expect(JSON.stringify(a.manifest, null, 1) + '\n').toBe(manifestText);
-      // Sprite frames come first; the 32 mark frames follow them.
+      // Sprite frames come first; the mark frames follow them (every layer in four headings), then the
+      // world tiles (one heading each).
       const firstMark = a.manifest.frames.findIndex((f) => 'layer' in f);
-      expect(a.manifest.frames.slice(firstMark).every((f) => 'layer' in f)).toBe(true);
-      expect(a.manifest.frames.length - firstMark).toBe(32);
+      const firstTile = a.manifest.frames.findIndex((f) => 'tile' in f);
+      expect(a.manifest.frames.slice(firstMark, firstTile).every((f) => 'layer' in f)).toBe(true);
+      expect(a.manifest.frames.slice(firstTile).every((f) => 'tile' in f)).toBe(true);
+      const markFrames = Object.values(a.manifest.features).reduce((n, f) => n + f.frames * f.headings, 0);
+      expect(firstTile - firstMark).toBe(markFrames);
+      expect(markFrames).toBe(80);
+      expect(a.manifest.frames.length - firstTile).toBe(Object.values(a.manifest.tiles).reduce((n, t) => n + t.frames, 0));
+    });
+  });
+
+  describe('Phase 3 module marks and world tiles (wave 2 art-features; SPEC §9 visuals, UX §6.2, §6.5)', () => {
+    /** Every Phase 3 module record's mark, whatever the manifest enables (W2-29). */
+    const P3_MODULES = ['E04', 'E06', 'E07', 'E08', 'E09', 'E10', 'E12'];
+    const p3marks = P3_MODULES.map((id) => ({ moduleId: id, layer: reg.modules[id]!.visualLayer }));
+    const allTiles = ALL_TILES;
+
+    it('the committed atlas carries the mark of every Phase 3 module record and every world tile', () => {
+      expect(p3marks.map((m) => m.layer)).toEqual(['anchor_foot', 'shade_patch', 'light_trail', 'debris_granule', 'protein_notches', 'matrix_edge', 'adhesion_link']);
+      for (const m of p3marks) expect(FEATURE_FRAMES[m.layer], m.layer).toBeDefined();
+      expect(checkAtlas(atlas(), phase13, { png, marks: [...marks, ...p3marks], tiles: allTiles })).toEqual([]);
+      // ARCH §10.1 / UX §6.2 counts: film isolated/edge/center/eroding; four object fill steps.
+      expect(TILE_FRAMES.film!.frames).toBe(4);
+      expect([TILE_FRAMES.pellet!.frames, TILE_FRAMES.wafer!.frames, TILE_FRAMES.stain!.frames]).toEqual([4, 4, 1]);
+      const a = atlas() as Atlas & { tiles: Record<string, { size: number; frames: number }> };
+      for (const t of allTiles) expect(a.tiles[t.tile]).toMatchObject({ size: 16, frames: TILE_FRAMES[t.tile]!.frames });
+    });
+
+    it('one missing frame of each new kind gives exactly one error naming it', () => {
+      const one = (key: string) => checkAtlas(without(atlas(), key), phase13, { marks: p3marks, tiles: allTiles });
+      const cases: [string, string, string][] = [
+        ['feature/anchor_foot/s/0', 'frames[feature/anchor_foot/s/0]', 'E04 (anchor_foot): missing frame "feature/anchor_foot/s/0"'],
+        ['feature/shade_patch/e/0', 'frames[feature/shade_patch/e/0]', 'E06 (shade_patch): missing frame "feature/shade_patch/e/0"'],
+        ['feature/light_trail/w/0', 'frames[feature/light_trail/w/0]', 'E07 (light_trail): missing frame "feature/light_trail/w/0"'],
+        ['feature/debris_granule/n/1', 'frames[feature/debris_granule/n/1]', 'E08 (debris_granule): missing frame "feature/debris_granule/n/1"'],
+        ['feature/protein_notches/e/1', 'frames[feature/protein_notches/e/1]', 'E09 (protein_notches): missing frame "feature/protein_notches/e/1"'],
+        ['feature/matrix_edge/s/3', 'frames[feature/matrix_edge/s/3]', 'E10 (matrix_edge): missing frame "feature/matrix_edge/s/3"'],
+        ['feature/adhesion_link/n/0', 'frames[feature/adhesion_link/n/0]', 'E12 (adhesion_link): missing frame "feature/adhesion_link/n/0"'],
+        ['tile/film/3', 'frames[tile/film/3]', 'film system (tile film): missing frame "tile/film/3"'],
+        ['tile/pellet/0', 'frames[tile/pellet/0]', 'M10 (tile pellet): missing frame "tile/pellet/0"'],
+        ['tile/wafer/2', 'frames[tile/wafer/2]', 'M11 (tile wafer): missing frame "tile/wafer/2"'],
+        ['tile/stain/0', 'frames[tile/stain/0]', 'M10 (tile stain): missing frame "tile/stain/0"'],
+      ];
+      for (const [key, path, message] of cases) {
+        const issues = one(key);
+        expect(issues, key).toHaveLength(1);
+        expect(issues[0], key).toMatchObject({ severity: 'error', path, message });
+      }
+    });
+
+    it('a short or missing tile set, a wrong tile size and a short Phase 3 mark are refused by name', () => {
+      const a = atlas() as Atlas & { tiles: Record<string, { size: number; frames: number }> };
+      a.tiles.film!.frames = 3;
+      a.tiles.pellet!.size = 8;
+      delete a.tiles.wafer;
+      expect(checkAtlas(a, enabled, { tiles: allTiles }).map((i) => i.message)).toEqual([
+        'film system (tile film): tile has 3 frame(s), needs 4 (isolated, edge, center, eroding)',
+        'M10 (tile pellet): tile frame size 8, expected 16',
+        'M11 (tile wafer) has no world tile in the atlas (run npm run art:build)',
+      ]);
+      const b = atlas();
+      b.features.matrix_edge!.frames = 1;
+      expect(checkAtlas(b, enabled, { marks: p3marks }).map((i) => i.message)).toEqual(['E10 (matrix_edge): mark has 1 frame(s), needs 4 (film bands 0–3)']);
+      // What the manifest needs: film with the film system, objects with M10/M11.
+      expect(enabledTiles({ manifest: { enabledSystems: ['core'], enabledMaterials: ['SUGAR'] } })).toEqual([]);
+      expect(enabledTiles({ manifest: { enabledSystems: ['film'], enabledMaterials: ['M11'] } }).map((t) => t.tile)).toEqual(['film', 'wafer', 'stain']);
+      expect(enabledTiles(reg).map((t) => t.tile)).toEqual(expect.arrayContaining(reg.manifest.enabledSystems.includes('film') ? ['film'] : []));
     });
   });
 

@@ -27,15 +27,16 @@ import { realizeRecipe } from '../../src/sim/recipes';
 import { rebuildIndex } from '../../src/sim/spatial';
 import { stageStructures } from '../../src/sim/structures';
 import { speciesIndex, type World } from '../../src/sim/world';
-import { registryWith } from '../helpers/registry';
-import { clearWater, registry, setField } from '../helpers/world';
+import { G2_LISTS, registryWith } from '../helpers/registry';
+import { registry, setField } from '../helpers/world';
 
 const CELL = cellIndex(64, 64);
 
 /** A clear-water dish whose recorded manifest also enables the film system. */
 function filmWorld(): World {
   const shipped = registry();
-  const systems: SystemFlag[] = [...shipped.manifest.enabledSystems, 'film'];
+  // The shipped manifest enables film since wave 2 (B02, F01); keep the helper independent of that.
+  const systems: SystemFlag[] = shipped.manifest.enabledSystems.includes('film') ? [...shipped.manifest.enabledSystems] : [...shipped.manifest.enabledSystems, 'film'];
   const reg = registryWith({ enabledSystems: systems.sort() });
   const base = reg.recipes.FIRST_DISH_V1!;
   const recipe: RecipeDef = {
@@ -51,6 +52,14 @@ function filmWorld(): World {
   const w = realizeRecipe(reg, recipe, { worldId: 'test-film' });
   expect(w.fields.film).toBeDefined();
   return w;
+}
+
+/** A clear-water dish under the g2 content lists, which have no film system. */
+function noFilmWorld(): World {
+  const reg = registryWith(G2_LISTS);
+  const base = reg.recipes.FIRST_DISH_V1!;
+  const recipe: RecipeDef = { ...base, id: 'TEST_NO_FILM_WATER', removeStones: true, fieldPatches: [], founders: [], scheduledCommands: [], backgroundOverrides: { sugar: 0 }, mutationPreset: 'fixed' };
+  return realizeRecipe(reg, recipe, { worldId: 'test-no-film' });
 }
 
 /** A B01 at the centre of cell (cx, cy) with test-only B, N and E (material changes logged as inputs). */
@@ -187,7 +196,7 @@ describe('P3.7 shared construction: proportional headroom', () => {
   });
 
   it('refuses malformed requests and a world without the film system; no requests is a no-op', () => {
-    const plain = clearWater();
+    const plain = noFilmWorld();
     expect(plain.fields.film).toBeUndefined();
     expect(constructionPass(plain, [])).toEqual([]);
     const s = builder(plain, 64, 64, 2, 0.2, 60);

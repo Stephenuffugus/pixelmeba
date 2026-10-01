@@ -4,14 +4,24 @@
   "moduleRegistryVersion": 1,
   "phenotypeMappingVersion": 1,
   "contentVersion": 2,
-  "contentHash": "59d708d2f08b69ca874de91742ff9d84c27592669a49fac3ef8822b6095eab93",
+  "contentHash": "fc3a87627695c96e92daf4a8d915f1e29a2b6690fdc9414da810c24ea8ffcbd5",
   "buildPhase": 3,
   "enabledSpecies": [
     "A01",
     "B01",
+    "B02",
+    "B03",
     "B04",
+    "B05",
     "B06",
-    "P01"
+    "F01",
+    "P01",
+    "P02",
+    "P03",
+    "P04",
+    "V01",
+    "X01",
+    "Y01"
   ],
   "enabledModules": [
     "E01",
@@ -21,7 +31,11 @@
   "enabledSystems": [
     "chemistry",
     "core",
-    "enzymes"
+    "enzymes",
+    "film",
+    "fungi",
+    "parasites",
+    "viruses"
   ],
   "enabledMaterials": [
     "ACID",

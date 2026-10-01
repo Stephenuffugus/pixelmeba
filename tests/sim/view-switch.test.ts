@@ -380,8 +380,16 @@ describe('Lab trays offer what the dish records (content is data; D-0024)', () =
     const info = ui.dishInfo.value!;
     const reg = registry();
     const table = buildSpeciesTable(info.speciesIds.map((id) => reg.species[id]!));
-    for (const sp of table)
-      expect(content.lifeBrushFor(info, sp.id)).toEqual({ habitatMask: sp.habitatMask, attached: sp.attached });
+    for (const sp of table) {
+      // A phage dose fills fields (W2-14); an attached species also needs one of its recorded surfaces (P3.2).
+      const expected =
+        sp.def.metabolism === 'viral'
+          ? { habitatMask: 0, attached: false, viral: true }
+          : sp.def.attachment
+            ? { habitatMask: sp.habitatMask, attached: true, surfaces: [...sp.def.attachment.surfaces] }
+            : { habitatMask: sp.habitatMask, attached: sp.attached };
+      expect(content.lifeBrushFor(info, sp.id), sp.id).toEqual(expected);
+    }
     expect(content.lifeBrushFor(info, 'X99')).toBeNull();
   });
 

@@ -10,6 +10,7 @@ import type { DishInfo, FamilyAnswer, InspectorPayload, OverlayId, Selection, Sn
 import type { NewDishPreview, RecipeOverrides } from '@worker/protocol';
 import type { EvolutionState } from '@sim/mutation';
 import { presetChangedToast, presetChangeText, type PresetId } from './strings/modes';
+import { LIFE_COPY } from './strings/lab';
 import type { DishRenderer } from '@render/renderer';
 import { clearFeed, pushFeed } from './feed';
 import { feed } from './feed';
@@ -85,6 +86,8 @@ export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | '
 /** P2.2: the open dish's evolution setting, rates and recorded changes (from its snapshots). */
 export const evolution = signal<EvolutionState | null>(null);
 export const overlay = signal<OverlayId | null>(null);
+/** Observe tray "Infection markers" (SPEC §10.8, UX §4.4): separate from the one-at-a-time overlay; view only. */
+export const infectionMarkers = signal<boolean>(false);
 export const overlayMax = signal<number>(0);
 export const toast = signal<string | null>(null);
 export const prompt = signal<string | null>(null);
@@ -212,6 +215,7 @@ export function attachRenderer(r: DishRenderer | null): void {
   renderer = r;
   if (r) {
     applyDisplaySettings();
+    r.setInfectionMarkers(infectionMarkers.value);
     const info = dishInfo.value;
     if (info) r.setSpecies(info.speciesIds, info.speciesAssets);
     if (lastGeometrySnapshot && info && lastGeometrySnapshot.dishId === info.dishId) r.applyGeometry(lastGeometrySnapshot);
@@ -922,6 +926,12 @@ export function setOverlay(id: OverlayId | null): void {
   syncView();
 }
 
+/** Turn the infection markers on or off: drawing only (the renderer), never the worker or the world. */
+export function setInfectionMarkers(on: boolean): void {
+  infectionMarkers.value = on;
+  renderer?.setInfectionMarkers(on);
+}
+
 export async function sendCommand(payload: CommandPayload, undoable = true): Promise<void> {
   const info = dishInfo.value;
   if (!info) return;
@@ -935,6 +945,12 @@ function reportCommand(info: DishInfo, payload: CommandPayload, res: CommandResu
   if (!res) return;
   if (payload.kind === 'inoculate') {
     const name = info.speciesNames[info.speciesIds.indexOf(payload.speciesId)] ?? payload.speciesId;
+    // A phage dose: accepted counts the cells dosed, each with `count` units (SPEC §10.2; W2-14).
+    if (info.speciesDiets?.[info.speciesIds.indexOf(payload.speciesId)]?.metabolism === 'viral') {
+      showToast(res.accepted === 0 ? LIFE_COPY.phageNone(name) : LIFE_COPY.phageAdded(payload.count, name, res.accepted));
+      ring?.placementRing(payload.x, payload.y, payload.radius);
+      return;
+    }
     if (res.accepted === 0) showToast(res.note === 'capacity' ? 'The dish is full.' : `No room here for ${name}.`);
     else showToast(res.rejected > 0 ? `Added ${res.accepted} ${name} (${res.rejected} didn't fit).` : `Added ${res.accepted} ${name}.`);
     ring?.placementRing(payload.x, payload.y, payload.radius);

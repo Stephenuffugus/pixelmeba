@@ -84,14 +84,15 @@ describe('enabled content needs the systems it uses', () => {
     );
   });
 
-  it('the shipped manifest validates (B04 digests film and ships without the film system)', () => {
+  it('the shipped manifest validates (B04 digests film; the film system ships with B02 and F01 since wave 2)', () => {
     const res = shipped();
     expect(res.issues.filter((i) => i.severity === 'error')).toEqual([]);
     expect(res.registry).not.toBeNull();
     const m = res.registry!.manifest;
     expect(res.registry!.species.B04!.digestsFilm).toBe(true);
     expect(m.enabledSpecies).toContain('B04');
-    expect(m.enabledSystems).not.toContain('film');
+    expect(m.enabledSystems).toContain('film');
+    expect(m.enabledSpecies).toEqual(expect.arrayContaining(['B02', 'F01']));
   });
 
   it('the requirement tables (species, materials, modules)', () => {

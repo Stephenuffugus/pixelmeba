@@ -5,7 +5,7 @@
  "width": 1024,
  "height": 1024,
  "padding": 2,
- "exportHash": "fad8795a60df56dc5e3f9e61d13f76ec8d293b6a328f4d0e569f9a59b65348c4",
+ "exportHash": "99ab54adef3664a294025b0bbdd61156c4831c17ebb256458f94a0d4ad3336ff",
  "sprites": {
   "a01_sunbead": {
    "speciesId": "A01",
@@ -743,6 +743,134 @@
     "prepare (also the idle carrier seam)",
     "rest",
     "wake"
+   ]
+  },
+  "anchor_foot": {
+   "size": 16,
+   "headings": 4,
+   "anchor": [
+    8,
+    8
+   ],
+   "frames": 1,
+   "frameNames": [
+    "foot (anchored)"
+   ]
+  },
+  "shade_patch": {
+   "size": 16,
+   "headings": 4,
+   "anchor": [
+    8,
+    8
+   ],
+   "frames": 1,
+   "frameNames": [
+    "dark interior patch"
+   ]
+  },
+  "light_trail": {
+   "size": 16,
+   "headings": 4,
+   "anchor": [
+    8,
+    8
+   ],
+   "frames": 1,
+   "frameNames": [
+    "two trailing pixels (moving toward light)"
+   ]
+  },
+  "debris_granule": {
+   "size": 16,
+   "headings": 4,
+   "anchor": [
+    8,
+    8
+   ],
+   "frames": 2,
+   "frameNames": [
+    "granule (carrier)",
+    "granule pulse (detritus intake)"
+   ]
+  },
+  "protein_notches": {
+   "size": 16,
+   "headings": 4,
+   "anchor": [
+    8,
+    8
+   ],
+   "frames": 2,
+   "frameNames": [
+    "paired notches (carrier)",
+    "pale release marks (releasing protein)"
+   ]
+  },
+  "matrix_edge": {
+   "size": 16,
+   "headings": 4,
+   "anchor": [
+    8,
+    8
+   ],
+   "frames": 4,
+   "frameNames": [
+    "trace (no film in its cell)",
+    "film up to a third of the cap",
+    "film up to two thirds",
+    "film above two thirds"
+   ]
+  },
+  "adhesion_link": {
+   "size": 16,
+   "headings": 4,
+   "anchor": [
+    8,
+    8
+   ],
+   "frames": 1,
+   "frameNames": [
+    "link pixels (linked)"
+   ]
+  }
+ },
+ "tiles": {
+  "film": {
+   "size": 16,
+   "frames": 4,
+   "frameNames": [
+    "isolated",
+    "edge",
+    "center",
+    "eroding"
+   ]
+  },
+  "pellet": {
+   "size": 16,
+   "frames": 4,
+   "frameNames": [
+    "a quarter or less left",
+    "up to half left",
+    "up to three quarters left",
+    "more than three quarters left"
+   ]
+  },
+  "wafer": {
+   "size": 16,
+   "frames": 4,
+   "frameNames": [
+    "a quarter or less left",
+    "up to half left",
+    "up to three quarters left",
+    "more than three quarters left"
+   ]
+  },
+  "stain": {
+   "size": 16,
+   "frames": 1,
+   "frameNames": [
+    "emptied object stain"
    ]
   }
  },
@@ -10220,6 +10348,603 @@
    "index": 2,
    "x": 782,
    "y": 542,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/anchor_foot/e/0",
+   "layer": "anchor_foot",
+   "heading": 0,
+   "index": 0,
+   "x": 802,
+   "y": 542,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/anchor_foot/s/0",
+   "layer": "anchor_foot",
+   "heading": 1,
+   "index": 0,
+   "x": 822,
+   "y": 542,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/anchor_foot/w/0",
+   "layer": "anchor_foot",
+   "heading": 2,
+   "index": 0,
+   "x": 842,
+   "y": 542,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/anchor_foot/n/0",
+   "layer": "anchor_foot",
+   "heading": 3,
+   "index": 0,
+   "x": 862,
+   "y": 542,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/shade_patch/e/0",
+   "layer": "shade_patch",
+   "heading": 0,
+   "index": 0,
+   "x": 882,
+   "y": 542,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/shade_patch/s/0",
+   "layer": "shade_patch",
+   "heading": 1,
+   "index": 0,
+   "x": 902,
+   "y": 542,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/shade_patch/w/0",
+   "layer": "shade_patch",
+   "heading": 2,
+   "index": 0,
+   "x": 922,
+   "y": 542,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/shade_patch/n/0",
+   "layer": "shade_patch",
+   "heading": 3,
+   "index": 0,
+   "x": 942,
+   "y": 542,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/light_trail/e/0",
+   "layer": "light_trail",
+   "heading": 0,
+   "index": 0,
+   "x": 962,
+   "y": 542,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/light_trail/s/0",
+   "layer": "light_trail",
+   "heading": 1,
+   "index": 0,
+   "x": 982,
+   "y": 542,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/light_trail/w/0",
+   "layer": "light_trail",
+   "heading": 2,
+   "index": 0,
+   "x": 1002,
+   "y": 542,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/light_trail/n/0",
+   "layer": "light_trail",
+   "heading": 3,
+   "index": 0,
+   "x": 2,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/debris_granule/e/0",
+   "layer": "debris_granule",
+   "heading": 0,
+   "index": 0,
+   "x": 22,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/debris_granule/s/0",
+   "layer": "debris_granule",
+   "heading": 1,
+   "index": 0,
+   "x": 42,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/debris_granule/w/0",
+   "layer": "debris_granule",
+   "heading": 2,
+   "index": 0,
+   "x": 62,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/debris_granule/n/0",
+   "layer": "debris_granule",
+   "heading": 3,
+   "index": 0,
+   "x": 82,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/debris_granule/e/1",
+   "layer": "debris_granule",
+   "heading": 0,
+   "index": 1,
+   "x": 102,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/debris_granule/s/1",
+   "layer": "debris_granule",
+   "heading": 1,
+   "index": 1,
+   "x": 122,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/debris_granule/w/1",
+   "layer": "debris_granule",
+   "heading": 2,
+   "index": 1,
+   "x": 142,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/debris_granule/n/1",
+   "layer": "debris_granule",
+   "heading": 3,
+   "index": 1,
+   "x": 162,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/protein_notches/e/0",
+   "layer": "protein_notches",
+   "heading": 0,
+   "index": 0,
+   "x": 182,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/protein_notches/s/0",
+   "layer": "protein_notches",
+   "heading": 1,
+   "index": 0,
+   "x": 202,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/protein_notches/w/0",
+   "layer": "protein_notches",
+   "heading": 2,
+   "index": 0,
+   "x": 222,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/protein_notches/n/0",
+   "layer": "protein_notches",
+   "heading": 3,
+   "index": 0,
+   "x": 242,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/protein_notches/e/1",
+   "layer": "protein_notches",
+   "heading": 0,
+   "index": 1,
+   "x": 262,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/protein_notches/s/1",
+   "layer": "protein_notches",
+   "heading": 1,
+   "index": 1,
+   "x": 282,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/protein_notches/w/1",
+   "layer": "protein_notches",
+   "heading": 2,
+   "index": 1,
+   "x": 302,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/protein_notches/n/1",
+   "layer": "protein_notches",
+   "heading": 3,
+   "index": 1,
+   "x": 322,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/e/0",
+   "layer": "matrix_edge",
+   "heading": 0,
+   "index": 0,
+   "x": 342,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/s/0",
+   "layer": "matrix_edge",
+   "heading": 1,
+   "index": 0,
+   "x": 362,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/w/0",
+   "layer": "matrix_edge",
+   "heading": 2,
+   "index": 0,
+   "x": 382,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/n/0",
+   "layer": "matrix_edge",
+   "heading": 3,
+   "index": 0,
+   "x": 402,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/e/1",
+   "layer": "matrix_edge",
+   "heading": 0,
+   "index": 1,
+   "x": 422,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/s/1",
+   "layer": "matrix_edge",
+   "heading": 1,
+   "index": 1,
+   "x": 442,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/w/1",
+   "layer": "matrix_edge",
+   "heading": 2,
+   "index": 1,
+   "x": 462,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/n/1",
+   "layer": "matrix_edge",
+   "heading": 3,
+   "index": 1,
+   "x": 482,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/e/2",
+   "layer": "matrix_edge",
+   "heading": 0,
+   "index": 2,
+   "x": 502,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/s/2",
+   "layer": "matrix_edge",
+   "heading": 1,
+   "index": 2,
+   "x": 522,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/w/2",
+   "layer": "matrix_edge",
+   "heading": 2,
+   "index": 2,
+   "x": 542,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/n/2",
+   "layer": "matrix_edge",
+   "heading": 3,
+   "index": 2,
+   "x": 562,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/e/3",
+   "layer": "matrix_edge",
+   "heading": 0,
+   "index": 3,
+   "x": 582,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/s/3",
+   "layer": "matrix_edge",
+   "heading": 1,
+   "index": 3,
+   "x": 602,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/w/3",
+   "layer": "matrix_edge",
+   "heading": 2,
+   "index": 3,
+   "x": 622,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/matrix_edge/n/3",
+   "layer": "matrix_edge",
+   "heading": 3,
+   "index": 3,
+   "x": 642,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/adhesion_link/e/0",
+   "layer": "adhesion_link",
+   "heading": 0,
+   "index": 0,
+   "x": 662,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/adhesion_link/s/0",
+   "layer": "adhesion_link",
+   "heading": 1,
+   "index": 0,
+   "x": 682,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/adhesion_link/w/0",
+   "layer": "adhesion_link",
+   "heading": 2,
+   "index": 0,
+   "x": 702,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "feature/adhesion_link/n/0",
+   "layer": "adhesion_link",
+   "heading": 3,
+   "index": 0,
+   "x": 722,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/film/0",
+   "tile": "film",
+   "index": 0,
+   "x": 742,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/film/1",
+   "tile": "film",
+   "index": 1,
+   "x": 762,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/film/2",
+   "tile": "film",
+   "index": 2,
+   "x": 782,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/film/3",
+   "tile": "film",
+   "index": 3,
+   "x": 802,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/pellet/0",
+   "tile": "pellet",
+   "index": 0,
+   "x": 822,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/pellet/1",
+   "tile": "pellet",
+   "index": 1,
+   "x": 842,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/pellet/2",
+   "tile": "pellet",
+   "index": 2,
+   "x": 862,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/pellet/3",
+   "tile": "pellet",
+   "index": 3,
+   "x": 882,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/wafer/0",
+   "tile": "wafer",
+   "index": 0,
+   "x": 902,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/wafer/1",
+   "tile": "wafer",
+   "index": 1,
+   "x": 922,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/wafer/2",
+   "tile": "wafer",
+   "index": 2,
+   "x": 942,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/wafer/3",
+   "tile": "wafer",
+   "index": 3,
+   "x": 962,
+   "y": 562,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/stain/0",
+   "tile": "stain",
+   "index": 0,
+   "x": 982,
+   "y": 562,
    "w": 16,
    "h": 16
   }

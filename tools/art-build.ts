@@ -1,7 +1,8 @@
 /**
  * npm run art:build [-- --check]
- * Packs every sprite frame (all headings) and every module feature-mark frame (all four headings;
- * art/src/layers) into public/atlas/organisms.png with 2 px transparent padding and writes
+ * Packs every sprite frame (all headings), every module feature-mark frame (all four headings;
+ * art/src/layers) and every world tile (film textures, food objects; art/src/tiles, one heading) into
+ * public/atlas/organisms.png with 2 px transparent padding and writes
  * public/atlas/manifest.json (ARCH §10.1). Output is byte-deterministic.
  * --check rebuilds in memory and fails if the committed files differ or required frames are missing
  * (sprite and mark requirements here, plus the packed-atlas completeness check shared with
@@ -12,6 +13,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SPRITES } from '../art/src/index';
 import { FEATURE_LAYERS, type FeatureLayerDef } from '../art/src/layers/modules';
+import { TILES, type TileDef } from '../art/src/tiles/index';
 import {
   frameRgba,
   FUNGUS_REQUIRED,
@@ -27,7 +29,7 @@ import {
 } from '../art/src/sprite';
 import { blit, createImage, encodePng } from './lib/png';
 import { REPO_ROOT, loadRegistryFs } from './lib/content-fs';
-import { atlasSpeciesRef, checkAtlas, enabledMarks, FEATURE_HEADINGS, FEATURE_SIZE, featureFrameKey } from './content-validate';
+import { ALL_TILES, atlasSpeciesRef, checkAtlas, enabledMarks, enabledTiles, FEATURE_HEADINGS, FEATURE_SIZE, featureFrameKey, TILE_SIZE, tileFrameKey } from './content-validate';
 
 const PAD = 2;
 /**
@@ -62,6 +64,24 @@ export interface AtlasFeatureFrame {
   readonly h: number;
 }
 
+/** One world-tile frame (key `tile/<tile>/<frame>`; one heading, never rotated). */
+export interface AtlasTileFrame {
+  readonly key: string;
+  readonly tile: string;
+  readonly index: number;
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+}
+
+/** One world tile set (film textures, food object fill steps, the emptied stain): one cell per frame. */
+export interface AtlasTile {
+  readonly size: number;
+  readonly frames: number;
+  readonly frameNames: string[];
+}
+
 /** One module feature mark: drawn over the body at its center, heading and scale (size / 16). */
 export interface AtlasFeature {
   readonly size: number;
@@ -89,8 +109,10 @@ export interface AtlasManifest {
   readonly sprites: Record<string, { speciesId: string; size: number; headings: number; anchor: [number, number]; animations: Record<string, AtlasAnimation> }>;
   /** Module feature marks by visual layer id (ARCH §10.1), in art/src/layers canonical order. */
   readonly features: Record<string, AtlasFeature>;
-  /** Sprite frames first, then feature-mark frames. */
-  readonly frames: (AtlasFrame | AtlasFeatureFrame)[];
+  /** World tiles by id (UX §6.2 film, §6.5 food objects), in art/src/tiles canonical order. */
+  readonly tiles: Record<string, AtlasTile>;
+  /** Sprite frames first, then feature-mark frames, then world-tile frames. */
+  readonly frames: (AtlasFrame | AtlasFeatureFrame | AtlasTileFrame)[];
 }
 
 function validate(def: SpriteDef): string[] {
@@ -126,14 +148,28 @@ function validateLayer(def: FeatureLayerDef): string[] {
   return errors;
 }
 
+function validateTile(def: TileDef): string[] {
+  const errors: string[] = [];
+  if (def.frames.length === 0) errors.push(`tile ${def.id}: no frames`);
+  if (def.frameNames.length !== def.frames.length) errors.push(`tile ${def.id}: ${def.frameNames.length} frame name(s) for ${def.frames.length} frame(s)`);
+  def.frames.forEach((f, i) => {
+    if (f.w !== TILE_SIZE || f.h !== TILE_SIZE) errors.push(`tile ${def.id}[${i}] is ${f.w}×${f.h}, expected ${TILE_SIZE}`);
+    if (f.count() === 0) errors.push(`tile ${def.id}[${i}] is empty`);
+    for (const px of f.data) if (px !== 0 && !def.palette[px]) errors.push(`tile ${def.id}[${i}]: palette index ${px} missing`);
+  });
+  return errors;
+}
+
 type PackItem =
   | { readonly kind: 'sprite'; readonly size: number; readonly def: SpriteDef; readonly anim: AnimName; readonly heading: number; readonly index: number }
-  | { readonly kind: 'feature'; readonly size: number; readonly def: FeatureLayerDef; readonly heading: number; readonly index: number };
+  | { readonly kind: 'feature'; readonly size: number; readonly def: FeatureLayerDef; readonly heading: number; readonly index: number }
+  | { readonly kind: 'tile'; readonly size: number; readonly def: TileDef; readonly index: number };
 
 export function buildAtlas(): { png: Buffer; manifest: AtlasManifest; errors: string[] } {
   const errors: string[] = [];
   for (const def of SPRITES) errors.push(...validate(def));
   for (const def of FEATURE_LAYERS) errors.push(...validateLayer(def));
+  for (const def of TILES) errors.push(...validateTile(def));
   // Every enabled species needs a sprite.
   const reg = loadRegistryFs();
   for (const id of reg.manifest.enabledSpecies) if (!SPRITES.some((s) => s.speciesId === id)) errors.push(`enabled species ${id} has no sprite`);
@@ -156,6 +192,8 @@ export function buildAtlas(): { png: Buffer; manifest: AtlasManifest; errors: st
   // Every enabled module needs its feature mark (content visualLayer → art/src/layers).
   const marks = enabledMarks(reg);
   for (const m of marks) if (!FEATURE_LAYERS.some((l) => l.id === m.layer)) errors.push(`enabled module ${m.moduleId} has no feature mark "${m.layer}" in art/src/layers`);
+  // Every enabled system or material that draws a world tile needs it (film textures, food objects).
+  for (const t of enabledTiles(reg)) if (!TILES.some((d) => d.id === t.tile)) errors.push(`${t.owner} has no world tile "${t.tile}" in art/src/tiles`);
 
   // Canonical frame list: sprites (animation names sorted, then heading, then frame), then feature
   // marks (art/src/layers order, then frame, then heading).
@@ -169,6 +207,8 @@ export function buildAtlas(): { png: Buffer; manifest: AtlasManifest; errors: st
   for (const def of FEATURE_LAYERS) {
     for (let i = 0; i < def.frames.length; i++) for (let h = 0; h < FEATURE_HEADINGS; h++) items.push({ kind: 'feature', size: FEATURE_SIZE, def, heading: h, index: i });
   }
+  // World tiles last (art/src/tiles order, then frame): one heading, never rotated.
+  for (const def of TILES) for (let i = 0; i < def.frames.length; i++) items.push({ kind: 'tile', size: TILE_SIZE, def, index: i });
   // Shelf packing: larger frames first, then canonical order (Array.prototype.sort is stable).
   items.sort((a, b) => b.size - a.size);
   let x = 0;
@@ -189,8 +229,15 @@ export function buildAtlas(): { png: Buffer; manifest: AtlasManifest; errors: st
   let height = 1;
   while (height < y + rowH) height *= 2;
   const img = createImage(ATLAS_W, height);
-  const frames: (AtlasFrame | AtlasFeatureFrame)[] = [];
+  const frames: (AtlasFrame | AtlasFeatureFrame | AtlasTileFrame)[] = [];
   for (const { item, x: fx, y: fy } of placed) {
+    if (item.kind === 'tile') {
+      const { def, index } = item;
+      const f = def.frames[index]!;
+      blit(img, { w: f.w, h: f.h, data: paletteRgba(def.palette, f, `tile ${def.id}`) }, fx, fy);
+      frames.push({ key: tileFrameKey(def.id, index), tile: def.id, index, x: fx, y: fy, w: f.w, h: f.h });
+      continue;
+    }
     if (item.kind === 'feature') {
       const { def, heading, index } = item;
       const f = orient(def.frames[index]!, heading);
@@ -228,6 +275,8 @@ export function buildAtlas(): { png: Buffer; manifest: AtlasManifest; errors: st
   for (const def of FEATURE_LAYERS) {
     features[def.id] = { size: FEATURE_SIZE, headings: FEATURE_HEADINGS, anchor: [FEATURE_SIZE / 2, FEATURE_SIZE / 2], frames: def.frames.length, frameNames: [...def.frameNames] };
   }
+  const tiles: AtlasManifest['tiles'] = {};
+  for (const def of TILES) tiles[def.id] = { size: TILE_SIZE, frames: def.frames.length, frameNames: [...def.frameNames] };
   const manifest: AtlasManifest = {
     format: 'pixelmeba-atlas',
     version: 1,
@@ -238,17 +287,24 @@ export function buildAtlas(): { png: Buffer; manifest: AtlasManifest; errors: st
     exportHash: createHash('sha256').update(png).digest('hex'),
     sprites,
     features,
+    tiles,
     frames,
   };
   // The packed result must pass the same completeness check content:validate applies (P1.4, the
   // enabled modules' marks), for every species that has a sprite, enabled or not.
   const refs = SPRITES.filter((d) => reg.species[d.speciesId]).map((d) => atlasSpeciesRef(reg.species[d.speciesId]!));
-  for (const i of checkAtlas(manifest, refs, { png, marks })) errors.push(`${i.path}: ${i.message}`);
+  // Every mark and every world tile is checked, enabled or not (a later flip needs no art change).
+  const allMarks = FEATURE_LAYERS.map((l) => ({ moduleId: marks.find((m) => m.layer === l.id)?.moduleId ?? `layer ${l.id}`, layer: l.id }));
+  for (const i of checkAtlas(manifest, refs, { png, marks: allMarks, tiles: ALL_TILES })) errors.push(`${i.path}: ${i.message}`);
   return { png, manifest, errors };
 }
 
 function featureCount(m: AtlasManifest): number {
   return m.frames.filter((f) => 'layer' in f).length;
+}
+
+function tileCount(m: AtlasManifest): number {
+  return m.frames.filter((f) => 'tile' in f).length;
 }
 
 const isMain = process.argv[1]?.endsWith('art-build.ts');
@@ -267,11 +323,11 @@ if (isMain) {
       console.error('ERROR public/atlas is out of date (run npm run art:build)');
       process.exit(1);
     }
-    console.log(`atlas up to date · ${manifest.frames.length} frames (${featureCount(manifest)} feature-mark frames) · ${manifest.width}×${manifest.height} · ${manifest.exportHash.slice(0, 12)}`);
+    console.log(`atlas up to date · ${manifest.frames.length} frames (${featureCount(manifest)} feature-mark frames, ${tileCount(manifest)} world-tile frames) · ${manifest.width}×${manifest.height} · ${manifest.exportHash.slice(0, 12)}`);
   } else {
     mkdirSync(dir, { recursive: true });
     writeFileSync(pngPath, png);
     writeFileSync(manPath, manText);
-    console.log(`wrote atlas · ${manifest.frames.length} frames (${featureCount(manifest)} feature-mark frames) · ${manifest.width}×${manifest.height} · ${manifest.exportHash.slice(0, 12)}`);
+    console.log(`wrote atlas · ${manifest.frames.length} frames (${featureCount(manifest)} feature-mark frames, ${tileCount(manifest)} world-tile frames) · ${manifest.width}×${manifest.height} · ${manifest.exportHash.slice(0, 12)}`);
   }
 }

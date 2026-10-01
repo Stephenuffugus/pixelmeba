@@ -18,12 +18,14 @@ import {
   showOrganism,
 } from '../state';
 import { reasonText } from '../strings/reasons';
+import { R } from '@sim/reasons';
 import { constraintWords, dietAnswer, familySummary, leadConstraint, makesOwnFood, relationLabel, stopAnswer } from '../strings/shortcuts';
 import { inheritedLead, LOCUS_NAMES, locusNote } from '../strings/inherited';
 import { actionLabel, dormancyChip, dormancyLines, energyCapText, LIFE_ACTIVE, moduleText, originChip, upkeepText } from '../strings/modules';
 import { founderStartText, moduleSourceText } from '../strings/modes';
 import { openLineage } from './LineageState';
 import { paintName, structureName } from './LabTrayNames';
+import { dishView } from '../views/LabView';
 import { PAINT_TARGETS, PLACEABLE_STRUCTURES, type PaintTarget, type PlaceableStructure } from '@sim/grid';
 
 /** The cell's ground in content words ("Impermeable wall", "Gel"), never the simulation's codes. */
@@ -102,6 +104,16 @@ function exposureText(e: NonNullable<CellView['exposure']>): string {
       `${EXPOSURE_WHO[l.category] ?? l.category} ${l.exposure.toFixed(2)} (growth × ${l.growthFactor.toFixed(2)}, −${l.damagePerSecond.toFixed(2)} health/s)`,
   );
   return `${parts.join('; ')}.${e.filmHalves ? ' Biofilm here halves it.' : ''} Other organisms are not affected.`;
+}
+
+/**
+ * P3.3 (W2-08): segments and separate threads are counted apart — "Threadlace: 12 segments in 3
+ * separate threads; this one has 5." Numbers come from the worker (fungi.ts fungalNetwork).
+ */
+function networkText(name: string, n: NonNullable<EntityInspect['network']>): string {
+  const seg = (k: number) => `${k} ${k === 1 ? 'segment' : 'segments'}`;
+  const threads = `${n.threads} separate ${n.threads === 1 ? 'thread' : 'threads'}`;
+  return `${name}: ${seg(n.segments)} in ${threads}; this one has ${seg(n.thisThread)}.`;
 }
 
 /** "0.08 (habitat 0.80 × shade 0.10)" (SPEC §4.4: the inspector shows every light factor). */
@@ -464,6 +476,29 @@ function EntityView({ e }: { e: EntityInspect }) {
                   ))}
                 </section>
               ) : null}
+              {/* P3.4: infections, attached parasites and the host a parasite rides, from recorded state
+                  (UX §5.2: Explore wording in Explore, Lab wording with the measured value in Lab), as
+                  body text above the small key/value grid. */}
+              {e.infection || e.parasite || e.host ? (
+                <section aria-label="Infection and parasites" data-testid="infection-parasites">
+                  {e.infection ? (
+                    <p data-testid="infection">
+                      {reasonText(R.INFECTED, dishView.value, { speciesName: info?.speciesNames[e.infection.speciesIdx] ?? 'a virus', value: e.infection.secondsLeft })}
+                    </p>
+                  ) : null}
+                  {e.parasite ? (
+                    <p data-testid="parasite">
+                      {reasonText(R.PARASITIZED, dishView.value, { speciesName: info?.speciesNames[e.parasite.speciesIdx] ?? 'A parasite', value: e.parasite.rate })}{' '}
+                      <span class="sub">#{e.parasite.birthId}</span>
+                    </p>
+                  ) : null}
+                  {e.host ? (
+                    <p data-testid="parasite-host">
+                      Attached to {info?.speciesNames[e.host.speciesIdx] ?? 'its host'} <span class="sub">#{e.host.birthId}</span>; it moves with its host.
+                    </p>
+                  ) : null}
+                </section>
+              ) : null}
               <dl class="kv">
                 <dt>Food here</dt>
                 <dd>
@@ -479,6 +514,18 @@ function EntityView({ e }: { e: EntityInspect }) {
                 <dd>{amount(e.intakeLastSecond)} carbon</dd>
                 <dt>Conditions</dt>
                 <dd>{Math.round(e.suitability * 100)} % suitable</dd>
+                {e.filmHere !== undefined && e.filmHere > 0 ? (
+                  <>
+                    <dt>Biofilm here</dt>
+                    <dd data-testid="film-here">{e.filmHere.toFixed(3)} carbon in this cell</dd>
+                  </>
+                ) : null}
+                {e.network ? (
+                  <>
+                    <dt>Network</dt>
+                    <dd data-testid="fungal-network">{networkText(name, e.network)}</dd>
+                  </>
+                ) : null}
                 {e.predation ? (
                   <>
                     <dt>Hunting</dt>

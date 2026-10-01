@@ -14,7 +14,11 @@ import type { DishJournalEntry, RegionalTraitSeries } from '@sim/history';
 import type { FounderOrigin } from '@sim/founders';
 import type { EvolutionState, MutationRates } from '@sim/mutation';
 
-export const PROTOCOL_VERSION = 1;
+/**
+ * 2 since Phase 3 wave 2 (D-0036): ENT_STRIDE 12 → 14 (E_CUE2, E_LINKMASK), seven deposit bands (film),
+ * SnapshotMsg.links and .objects, VisualEvent 'objectEmptied'.
+ */
+export const PROTOCOL_VERSION = 2;
 
 /** Every packet in both directions carries the protocol version (ARCH §7). */
 export interface Envelope {
@@ -199,8 +203,8 @@ export interface SlotModes {
   readonly partial?: boolean;
 }
 
-/** Per-entity record stride in SnapshotMsg.ents (Float32). */
-export const ENT_STRIDE = 12;
+/** Per-entity record stride in SnapshotMsg.ents (Float32). 14 since protocol 2 (E_CUE2, E_LINKMASK). */
+export const ENT_STRIDE = 14;
 export const E_SLOT = 0;
 export const E_SPECIES = 1;
 export const E_X = 2;
@@ -213,6 +217,8 @@ export const E_HEALTH = 8; // H / 100
 export const E_LIFE = 9; // life state
 export const E_SIZE = 10; // body size factor (1 until Phase 7)
 export const E_CUE = 11; // cue bits (see CUE_*)
+export const E_CUE2 = 12; // Phase 3 cue bits (see CUE2_*); 0 when none
+export const E_LINKMASK = 13; // fungal link directions and transfer (see LINKMASK_*); 0 when none
 
 export const CUE_FEEDING = 1;
 export const CUE_STRESSED = 2;
@@ -233,6 +239,66 @@ export const CUE_MOD_E05 = 256;
 export const CUE_RESERVE_BAND_SHIFT = 9;
 export const CUE_RESERVE_BAND_MASK = 3 << CUE_RESERVE_BAND_SHIFT;
 
+/**
+ * Phase 3 cue bits in E_CUE2 (protocol 2). Each is set only from authoritative state at pack time:
+ * INFECTED (infectedBy ≠ 0), PARASITIZED (a live parasite pair on this host), ANCHORED (E04 anchorState
+ * 1), LINKED (any valid adhesion link), CUE2_MOD_E0x/E1x (the module is in its genome, like CUE_MOD_E0x),
+ * SEEKING_LIGHT (E07 carrier that is moving). DETRITUS_INTAKE and RELEASING_PROTEIN are reserved for
+ * wave 4 (their FLAG bits 1 << 13 / 1 << 12 do not exist yet), so they are never set before then.
+ */
+export const CUE2_INFECTED = 1;
+export const CUE2_PARASITIZED = 2;
+export const CUE2_ANCHORED = 4;
+export const CUE2_LINKED = 8;
+export const CUE2_MOD_E04 = 16;
+export const CUE2_MOD_E06 = 32;
+export const CUE2_MOD_E07 = 64;
+export const CUE2_MOD_E08 = 128;
+export const CUE2_MOD_E09 = 256;
+export const CUE2_MOD_E10 = 512;
+export const CUE2_MOD_E12 = 1024;
+export const CUE2_SEEKING_LIGHT = 2048;
+export const CUE2_DETRITUS_INTAKE = 4096;
+export const CUE2_RELEASING_PROTEIN = 8192;
+
+/**
+ * E_LINKMASK (protocol 2): the low four bits are the directions of the segment's live fungal links
+ * (y grows south; the art's mask bits, D-0046): N 1, E 2, S 4, W 8. Bit 4 is a transport transfer this
+ * second (0 until wave 3's F02 transport).
+ */
+export const LINKMASK_N = 1;
+export const LINKMASK_E = 2;
+export const LINKMASK_S = 4;
+export const LINKMASK_W = 8;
+export const LINKMASK_DIRS = 15;
+export const LINKMASK_TRANSFER = 16;
+
+/** SnapshotMsg.links record: [x1, y1, x2, y2, kind] per link, each pair once. */
+export const LINK_STRIDE = 5;
+/** Link kind in SnapshotMsg.links: an adhesion link (E12). */
+export const LINK_KIND_ADHESION = 3;
+
+/**
+ * Deposit bands (SnapshotMsg.deposits, CELL_COUNT bytes each, protocol 2): 0 starch, 1 detritus, 2 oil,
+ * 3 protein, 4 sugar haze, 5 catalysis, 6 film. The film band's low seven bits are film carbon on a
+ * linear scale (0.50 C, the film cap, = 127; any film ≥ 1); bit 7 is set while the film there is eroding
+ * (lower than at the packer's previous tick; worker-side scratch, never simulation state).
+ */
+export const DEPOSIT_FILM_BAND = 6;
+export const FILM_LEVEL_MASK = 127;
+export const FILM_ERODING = 128;
+
+/** One finite food object as the renderer draws it (SnapshotMsg.objects). */
+export interface SnapshotObject {
+  readonly id: number;
+  /** Its cell's centre (cells). */
+  readonly x: number;
+  readonly y: number;
+  readonly kind: string;
+  /** Remaining carbon / its full inventory (0–1). */
+  readonly fill: number;
+}
+
 /** Per-entity id stride in SnapshotMsg.ids (Uint32): birthId, entityId. */
 export const ID_STRIDE = 2;
 
@@ -244,7 +310,8 @@ export interface GeometryMsg {
 }
 
 export interface VisualEvent {
-  readonly type: 'birth' | 'death' | 'introduce' | 'capture' | 'conversion' | 'mutation' | 'branchEstablished' | 'branchExtinct';
+  /** 'objectEmptied' (protocol 2): a food object ran out in `cell` (a cosmetic fading stain; wave 3 passes it through). */
+  readonly type: 'birth' | 'death' | 'introduce' | 'capture' | 'conversion' | 'mutation' | 'branchEstablished' | 'branchExtinct' | 'objectEmptied';
   readonly tick: number;
   readonly species: number;
   readonly cell: number;
@@ -271,6 +338,15 @@ export interface VisualEvent {
   };
 }
 
+/** One species' recorded diet as the trays describe it (DishInfo.speciesDiets). */
+export interface SpeciesDiet {
+  readonly metabolism: string;
+  readonly foods: readonly string[];
+  readonly prey: readonly { readonly id: string; readonly requires: string }[];
+  readonly hosts: readonly string[];
+  readonly digestsFilm: boolean;
+}
+
 export interface DishInfo {
   readonly dishId: string;
   readonly worldId: string;
@@ -290,6 +366,12 @@ export interface DishInfo {
   readonly speciesHabitats?: readonly (readonly string[])[];
   readonly speciesAttachment?: readonly (readonly string[] | null)[];
   readonly speciesSummaries?: readonly string[];
+  /**
+   * Add Life and the Lab Life tray (P3.3/P3.4, W2-13): each species' recorded diet, in speciesIds
+   * order — metabolism, field foods in the record's order, prey (id and requirement), hosts, and
+   * whether it digests film (only when this world's manifest enables the film system).
+   */
+  readonly speciesDiets?: readonly SpeciesDiet[];
   /** Lab trays (P2.7): each enabled material's one-line summary, in materials order. */
   readonly materialSummaries?: readonly string[];
   /** Fields allocated in this world (the overlays the Lab Observe tray can offer), canonical order. */
@@ -318,8 +400,12 @@ export interface SnapshotMsg {
   readonly count: number;
   readonly ents: Float32Array;
   readonly ids: Uint32Array;
-  /** Per cell: starch, detritus, oil, protein, sugar-haze bands (0–255), 5 × CELL_COUNT. */
+  /** Per cell: starch, detritus, oil, protein, sugar haze, catalysis, film (7 × CELL_COUNT; DEPOSIT_FILM_BAND). */
   readonly deposits: Uint8Array;
+  /** Protocol 2: adhesion links as [x1, y1, x2, y2, kind] (LINK_STRIDE; kind LINK_KIND_ADHESION), each pair once. */
+  readonly links?: Float32Array;
+  /** Protocol 2: the dish's finite food objects (world.objects order). */
+  readonly objects?: readonly SnapshotObject[];
   readonly overlay: { readonly id: OverlayId; readonly data: Float32Array; readonly max: number } | null;
   readonly geometry: GeometryMsg | null;
   readonly events: readonly VisualEvent[];
@@ -450,6 +536,29 @@ export interface EntityInspect {
   readonly dormancy: DormancyInspect | null;
   /** P2.2: where its line began and how it came to carry each module ("present at creation", inherited, gained). */
   readonly founderOrigin?: FounderOrigin;
+  /**
+   * P3.3 (W2-08): a fungal segment's network — living segments of its species, how many separate
+   * threads (connected components) they form, and the size of this segment's thread. Absent otherwise.
+   */
+  readonly network?: { readonly segments: number; readonly threads: number; readonly thisThread: number };
+  /**
+   * P3.3: biofilm carbon in its cell (SPEC §12.1 Details "field values"), present only in a world with
+   * the film system. A tap on an occupied cell selects the organism, so this is where film under an
+   * organism (e.g. the Velvet that built it) is read.
+   */
+  readonly filmHere?: number;
+  /**
+   * P3.4 (SPEC §7.5, UX §5.2 INFECTED): the virus infecting it (species index in this dish) and the
+   * seconds until lysis (20 s after infection). Absent when it is not infected.
+   */
+  readonly infection?: { readonly speciesIdx: number; readonly secondsLeft: number };
+  /**
+   * P3.4 (SPEC §7.4, UX §5.2 PARASITIZED): the live parasite attached to it, with its measured drain
+   * (C/s: the carbon the parasite drained in the last whole second). Absent when none is attached.
+   */
+  readonly parasite?: { readonly speciesIdx: number; readonly birthId: number; readonly rate: number };
+  /** P3.4: for an attached parasite, the host it rides. Absent when free or not a parasite. */
+  readonly host?: { readonly speciesIdx: number; readonly birthId: number };
 }
 
 /** One carried supplementary module and its recorded numbers (world's versioned registry). */

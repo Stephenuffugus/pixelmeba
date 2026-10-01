@@ -32,6 +32,7 @@ import type { ConstructionRequest } from './construction';
 import type { Ledger } from './ledger';
 import type { Profile } from './phenotype';
 import { producerApplies, producerRun } from './secretion';
+import { biofilmApplies, biofilmRun } from './film';
 import type { World } from './world';
 
 export type ActionTier = 'mandatory' | 'native' | 'module';
@@ -99,6 +100,7 @@ const SHIPPED: readonly Stage8Action[] = [
   nativeAction('E_STARCH_SECRETION', producerApplies('starch', 'native'), producerRun('starch')),
   nativeAction('E_OIL_SECRETION', producerApplies('oil', 'native'), producerRun('oil')),
   nativeAction('E_PROTEIN_SECRETION', producerApplies('protein', 'native'), producerRun('protein')),
+  nativeAction('BIOFILM', biofilmApplies, biofilmRun),
   moduleAction('E01', producerApplies('starch', 'E01'), producerRun('starch')),
 ];
 

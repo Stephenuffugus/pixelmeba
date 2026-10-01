@@ -16,6 +16,8 @@ import { emit } from './events';
 import { LIFE_ACTIVE, LIFE_RESTING } from './entities';
 import { recordDeath } from './lineage';
 import { removeAllLinks } from './links';
+import { drainDeathDue, releaseHostPair } from './parasites';
+import { infectionDue, lyse } from './viruses';
 import { onDeath } from './branches';
 import { profileOf } from './profiles';
 import { R } from './reasons';
@@ -58,8 +60,9 @@ export function stageMaintenance(world: World): void {
     const E = E0 - paidMaint - paidMove;
     c.E[i] = E;
 
-    // Aging and timers.
+    // Aging and timers. An infection's timer advances here; at 20 s it lyses instead (viruses.ts).
     c.age[i]! += DT;
+    const lysisNow = infectionDue(world, i);
     if (c.attackCooldown[i]! > 0) c.attackCooldown[i] = Math.max(0, c.attackCooldown[i]! - DT);
 
     // Damage and healing.
@@ -82,8 +85,14 @@ export function stageMaintenance(world: World): void {
     }
     c.H[i] = H;
 
-    if (H <= 0) killEntity(world, i, primaryDamageCause(world, i));
+    // Lysis before ordinary death (SPEC §6.8, §7.5); a host drained below 0.25 × B0' while a live
+    // parasite is attached dies of the drain (§7.4; parasites.ts).
+    if (lysisNow) {
+      lyse(world, i);
+      killEntity(world, i, R.DEATH_LYSIS);
+    } else if (H <= 0) killEntity(world, i, primaryDamageCause(world, i));
     else if (c.age[i]! >= sp.def.maxAge) killEntity(world, i, R.DEATH_AGE);
+    else if (drainDeathDue(world, i)) killEntity(world, i, R.DEATH_PARASITE_DRAIN);
   }
 }
 
@@ -151,6 +160,7 @@ export function killEntity(world: World, i: number, cause: number): void {
   onDeath(world, i);
   const sp = c.species[i]!;
   world.history.pendingDeaths[sp] = (world.history.pendingDeaths[sp] ?? 0) + 1;
+  releaseHostPair(world, i); // SPEC §6.8, §7.4: an attached parasite is released alive (parasites.ts)
   removeAllLinks(world, i); // SPEC §6.8: incident links leave both endpoints
   world.ents.free(i);
 }

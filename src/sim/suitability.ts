@@ -64,10 +64,12 @@ export function inhibitorExposure(world: World, sp: SpeciesRT, cell: number): nu
 
 /**
  * Compute suitability for a species/profile at a cell. Returns a shared result object; copy the
- * fields you need before calling again.
+ * fields you need before calling again. `habitatOk`, when given, replaces habitatCompatible as the
+ * habitat factor: the entity-aware check of src/sim/crossing.ts (P04 crossing open water, W2-11).
+ * Omitted, the result is exactly the species' habitat rule.
  */
-export function suitabilityAt(world: World, sp: SpeciesRT, prof: Profile, cell: number): SuitResult {
-  if (!habitatCompatible(world, sp, cell)) {
+export function suitabilityAt(world: World, sp: SpeciesRT, prof: Profile, cell: number, habitatOk?: boolean): SuitResult {
+  if (!(habitatOk ?? habitatCompatible(world, sp, cell))) {
     out.value = 0;
     out.reason = R.SUIT_HABITAT;
     out.exposure = 0;

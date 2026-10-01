@@ -5,7 +5,7 @@
  */
 import type { NativeAbilityId } from './schema';
 
-export const IMPLEMENTED_NATIVE_ABILITIES: readonly NativeAbilityId[] = ['E_STARCH_SECRETION', 'PREDATION'];
+export const IMPLEMENTED_NATIVE_ABILITIES: readonly NativeAbilityId[] = ['BIOFILM', 'BRANCHING', 'E_STARCH_SECRETION', 'HOST_DRAIN', 'LYSIS', 'OXYGEN_SUPPRESSED', 'PREDATION', 'SEDIMENT_WATER_CROSSING'];
 
 /** Supplementary modules the simulation implements (checked the same way; P2.1). */
 export const IMPLEMENTED_MODULES: readonly string[] = ['E01', 'E03', 'E05'];

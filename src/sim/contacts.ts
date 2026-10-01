@@ -9,12 +9,18 @@
  * 3. Kills commit together: the prey's B and N become the winner's meal (capped at 2 × B0 carbon;
  *    overflow becomes detritus at the prey's cell), any meal the prey held becomes detritus, prey
  *    energy is discarded, and the winner's cooldown starts. One prey is never awarded twice.
+ * 4. Then parasite attachment (parasites.ts) and host-specific infection (viruses.ts), P3.4.
+ *
+ * Contact kinds on the 'contact' stream (saved worlds depend on them; never renumber): 1 attack (here),
+ * 2 parasite attachment (parasites.ts KIND_PARASITE), 3 infection unit order (viruses.ts KIND_INFECT).
  */
 import { CONTACT_DISTANCE, GRID_H, GRID_W, MEAL_CAP_MULTIPLE } from './constants';
 import { emit } from './events';
 import { cellIndex } from './grid';
 import { recordDeath } from './lineage';
 import { removeAllLinks } from './links';
+import { attachParasites, releaseHostPair } from './parasites';
+import { infectHosts } from './viruses';
 import { onDeath } from './branches';
 import { hungryPredator, preyAllowed } from './movement';
 import { profileOf } from './profiles';
@@ -31,6 +37,13 @@ const bestClaimant = new Int32Array(6000);
 const bestPriority = new Float64Array(6000);
 
 export function stageContacts(world: World): void {
+  predationContacts(world);
+  // SPEC §3.2 row 5: predation, then parasite attachment, then host-specific infection.
+  attachParasites(world);
+  infectHosts(world);
+}
+
+function predationContacts(world: World): void {
   const e = world.ents;
   const c = e.cols;
   const hw = e.highWater;
@@ -135,6 +148,7 @@ export function consumePrey(world: World, pred: number, prey: number): void {
   });
   recordDeath(world.lineage, c.birthId[prey]!, world.tick, R.DEATH_PREDATION);
   onDeath(world, prey);
+  releaseHostPair(world, prey); // SPEC §6.8, §7.4: an attached parasite is released alive
   const preySp = c.species[prey]!;
   world.history.pendingDeaths[preySp] = (world.history.pendingDeaths[preySp] ?? 0) + 1;
   removeAllLinks(world, prey); // SPEC §6.8: incident links leave both endpoints

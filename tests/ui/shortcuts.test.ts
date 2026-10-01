@@ -11,6 +11,7 @@ import type { World } from '../../src/sim/world';
 import type { EntityInspect, FamilyAnswer } from '../../src/worker/protocol';
 import { buildFamily, buildInspector } from '../../src/worker/snapshot';
 import { dietAnswer, familySummary, listWords, relationLabel, stopAnswer } from '../../src/ui/strings/shortcuts';
+import { G2_LISTS, registryWith } from '../helpers/registry';
 import { registry } from '../helpers/world';
 
 const FORBIDDEN = /\b(immune|superior|adapted|advanced|perfect|invincible)\b/i;
@@ -47,8 +48,11 @@ describe('inspector shortcut answers (P1.7)', () => {
     expect(crumb).toContain('enzyme');
     const recycler = dietAnswer(firstOf(world, 'B04'), names).lines.join(' ');
     expect(recycler).toContain('debris');
-    // Film digestion is not simulated until P3.3, so the answer must not claim it.
-    expect(recycler).not.toContain('biofilm');
+    // Film digestion is simulated since P3.3 (wave 2): named where the dish records the film system, never elsewhere.
+    expect(recycler).toContain('biofilm');
+    const g2 = realizeRecipe(registryWith(G2_LISTS), 'FIRST_DISH_V1', { worldId: 'shortcuts-g2', seed: 104729 });
+    step(g2);
+    expect(dietAnswer(firstOf(g2, 'B04'), g2.species.map((s) => s.def.name)).lines.join(' ')).not.toContain('biofilm');
     const sunbead = dietAnswer(firstOf(world, 'A01'), names).lines.join(' ');
     expect(sunbead).toContain('light');
     for (const id of ['B01', 'B04', 'B06', 'A01']) {

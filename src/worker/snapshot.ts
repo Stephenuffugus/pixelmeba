@@ -2,6 +2,9 @@
  * Snapshot and inspector builders (ARCH §8, SPEC §12.1). Pure reads of authoritative state: no
  * simulation randomness, no mutation. The worker transfers the typed arrays to the main thread.
  */
+import { hostInfo, parasiteInfo } from '@sim/parasites';
+import { infectionInfo } from '@sim/viruses';
+import { fungalNetwork } from '@sim/fungi';
 import { CELL_COUNT, GRID_W } from '@sim/constants';
 import { allDivisionBlockers, divisionBlocker, divisionNeeds } from '@sim/births';
 import { FLAG } from '@sim/entities';
@@ -18,9 +21,33 @@ import { exposureBreakdown, lightFactors, salinityIndex } from '@sim/chemistry';
 import { dormancySummary, moduleSummaries, reserveBand, upkeepNow } from '@sim/moduleView';
 import { founderOriginOf } from '@sim/founders';
 import { entityCell, forEachInCell } from '@sim/spatial';
-import { response, SHOULDER_PH, SHOULDER_SALINITY, SHOULDER_WARMTH, suitabilityAt } from '@sim/suitability';
+import { response, SHOULDER_PH, SHOULDER_SALINITY, SHOULDER_WARMTH } from '@sim/suitability';
+import { entitySuitabilityAt } from '@sim/crossing';
 import type { World } from '@sim/world';
 import {
+  CUE2_ANCHORED,
+  CUE2_INFECTED,
+  CUE2_LINKED,
+  CUE2_MOD_E04,
+  CUE2_MOD_E06,
+  CUE2_MOD_E07,
+  CUE2_MOD_E08,
+  CUE2_MOD_E09,
+  CUE2_MOD_E10,
+  CUE2_MOD_E12,
+  CUE2_PARASITIZED,
+  CUE2_SEEKING_LIGHT,
+  DEPOSIT_FILM_BAND,
+  E_CUE2,
+  E_LINKMASK,
+  FILM_ERODING,
+  FILM_LEVEL_MASK,
+  LINK_KIND_ADHESION,
+  LINKMASK_E,
+  LINKMASK_N,
+  LINKMASK_S,
+  LINKMASK_W,
+  type SnapshotObject,
   CUE_CAPACITY_BLOCKED,
   CUE_MOD_E01,
   CUE_MOD_E03,
@@ -97,6 +124,9 @@ export function packEntities(world: World, ents: Float32Array | null, ids: Uint3
     outE[o + E_LIFE] = c.lifeState[i]!;
     outE[o + E_SIZE] = 1;
     outE[o + E_CUE] = cue;
+    // Protocol 2: every slot is written for every entity (pooled buffers), 0 when nothing applies.
+    outE[o + E_CUE2] = cue2Of(world, i, mods, flags);
+    outE[o + E_LINKMASK] = linkMaskOf(world, i);
     outI[k * ID_STRIDE] = c.birthId[i]!;
     outI[k * ID_STRIDE + 1] = c.entityId[i]!;
     speciesCounts[c.species[i]!]!++;
@@ -105,11 +135,156 @@ export function packEntities(world: World, ents: Float32Array | null, ids: Uint3
   return { ents: outE, ids: outI, count: k, speciesCounts };
 }
 
+/**
+ * Phase 3 cue bits (protocol 2, CUE2_*) of one living organism, read from authoritative state only: an
+ * infection, a live parasite pair, an E04 anchor, a valid adhesion link, the Phase 3 modules in its
+ * genome (like CUE_MOD_E0x), and E07 seeking light (an E07 carrier that is moving). DETRITUS_INTAKE and
+ * RELEASING_PROTEIN stay 0 until wave 4 adds their FLAG bits.
+ */
+function cue2Of(world: World, i: number, mods: readonly string[], flags: number): number {
+  const c = world.ents.cols;
+  const e = world.ents;
+  let cue2 = 0;
+  if (c.infectedBy[i] !== 0) cue2 |= CUE2_INFECTED;
+  const p = c.parasiteSlot[i]!;
+  if (p >= 0 && e.refValid(p, c.parasiteBirthId[i]!)) cue2 |= CUE2_PARASITIZED;
+  if (c.anchorState[i] === 1) cue2 |= CUE2_ANCHORED;
+  if ((c.aLink0[i]! >= 0 && e.refValid(c.aLink0[i]!, c.aLinkB0[i]!)) || (c.aLink1[i]! >= 0 && e.refValid(c.aLink1[i]!, c.aLinkB1[i]!))) cue2 |= CUE2_LINKED;
+  if (mods.length > 0) {
+    if (mods.includes('E04')) cue2 |= CUE2_MOD_E04;
+    if (mods.includes('E06')) cue2 |= CUE2_MOD_E06;
+    if (mods.includes('E07')) {
+      cue2 |= CUE2_MOD_E07;
+      if (flags & FLAG.moving) cue2 |= CUE2_SEEKING_LIGHT;
+    }
+    if (mods.includes('E08')) cue2 |= CUE2_MOD_E08;
+    if (mods.includes('E09')) cue2 |= CUE2_MOD_E09;
+    if (mods.includes('E10')) cue2 |= CUE2_MOD_E10;
+    if (mods.includes('E12')) cue2 |= CUE2_MOD_E12;
+  }
+  return cue2;
+}
+
+const FUNGAL_LINK_COLUMNS = [
+  ['fLink0', 'fLinkB0'],
+  ['fLink1', 'fLinkB1'],
+  ['fLink2', 'fLinkB2'],
+  ['fLink3', 'fLinkB3'],
+] as const;
+
+/**
+ * E_LINKMASK of one organism: the direction of each live fungal link (partner reference valid), from
+ * the partner's cell relative to its own (four-neighbour cells; y grows south): N 1, E 2, S 4, W 8.
+ * A partner that is not a four-neighbour (never made by the rules) counts on its dominant axis.
+ * Bit 4 (a transport transfer this second) stays 0 until wave 3's F02 transport.
+ */
+function linkMaskOf(world: World, i: number): number {
+  const c = world.ents.cols;
+  let mask = 0;
+  for (const [slotCol, birthCol] of FUNGAL_LINK_COLUMNS) {
+    const j = c[slotCol][i]!;
+    if (j < 0 || !world.ents.refValid(j, c[birthCol][i]!)) continue;
+    const dx = Math.floor(c.x[j]!) - Math.floor(c.x[i]!);
+    const dy = Math.floor(c.y[j]!) - Math.floor(c.y[i]!);
+    if (dx === 0 && dy === 0) continue;
+    if (Math.abs(dx) >= Math.abs(dy)) mask |= dx > 0 ? LINKMASK_E : LINKMASK_W;
+    else mask |= dy > 0 ? LINKMASK_S : LINKMASK_N;
+  }
+  return mask;
+}
+
+/**
+ * Adhesion links (protocol 2, SnapshotMsg.links): [x1, y1, x2, y2, LINK_KIND_ADHESION] per valid link,
+ * each pair once (written from its lower slot), in slot order.
+ */
+export function packLinks(world: World): Float32Array {
+  const c = world.ents.cols;
+  const e = world.ents;
+  const out: number[] = [];
+  for (let i = 0; i < e.highWater; i++) {
+    if (c.alive[i] !== 1) continue;
+    for (const [slotCol, birthCol] of [['aLink0', 'aLinkB0'], ['aLink1', 'aLinkB1']] as const) {
+      const j = c[slotCol][i]!;
+      if (j <= i || !e.refValid(j, c[birthCol][i]!)) continue;
+      out.push(c.x[i]!, c.y[i]!, c.x[j]!, c.y[j]!, LINK_KIND_ADHESION);
+    }
+  }
+  const buf = new Float32Array(out.length);
+  buf.set(out);
+  return buf;
+}
+
+/** Full carbon inventory of a new food object by kind (CT §5.2: M10 pellet 10 sugar C, M11 wafer 6 starch + 4 protein C). */
+export const OBJECT_FULL_C: Readonly<Record<string, number>> = { pellet: 10, wafer: 10 };
+
+/** The dish's food objects (protocol 2, SnapshotMsg.objects): cell centre, kind, and remaining C / full inventory. */
+export function packObjects(world: World): SnapshotObject[] {
+  return world.objects.map((o) => {
+    const left = (o.pools.sugar ?? 0) + (o.pools.starch ?? 0) + (o.pools.protein ?? 0);
+    const full = OBJECT_FULL_C[o.kind] ?? 0;
+    return {
+      id: o.id,
+      x: (o.cell % GRID_W) + 0.5,
+      y: Math.floor(o.cell / GRID_W) + 0.5,
+      kind: o.kind,
+      fill: full > 0 ? Math.min(1, Math.max(0, left / full)) : 0,
+    };
+  });
+}
+
+/** Film carbon at the band's top (127): the film cap (SPEC §7.1, 0.50 C per cell). */
+const FILM_BAND_FULL = 0.5;
+
+/**
+ * Worker-side scratch for the film band's eroding bit: per world, the film at the last tick this packer
+ * saw and the eroding bits it computed then. Never simulation state (a WeakMap, so a disposed world
+ * takes its scratch with it).
+ */
+interface FilmScratch {
+  tick: number;
+  film: Float64Array;
+  eroding: Uint8Array;
+}
+const filmScratch = new WeakMap<World, FilmScratch>();
+
+/**
+ * The film band (band 6): low seven bits = film C (FILM_BAND_FULL = 127, any film ≥ 1), bit 7 = eroding:
+ * the cell's film is lower than at the previous tick this packer saw (decay, grazing) — a cell where
+ * builders deposited at least as much as it lost is not eroding. Packing twice at one tick (paused)
+ * keeps the bits; a world that went back (undo) starts over with none.
+ */
+function packFilmBand(world: World, buf: Uint8Array, base: number): void {
+  const film = world.fields.film;
+  if (!film) {
+    buf.fill(0, base, base + CELL_COUNT);
+    return;
+  }
+  let sc = filmScratch.get(world);
+  if (!sc) {
+    sc = { tick: world.tick, film: Float64Array.from(film), eroding: new Uint8Array(CELL_COUNT) };
+    filmScratch.set(world, sc);
+  } else if (world.tick > sc.tick) {
+    for (let i = 0; i < CELL_COUNT; i++) sc.eroding[i] = film[i]! < sc.film[i]! - 1e-12 ? 1 : 0;
+    sc.film.set(film);
+    sc.tick = world.tick;
+  } else if (world.tick < sc.tick) {
+    sc.eroding.fill(0);
+    sc.film.set(film);
+    sc.tick = world.tick;
+  }
+  for (let i = 0; i < CELL_COUNT; i++) {
+    const v = film[i]!;
+    const level = v <= 1e-9 ? 0 : Math.min(FILM_LEVEL_MASK, Math.max(1, Math.round((v / FILM_BAND_FULL) * FILM_LEVEL_MASK)));
+    buf[base + i] = level === 0 ? 0 : level | (sc.eroding[i] ? FILM_ERODING : 0);
+  }
+}
+
 /** Deposit glyph bands: starch, detritus, oil, protein, sugar haze → 0–255 on a soft log scale. */
-/** Bands: starch, detritus, oil, protein, sugar haze, catalysis (carbon converted last tick). */
-export const DEPOSIT_BANDS = 6;
+/** Bands: starch, detritus, oil, protein, sugar haze, catalysis (carbon converted last tick), film (protocol 2). */
+export const DEPOSIT_BANDS = 7;
 export function packDeposits(world: World, out: Uint8Array | null): Uint8Array {
   const buf = out && out.length === CELL_COUNT * DEPOSIT_BANDS ? out : new Uint8Array(CELL_COUNT * DEPOSIT_BANDS);
+  packFilmBand(world, buf, DEPOSIT_FILM_BAND * CELL_COUNT);
   // Catalysis: the renderer draws dust only where stage 3 really converted something (UX §7 "activity
   // particles only during conversion"). 1e-5 C per tick ≈ an enzyme activity of 0.001.
   const cat = world.catalysisCells;
@@ -235,17 +410,23 @@ function inspectEntity(world: World, slot: number): EntityInspect {
   const birthId = c.birthId[slot]!;
   const parent = lineageField(world.lineage, 'parent', birthId) ?? 0;
   const parentGenome = parent > 0 ? lineageField(world.lineage, 'genome', parent) : undefined;
-  const suit = suitabilityAt(world, sp, prof, cell);
+  // Stage 4's own value (P04 crossing open water counts as its habitat; src/sim/crossing.ts).
+  const suit = entitySuitabilityAt(world, slot, sp, prof, cell);
   let predation: EntityInspect['predation'] = null;
   if (sp.isPredator) {
     let code: number = R.PRED_NO_PREY;
     if (c.mealC[slot]! >= 0.5 * prof.b0) code = R.PRED_MEAL_FULL;
     else if (!hungryPredator(world, slot, prof)) code = R.PRED_ENERGY_HIGH;
     else if (c.attackCooldown[slot]! > 0) code = R.PRED_COOLDOWN;
-    else if (c.preySlot[slot]! >= 0) code = R.PRED_OUT_OF_CONTACT;
-    predation = { code, targetBirthId: c.preyBirthId[slot]!, cooldown: c.attackCooldown[slot]! };
+    // A prey removed in this tick stays named until the next decision: it is no longer a target.
+    const target = c.preySlot[slot]! >= 0 && world.ents.refValid(c.preySlot[slot]!, c.preyBirthId[slot]!);
+    if (code === R.PRED_NO_PREY && target) code = R.PRED_OUT_OF_CONTACT;
+    predation = { code, targetBirthId: target ? c.preyBirthId[slot]! : 0, cooldown: c.attackCooldown[slot]! };
   }
   const foodHere = prof.foods.map((f) => ({ food: f, amount: world.fields[f]?.[cell] ?? 0 }));
+  // P3.3: a film digester in a film world also eats the film here, as detritus (D-0038).
+  if (sp.def.digestsFilm && world.fields.film !== undefined && worldHasSystem(world, 'film')) foodHere.push({ food: 'film', amount: world.fields.film[cell]! });
+  const network = fungalNetwork(world, slot);
   const blockers = divisionBlocker(world, slot) === R.NONE ? allDivisionBlockers(world, slot) : allDivisionBlockers(world, slot);
   // P2.2: from recorded lineage only (a module seeded at creation vs inherited vs gained here).
   const origin = founderOriginOf(world, birthId);
@@ -327,7 +508,18 @@ function inspectEntity(world: World, slot: number): EntityInspect {
     upkeep: upkeepNow(world, slot),
     dormancy: dormancySummary(world, slot),
     founderOrigin: origin,
+    ...(network ? { network } : {}),
+    ...(world.fields.film !== undefined && worldHasSystem(world, 'film') ? { filmHere: world.fields.film[cell]! } : {}),
+    ...parasiteAndInfection(world, slot),
   };
+}
+
+/** P3.4: an infection, an attached parasite, or the host a parasite rides (sim/viruses.ts, sim/parasites.ts). */
+function parasiteAndInfection(world: World, slot: number): Pick<EntityInspect, 'infection' | 'parasite' | 'host'> {
+  const infection = infectionInfo(world, slot);
+  const parasite = parasiteInfo(world, slot);
+  const host = hostInfo(world, slot);
+  return { ...(infection ? { infection } : {}), ...(parasite ? { parasite } : {}), ...(host ? { host } : {}) };
 }
 
 /** The recorded loci of the founder at the root of an organism's recorded ancestry, or null when not recorded. */

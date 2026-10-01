@@ -1,11 +1,12 @@
 /**
  * Overlay picker (SPEC §10.8, UX §4.4 Observe): one environmental overlay at a time, with a legend
- * and adjustable opacity (the same stored setting as Settings → overlay opacity, 45 % default).
+ * and adjustable opacity (the same stored setting as Settings → overlay opacity, 45 % default), and
+ * in a dish with viruses a separate Infection markers toggle (the glyph on every infected organism).
  * Overlays only change what the worker packs into snapshots; they never modify the simulation or
  * consume randomness.
  */
 import type { OverlayId } from '@worker/protocol';
-import { dishInfo, setOverlay, settings, updateSettings } from '../state';
+import { dishInfo, infectionMarkers, setInfectionMarkers, setOverlay, settings, updateSettings } from '../state';
 import { LAB_TEXT, OVERLAYS } from '../strings/lab';
 import { labOverlay } from '../views/LabView';
 import { OverlayLegend } from './OverlayLegend';
@@ -19,6 +20,15 @@ export const OPACITY_STEP = 0.05;
 export function availableOverlays(): typeof OVERLAYS {
   const fields = dishInfo.value?.fieldIds;
   return OVERLAYS.filter((o) => o.id === 'light' || !fields || fields.includes(o.id));
+}
+
+/** Viral unit fields (Phase 3 Pinphage): a dish holding one offers the Infection markers toggle. */
+const VIRAL_FIELDS: readonly string[] = ['v01'];
+
+/** Whether this dish can have infected organisms to mark (it allocates a viral field). */
+export function infectionMarkersOffered(): boolean {
+  const fields = dishInfo.value?.fieldIds;
+  return !!fields && fields.some((f) => VIRAL_FIELDS.includes(f));
 }
 
 /** Choose the Lab overlay (null = none). A view request only. */
@@ -68,6 +78,24 @@ export function OverlayPicker() {
         />
       </label>
       {current ? <OverlayLegend /> : <p class="lab-sub">{LAB_TEXT.noOverlay}</p>}
+      {infectionMarkersOffered() ? (
+        // SPEC §10.8: a separate toggle, independent of the one-at-a-time overlay; drawing only.
+        <button
+          type="button"
+          class="btn lab-item"
+          aria-pressed={infectionMarkers.value}
+          aria-describedby="infection-markers-hint"
+          data-testid="infection-markers"
+          onClick={() => setInfectionMarkers(!infectionMarkers.value)}
+        >
+          {LAB_TEXT.infectionMarkers}
+        </button>
+      ) : null}
+      {infectionMarkersOffered() ? (
+        <p class="lab-sub" id="infection-markers-hint">
+          {LAB_TEXT.infectionMarkersHint}
+        </p>
+      ) : null}
     </div>
   );
 }
