@@ -329,8 +329,11 @@ export class DishHost {
         }
         case 'autosave': {
           // One autosave at a time (the 30 s interval, going to the background and leaving the page can
-          // ask together): each one compares with what the one before it wrote.
-          const turn = this.autosaveTail.then(() => this.autosave(msg));
+          // ask together): each one compares with what the one before it wrote. The dish is taken when the
+          // request arrives, as before the queue: a replacing action that disposes it meanwhile never turns
+          // a waiting autosave into an error (re-verify round 3).
+          const dish = this.need(msg.dishId);
+          const turn = this.autosaveTail.then(() => this.autosave(msg, dish));
           this.autosaveTail = turn.then(
             () => undefined,
             () => undefined,
@@ -1794,8 +1797,7 @@ export class DishHost {
    * The file is built at every event, and nothing is written for an unchanged dish (the store stays
    * byte-identical). The reply says whether it wrote.
    */
-  private async autosave(msg: Extract<ToWorker, { type: 'autosave' }>): Promise<void> {
-    const d = this.need(msg.dishId);
+  private async autosave(msg: Extract<ToWorker, { type: 'autosave' }>, d: Dish): Promise<void> {
     if (!this.store) throw new Error('Saving is unavailable on this device.');
     const name = d.name;
     const savedAt = this.iso();

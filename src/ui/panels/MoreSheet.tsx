@@ -6,7 +6,7 @@ import { openWhatIf } from './WhatIfState';
 import { WHATIF_TEXT } from '../strings/whatif';
 import { worldModesLine } from '../strings/modes';
 import { slotModesLine } from '../strings/modes';
-import { evolution } from '../state';
+import { dishClock, evolution } from '../state';
 import {
   dishInfo,
   duplicateCurrent,
@@ -185,7 +185,7 @@ export function SaveSheet() {
               >
                 <span>Slot {i + 1}</span>
                 <span class="sub">
-                  {s ? `${s.name} · ${Math.floor(s.tick / 10)} s` : 'empty'}
+                  {s ? `${s.name} · ${dishClock(s.tick)}` : 'empty'}
                   {/* P2.2: the saved world's mode labels (UX §3.3). */}
                   {s && slotModesLine(s.modes) ? <span class="slot-modes">{slotModesLine(s.modes)}</span> : null}
                 </span>

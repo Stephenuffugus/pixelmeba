@@ -1234,3 +1234,19 @@ describe('Fix round 2: the dish Continue holds is kept once, never again on late
     expect(await s.slotHash('slot3')).toBe(newerHash);
   });
 });
+
+describe('Re-verify round 3: a waiting autosave survives the dish being disposed', () => {
+  it('two autosaves queued, then dispose: both still write the dish they were asked for', async () => {
+    const h = harness();
+    await h.create('x', GARDEN, 'Little Living Garden');
+    h.steps('x', 20);
+    h.host.handle({ type: 'autosave', requestId: 9001, dishId: 'x' });
+    h.host.handle({ type: 'autosave', requestId: 9002, dishId: 'x' });
+    h.host.handle({ type: 'dispose', dishId: 'x' });
+    const deadline = Date.now() + 60_000;
+    while (!h.out.some((m) => 'requestId' in m && m.requestId === 9002) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 2));
+    const replies = [9001, 9002].map((id) => h.out.find((m) => 'requestId' in m && m.requestId === id));
+    expect(replies.map((r) => r?.type)).toEqual(['slotSaved', 'slotSaved']);
+    expect(h.backend.slots[AUTOSAVE_SLOT]?.tick).toBe(20);
+  });
+});
