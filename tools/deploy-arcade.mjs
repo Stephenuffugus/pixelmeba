@@ -26,6 +26,7 @@ const SITE = 'https://lucidwinds.com', DIR = 'satellites/pixelmeba', THUMB = 'po
 // The credential that can push to Stephen's repos (the codespace token cannot).
 const env = { ...process.env }; delete env.GITHUB_TOKEN; delete env.GH_TOKEN;
 const CRED = ['-c', 'credential.helper=', '-c', 'credential.helper=!/usr/bin/gh auth git-credential'];
+/** @param {string} cwd @param {...string} a @returns {string} */
 const git = (cwd, ...a) => execFileSync('git', [...CRED, ...a], { cwd, env, encoding: 'utf8', maxBuffer: 1 << 28 }).trim();
 const die = (m) => { console.error('deploy-arcade: ' + m); process.exit(1); };
 

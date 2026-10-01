@@ -602,3 +602,22 @@ The five-tester comprehension session of D06 §18 is still to be run: recruit fi
 unfamiliar with the design, give them the session task (T1), observe a ten-minute session without
 directing their taps, then ask T2–T5. The tasks above are written so they can be handed to testers
 unchanged; `tools/review-g2.mjs` gives a reference run to compare against.
+
+## Revisions after the review (2026‑10‑01)
+
+Fixed in `7c0b0b1` (D‑0041; fixer report `docs/reports/reviews/g2-close/review-fix1.md`), labels,
+hierarchy and event evidence only — no mechanics, numbers or content values changed:
+
+| Finding | Change | Proof |
+|---|---|---|
+| B1 tap outside the dish crashed the cell inspector | a tap outside the dish maps to no cell, closes any panel and says "Outside the dish."; the cell panel never formats a missing value | `tests/ui/dish-point.test.ts`; a journey that taps around the dish edge in all three layouts, also zoomed out (`tests/e2e/inspector.spec.ts`) |
+| M1 a saved result card could not be found | Notebook → Journal lists saved comparison results; the toast says where; Done explains Duplicate | `tests/e2e/compare.spec.ts`, `tests/ui/comprehension-labels.test.ts` |
+| M2 inherited differences found by luck | the inspector compares with the parent and the founder of the line; event lines name the trait and both values | `tests/ui/inherited-differences.test.ts` |
+| M3 clipped tabs at 200 % text | tab names wrap between words; the open answer scrolls into view | a 200 % journey asserts no clipped button text |
+| M4 results read as direct effects | one sentence: differences trace back to the change directly or through knock-on effects | `tests/e2e/compare.spec.ts` |
+| M5 the Sunbead's sugar was never stated | the Sunbead's answer states its sugar release (measured); sugar eaters list the sources | `tests/ui/comprehension-labels.test.ts` |
+| m4, m5, m6, m7, m11, m12, m14, m15, m24, m25 | the wording or layout the review proposed | `tests/ui/comprehension-labels.test.ts`, inspector and compare journeys |
+
+Deferred to P3.11 / P4 polish: m1, m2, m3, m8, m9, m10, m13, m16–m23, M2's "Show it" links and M4's
+optional measure rows. The five tasks were not re-run with `tools/review-g2.mjs` after these fixes;
+the journeys above cover each change, and the five-tester session remains an owner item.
