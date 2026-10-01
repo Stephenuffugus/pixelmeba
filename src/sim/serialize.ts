@@ -6,7 +6,7 @@
  * can influence future simulation, so equal hashes mean equal futures under equal commands.
  */
 import { CELL_COUNT } from './constants';
-import { ENTITY_COLUMNS } from './entities';
+import { emptyValueOf, ENTITY_COLUMNS, FIRST_HASH_NEUTRAL_COLUMN } from './entities';
 import { allocatedFieldIds, isFieldId } from './fields';
 import { genomeKey, type Genome } from './genome';
 import { base64ToBytes, canonicalJson, StateHasher, typedToBase64 } from './hash';
@@ -17,6 +17,8 @@ import { historyForSchema3, sanitizeHistoryRecords } from './history';
 import { createLedger, type Ledger } from './ledger';
 import type { Lineage } from './lineage';
 import type { BranchBook } from './branches';
+import type { FoodObject } from './objects';
+import { decodeSample, encodeSample, type SavedSample } from './sampleSlot';
 import { rebuildIndex } from './spatial';
 import { updateDerived } from './transport';
 import { createEmptyWorld, SCHEMA_VERSION, type World, type WorldContent, type WorldSettings } from './world';
@@ -87,6 +89,10 @@ export interface WorldState {
   readonly capacityLimitedTicks: number;
   readonly conversionTotals?: { starch: number; oil: number; protein: number };
   readonly branches?: BranchBook;
+  /** Schema 4: finite food objects (absent before; the migration adds []). */
+  readonly objects?: readonly FoodObject[];
+  /** Schema 4: the held sample with its rows as typed payloads (absent before; the migration adds null). */
+  readonly sample?: SavedSample | null;
 }
 
 function sliceTo<T extends ArrayBufferView & { subarray(a: number, b: number): T; length: number }>(arr: T, n: number): T {
@@ -137,19 +143,25 @@ export function serializeWorld(world: World): WorldState {
     capacityLimitedTicks: world.capacityLimitedTicks,
     conversionTotals: { ...world.conversionTotals },
     branches: clone(world.branches),
+    objects: clone(world.objects),
+    sample: world.sample === null ? null : encodeSample(world.sample),
   };
 }
 
-/** Entity columns added at each world schema version (zero-filled when migrating older states). */
+/** Entity columns added at each world schema version (filled with emptyValueOf when migrating older states). */
 export const COLUMNS_ADDED_IN: Readonly<Record<number, readonly (typeof ENTITY_COLUMNS)[number][0][]>> = {
   2: ['dryTimer'],
+  // Schema 4 (Phase 3 foundation; D-0035): every column from `filmSeconds` on.
+  4: ENTITY_COLUMNS.slice(FIRST_HASH_NEUTRAL_COLUMN).map(([n]) => n),
 };
 
 /**
  * Bring an older world state up to SCHEMA_VERSION by copy (the input is never modified; CLAUDE.md
  * "migration by copy"). Each step only adds what that version introduced, with the value an older
  * world implicitly had: dryTimer 0, because no organism could rest before schema 2; at schema 3 an
- * empty trait record and journal, because nothing of either was recorded before it.
+ * empty trait record and journal, because nothing of either was recorded before it; at schema 4 every
+ * Phase 3 column at its empty value (−1 for link slots: a 0 would point at slot 0), no food objects and
+ * no held sample, because none of these existed before it.
  */
 export function migrateWorldState(state: WorldState): WorldState {
   if (!Number.isInteger(state.schemaVersion) || state.schemaVersion < 1) throw new Error(`unsupported world schema ${String(state.schemaVersion)}`);
@@ -161,11 +173,16 @@ export function migrateWorldState(state: WorldState): WorldState {
       if (columns[name]) continue;
       const dtype = ENTITY_COLUMNS.find(([n]) => n === name)![1];
       const Ctor = { f64: Float64Array, f32: Float32Array, i32: Int32Array, u32: Uint32Array, u16: Uint16Array, u8: Uint8Array }[dtype];
-      columns[name] = encodeArray(new Ctor(s.entities.highWater));
+      const arr = new Ctor(s.entities.highWater);
+      const empty = emptyValueOf(name);
+      if (empty !== 0) arr.fill(empty);
+      columns[name] = encodeArray(arr);
     }
     s = { ...s, schemaVersion: v, entities: { ...s.entities, columns } };
     // Schema 3 (P2.8): history gains trait samples and the dish's journal, both empty for an older world.
     if (v === 3) s = { ...s, history: historyForSchema3(s.history, s.tick) };
+    // Schema 4 (Phase 3 foundation): no finite food objects and no held sample.
+    if (v === 4) s = { ...s, objects: [], sample: null };
   }
   // SPEC §14.5: a migration tags provenance. Not in the state hash (stateHash never reads provenance).
   if (state.schemaVersion < SCHEMA_VERSION) {
@@ -216,6 +233,8 @@ export function deserializeWorld(input: WorldState): World {
   world.capacityHitThisTick = false;
   if (state.conversionTotals) Object.assign(world.conversionTotals, state.conversionTotals);
   if (state.branches) Object.assign(world.branches, JSON.parse(JSON.stringify(state.branches)));
+  for (const o of state.objects ?? []) world.objects.push(JSON.parse(JSON.stringify(o)) as FoodObject);
+  world.sample = state.sample ? decodeSample(state.sample) : null;
   updateDerived(world);
   rebuildIndex(world);
   return world;
@@ -234,11 +253,13 @@ export function stateHash(world: World): string {
   }
   const hw = world.ents.highWater;
   h.number(hw);
-  for (const [name] of ENTITY_COLUMNS) {
+  ENTITY_COLUMNS.forEach(([name], k) => {
     const arr = world.ents.cols[name] as unknown as Float64Array;
+    // D-0035: a column from schema 4 on is hashed only while some slot holds a non-empty value.
+    if (k >= FIRST_HASH_NEUTRAL_COLUMN && isEmptyColumn(arr, hw, emptyValueOf(name))) return;
     h.string(name);
     h.typed(arr.subarray(0, hw));
-  }
+  });
   h.number(world.genomes.size);
   for (const g of world.genomes.list) h.string(genomeKey(g));
   const L = world.lineage;
@@ -255,5 +276,15 @@ export function stateHash(world: World): string {
   h.string(canonicalJson(world.commands.pending.map((p) => ({ id: p.commandId, seq: p.seq, t: p.targetTick, p: p.payload }))));
   h.number(world.commands.nextSeq);
   h.string(canonicalJson(world.branches));
+  // Schema 4 stores and counters (D-0035): hashed only when non-empty / moved from their initial value.
+  if (world.objects.length > 0) h.string('objects').string(canonicalJson(world.objects));
+  if (world.sample !== null) h.string('sample').string(canonicalJson(encodeSample(world.sample)));
+  if (c.nextObjectId !== 1) h.string('nextObjectId').number(c.nextObjectId);
   return h.hex();
+}
+
+/** True when every slot in [0, hw) holds `empty` (Object.is, so a −0 in a 0 column counts as state, as the raw bytes do). */
+function isEmptyColumn(arr: ArrayLike<number>, hw: number, empty: number): boolean {
+  for (let i = 0; i < hw; i++) if (!Object.is(arr[i], empty)) return false;
+  return true;
 }

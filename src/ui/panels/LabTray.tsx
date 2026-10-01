@@ -5,11 +5,11 @@
  * duplicate, compare, undo); Observe carries overlays, charts (the History sheet) and the family tree
  * (the lineage panel's sheet, P2.3).
  */
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { JSX } from 'preact';
 import { drawFrame, loadAtlas } from '../atlas';
 import { IconClose, IconCopy, IconUndo } from '../icons';
-import { dishInfo, duplicateCurrent, meta, openCompare, sheet, undo } from '../state';
+import { dishInfo, duplicateCurrent, getClient, meta, openCompare, sheet, showToast, undo } from '../state';
 import type { PlaceableStructure, SubstrateName } from '@sim/grid';
 import {
   BRUSH_COPY,
@@ -21,6 +21,7 @@ import {
   habitatList,
   LAB_CATEGORIES,
   LAB_TEXT,
+  LID_COPY,
   LIFE_COPY,
   livesHereText,
   MATERIAL_COPY,
@@ -112,10 +113,12 @@ export function trayItems(category: LabCategory): TrayItem[] {
       }));
     case 'food':
     case 'chemistry': {
+      // In the tray's own order (CT §5.1), only what this dish's recorded content enables.
       const allowed = category === 'food' ? FOOD_MATERIALS : CHEMISTRY_MATERIALS;
-      return info.materials
-        .filter((m) => allowed.includes(m.id))
-        .map((m) => ({ id: `material:${m.id}` as LabToolId, name: m.name, icon: <Swatch id={m.id} /> }));
+      return allowed.flatMap((id) => {
+        const m = info.materials.find((x) => x.id === id);
+        return m ? [{ id: `material:${m.id}` as LabToolId, name: m.name, icon: <Swatch id={m.id} /> }] : [];
+      });
     }
     case 'habitat':
       // Only the paints this dish's recorded content has (content is data; D-0024).
@@ -402,6 +405,60 @@ function ToolsActions() {
   );
 }
 
+let lidCommands = 0;
+
+/**
+ * The dish's lid, open or closed (SPEC §4.5; P3.1): a world setting changed by the setLid command, one
+ * recorded, undoable change like any gesture. Shows the setting the dish's latest snapshot reported.
+ */
+function LidToggle() {
+  const info = dishInfo.value;
+  const dishId = info?.dishId ?? null;
+  const [lid, setLid] = useState<'open' | 'closed' | null>(() => (dishId ? getClient().lidOf(dishId) : null));
+  useEffect(() => {
+    if (!dishId) return;
+    const c = getClient();
+    setLid(c.lidOf(dishId));
+    return c.onSnapshot((s) => {
+      if (s.dishId === dishId && s.lid) setLid(s.lid);
+    });
+  }, [dishId]);
+  if (!dishId) return null;
+  const choose = (want: 'open' | 'closed') => {
+    if (want === lid) return;
+    void getClient()
+      .command(dishId, `lab-lid-${++lidCommands}`, { kind: 'setLid', lid: want }, true)
+      .then((res) => {
+        if (dishInfo.value?.dishId !== dishId) return;
+        showToast(res && res.accepted > 0 ? LID_COPY.outcome(want) : LID_COPY.failed, 4000);
+      })
+      .catch(() => showToast(LID_COPY.failed, 4000));
+  };
+  return (
+    <div class="lab-option" data-testid="lab-lid">
+      <span class="lab-option-label" id="lab-lid-label">
+        {LID_COPY.label}
+      </span>
+      <div class="segmented" role="group" aria-labelledby="lab-lid-label" aria-describedby="lab-lid-rule">
+        {(['open', 'closed'] as const).map((v) => (
+          <button
+            key={v}
+            class="btn"
+            aria-pressed={lid === v}
+            onClick={() => choose(v)}
+            data-testid={`lab-lid-${v}`}
+          >
+            {v === 'open' ? LID_COPY.open : LID_COPY.closed}
+          </button>
+        ))}
+      </div>
+      <p class="lab-sub" id="lab-lid-rule">
+        {LID_COPY.rule}
+      </p>
+    </div>
+  );
+}
+
 function ObserveActions() {
   return (
     <div class="lab-actions" role="group" aria-label="Charts and family">
@@ -498,6 +555,7 @@ export function LabTray({ category }: { category: LabCategory }) {
               </p>
             ) : null}
             {category === 'tools' ? <ToolsActions /> : null}
+            {category === 'habitat' ? <LidToggle /> : null}
           </>
         )}
       </div>

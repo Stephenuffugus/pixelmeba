@@ -152,6 +152,23 @@ export interface RecipeOverridesRecord {
   readonly mutationPreset?: RecipeDef['mutationPreset'];
   readonly founderMode?: RecipeDef['founderMode'];
   readonly empty?: boolean;
+  /**
+   * P3.2: start on another habitat preset than the recipe's (New Dish 'Empty Gel Colony', 'Empty
+   * Sediment Edge'); absent = the recipe's own habitat. See withHabitatOverride.
+   */
+  readonly habitatId?: string;
+}
+
+/**
+ * The recipe on habitat `habitatId` (a recorded override; P3.2). A different habitat is a habitat
+ * start: the recipe's background overrides (FIRST_DISH_V1's sugar 0) belong to the recipe's own
+ * habitat and are dropped, so the dish starts exactly as the preset defines it (CT §8.1). The
+ * recipe's own habitat (or none) changes nothing. Every path that realizes a dish from its recorded
+ * overrides applies this, so it rebuilds the same habitat.
+ */
+export function withHabitatOverride(r: RecipeDef, habitatId: string | undefined): RecipeDef {
+  if (habitatId === undefined || habitatId === r.habitatId) return r;
+  return { ...r, habitatId, backgroundOverrides: {} };
 }
 
 /** Provenance of a world realized from a recipe; `overrides` is absent in saves made before it was recorded. */
@@ -172,7 +189,8 @@ export function recipeOverridesOf(world: World): RecipeOverridesRecord | null | 
     (r.seed === undefined || (Number.isInteger(r.seed) && (r.seed as number) >= 0)) &&
     (r.mutationPreset === undefined || typeof r.mutationPreset === 'string') &&
     (r.founderMode === undefined || typeof r.founderMode === 'string') &&
-    (r.empty === undefined || typeof r.empty === 'boolean');
+    (r.empty === undefined || typeof r.empty === 'boolean') &&
+    (r.habitatId === undefined || typeof r.habitatId === 'string');
   return ok ? o : null;
 }
 

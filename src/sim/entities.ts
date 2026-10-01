@@ -91,6 +91,45 @@ export const ENTITY_COLUMNS = [
   // dormancy clocks reuse stateTimer (no-intake seconds while Active; elapsed seconds while Preparing
   // or Waking; wake-condition seconds while Resting) and lockoutTimer (lockout after waking).
   ['dryTimer', 'f64'],
+  // ---- Phase 3 foundation (world schema 4; D-0035). From `filmSeconds` on, every column is
+  // hash-neutral: stateHash includes it only while some slot in [0, highWater) differs from its empty
+  // value (emptyValueOf), so a world holding no Phase 3 state hashes exactly as the g2 build hashed it.
+  // B02 biofilm: continuous attached seconds (P3.3).
+  ['filmSeconds', 'f64'],
+  // E04 surface anchor (P3.7): 0 free, 1 anchored; continuous qualifying seconds; reattach lockout.
+  ['anchorState', 'u8'],
+  ['anchorSeconds', 'f64'],
+  ['anchorLockout', 'f64'],
+  // E12 colony adhesion (P3.7): birthId of the pairing candidate (0 = none), pairing seconds, relink lockout.
+  ['adhPartner', 'u32'],
+  ['adhSeconds', 'f64'],
+  ['adhLockout', 'f64'],
+  // P04 sediment/water crossing (P3.4): 1 once it has crossed (per organism).
+  ['waterCrossed', 'u8'],
+  // D-0035: seconds since the organism's last usable intake under D-0019's 1 % rule (the
+  // FLAG.usableIntake test); 0 at allocation, so newborns and migrated organisms start fresh. Wave 4
+  // advances it, once per tick and only for organisms carrying E04 or E12 (whose "10 s without intake"
+  // rules read it); nothing in the wave 1 foundation writes it, so Phase 2 worlds keep it empty.
+  ['noUsableIntakeSeconds', 'f64'],
+  // Fungal links (SPEC §7.2, §7.7; ARCH §5 links 6000×4), at most 4 per segment: partner slot (−1 =
+  // none), partner birthId, kind (1 visual F01, 2 transport F02). Symmetric; see src/sim/links.ts.
+  ['fLink0', 'i32'],
+  ['fLink1', 'i32'],
+  ['fLink2', 'i32'],
+  ['fLink3', 'i32'],
+  ['fLinkB0', 'u32'],
+  ['fLinkB1', 'u32'],
+  ['fLinkB2', 'u32'],
+  ['fLinkB3', 'u32'],
+  ['fLinkKind0', 'u8'],
+  ['fLinkKind1', 'u8'],
+  ['fLinkKind2', 'u8'],
+  ['fLinkKind3', 'u8'],
+  // E12 adhesion links (SPEC §9.12; ARCH §5 adhesion 6000×2), at most 2: partner slot (−1) and birthId.
+  ['aLink0', 'i32'],
+  ['aLink1', 'i32'],
+  ['aLinkB0', 'u32'],
+  ['aLinkB1', 'u32'],
 ] as const satisfies ReadonlyArray<readonly [string, ColType]>;
 
 export type ColumnName = (typeof ENTITY_COLUMNS)[number][0];
@@ -112,8 +151,42 @@ export type EntityColumns = { [N in ColumnName]: ArrayFor<ColumnTypeOf<N>> };
 /** Columns whose empty value is -1 rather than 0. */
 const NEG_ONE_DEFAULT: ReadonlySet<ColumnName> = (() => {
   // eslint-disable-next-line no-restricted-syntax -- lookup only, never iterated
-  return new Set<ColumnName>(['genome', 'preySlot', 'hostSlot', 'parasiteSlot', 'propG0', 'propG1', 'branchId', 'refGenome', 'propLocus0', 'propLocus1', 'propModule0', 'propModule1']);
+  return new Set<ColumnName>([
+    'genome',
+    'preySlot',
+    'hostSlot',
+    'parasiteSlot',
+    'propG0',
+    'propG1',
+    'branchId',
+    'refGenome',
+    'propLocus0',
+    'propLocus1',
+    'propModule0',
+    'propModule1',
+    'fLink0',
+    'fLink1',
+    'fLink2',
+    'fLink3',
+    'aLink0',
+    'aLink1',
+  ]);
 })();
+
+/**
+ * The value a column holds in a free or never-used slot: −1 for slot/index references
+ * (NEG_ONE_DEFAULT), 0 otherwise. One source for the entity store, the schema migration (which
+ * fills added columns with it) and the hash-neutral rule of stateHash (D-0035).
+ */
+export function emptyValueOf(name: ColumnName): number {
+  return NEG_ONE_DEFAULT.has(name) ? -1 : 0;
+}
+
+/**
+ * Index in ENTITY_COLUMNS of the first hash-neutral column (`filmSeconds`, world schema 4): this
+ * column and every later one are hashed only while some slot in [0, highWater) is not empty.
+ */
+export const FIRST_HASH_NEUTRAL_COLUMN: number = ENTITY_COLUMNS.findIndex(([n]) => n === 'filmSeconds');
 
 function makeArray(t: ColType, n: number): ArrayFor<ColType> {
   switch (t) {
@@ -148,6 +221,7 @@ export const FLAG = {
   restDry: 1 << 10,
   /** This tick's intake reached 1 % of its intake ceiling (USABLE_INTAKE_FRACTION; set in stage 6). */
   usableIntake: 1 << 11,
+  // 1 << 12 and 1 << 13 are reserved for Phase 3 wave 4 (E04/E12); the foundation adds no flag.
 } as const;
 
 /** Life states (SPEC §6.1, §7.6). Saved in the lifeState column: append only. */
@@ -179,7 +253,7 @@ export class EntityStore {
     const cols: Record<string, ArrayFor<ColType>> = {};
     for (const [name, t] of ENTITY_COLUMNS) {
       const arr = makeArray(t, capacity);
-      if (NEG_ONE_DEFAULT.has(name)) (arr as Int32Array).fill(-1);
+      if (emptyValueOf(name) !== 0) (arr as Int32Array).fill(-1);
       cols[name] = arr;
     }
     this.cols = cols as unknown as EntityColumns;
@@ -216,7 +290,7 @@ export class EntityStore {
   private clearSlot(slot: number): void {
     for (const [name] of ENTITY_COLUMNS) {
       const arr = this.cols[name] as ArrayFor<ColType>;
-      arr[slot] = NEG_ONE_DEFAULT.has(name) ? -1 : 0;
+      arr[slot] = emptyValueOf(name);
     }
   }
 

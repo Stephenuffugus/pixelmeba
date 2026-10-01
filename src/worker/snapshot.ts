@@ -13,7 +13,8 @@ import { childrenOf, field as lineageField, has as lineageHas } from '@sim/linea
 import { profileOf } from '@sim/profiles';
 import { R } from '@sim/reasons';
 import { PREY_NONE } from '@sim/species';
-import { FILM_DIGESTION_IMPLEMENTED } from '@sim/content/implemented';
+import { worldHasSystem } from '@sim/gates';
+import { exposureBreakdown, lightFactors, salinityIndex } from '@sim/chemistry';
 import { dormancySummary, moduleSummaries, reserveBand, upkeepNow } from '@sim/moduleView';
 import { founderOriginOf } from '@sim/founders';
 import { entityCell, forEachInCell } from '@sim/spatial';
@@ -314,9 +315,10 @@ function inspectEntity(world: World, slot: number): EntityInspect {
       metabolism: sp.def.metabolism,
       prey: Array.from(sp.prey.keys()).filter((j) => sp.prey[j] !== PREY_NONE),
       abilities: sp.abilities,
-      // Film digestion is a P3.3 mechanic: claim it only when this world has a film field and the
-      // simulation consumes it. Until then the inspector must not describe it (honest labels).
-      digestsFilm: sp.def.digestsFilm && world.fields.film !== undefined && FILM_DIGESTION_IMPLEMENTED,
+      // Film digestion is a P3.3 mechanic: claim it only when this world's recorded manifest enables
+      // the film system (and so has a film field). No shipped world has film before wave 2 lands film
+      // digestion (D-0038), so the inspector never describes it before the simulation consumes it.
+      digestsFilm: sp.def.digestsFilm && world.fields.film !== undefined && worldHasSystem(world, 'film'),
       sugarSources: sugarSourcesOf(world),
     },
     lociActiveEffective: prof.lociActive,
@@ -373,6 +375,20 @@ function inspectCell(world: World, cell: number): CellInspect {
     light: world.derived.light[cell]!,
     residents,
     load: world.derived.cellLoad[cell]!,
+    // P3.1 (SPEC §12.1): the chemistry and light readings, by the simulation's own rules (@sim/chemistry).
+    ...chemistryLines(world, cell),
+  };
+}
+
+function chemistryLines(world: World, cell: number): Pick<CellInspect, 'salinity' | 'oxygen' | 'lightBase' | 'shade' | 'exposure'> {
+  const light = lightFactors(world, cell);
+  const bd = exposureBreakdown(world, cell);
+  return {
+    salinity: salinityIndex(world, cell),
+    oxygen: world.fields.oxygen?.[cell] ?? 0,
+    lightBase: light.baseline,
+    shade: light.shade,
+    ...(bd.lines.length > 0 ? { exposure: bd } : {}),
   };
 }
 

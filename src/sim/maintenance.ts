@@ -15,6 +15,7 @@ import {
 import { emit } from './events';
 import { LIFE_ACTIVE, LIFE_RESTING } from './entities';
 import { recordDeath } from './lineage';
+import { removeAllLinks } from './links';
 import { onDeath } from './branches';
 import { profileOf } from './profiles';
 import { R } from './reasons';
@@ -150,5 +151,6 @@ export function killEntity(world: World, i: number, cause: number): void {
   onDeath(world, i);
   const sp = c.species[i]!;
   world.history.pendingDeaths[sp] = (world.history.pendingDeaths[sp] ?? 0) + 1;
+  removeAllLinks(world, i); // SPEC §6.8: incident links leave both endpoints
   world.ents.free(i);
 }

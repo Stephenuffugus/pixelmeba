@@ -19,14 +19,18 @@ import { createEventLog, type EventLog } from './events';
 import { createHistory, type History } from './history';
 import type { Command } from './commands';
 import { createBranchBook, type BranchBook } from './branches';
+import type { FoodObject } from './objects';
+import type { SampleSlot } from './sampleSlot';
 
 /**
  * World schema. 1 = Phase 1. 2 = P2.1 adds the dryTimer entity column (dormancy). 3 = P2.8 adds
  * history records (regional trait samples, the debris total, the dish's journal; see history.ts).
+ * 4 = P3 foundation: link, anchor, film, E12 and P04 columns; food-object and sample stores (D-0035;
+ * all hash-neutral while empty, so a world without Phase 3 state hashes as the g2 build hashed it).
  * Older states are migrated by copy in migrateWorldState (src/sim/serialize.ts); new states are
  * always written at the current version.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export type MutationPreset = 'standard' | 'accelerated' | 'fixed';
 export type FounderMode = 'identical' | 'varied' | 'diverse';
@@ -81,6 +85,8 @@ export interface Counters {
   nextEntityId: number;
   nextBirthId: number;
   nextEventId: number;
+  /** Next finite food object id (schema 4; hashed only once it moved from 1). */
+  nextObjectId: number;
 }
 
 export interface World {
@@ -120,6 +126,10 @@ export interface World {
   readonly catalysisCells: Float32Array;
   /** Cumulative carbon converted by each enzyme (observation, saved). */
   readonly conversionTotals: { starch: number; oil: number; protein: number };
+  /** Finite food objects (SPEC §5.1; schema 4), ordered by id; at most 128 (src/sim/objects.ts). */
+  readonly objects: FoodObject[];
+  /** The single held sample (SPEC §10.5; schema 4), or null (src/sim/sampleSlot.ts). */
+  sample: SampleSlot | null;
 }
 
 export function speciesIndex(world: World, id: string): number {
@@ -169,7 +179,7 @@ export function createEmptyWorld(opts: {
     lineage: createLineage(),
     ledger: createLedger(),
     commands: { pending: [], nextSeq: 1, log: [] },
-    counters: { nextEntityId: 1, nextBirthId: 1, nextEventId: 1 },
+    counters: { nextEntityId: 1, nextBirthId: 1, nextEventId: 1, nextObjectId: 1 },
     events: createEventLog(),
     history: createHistory(species.length),
     capacityLimitedTicks: 0,
@@ -178,5 +188,7 @@ export function createEmptyWorld(opts: {
     conversionTally: { starch: 0, oil: 0, protein: 0 },
     catalysisCells: new Float32Array(CELL_COUNT),
     conversionTotals: { starch: 0, oil: 0, protein: 0 },
+    objects: [],
+    sample: null,
   };
 }

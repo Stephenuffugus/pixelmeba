@@ -53,7 +53,17 @@ type Ground = 'water' | 'gel' | 'sediment' | 'outside';
 
 const HEADINGS = ['e', 's', 'w', 'n'] as const;
 const HEADING_LABEL: Record<string, string> = { e: 'East', s: 'South', w: 'West', n: 'North' };
-const ANIM_ORDER = ['move', 'idle', 'feed', 'reproduction', 'stress', 'death'];
+const ANIM_ORDER = ['move', 'idle', 'feed', 'reproduction', 'stress', 'death', 'mask', 'decaying', 'tip', 'bud', 'pulse', 'glyph'];
+/** Frame sets that are not organism bodies (ARCH §10.1 fungal tiles, UX §6.2 virus glyph): kept out of the dense group. */
+const isTileOrGlyph = (sprite: AtlasSprite): boolean => 'mask' in sprite.animations || 'glyph' in sprite.animations;
+const ANIM_NOTE: Record<string, string> = {
+  mask: 'frame index = connection mask (N 1, E 2, S 4, W 8)',
+  decaying: 'dying segment, frame index = connection mask',
+  tip: 'overlay drawn over the mask tile at a growing end',
+  bud: 'overlay drawn over the mask tile at a branch bud',
+  pulse: 'overlay drawn only when a transfer happened (≤ 1/s)',
+  glyph: 'inspection glyph (density is a field overlay)',
+};
 const GROUND: Record<Ground, string> = { water: P.water, gel: P.gel, sediment: P.sediment, outside: P.outside };
 /** Machado, Oliveira & Fernandes (2009), severity 1.0, applied in linear RGB. */
 const CVD: Record<Exclude<Vision, 'none'>, readonly number[]> = {
@@ -248,7 +258,9 @@ function buildSpecies(): void {
       const title = document.createElement('div');
       title.innerHTML = `<span class="anim-title"></span> <span class="anim-meta"></span>`;
       title.children[0]!.textContent = anim;
-      title.children[1]!.textContent = `${a.frames} frame${a.frames === 1 ? '' : 's'} · ${a.durationMs} ms/frame · ${a.loop ? 'loops' : 'plays once'} · reduced-motion frame ${a.reducedMotionFrame}`;
+      title.children[1]!.textContent = ANIM_NOTE[anim]
+        ? `${a.frames} frame${a.frames === 1 ? '' : 's'} · ${ANIM_NOTE[anim]}`
+        : `${a.frames} frame${a.frames === 1 ? '' : 's'} · ${a.durationMs} ms/frame · ${a.loop ? 'loops' : 'plays once'} · reduced-motion frame ${a.reducedMotionFrame}`;
       block.append(title);
       const row = document.createElement('div');
       row.className = 'headings';
@@ -307,6 +319,60 @@ function buildSpecies(): void {
       head.append(warn);
     }
     root.append(card);
+  }
+}
+
+// ---------- fungal networks ----------
+
+/** A small network ('#' segment, 'b' bud, 'd' decaying, 'p' pulse junction), edges joined by mask. */
+const NETWORK = ['..#.....', '.####...', '..#.#d#.', '..p..#..', '.#b###d.', '.#......'];
+
+function buildFungi(): void {
+  const root = $('fungi');
+  root.replaceChildren();
+  const s = state.scale;
+  const fungi = Object.keys(manifest.sprites).filter((id) => 'mask' in manifest.sprites[id]!.animations);
+  const at = (x: number, y: number): string => NETWORK[y]?.[x] ?? '.';
+  for (const assetId of fungi) {
+    const sprite = manifest.sprites[assetId]!;
+    const card = document.createElement('article');
+    card.className = 'card';
+    const head = document.createElement('header');
+    const h3 = document.createElement('h3');
+    h3.textContent = `${sprite.speciesId} ${speciesNames[sprite.speciesId] ?? ''} network`.trim();
+    head.append(h3);
+    card.append(head);
+    const wrap = document.createElement('div');
+    wrap.className = 'scroll';
+    wrap.tabIndex = 0;
+    wrap.setAttribute('role', 'region');
+    wrap.setAttribute('aria-label', `${assetId} network (scrolls sideways)`);
+    const canvas = document.createElement('canvas');
+    canvas.className = 'stage';
+    canvas.setAttribute('aria-label', `${assetId} tiles assembled into a network`);
+    wrap.append(canvas);
+    card.append(wrap);
+    root.append(card);
+    const t = sprite.size * s;
+    const cols = NETWORK[0]!.length;
+    const ctx = sizeCanvas(canvas, cols * t, NETWORK.length * t);
+    strips.push(() => {
+      ctx.fillStyle = groundColor();
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (let y = 0; y < NETWORK.length; y++) {
+        for (let x = 0; x < cols; x++) {
+          const c = at(x, y);
+          if (c === '.') continue;
+          const on = (cx: number, cy: number) => at(cx, cy) !== '.';
+          const mask = (on(x, y - 1) ? 1 : 0) | (on(x + 1, y) ? 2 : 0) | (on(x, y + 1) ? 4 : 0) | (on(x - 1, y) ? 8 : 0);
+          const degree = [1, 2, 4, 8].filter((b) => mask & b).length;
+          drawFrame(ctx, `${assetId}/${c === 'd' ? 'decaying' : 'mask'}/e/${mask}`, x * t, y * t, s);
+          if (c === 'b') drawFrame(ctx, `${assetId}/bud/e/0`, x * t, y * t, s);
+          else if (c === 'p') drawFrame(ctx, `${assetId}/pulse/e/1`, x * t, y * t, s);
+          else if (c !== 'd' && degree <= 1) drawFrame(ctx, `${assetId}/tip/e/0`, x * t, y * t, s);
+        }
+      }
+    });
   }
 }
 
@@ -449,7 +515,7 @@ let bodies: Body[] = [];
 
 function layoutDense(): void {
   const rnd = mulberry32(state.denseSeed * 7919 + state.denseCount);
-  const assets = Object.keys(manifest.sprites);
+  const assets = Object.keys(manifest.sprites).filter((id) => !isTileOrGlyph(manifest.sprites[id]!));
   const large = assets.filter((id) => manifest.sprites[id]!.size >= 32);
   const small = assets.filter((id) => manifest.sprites[id]!.size < 32);
   // Every sprite appears: ~6 % large consumers (at least one each), the rest shared evenly among
@@ -564,6 +630,7 @@ function wire(): void {
   scale.addEventListener('change', () => {
     state.scale = Number(scale.value);
     buildSpecies();
+    buildFungi();
     buildMarks();
     redrawAll();
   });
@@ -639,6 +706,7 @@ async function main(): Promise<void> {
     layoutDense();
     buildDense();
     buildSpecies();
+    buildFungi();
     buildMarks();
     redrawAll();
     requestAnimationFrame(tick);

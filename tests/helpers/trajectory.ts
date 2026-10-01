@@ -42,6 +42,7 @@ import { genomeKey } from '../../src/sim/genome';
 import { createGrid } from '../../src/sim/grid';
 import { canonicalJson, StateHasher } from '../../src/sim/hash';
 import { createEmptyWorld, type World } from '../../src/sim/world';
+import type { SampleSlot } from '../../src/sim/sampleSlot';
 
 export type DigestMode = 'g2' | 'full';
 
@@ -196,11 +197,36 @@ const G2_INDEX_COLUMNS: Readonly<Partial<Record<ColumnName, IndexKind>>> = Objec
 /** Post-g2 columns that hold a species, genome or module index (hashed as IDs in 'full' mode). */
 export const POST_G2_COLUMN_KINDS: Readonly<Record<string, IndexKind>> = Object.freeze({});
 /** Post-g2 stores whose records hold slot/species/module references: map them to birthIds and IDs for 'full' mode. */
-export const POST_G2_STORE_CANON: Readonly<Record<string, (world: World, value: unknown) => unknown>> = Object.freeze({});
+export const POST_G2_STORE_CANON: Readonly<Record<string, (world: World, value: unknown) => unknown>> = Object.freeze({
+  // Phase 3 foundation (world schema 4): the held sample. Each held row is keyed by its birthId instead
+  // of its slot; species, genome and module indices become IDs and genome keys; slot-valued columns are
+  // dropped (each has a birthId partner column that keeps the identity).
+  sample: (world: World, value: unknown) => canonSample(world, value as SampleSlot),
+});
 /** Post-g2 world properties that are derived caches (rebuilt from state, never saved): never hashed. */
 export const POST_G2_DERIVED_KEYS: readonly string[] = Object.freeze([]);
 /** The value a post-g2 WorldSettings key has in a world that never set it (absent counts as default too). */
 export const POST_G2_SETTINGS_DEFAULTS: Readonly<Record<string, unknown>> = Object.freeze({});
+
+/** Sample columns holding a slot (identity kept by their birthId partner columns). */
+const SAMPLE_SLOT_COLUMNS: readonly string[] = ['preySlot', 'hostSlot', 'parasiteSlot', 'fLink0', 'fLink1', 'fLink2', 'fLink3', 'aLink0', 'aLink1'];
+
+function canonSample(world: World, s: SampleSlot): unknown {
+  const map = new Mapper(world);
+  const kinds: Readonly<Record<string, IndexKind>> = { ...G2_INDEX_COLUMNS, ...POST_G2_COLUMN_KINDS };
+  const rows = s.rows.map((r) => {
+    const cols: Record<string, number | string> = {};
+    for (const [name] of ENTITY_COLUMNS) {
+      if (SAMPLE_SLOT_COLUMNS.includes(name)) continue;
+      const kind = kinds[name];
+      const v = r.cols[name];
+      cols[name] = kind ? map.index(kind, v) : v;
+    }
+    return { birthId: r.cols.birthId, cols };
+  });
+  const genomes = s.genomes.map((g) => ({ key: map.genome(g.index) })).sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  return { txId: s.txId, seq: s.seq, mode: s.mode, origin: s.origin, radius: s.radius, rows, cells: s.cells, objects: s.objects, genomes };
+}
 
 const LINEAGE_ARRAYS = ['parent', 'genome', 'birthTick', 'generation', 'species', 'entityId', 'deathTick', 'deathCause', 'origin', 'mutFlags', 'mutLocus', 'mutDelta', 'mutModule'] as const;
 

@@ -4,7 +4,7 @@
  */
 import { signal } from '@preact/signals';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import type { EntityInspect, FamilyAnswer } from '@worker/protocol';
+import type { CellInspect, EntityInspect, FamilyAnswer } from '@worker/protocol';
 import { IconClose, IconFollow } from '../icons';
 import {
   askFamily,
@@ -76,7 +76,40 @@ const CELL_FIELD_NAMES: Record<string, string> = {
   eStarch: 'Starch enzyme',
   eOil: 'Oil enzyme',
   eProtein: 'Protein enzyme',
+  inhBact: 'Bacterial inhibitor',
+  inhFung: 'Fungal inhibitor',
+  inhPhoto: 'Photosynthetic inhibitor',
 };
+
+/** Pools with their own cell lines (P3.1), left out of the generic pool list. */
+const OWN_CELL_LINES: readonly string[] = ['salt', 'oxygen', 'inhBact', 'inhFung', 'inhPhoto'];
+
+/** Who each inhibitor targets (CT §3.4), as the cell inspector names it. */
+const EXPOSURE_WHO: Record<string, string> = {
+  bacterial: 'Bacteria',
+  fungal: 'Yeasts and fungi',
+  photosynthetic: 'Algae',
+};
+
+type CellView = CellInspect;
+
+/** "Bacteria 0.10 (growth × 0.91, −0.80 health/s)"; "None here." when no inhibitor is present (P3.1). */
+function exposureText(e: NonNullable<CellView['exposure']>): string {
+  const hit = e.lines.filter((l) => l.amount > 0);
+  if (hit.length === 0) return 'None here.';
+  const parts = hit.map(
+    (l) =>
+      `${EXPOSURE_WHO[l.category] ?? l.category} ${l.exposure.toFixed(2)} (growth × ${l.growthFactor.toFixed(2)}, −${l.damagePerSecond.toFixed(2)} health/s)`,
+  );
+  return `${parts.join('; ')}.${e.filmHalves ? ' Biofilm here halves it.' : ''} Other organisms are not affected.`;
+}
+
+/** "0.08 (habitat 0.80 × shade 0.10)" (SPEC §4.4: the inspector shows every light factor). */
+function lightText(c: CellView): string {
+  const eff = cellNumber(c.light, 2);
+  if (c.lightBase === undefined || c.shade === undefined) return eff;
+  return `${eff} (habitat ${c.lightBase.toFixed(2)} × shade ${c.shade.toFixed(2)})`;
+}
 
 /** A measured cell value with fixed decimals; a missing or non-finite value reads "not measured" (B1). */
 function cellNumber(v: number | undefined, digits: number): string {
@@ -598,11 +631,29 @@ export function InspectorSheet() {
               <dt>Ground</dt>
               <dd>{groundName(p.cell.substrate, p.cell.structure)}</dd>
               <dt>pH</dt>
-              <dd>{cellNumber(p.cell.ph, 1)}</dd>
+              <dd data-testid="cell-ph">{cellNumber(p.cell.ph, 2)}</dd>
+              {p.cell.salinity !== undefined ? (
+                <>
+                  <dt>Salinity</dt>
+                  <dd data-testid="cell-salinity">{cellNumber(p.cell.salinity, 2)}</dd>
+                </>
+              ) : null}
+              {p.cell.oxygen !== undefined ? (
+                <>
+                  <dt>Oxygen</dt>
+                  <dd data-testid="cell-oxygen">{cellNumber(p.cell.oxygen, 2)}</dd>
+                </>
+              ) : null}
               <dt>Light</dt>
-              <dd>{cellNumber(p.cell.light, 2)}</dd>
+              <dd data-testid="cell-light">{lightText(p.cell)}</dd>
+              {p.cell.exposure ? (
+                <>
+                  <dt>Inhibitor exposure</dt>
+                  <dd data-testid="cell-exposure">{exposureText(p.cell.exposure)}</dd>
+                </>
+              ) : null}
               {Object.entries(p.cell.fields ?? {})
-                .filter(([, v]) => typeof v === 'number' && v > 1e-6)
+                .filter(([k, v]) => typeof v === 'number' && v > 1e-6 && !(p.cell!.salinity !== undefined && OWN_CELL_LINES.includes(k)))
                 .map(([k, v]) => (
                   <>
                     <dt>{CELL_FIELD_NAMES[k] ?? k.charAt(0).toUpperCase() + k.slice(1)}</dt>

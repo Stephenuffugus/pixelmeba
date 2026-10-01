@@ -59,6 +59,35 @@ export interface StarchRules {
   readonly localCap: number;
 }
 
+/**
+ * Enzyme producer rules for any activity (SPEC §5.3; P3.7 stage 8): E_STARCH, E_OIL or E_PROTEIN,
+ * native or gained through a module (E01 starch, E09 protein). StarchRules is the starch case.
+ */
+export interface ProducerRules {
+  readonly source: 'native' | 'E01' | 'E09';
+  readonly emitRate: number;
+  readonly minEnergy: number;
+  readonly emitCost: number;
+  readonly localCap: number;
+}
+
+/**
+ * Shared-construction rules (SPEC §7.1, §9 E10, CT §12.6; P3.7 stage 8): native B02 film deposition
+ * or the E10 matrix builder. Builders submit requests to stage 8's shared construction pass
+ * (construction.ts). Null for every species until those systems land (P3.3, wave 4 E10).
+ */
+export interface BuilderRules {
+  readonly source: 'native' | 'E10';
+  /** Build only while E is above this (B02 40, E10 35). */
+  readonly minEnergy: number;
+  /** Body carbon offered per second (0.05 B02, 0.02 E10). */
+  readonly ratePerSecond: number;
+  /** The body never goes below bodyFloor × B0' (B02 1.0, E10 1.2). */
+  readonly bodyFloor: number;
+  /** Energy charged per carbon actually accepted (E10 2 E/C; 0 for native film). */
+  readonly energyPerC: number;
+}
+
 /** Dormancy state machine rules (SPEC §7.6, CT §12.7): native (B12, F04, P08) or gained through E03. */
 export interface DormancyRules {
   readonly source: 'native' | 'E03';
@@ -111,6 +140,12 @@ export interface Profile {
   readonly starch: StarchRules | null;
   /** Dormancy rules, or null when it cannot rest. */
   readonly dormancy: DormancyRules | null;
+  /** Oil-enzyme producer rules (native B07), or null. Null for every species until P3.6. */
+  readonly oil: ProducerRules | null;
+  /** Protein-enzyme producer rules (native B08, module E09), or null. Null for every species until P3.6/E09. */
+  readonly protein: ProducerRules | null;
+  /** Shared-construction rules (native B02 film, module E10), or null. Null for every species until P3.3/E10. */
+  readonly builder: BuilderRules | null;
 }
 
 const PH_DOMAIN: readonly [number, number] = [2, 12];
@@ -277,5 +312,8 @@ export function deriveProfile(sp: SpeciesRT, genome: Genome, modules: readonly M
     lociActive: active,
     starch,
     dormancy,
+    oil: null,
+    protein: null,
+    builder: null,
   };
 }

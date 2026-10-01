@@ -22,16 +22,31 @@ export const LAB_CATEGORIES: readonly {
   {
     id: 'chemistry',
     label: 'Chemistry',
-    hint: 'Add dissolved minerals. More chemistry arrives in a later update.',
+    hint: 'Change the water: minerals, gases, pH, salt and inhibitors. Each item says what it changes and what it leaves alone.',
   },
-  { id: 'habitat', label: 'Habitat', hint: 'Paint water, gel or sediment, or shade the light.' },
+  { id: 'habitat', label: 'Habitat', hint: 'Paint water, gel or sediment, shade the light, or close the lid.' },
   { id: 'tools', label: 'Tools', hint: 'Place and erase structures, keep a snapshot, compare, undo.' },
   { id: 'observe', label: 'Observe', hint: 'Overlays and charts. Looking never changes the dish.' },
 ];
 
-/** Which enabled materials each tray offers (Chemistry is mineral nutrient only until Phase 3). */
-export const FOOD_MATERIALS: readonly string[] = ['SUGAR', 'STARCH', 'DEBRIS'];
-export const CHEMISTRY_MATERIALS: readonly string[] = ['NUTRIENT'];
+/**
+ * Which materials each tray offers, in tray order (CT §5.1; P3.1). A dish shows only those its
+ * recorded content enables; each needs a MATERIAL_COPY entry. Enzymes and the enzyme breaker join the
+ * Chemistry tray with their system (P3.6).
+ */
+export const FOOD_MATERIALS: readonly string[] = ['SUGAR', 'STARCH', 'OIL', 'PROTEIN', 'DEBRIS', 'METABOLITE'];
+export const CHEMISTRY_MATERIALS: readonly string[] = [
+  'NUTRIENT',
+  'OXYGEN',
+  'CO2',
+  'ACID',
+  'BASE',
+  'BUFFER',
+  'SALT',
+  'INH_BACT',
+  'INH_FUNG',
+  'INH_PHOTO',
+];
 
 export const RADII = [1, 3, 6] as const;
 export type LabRadius = (typeof RADII)[number];
@@ -124,6 +139,21 @@ export interface MaterialCopy {
   readonly unit: string;
 }
 
+const STAYS_PUT = 'Open water, gel or sediment, and porous beads. It stays where you put it.';
+const SPREADS = 'Open water, gel or sediment, and porous beads. It spreads like sugar: fast in water, slowly in gel and sediment.';
+const PH_RULE = 'Shown pH = 7 + (base − acid) / (1 + buffer), kept between 2 and 12; each tick equal amounts of acid and base cancel out.';
+
+/** The three abstract inhibitors (CT §3.4; SPEC §4.3): one category each, the same rules. */
+function inhibitorCopy(who: string, unaffected: string, watch: string): MaterialCopy {
+  return {
+    habitats: SPREADS,
+    changes: `Adds an abstract inhibitor to each covered open cell; it loses 0.2 % of its amount each tick. ${who} there grow × 1 / (1 + exposure) and lose 8 × exposure health each second; biofilm in a cell halves the exposure once.`,
+    unchanged: `${unaffected} No food, carbon or nutrient.`,
+    watch,
+    unit: 'units',
+  };
+}
+
 /** Material tray copy beyond the content summary (per enabled material id). */
 export const MATERIAL_COPY: Readonly<Record<string, MaterialCopy>> = {
   SUGAR: {
@@ -158,6 +188,76 @@ export const MATERIAL_COPY: Readonly<Record<string, MaterialCopy>> = {
     watch: 'Where the inspector says growth is limited by minerals, whether growth goes on nearby.',
     unit: 'N',
   },
+  OIL: {
+    habitats: STAYS_PUT,
+    changes: 'Adds an oil deposit (carbon, no minerals) to each covered open cell, logged as an input.',
+    unchanged: 'Nothing refills it. It does not dissolve or spread by itself.',
+    watch: 'Organisms that eat oil gathering on it.',
+    unit: 'C',
+  },
+  PROTEIN: {
+    habitats: STAYS_PUT,
+    changes: 'Adds a protein deposit (carbon, no minerals) to each covered open cell, logged as an input.',
+    unchanged: 'Nothing refills it. It does not dissolve or spread by itself.',
+    watch: 'Organisms that eat protein gathering on it.',
+    unit: 'C',
+  },
+  METABOLITE: {
+    habitats: SPREADS,
+    changes: 'Adds dissolved metabolite carbon (no minerals) to each covered open cell, logged as an input.',
+    unchanged: 'Nothing refills it. Only organisms that list metabolite as food can eat it.',
+    watch: 'Metabolite eaters gathering on it; the patch spreading out and thinning.',
+    unit: 'C',
+  },
+  OXYGEN: {
+    habitats: SPREADS,
+    changes:
+      'Adds dissolved oxygen to each covered open cell. Oxygen is not one of the counted materials (carbon, nutrient, mineral), so it is not logged as an input.',
+    unchanged:
+      'No food, carbon or nutrient. With the lid open every cell drifts back toward 0.8 oxygen by 0.02 of the difference each tick (sediment ten times slower).',
+    watch: 'Eaters that were short of oxygen feeding faster nearby, until the extra spreads away.',
+    unit: 'O2',
+  },
+  CO2: {
+    habitats: SPREADS,
+    changes: 'Adds dissolved carbon dioxide to each covered open cell; it is carbon, logged as an input.',
+    unchanged:
+      'It is not food for eaters. With the lid open every cell drifts back toward 0.5 by 0.02 of the difference each tick (sediment ten times slower).',
+    watch: 'Algae growing faster where light, nutrient and carbon dioxide meet.',
+    unit: 'C',
+  },
+  ACID: {
+    habitats: SPREADS,
+    changes: `Adds acid equivalents to each covered open cell, lowering pH. ${PH_RULE}`,
+    unchanged: 'No food, carbon or nutrient. Nothing refills it.',
+    watch: 'The pH line in the cell inspector; organisms outside their preferred pH becoming stressed.',
+    unit: 'acid',
+  },
+  BASE: {
+    habitats: SPREADS,
+    changes: `Adds base equivalents to each covered open cell, raising pH. ${PH_RULE}`,
+    unchanged: 'No food, carbon or nutrient. Nothing refills it.',
+    watch: 'The pH line in the cell inspector moving back toward 7 where there was acid.',
+    unit: 'base',
+  },
+  BUFFER: {
+    habitats: SPREADS,
+    changes: `Adds buffer to each covered open cell. It does not move pH by itself: it divides how far base and acid move it. ${PH_RULE}`,
+    unchanged: 'No food, carbon or nutrient, and no acid or base. Nothing refills it.',
+    watch: 'The same acid moving the pH line less where there is buffer.',
+    unit: 'buffer',
+  },
+  SALT: {
+    habitats: SPREADS,
+    changes:
+      'Adds salt to each covered open cell. Salinity is the salt amount (it can go above 1); it spreads and never decays.',
+    unchanged: 'No food, carbon or nutrient. Nothing removes it by itself.',
+    watch: 'Organisms outside their preferred salinity becoming stressed while salt-tolerant ones carry on.',
+    unit: 'salt',
+  },
+  INH_BACT: inhibitorCopy('Bacteria', 'Yeasts, fungi, algae, consumers, parasites and viruses are not affected.', 'Bacteria nearby slowing or dying while other organisms carry on.'),
+  INH_FUNG: inhibitorCopy('Yeasts and fungi', 'Bacteria, algae, consumers, parasites and viruses are not affected.', 'Yeasts and fungi nearby slowing or dying while other organisms carry on.'),
+  INH_PHOTO: inhibitorCopy('Algae', 'Bacteria, yeasts, fungi, consumers, parasites and viruses are not affected.', 'Algae nearby slowing or dying while other organisms carry on.'),
 };
 
 export const FALLBACK_MATERIAL_COPY: MaterialCopy = {
@@ -250,6 +350,14 @@ export const OVERLAYS: readonly { readonly id: string; readonly copy: OverlayCop
   { id: 'starch', copy: { name: 'Starch', unit: 'C per cell' } },
   { id: 'detritus', copy: { name: 'Debris', unit: 'C per cell' } },
   { id: 'eStarch', copy: { name: 'Starch enzyme', unit: 'activity per cell' } },
+  // P3.1: food and chemistry fields the Phase 3 trays add (each listed only when the dish allocates it).
+  { id: 'oil', copy: { name: 'Oil', unit: 'C per cell' } },
+  { id: 'protein', copy: { name: 'Protein', unit: 'C per cell' } },
+  { id: 'metabolite', copy: { name: 'Metabolite', unit: 'C per cell' } },
+  { id: 'salt', copy: { name: 'Salt', unit: 'salinity (salt per cell)' } },
+  { id: 'inhBact', copy: { name: 'Bacterial inhibitor', unit: 'units per cell' } },
+  { id: 'inhFung', copy: { name: 'Fungal inhibitor', unit: 'units per cell' } },
+  { id: 'inhPhoto', copy: { name: 'Photosynthetic inhibitor', unit: 'units per cell' } },
 ];
 
 export function overlayCopy(id: string): OverlayCopy {
@@ -328,6 +436,19 @@ export function habitatEditOutcome(p: CommandPayload, r: CommandResult, label = 
       return '';
   }
 }
+
+/** The Habitat tray's lid toggle (SPEC §4.2, §4.5; CT §12.2; P3.1): a world setting, one recorded change. */
+export const LID_COPY = {
+  label: 'Lid',
+  open: 'Open',
+  closed: 'Closed',
+  rule: 'Open: every cell trades oxygen and carbon dioxide with the air, 0.02 of the difference each tick toward 0.8 oxygen and 0.5 carbon dioxide (sediment ten times slower). Closed: no gas exchange at all. Light enters either way. Each change is recorded and can be undone.',
+  outcome: (lid: 'open' | 'closed') =>
+    lid === 'closed'
+      ? 'Lid closed: no gas exchange with the air. Light still enters.'
+      : 'Lid open: oxygen and carbon dioxide drift toward the air’s levels again.',
+  failed: 'The lid did not change.',
+} as const;
 
 export const LAB_TEXT = {
   toggle: 'Lab',

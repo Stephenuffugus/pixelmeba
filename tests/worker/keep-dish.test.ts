@@ -726,6 +726,13 @@ describe('Fix round 1: an untouched start rebuilds exactly and is not written (p
       name: 'Empty dish',
       seed: 8,
     },
+    // P3.2: the rebuild re-applies the recorded habitat (wave 1 verifier MINOR: freshStart and withHabitatOverride).
+    'New Dish, Empty Gel Colony': {
+      make: (h) =>
+        h.create('cur', { kind: 'recipe', recipeId: 'FIRST_DISH_V1', seed: 9, overrides: { mutationPreset: 'standard', founderMode: 'identical', empty: true, habitatId: 'GEL_COLONY' } }, 'Gel dish'),
+      name: 'Gel dish',
+      seed: 9,
+    },
     'an experiment card': {
       make: async (h) => {
         const r = await h.ask({ type: 'experimentStart', cardId: 'EXP_103', newDishId: 'cur', compare: null });

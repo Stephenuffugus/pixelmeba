@@ -33,6 +33,7 @@ import { MODULE_NATIVE_ABILITY, missingModuleParams, moduleSetProblem } from './
 import { MAX_WHAT_IF_CHOICES, variantPatchProblems } from '../variants';
 import { experimentProblems } from '../experiments';
 import { PAINT_TARGETS, STRUCTURE_RECORD_IDS } from '../grid';
+import { FIELD_DEFS, isFieldId, type SystemFlag } from '../fields';
 
 export interface RawFile {
   readonly file: string;
@@ -421,6 +422,25 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
         err(variants.files[id]!, 'sourceId', `${sourceId} already has ${MAX_WHAT_IF_CHOICES} What if? choices (${list.slice(0, MAX_WHAT_IF_CHOICES).join(', ')})`),
       );
     }
+    // Systems (Phase 3 foundation): an enabled species, material or module needs the systems it uses.
+    const hasSystem = (sys: SystemFlag) => m.enabledSystems.includes(sys);
+    m.enabledSpecies.forEach((id, i) => {
+      const s = species.map[id];
+      if (s === undefined) return;
+      for (const [sys, why] of speciesSystemNeeds(s)) {
+        if (!hasSystem(sys)) err(mf, `enabledSpecies.${i}`, `enabled species "${id}" uses ${why}, which needs the "${sys}" system (not in enabledSystems)`);
+      }
+    });
+    m.enabledMaterials.forEach((id, i) => {
+      const mat = materials.map[id];
+      if (mat === undefined) return;
+      const sys = materialSystemNeed(mat);
+      if (sys !== null && !hasSystem(sys)) err(mf, `enabledMaterials.${i}`, `enabled material "${id}" (${mat.kind} ${mat.target}) needs the "${sys}" system (not in enabledSystems)`);
+    });
+    m.enabledModules.forEach((id, i) => {
+      const sys = MODULE_SYSTEM_NEEDS[id];
+      if (sys !== undefined && !hasSystem(sys)) err(mf, `enabledModules.${i}`, `enabled module "${id}" needs the "${sys}" system (not in enabledSystems)`);
+    });
     if (m.contentHash === '') warn(mf, 'contentHash', 'content hash not written yet (run npm run content:validate -- --write)');
   }
 
@@ -450,6 +470,41 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
     objectiveIds: objectives.ids,
   };
   return { registry, issues };
+}
+
+/** Modules that use a system (CT §7): E01 and E09 secrete enzymes, E10 builds film. */
+export const MODULE_SYSTEM_NEEDS: Readonly<Record<string, SystemFlag>> = { E01: 'enzymes', E09: 'enzymes', E10: 'film' };
+
+/**
+ * The systems a species uses, each with what uses it (for the validator's message). Never film for
+ * `digestsFilm`: B04 ships without the film system and simply finds no film (D-0038).
+ */
+export function speciesSystemNeeds(s: Species): [SystemFlag, string][] {
+  const out: [SystemFlag, string][] = [];
+  const has = (a: Species['nativeAbilities'][number]) => s.nativeAbilities.includes(a);
+  if (has('BIOFILM')) out.push(['film', 'BIOFILM']);
+  if (has('BRANCHING')) out.push(['fungi', 'BRANCHING']);
+  if (has('TRANSPORT_LINKS')) out.push(['fungi', 'TRANSPORT_LINKS']);
+  if (has('HOST_DRAIN')) out.push(['parasites', 'HOST_DRAIN']);
+  if (has('LYSIS')) out.push(['viruses', 'LYSIS']);
+  else if (s.category === 'virus') out.push(['viruses', 'the virus category']);
+  for (const a of ['E_STARCH_SECRETION', 'E_OIL_SECRETION', 'E_PROTEIN_SECRETION'] as const) if (has(a)) out.push(['enzymes', a]);
+  if (s.foodPriority.includes('broth')) out.push(['enzymes', 'a broth diet']);
+  return out;
+}
+
+/**
+ * The system a material uses: its target field's system for field, deposit, activity and viral
+ * materials (null for 'core'), 'foodObjects' for objects (M10, M11); paint and structures use none.
+ */
+export function materialSystemNeed(mat: MaterialDef): SystemFlag | null {
+  if (mat.kind === 'object') return 'foodObjects';
+  if (mat.kind === 'field' || mat.kind === 'deposit' || mat.kind === 'activity' || mat.kind === 'viral') {
+    if (!isFieldId(mat.target)) return null;
+    const sys = FIELD_DEFS[mat.target].system;
+    return sys === 'core' ? null : sys;
+  }
+  return null;
 }
 
 /** Validate and throw a ContentError on any error. */

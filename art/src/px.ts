@@ -79,6 +79,70 @@ export class Px {
     return this;
   }
 
+  /**
+   * Thick stroke along a polyline: every pixel whose center lies within `r` of the path. `rAt`
+   * (0..1 along the path → radius) tapers it. Integer pixels, so the result is deterministic.
+   */
+  fillStroke(pts: readonly (readonly [number, number])[], r: number, c: number, rAt?: (t: number) => number): this {
+    const segs: { ax: number; ay: number; bx: number; by: number; t0: number; t1: number }[] = [];
+    let total = 0;
+    for (let k = 1; k < pts.length; k++) total += Math.hypot(pts[k]![0] - pts[k - 1]![0], pts[k]![1] - pts[k - 1]![1]);
+    let acc = 0;
+    for (let k = 1; k < pts.length; k++) {
+      const [ax, ay] = pts[k - 1]!;
+      const [bx, by] = pts[k]!;
+      const len = Math.hypot(bx - ax, by - ay);
+      segs.push({ ax, ay, bx, by, t0: total > 0 ? acc / total : 0, t1: total > 0 ? (acc + len) / total : 1 });
+      acc += len;
+    }
+    if (pts.length === 1) segs.push({ ax: pts[0]![0], ay: pts[0]![1], bx: pts[0]![0], by: pts[0]![1], t0: 0, t1: 1 });
+    for (let y = 0; y < this.h; y++) {
+      for (let x = 0; x < this.w; x++) {
+        const px = x + 0.5;
+        const py = y + 0.5;
+        for (const s of segs) {
+          const dx = s.bx - s.ax;
+          const dy = s.by - s.ay;
+          const l2 = dx * dx + dy * dy;
+          const u = l2 === 0 ? 0 : Math.min(1, Math.max(0, ((px - s.ax) * dx + (py - s.ay) * dy) / l2));
+          const qx = s.ax + u * dx;
+          const qy = s.ay + u * dy;
+          const rr = rAt ? rAt(s.t0 + (s.t1 - s.t0) * u) : r;
+          if ((px - qx) ** 2 + (py - qy) ** 2 <= rr * rr) {
+            this.set(x, y, c);
+            break;
+          }
+        }
+      }
+    }
+    return this;
+  }
+
+  /** One-pixel line (Bresenham) between integer points. */
+  line(x0: number, y0: number, x1: number, y1: number, c: number): this {
+    let x = x0;
+    let y = y0;
+    const dx = Math.abs(x1 - x0);
+    const dy = -Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1;
+    const sy = y0 < y1 ? 1 : -1;
+    let e = dx + dy;
+    for (;;) {
+      this.set(x, y, c);
+      if (x === x1 && y === y1) break;
+      const e2 = 2 * e;
+      if (e2 >= dy) {
+        e += dy;
+        x += sx;
+      }
+      if (e2 <= dx) {
+        e += dx;
+        y += sy;
+      }
+    }
+    return this;
+  }
+
   fillRect(x0: number, y0: number, w: number, h: number, c: number): this {
     for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) this.set(x, y, c);
     return this;

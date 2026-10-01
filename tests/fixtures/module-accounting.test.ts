@@ -59,7 +59,7 @@ function snapshotEnergy(e: Energy): Energy {
 /** Every recorded energy flow for a one-organism dish: ΔE must equal earned − everything spent/lost. */
 function energyBalance(before: Energy, after: Energy): number {
   const d = (k: keyof Energy) => after[k] - before[k];
-  return d('earned') - d('maintenance') - d('surcharge') - d('upkeep') - d('movement') - d('secretion') - d('division') - d('dormancy') - d('dissipated') - d('other');
+  return d('earned') - d('maintenance') - d('surcharge') - d('upkeep') - d('movement') - d('secretion') - d('division') - d('dormancy') - d('construction') - d('dissipated') - d('other');
 }
 
 function fillSugar(w: World, cx: number, cy: number, r: number, amount: number): void {

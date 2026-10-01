@@ -94,7 +94,7 @@ describe('debris in History (P2.8)', () => {
   });
 
   it('a schema 2 save loads through the import path (migrated by copy), continues identically, and has no debris for its older seconds', async () => {
-    expect(SCHEMA_VERSION).toBe(3);
+    expect(SCHEMA_VERSION).toBe(4);
     const w = realizeRecipe(reg, 'CLEANING_CREW_V1', { worldId: 'old-dish', seed: 103 });
     run(w, 300);
     const { text } = await buildSaveFile(w, {
@@ -107,7 +107,7 @@ describe('debris in History (P2.8)', () => {
     const before = JSON.stringify(oldState);
     const migrated = migrateWorldState(oldState);
     expect(JSON.stringify(oldState)).toBe(before); // by copy: the input is untouched
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(SCHEMA_VERSION);
     // The trait record states where it starts: the migrated world's time (tick 300 = 0:30).
     expect(migrated.history.traits).toEqual({ recent: [], minutes: [], compacted: false, since: 30 });
     expect(migrated.history.journal).toEqual([]);
@@ -132,14 +132,14 @@ describe('debris in History (P2.8)', () => {
         12,
       );
     expect(world.history.traits.recent.map((x) => x.second)).toEqual([40, 50]);
-    // And a current save of it round-trips at schema 3.
+    // And a current save of it round-trips at the current schema.
     const again = await buildSaveFile(world, {
       name: 'Old dish',
       savedAt: '2026-09-28T00:01:00Z',
       recipeId: 'CLEANING_CREW_V1',
     });
     const re = await loadSaveFile(again.text);
-    expect(re.file.schemaVersion).toBe(3);
+    expect(re.file.schemaVersion).toBe(SCHEMA_VERSION);
     expect(re.world.history.seconds).toEqual(world.history.seconds);
     expect(serializeWorld(re.world).history).toEqual(serializeWorld(world).history);
   });
@@ -178,9 +178,9 @@ describe('debris in History (P2.8)', () => {
     expect(world.history.seconds.filter((x) => x.debrisTotal !== undefined).map((x) => x.second)[0]).toBe(191);
     expect(world.history.traits.recent.map((x) => x.second)).toEqual([200, 210, 220]);
     expect(traitRecordNote(regionalTraitSeries(world.history, 0, 0))).toMatch(/^Trait samples start after 3:10: this dish was saved by an older version/);
-    // A re-save is a new schema-3 record that loads to the same state.
+    // A re-save is a new current-schema record that loads to the same state.
     const again = await buildSaveFile(world, { name: 'Schema 2 cleaning crew', savedAt: '2026-09-28T12:05:00Z', recipeId: 'CLEANING_CREW_V1' });
-    expect(JSON.parse(again.text).schemaVersion).toBe(3);
+    expect(JSON.parse(again.text).schemaVersion).toBe(SCHEMA_VERSION);
     const re = await loadSaveFile(again.text);
     expect(stateHash(re.world)).toBe(stateHash(world));
     expect(re.world.history.traits.since).toBe(190);

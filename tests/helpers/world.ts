@@ -11,6 +11,8 @@ import { FIELD_DEFS, type FieldId } from '../../src/sim/fields';
 import { markField, updateDerived } from '../../src/sim/transport';
 import { maskCells } from '../../src/sim/grid';
 import { initializeLedger } from '../../src/sim/ledger';
+import { addAdhesionLink, addFungalLink, LINK_TRANSPORT, type FungalLinkKind } from '../../src/sim/links';
+import { createObject, objectTotals, type FoodObject, type FoodObjectKind } from '../../src/sim/objects';
 
 export function registry(): ContentRegistry {
   return loadRegistryFs();
@@ -97,4 +99,26 @@ export function aliveOf(world: World, speciesId?: string): number[] {
     out.push(i);
   }
   return out;
+}
+
+/** Link two organisms with a fungal link (test setup; throws when the store refuses). */
+export function linkFungal(world: World, a: number, b: number, kind: FungalLinkKind = LINK_TRANSPORT): void {
+  if (!addFungalLink(world, a, b, kind)) throw new Error(`linkFungal: ${a}–${b} refused`);
+}
+
+/** Link two organisms with an adhesion link (test setup; throws when the store refuses). */
+export function linkAdhesion(world: World, a: number, b: number): void {
+  if (!addAdhesionLink(world, a, b)) throw new Error(`linkAdhesion: ${a}–${b} refused`);
+}
+
+/**
+ * Place a finite food object (test setup): its material is logged as an external input, as the
+ * placing tool will (SPEC §5.1 "creation is an external ledger input"). Throws when the store refuses.
+ */
+export function placeObject(world: World, cell: number, kind: FoodObjectKind, pools: FoodObject['pools'], n: number): FoodObject {
+  const res = createObject(world, { cell, kind, pools, n });
+  if (!res.ok) throw new Error(`placeObject: refused (${res.reason})`);
+  world.ledger.inputs.c += objectTotals([res.object]).c;
+  world.ledger.inputs.n += n;
+  return res.object;
 }

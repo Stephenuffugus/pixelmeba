@@ -327,18 +327,34 @@ export interface LifeBrush {
   readonly habitatMask: number;
   /** Attached species may sit on porous beads; free swimmers may not. */
   readonly attached: boolean;
+  /**
+   * The species record's attachment surfaces ('gel', 'sediment', 'stoneEdge', 'bead', 'mesh'); absent
+   * for a free-living species. An attached species needs one of them in the cell (SPEC §2.2, D-0006).
+   */
+  readonly surfaces?: readonly string[];
 }
 
 /**
  * How one covered cell responds to the Life brush: exactly the inoculate command's cell filter
- * (canOccupy → habitatCompatible, src/sim/suitability.ts), stated over the grid codes so the
- * renderer's preview can use it; tests/sim/lab-commands.test.ts ties the two cell by cell.
+ * (canOccupy → habitatCompatible, src/sim/suitability.ts, with src/sim/attachment.ts's surfaces),
+ * stated over the grid codes so the renderer's preview can use it; tests/sim/lab-commands.test.ts ties
+ * the two cell by cell. `stoneEdge` says whether the cell is a stone edge (isStoneEdge: an open cell
+ * four-adjacent to stone). A cell without one of an attached species' surfaces is 'habitat'.
  */
-export function lifeCellOutcome(structure: number, substrate: number, life: LifeBrush): BrushCellOutcome {
+export function lifeCellOutcome(structure: number, substrate: number, life: LifeBrush, stoneEdge: boolean): BrushCellOutcome {
   if (structure === ST_OUTSIDE) return 'rim';
   if (structure !== ST_NONE && !(structure === ST_BEAD && life.attached)) return 'structure';
   const bit = substrate === SUB_WATER ? 1 : substrate === SUB_GEL ? 2 : substrate === SUB_SEDIMENT ? 4 : 0;
-  return (life.habitatMask & bit) !== 0 ? 'ok' : 'habitat';
+  if ((life.habitatMask & bit) === 0) return 'habitat';
+  const surfaces = life.surfaces;
+  if (surfaces === undefined) return 'ok';
+  const on =
+    structure === ST_BEAD
+      ? surfaces.includes('bead')
+      : (substrate === SUB_GEL && surfaces.includes('gel')) ||
+        (substrate === SUB_SEDIMENT && surfaces.includes('sediment')) ||
+        (structure === ST_NONE && stoneEdge && surfaces.includes('stoneEdge'));
+  return on ? 'ok' : 'habitat';
 }
 
 /**

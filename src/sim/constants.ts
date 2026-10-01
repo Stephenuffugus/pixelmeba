@@ -87,6 +87,9 @@ export const ENZYME_CONVERSION = 0.1;
 export const ENZYME_DECAY_PER_SECOND = 0.02;
 export const BREAKER_DECAY_PER_SECOND = 0.01;
 
+/** Shared film construction (SPEC §7.1, §9 E10, CT §12.6): film carbon per cell never exceeds this. */
+export const FILM_CAP = 0.5;
+
 /** Dormancy state machine for native resters (SPEC §7.6, CT §12.7). E03 reads its own recorded params. */
 export const DORMANCY_PREPARE_SECONDS = 5;
 export const DORMANCY_PREPARE_COST = 10;

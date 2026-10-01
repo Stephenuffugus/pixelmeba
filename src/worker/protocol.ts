@@ -39,6 +39,12 @@ export interface RecipeOverrides {
   readonly founderMode?: 'identical' | 'varied' | 'diverse';
   /** Start from the recipe's habitat only: no founders, patches or scheduled inputs. */
   readonly empty?: boolean;
+  /**
+   * P3.2: build on this enabled habitat preset instead of the recipe's (New Dish 'Empty Gel Colony',
+   * 'Empty Sediment Edge'); a different habitat drops the recipe's background overrides
+   * (@sim/recipes withHabitatOverride). Absent = the recipe's own habitat.
+   */
+  readonly habitatId?: string;
 }
 
 export type DishSource =
@@ -327,6 +333,8 @@ export interface SnapshotMsg {
   readonly lineage?: LineageMarks | null;
   /** P2.2: the evolution setting now in effect, its per-daughter rates and the recorded changes (Advanced panel). */
   readonly evolution?: EvolutionState;
+  /** P3.1: the dish's lid setting now in effect (SPEC §4.5), for the Habitat tray's lid toggle. */
+  readonly lid?: 'open' | 'closed';
 }
 
 /** What the lineage view asks the worker to mark: a locus to band, and/or a branch to highlight. */
@@ -558,6 +566,28 @@ export interface CellInspect {
   readonly light: number;
   readonly residents: readonly { readonly birthId: number; readonly speciesId: string }[];
   readonly load: number;
+  /** P3.1 (SPEC §12.1): the salinity index (the salt amount, unclamped). */
+  readonly salinity?: number;
+  /** P3.1: dissolved oxygen in the cell (shown even at 0). */
+  readonly oxygen?: number;
+  /** P3.1 (SPEC §4.4): the light factors, effective light = clamp(baseline × shade, 0, 1). */
+  readonly lightBase?: number;
+  readonly shade?: number;
+  /**
+   * P3.1 (SPEC §4.3; CT §3.4): inhibitor exposure an organism of each targeted category has here (the
+   * amount, × 0.5 once when the cell holds film), with its growth factor and health loss per second.
+   * Absent when the world records no inhibitors.
+   */
+  readonly exposure?: {
+    readonly filmHalves: boolean;
+    readonly lines: readonly {
+      readonly category: 'bacterial' | 'fungal' | 'photosynthetic';
+      readonly amount: number;
+      readonly exposure: number;
+      readonly growthFactor: number;
+      readonly damagePerSecond: number;
+    }[];
+  };
 }
 
 export type FromWorker =
@@ -848,8 +878,17 @@ export interface RegistryInfo {
 export interface NewDishPreview {
   readonly recipeId: string;
   readonly recipeName: string;
-  /** The habitat as the Field Guide names and summarizes it. */
-  readonly habitat: { readonly name: string; readonly summary: string };
+  /**
+   * The habitat as the Field Guide names and summarizes it; `rules` is its guide's rules text (what
+   * every cell is preloaded with) and `grid` its substrate and structure layout (@sim/recipes
+   * habitatGrid; CELL_COUNT cells, SUB_* and ST_* codes) for the preview map (P3.2).
+   */
+  readonly habitat: {
+    readonly name: string;
+    readonly summary: string;
+    readonly rules?: string;
+    readonly grid?: { readonly substrate: Uint8Array; readonly structure: Uint8Array };
+  };
   readonly seed: number;
   readonly mutationPreset: string;
   readonly founderMode: string;

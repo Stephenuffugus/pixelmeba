@@ -4,7 +4,7 @@
   "moduleRegistryVersion": 1,
   "phenotypeMappingVersion": 1,
   "contentVersion": 2,
-  "contentHash": "adc910dcd970d3f4393f3c5e4d8e87afa4203e820d72614dfe448b6dab88650c",
+  "contentHash": "59d708d2f08b69ca874de91742ff9d84c27592669a49fac3ef8822b6095eab93",
   "buildPhase": 3,
   "enabledSpecies": [
     "A01",
@@ -19,13 +19,26 @@
     "E05"
   ],
   "enabledSystems": [
+    "chemistry",
     "core",
     "enzymes"
   ],
   "enabledMaterials": [
+    "ACID",
+    "BASE",
+    "BUFFER",
+    "CO2",
     "DEBRIS",
     "GEL",
+    "INH_BACT",
+    "INH_FUNG",
+    "INH_PHOTO",
+    "METABOLITE",
     "NUTRIENT",
+    "OIL",
+    "OXYGEN",
+    "PROTEIN",
+    "SALT",
     "SEDIMENT",
     "SHADE",
     "STARCH",
@@ -33,6 +46,8 @@
     "WATER"
   ],
   "enabledHabitats": [
+    "GEL_COLONY",
+    "SEDIMENT_EDGE",
     "WATER_GARDEN"
   ],
   "enabledStructures": [

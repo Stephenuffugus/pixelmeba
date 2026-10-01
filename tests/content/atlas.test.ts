@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildAtlas } from '../../tools/art-build';
-import { checkAtlas, enabledMarks, FEATURE_FRAMES, featureFrameKey, pngSize, requiredFrames, type AtlasSpeciesRef } from '../../tools/content-validate';
+import { atlasSpeciesRef, checkAtlas, enabledMarks, FEATURE_FRAMES, featureFrameKey, P3_SPRITES, pngSize, requiredFrames, type AtlasSpeciesRef } from '../../tools/content-validate';
 import { loadRegistryFs, REPO_ROOT } from '../../tools/lib/content-fs';
 
 interface Frame {
@@ -34,10 +34,10 @@ const ATLAS_DIR = join(REPO_ROOT, 'public', 'atlas');
 const manifestText = readFileSync(join(ATLAS_DIR, 'manifest.json'), 'utf8');
 const png = new Uint8Array(readFileSync(join(ATLAS_DIR, 'organisms.png')));
 const reg = loadRegistryFs();
-const enabled: AtlasSpeciesRef[] = reg.manifest.enabledSpecies.map((id) => {
-  const s = reg.species[id]!;
-  return { id, assetId: s.assetId, frameSize: s.frameSize, headings: s.headings };
-});
+const enabled: AtlasSpeciesRef[] = reg.manifest.enabledSpecies.map((id) => atlasSpeciesRef(reg.species[id]!));
+/** Every Phase 1–3 species record, regardless of what the manifest enables (wave 1 art; later waves flip them on). */
+const phase13: AtlasSpeciesRef[] = reg.speciesIds.filter((id) => reg.species[id]!.phase <= 3).map((id) => atlasSpeciesRef(reg.species[id]!));
+const PHASE3_IDS = ['B02', 'B03', 'B05', 'B07', 'B08', 'F01', 'F02', 'P02', 'P03', 'P04', 'V01', 'X01', 'Y01', 'Y02'];
 
 const atlas = (): Atlas => JSON.parse(manifestText) as Atlas;
 const without = (a: Atlas, key: string): Atlas => ({ ...a, frames: a.frames.filter((f) => f.key !== key) });
@@ -211,6 +211,105 @@ describe('atlas completeness (P1.4)', () => {
       const firstMark = a.manifest.frames.findIndex((f) => 'layer' in f);
       expect(a.manifest.frames.slice(firstMark).every((f) => 'layer' in f)).toBe(true);
       expect(a.manifest.frames.length - firstMark).toBe(32);
+    });
+  });
+
+  describe('Phase 3 organism art (UX §6.2, ARCH §10.1)', () => {
+    const p3 = (id: string) => phase13.find((r) => r.id === id)!;
+    const all = (a: unknown) => checkAtlas(a, phase13);
+
+    it('the committed atlas is complete for every Phase 1–3 species record, enabled or not', () => {
+      expect(phase13.map((r) => r.id).sort()).toEqual(['A01', 'B01', 'B04', 'B06', 'P01', ...PHASE3_IDS].sort());
+      expect(checkAtlas(atlas(), phase13, { png, marks })).toEqual([]);
+      // The independent spec table agrees with the records (sizes and headings).
+      for (const id of PHASE3_IDS) {
+        expect(p3(id).frameSize, id).toBe(P3_SPRITES[id]!.size);
+        expect(p3(id).headings, id).toBe(P3_SPRITES[id]!.headings);
+      }
+    });
+
+    it('packs the UX §6.2 frame counts per heading for each Phase 3 form', () => {
+      const a = atlas();
+      const per = (assetId: string, anim: string, h = 'e') => a.frames.filter((f) => f.key.startsWith(`${assetId}/${anim}/${h}/`)).length;
+      for (const id of ['b03_dusk', 'b05_crossfeeder', 'b07_oilwick', 'b08_brothmaker']) {
+        for (const h of ['e', 's', 'w', 'n']) expect(['move', 'reproduction', 'stress', 'death'].map((n) => per(id, n, h)), `${id} ${h}`).toEqual([4, 4, 2, 3]);
+      }
+      for (const id of ['b02_velvet', 'y01_bubble', 'y02_creambud']) expect(['idle', 'reproduction', 'stress', 'death'].map((n) => per(id, n)), id).toEqual([4, 4, 2, 3]);
+      expect(['move', 'reproduction', 'stress', 'death'].map((n) => per('x01_hitcher', n))).toEqual([4, 4, 2, 3]);
+      for (const id of ['p02_ciliate', 'p03_rotifer', 'p04_siltworm']) {
+        for (const h of ['e', 's', 'w', 'n']) expect(['move', 'feed', 'reproduction', 'stress', 'death'].map((n) => per(id, n, h)), `${id} ${h}`).toEqual([6, 4, 4, 2, 4]);
+      }
+      for (const id of ['f01_threadlace', 'f02_cordweaver']) {
+        expect(['mask', 'decaying', 'tip', 'bud', 'idle'].map((n) => per(id, n)), id).toEqual([16, 16, 1, 1, 1]);
+        expect(a.sprites[id]!.headings).toBe(1);
+      }
+      expect(per('f02_cordweaver', 'pulse')).toBe(2);
+      expect(['glyph', 'idle'].map((n) => per('v01_pinphage', n))).toEqual([1, 1]);
+      expect(requiredFrames(16, 'fungus').map((r) => `${r.anims.join('|')}:${r.frames}`)).toEqual(['mask:16', 'decaying:16', 'tip:1', 'bud:1', 'idle:1']);
+      expect(requiredFrames(16, 'virus').map((r) => `${r.anims.join('|')}:${r.frames}`)).toEqual(['glyph:1', 'idle:1']);
+      // UI thumbnails (src/ui/atlas.ts drawFrame: move, else idle, facing East, frame 0) exist for every species.
+      for (const r of phase13) {
+        const s = a.sprites[r.assetId]!;
+        const anim = s.animations.move ? 'move' : 'idle';
+        expect(a.frames.some((f) => f.key === `${r.assetId}/${anim}/e/0`), r.id).toBe(true);
+      }
+    });
+
+    it('removing one required frame of each kind gives exactly one error naming sprite, animation, heading and frame', () => {
+      const cases: [string, string][] = [
+        ['B07 (b07_oilwick)', 'b07_oilwick/stress/s/1'], // small, 4 headings
+        ['Y02 (y02_creambud)', 'y02_creambud/idle/e/3'], // small, idle loop
+        ['P03 (p03_rotifer)', 'p03_rotifer/feed/w/3'], // large
+        ['F01 (f01_threadlace)', 'f01_threadlace/mask/e/10'], // fungus mask tile
+        ['F02 (f02_cordweaver)', 'f02_cordweaver/tip/e/0'], // fungus overlay
+        ['V01 (v01_pinphage)', 'v01_pinphage/glyph/e/0'], // virus glyph
+      ];
+      for (const [who, key] of cases) {
+        const issues = all(without(atlas(), key));
+        expect(issues, key).toHaveLength(1);
+        expect(issues[0]).toMatchObject({ severity: 'error', path: `frames[${key}]`, message: `${who}: missing frame "${key}"` });
+      }
+    });
+
+    it('requires the fungus and virus frame sets by category, not by size', () => {
+      const a = atlas();
+      delete (a.sprites.f01_threadlace!.animations as Record<string, unknown>).bud;
+      a.sprites.f02_cordweaver!.animations.mask!.frames = 15;
+      delete (a.sprites.v01_pinphage!.animations as Record<string, unknown>).idle;
+      expect(all(a).map((i) => i.message)).toEqual([
+        'F01 (f01_threadlace): missing required animation "bud" (1 frames × 1 heading(s))',
+        'F02 (f02_cordweaver): "mask" has 15 frame(s), needs 16',
+        'V01 (v01_pinphage): missing required animation "idle" (1 frames × 1 heading(s))',
+      ]);
+      // Under the small-organism rule the same fungus would need move/idle, reproduction, … — the category decides.
+      const asSmall = checkAtlas(atlas(), [{ ...p3('F01'), category: 'bacterium' }]).map((i) => i.message);
+      expect(asSmall).toContain('F01 (f01_threadlace): missing required animation "reproduction" (4 frames × 1 heading(s))');
+    });
+
+    it('requires F02 Cordweaver\'s transfer pulse (UX §6.3 "copper threads with pulse on transfer"), not only its fungus frames', () => {
+      const a = atlas();
+      delete (a.sprites.f02_cordweaver!.animations as Record<string, unknown>).pulse;
+      a.frames = a.frames.filter((f) => !f.key.startsWith('f02_cordweaver/pulse/'));
+      const issues = all(a);
+      expect(issues).toHaveLength(1);
+      expect(issues[0]).toMatchObject({
+        path: 'sprites.f02_cordweaver.animations.pulse',
+        message: 'F02 (f02_cordweaver): missing required animation "pulse" (1 frames × 1 heading(s), UX §6.3 "pulse on transfer")',
+      });
+      // F01 has no pulse requirement: pulse is F02's identity, not a fungus-wide frame.
+      expect(P3_SPRITES.F01!.extra).toBeUndefined();
+    });
+
+    it('enforces the Phase 3 sizes, headings and loops even if content and atlas agree on something weaker', () => {
+      const weak = atlas();
+      weak.sprites.p02_ciliate!.headings = 1;
+      const refs = phase13.map((r) => (r.id === 'P02' ? { ...r, headings: 1 } : r));
+      expect(checkAtlas(weak, refs).map((i) => i.message)).toContain('P02 (p02_ciliate): CT §1.3 / UX §6.2 requires 4 heading(s), atlas has 1');
+      const noMove = atlas();
+      const x = noMove.sprites.x01_hitcher!.animations;
+      x.idle = x.move!;
+      delete (x as Record<string, unknown>).move;
+      expect(all(noMove).map((i) => i.message)).toContain('X01 (x01_hitcher): CT §1.3 / UX §6.2 requires a 4-frame "move" animation');
     });
   });
 

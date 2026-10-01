@@ -9,6 +9,8 @@
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { DishInfo, NewDishPreview, Speed } from '@worker/protocol';
+import { DISH_TEX, paintDish } from '@render/layers';
+import { CELL_COUNT } from '@sim/constants';
 import { IconBack, IconPlay } from '../icons';
 import { busy, dishInfo, newDishPreview, route, setSpeed, startCustom, toast } from '../state';
 import { useKeepPlanText } from '../panels/KeepPlanLine';
@@ -31,6 +33,15 @@ import { plural } from '../strings/experiments';
 const RECIPE_ID = 'FIRST_DISH_V1';
 const MAX_SEED = 4294967295;
 
+/** 'Start with' choices (UX §2.3): the Garden, or an empty habitat preset (CT §8.1; P3.2). */
+type StartId = 'garden' | 'empty' | 'gel' | 'sediment';
+
+/** Habitat-only starts on another preset than the recipe's: the habitat the dish is built on. */
+const START_HABITAT: Readonly<Partial<Record<StartId, string>>> = {
+  gel: 'GEL_COLONY',
+  sediment: 'SEDIMENT_EDGE',
+};
+
 function randomSeed(): number {
   // UI only: picks the seed the dish will record. The simulation never reads this generator.
   return Math.floor(Math.random() * 900000) + 100000;
@@ -46,20 +57,65 @@ function listText(items: readonly string[]): string {
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
+/**
+ * The habitat's layout as the dish will start (the worker's habitatGrid), drawn with the dish's own
+ * colours; the words next to it say the same, so nothing rests on the picture alone.
+ */
+function HabitatMap({ p }: { readonly p: NewDishPreview }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const grid = p.habitat.grid;
+  useEffect(() => {
+    const canvas = ref.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx || !grid) return;
+    const img = ctx.createImageData(DISH_TEX, DISH_TEX);
+    paintDish(img, grid.substrate, grid.structure, new Float32Array(CELL_COUNT).fill(1));
+    ctx.putImageData(img, 0, 0);
+  }, [grid]);
+  if (!grid) return null;
+  return (
+    <canvas
+      ref={ref}
+      style={{
+        display: 'block',
+        width: '10rem',
+        maxWidth: '100%',
+        height: 'auto',
+        imageRendering: 'pixelated',
+        margin: '0 0 0.5rem',
+      }}
+      width={DISH_TEX}
+      height={DISH_TEX}
+      role="img"
+      aria-label={`Map of ${p.habitat.name}: ${p.habitat.summary}`}
+      data-testid="new-dish-map"
+    />
+  );
+}
+
 /** Exactly what the preview world holds, in words (founders, patches, seeded abilities, initial ledger). */
-function Summary({ p }: { readonly p: NewDishPreview }) {
+function Summary({ p, habitatStart }: { readonly p: NewDishPreview; readonly habitatStart: boolean }) {
   const founders = p.founders.map((f) => countOf(f.count, f.name));
   const seeded = p.founders.filter((f) => f.withModule > 0);
   const eligible = p.founders.reduce((a, f) => a + f.eligible, 0);
   const withModule = p.founders.reduce((a, f) => a + f.withModule, 0);
   return (
     <div data-testid="new-dish-summary">
-      <p>
-        {p.habitat.name}: {p.habitat.summary}{' '}
-        {p.empty
-          ? 'No life and no food until you add them.'
-          : `${p.patches.length > 0 ? `${listText(p.patches)}; ` : ''}${founders.length > 0 ? `${listText(founders)}.` : 'no founders.'}`}
-      </p>
+      <HabitatMap p={p} />
+      {habitatStart ? (
+        // A habitat start is the preset exactly as CT §8.1 defines it: its rules text says what every
+        // cell holds (food included), and nothing else is added.
+        <p data-testid="new-dish-habitat">
+          {p.habitat.name}: {p.habitat.summary} {p.habitat.rules ?? ''} No life until you add it.
+        </p>
+      ) : (
+        <p>
+          {p.habitat.name}: {p.habitat.summary}{' '}
+          {p.empty
+            ? 'No life and no food until you add them.'
+            : `${p.patches.length > 0 ? `${listText(p.patches)}; ` : ''}${founders.length > 0 ? `${listText(founders)}.` : 'no founders.'}`}
+        </p>
+      )}
       {p.founderMode === 'diverse' && !p.empty ? (
         <p data-testid="new-dish-diverse">
           {withModule === 0
@@ -100,14 +156,16 @@ function revealLifeTray(frames = 60): void {
 }
 
 export function NewDish() {
-  const [start, setStart] = useState<'garden' | 'empty'>('garden');
+  const [start, setStart] = useState<StartId>('garden');
   const [name, setName] = useState('My dish');
   const [seed, setSeed] = useState(randomSeed);
   const [preset, setPreset] = useState<PresetId>('standard');
   const [founders, setFounders] = useState<FounderModeId>('identical');
   const [showRates, setShowRates] = useState(false);
   const [showContent, setShowContent] = useState(false);
-  const [preview, setPreview] = useState<NewDishPreview | null>(null);
+  const [preview, setPreview] = useState<{ readonly start: StartId; readonly p: NewDishPreview } | null>(
+    null,
+  );
   const [problem, setProblem] = useState<string | null>(null);
   const request = useRef(0);
 
@@ -115,14 +173,16 @@ export function NewDish() {
   useEffect(() => {
     const id = ++request.current;
     const t = setTimeout(() => {
+      const habitatId = START_HABITAT[start];
       newDishPreview(RECIPE_ID, seed, {
         mutationPreset: preset,
         founderMode: founders,
-        empty: start === 'empty',
+        empty: start !== 'garden',
+        ...(habitatId !== undefined ? { habitatId } : {}),
       })
         .then((p) => {
           if (id !== request.current) return;
-          setPreview(p);
+          setPreview({ start, p });
           setProblem(null);
         })
         .catch((e: unknown) => {
@@ -134,14 +194,15 @@ export function NewDish() {
 
   const current =
     preview &&
-    preview.seed === seed &&
-    preview.mutationPreset === preset &&
-    preview.founderMode === founders &&
-    preview.empty === (start === 'empty')
-      ? preview
+    preview.start === start &&
+    preview.p.seed === seed &&
+    preview.p.mutationPreset === preset &&
+    preview.p.founderMode === founders &&
+    preview.p.empty === (start !== 'garden')
+      ? preview.p
       : null;
   // The registry is this build's manifest whatever the choices, so an older answer still describes it.
-  const registry = (current ?? preview)?.registry ?? null;
+  const registry = (current ?? preview?.p)?.registry ?? null;
 
   // D-0033: what Create will do to the open dish (with none open, the dish Continue holds: fix round 1),
   // from the worker's keep step (said before Create).
@@ -170,7 +231,8 @@ export function NewDish() {
           seed,
           mutationPreset: preset,
           founderMode: founders,
-          empty: start === 'empty',
+          empty: start !== 'garden',
+          ...(START_HABITAT[start] !== undefined ? { habitatId: START_HABITAT[start] } : {}),
         },
         started,
       );
@@ -209,7 +271,7 @@ export function NewDish() {
         </header>
         <section class="card" aria-labelledby="nd-basics">
           <h2 id="nd-basics">Start with</h2>
-          <ChoiceGroup<'garden' | 'empty'>
+          <ChoiceGroup<StartId>
             label="Start with"
             testId="new-dish-start-with"
             value={start}
@@ -224,6 +286,16 @@ export function NewDish() {
                 id: 'empty',
                 label: 'Empty Water Garden',
                 note: 'The same water and stones, with nothing living and no food.',
+              },
+              {
+                id: 'gel',
+                label: 'Empty Gel Colony',
+                note: 'Gel with one water channel and a little sugar everywhere, with nothing living.',
+              },
+              {
+                id: 'sediment',
+                label: 'Empty Sediment Edge',
+                note: 'Water above, sediment with debris below and one stone, with nothing living.',
               },
             ]}
           />
@@ -343,7 +415,11 @@ export function NewDish() {
           <p class="world-modes" data-testid="new-dish-modes">
             {worldModesLine(preset, founders, registry)}
           </p>
-          {current ? <Summary p={current} /> : <p>Working out exactly what this dish starts with…</p>}
+          {current ? (
+            <Summary p={current} habitatStart={START_HABITAT[start] !== undefined} />
+          ) : (
+            <p>Working out exactly what this dish starts with…</p>
+          )}
           {problem ? (
             <p class="constraint" role="alert">
               {problem}

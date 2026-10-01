@@ -30,7 +30,7 @@ import { realizeRecipe } from '../../src/sim/recipes';
 import { stateHash } from '../../src/sim/serialize';
 import { entityCell, rebuildIndex } from '../../src/sim/spatial';
 import { run as runTicks, step } from '../../src/sim/tick';
-import { speciesIndex, type World } from '../../src/sim/world';
+import { SCHEMA_VERSION, speciesIndex, type World } from '../../src/sim/world';
 import { loadRegistryFs, REPO_ROOT } from '../../tools/lib/content-fs';
 import {
   ANALYSIS_END,
@@ -85,7 +85,7 @@ describe('sim-tune', () => {
       moduleRegistry: registry.manifest.moduleRegistryVersion,
       phenotypeMapping: registry.manifest.phenotypeMappingVersion,
       content: registry.manifest.contentVersion,
-      worldSchema: 3,
+      worldSchema: SCHEMA_VERSION,
     });
     expect(run.moduleNames.E01).toBe('Starch release');
     for (const key of [
@@ -704,7 +704,7 @@ describe('sim-tune: supplementary horizon, plain-run check, build and integrity'
     expect(md).toContain(buildLine(clean));
     const m = registry.manifest;
     expect(md).toContain(
-      `rule versions (content/manifest.json): simulation 3, evolution rules ${m.evolutionRulesVersion}, module registry ${m.moduleRegistryVersion}, phenotype mapping ${m.phenotypeMappingVersion}, content ${m.contentVersion}; world schema 3.`,
+      `rule versions (content/manifest.json): simulation 3, evolution rules ${m.evolutionRulesVersion}, module registry ${m.moduleRegistryVersion}, phenotype mapping ${m.phenotypeMappingVersion}, content ${m.contentVersion}; world schema ${SCHEMA_VERSION}.`,
     );
   });
 

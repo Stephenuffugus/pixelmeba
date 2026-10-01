@@ -28,7 +28,7 @@ import { Camera, ZOOM_CLOSE, ZOOM_NEIGHBORHOOD } from './camera';
 import { DISH_PX_PER_CELL, DISH_TEX, paintAggregation, paintDeposits, paintDish, paintOverlay, repaintDepositCells, type DirtyRect } from './layers';
 import { speciesRgb } from './speciesColors';
 import { featureFrameKeys, featureLayers, featureMarkScale, type AtlasFeatureLike, type FeatureLayerId, type LayerPick } from './features';
-import { brushCellOutcome, lifeCellOutcome, ST_NONE, SUB_WATER, type LabBrushRule, type LifeBrush } from '@sim/grid';
+import { brushCellOutcome, lifeCellOutcome, ST_NONE, ST_STONE, SUB_WATER, type LabBrushRule, type LifeBrush } from '@sim/grid';
 import type { LineageMarks } from '@worker/protocol';
 
 const FLAG_MOVING = 1 << 6;
@@ -965,7 +965,7 @@ export class DishRenderer {
       const st = this.structure ? this.structure[cell]! : ST_NONE;
       const o =
         p.rule === 'life'
-          ? lifeCellOutcome(st, this.brushSubstrate ? this.brushSubstrate[cell]! : SUB_WATER, p.life)
+          ? lifeCellOutcome(st, this.brushSubstrate ? this.brushSubstrate[cell]! : SUB_WATER, p.life, this.stoneEdgeAt(cell))
           : brushCellOutcome(p.rule, st, occupied[cell] === 1);
       if (o === 'ok') {
         ok++;
@@ -984,6 +984,22 @@ export class DishRenderer {
       g.stroke({ width: 0.16, color: 0x172c35, alpha: 0.9 });
     }
     return { ok, refused: refused.length };
+  }
+
+  /**
+   * Whether an open cell is four-adjacent to stone in the latest geometry (grid.ts isStoneEdge, the
+   * attachment surface 'stoneEdge'), for the Life brush preview of attached species.
+   */
+  private stoneEdgeAt(cell: number): boolean {
+    const st = this.structure;
+    if (!st || st[cell] !== ST_NONE) return false;
+    const x = cell % GRID_W;
+    return (
+      (x + 1 < GRID_W && st[cell + 1] === ST_STONE) ||
+      (x > 0 && st[cell - 1] === ST_STONE) ||
+      (cell + GRID_W < CELL_COUNT && st[cell + GRID_W] === ST_STONE) ||
+      (cell >= GRID_W && st[cell - GRID_W] === ST_STONE)
+    );
   }
 
   destroy(): void {
