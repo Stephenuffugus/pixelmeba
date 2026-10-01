@@ -3,6 +3,32 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑01 ≈ 23:15 UTC — PAUSED for a codespace restart near the end of wave 3. START HERE.**
+> - `main` = wave 2 + docs (`552d60e`), pushed. Tags g0 g1 g2. P3.1–P3.4 ticked, P3.7 `[~]`; decisions through D‑0050.
+> - Wave 3 (eight builders) is UNCOMMITTED in the working tree (107 paths) and backed up on branch `wip/g3-wave-3` =
+>   `fd88c91` (local and on origin). The disk normally survives a restart; only if `git status` is clean, restore with
+>   `git merge --squash wip/g3-wave-3 && git reset -q` (applies the snapshot without committing).
+> - Done: all eight builds; two rules verifiers + two saves verifiers; fix round 1 (f02-links, food-objects, tools-sample)
+>   and its re-verify; fix round 2 for e1-producers (report `e1-producers-fix2.md`: chemistry.test M01 pin fixed,
+>   producersNear credits only a producer whose bit is set). Reports: `docs/reports/reviews/g3-wave-3/`; the run journal
+>   is gone with the session, so read the .md reports (wave-verify-1/2, saves-verify-*, *-fix1, wave-reverify1).
+> - Interrupted: fix round 2 for f02-links (its partial edits are in the tree) and the round-2 re-verify. Open items
+>   (all test-only, from `wave-reverify1.md`): (a) tests/fixtures/film.test.ts ≈ :385 and :402 build a no-film/no-fungi
+>   registry by removing only B02/F01 — remove F02 too now that it is enabled; (b) tests/fixtures/host-specificity.test.ts
+>   ≈ :94 "dense dish of every enabled species" packs 18 species into the same rows, so B01 never meets the phage —
+>   fix the layout, not the sim; (c) record the tools-sample PROPOSED DECISION (event-ring / commands.log caps vs an exact
+>   Cancel: exact means stateHash-exact, D‑0037).
+> - Next, in order (lean): (1) the lead finishes (a) and (b) directly (test-only; check what the interrupted fixer already
+>   changed with `git diff tests/fixtures/film.test.ts tests/fixtures/host-specificity.test.ts`), runs those files plus the
+>   fence; (2) one re-verifier (effort high) over the round-2 fixes (e1-producers + f02-links) — or skip it if (a)/(b) stay
+>   test-only and the lead's runs are green; (3) lead integration: read the MINORs in all wave 3 reports, record
+>   D‑0051+ from every PROPOSED DECISION (owner calls listed in the wave 3 tasks writer summary: E04 rim support,
+>   anchored carriers as "free" prey, E12 "free", E12 link-cost category), `npm run check`, desktop e2e of the new
+>   journeys (cordweaver, food-objects, reactions, sample-transfer, plus experiments), commit, push; (4) the LEAD MODULE
+>   FLIP (checklist in the header of `docs/agent/g3-wave-3.tasks.js.txt`), tick P3.5–P3.7; (5) wave 4 (plan W5 + W6)
+>   task file with one writer (same prompt shape as wave 3's), then wave 4 and the G3 gate.
+> - Environment: stop servers by port (`for p in $(seq 4173 4399); do lsof -t -i :$p | xargs -r kill; done`).
+
 > **Update 2026‑10‑01 ≈ 18:15 UTC — WAVE 2 COMMITTED (`1cfe848`), WAVE 3 RUNNING. START HERE if this session died.**
 > - P3.3, P3.4 ticked. Decisions D‑0047…D‑0050 (owner flags: D‑0047 four-neighbour fungi, D‑0048 Dusk needs low oxygen).
 > - Wave 3 (eight builders: e1-producers 4231, f02-links 4232, food-objects 4233, tools-sample 4234, mod-anchor-light 4235,
