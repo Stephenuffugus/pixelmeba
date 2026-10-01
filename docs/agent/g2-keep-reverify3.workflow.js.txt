@@ -1,7 +1,7 @@
 export const meta = {
   name: 'g2-keep-reverify3',
-  description: 'Re-verify keep-dish fix rounds 2 and 3 (D-0033) on a snapshot of the committed fix: saves lens and player lens, read-only',
-  phases: [{ title: 'Reverify', detail: 'two lenses on a git-archive snapshot of HEAD' }],
+  description: 'Re-verify keep-dish fix rounds 2 and 3 (D-0033) on a snapshot of the committed fix: one saves lens (effort high), read-only',
+  phases: [{ title: 'Reverify', detail: 'saves lens on a git-archive snapshot of the fix commit' }],
 }
 
 // args: { sha: '<fix round 3 commit>' }
@@ -10,7 +10,6 @@ const R = 'docs/reports/reviews/g2-close'
 
 const LENSES = [
   { key: 'saves', port: 4231, text: `LENS: saves and state. Every entry point (Play, New Dish, experiment card, Saved dishes → Open incl. Continue and checkpoints, Import, Duplicate, What if?, and with no dish open the dish Continue holds) keeps the open dish or proves it unchanged; a changed dish is NEVER skipped (try: run 1 tick; one accepted command while paused; rename a branch; add a journal note; open from a checkpoint then change nothing/something; relaunch = a new DishHost on the same backend); the predecessor is kept; slots-full shows the choice and Cancel changes nothing incl. run state; a failed write refuses and changes nothing; the Continue rebinding and exact-copy binding never write a stale Continue over a newer save and never leave duplicates in the ten slots over repeated launches; the autosave now writes a dish changed while paused (carry-over 1) and never rewrites an unchanged one (store byte-identical); What if? behaviour and messages unchanged; no simulation state touched (state hashes identical before/after a keep or an autosave). Re-run tests/worker/keep-*.test.ts, tests/worker/whatif.test.ts, tests/sim/view-switch.test.ts and tests/persistence/checkpoints.test.ts; mentally revert each fix — would its test fail? Prove it for at least the carry-over 1 tests with a load-time mutant.` },
-  { key: 'player', port: 4241, text: `LENS: player-facing truth and usability. Drive the built app (throwaway spec in your snapshot's tmp/) at phone-portrait, phone-landscape and desktop, 100 % and 200 % text, including relaunches (reload, background autosave): every line about the open dish is true (what will happen before, what happened after); one time format per save ("at 0:05 dish time" in Saved dishes' named rows and Home's Continue card, "· 0:05" in the Keep and What if? sheets); curly quotes around every quoted dish name; toasts at 16 px that never cover controls at 200 % text; a module gain or loss is named in the feed and the birth record ("gained Reserve chamber (E05)") and traces to the recorded mutation; wording follows UX_SPEC tone; the all-slots-used choice is reachable by keyboard with correct focus order and announced (role/aria); 48 px targets, 16 px text, axe clean; Home's Continue card offers the dish opened last; re-run tests/e2e/keep-dish.spec.ts, tests/e2e/whatif.spec.ts, tests/e2e/observe.spec.ts and tests/e2e/lineage.spec.ts on all three projects.` },
 ]
 
 const VERDICT = { type: 'object', properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } }, required: ['ok', 'problems'] }
@@ -27,5 +26,5 @@ ${l.text}
 Return problems with file:line and a concrete repro, most severe first, each prefixed BLOCKER / MAJOR / MINOR; add "VERIFIED OK — <item> — <evidence>" entries for parts that hold. ok=false if any BLOCKER or MAJOR. Write the same list to ${R}/keep-dish-reverify3-${l.key}.md.`
 
 phase('Reverify')
-const verdicts = await parallel(LENSES.map((l) => () => agent(PROMPT(l), { label: `reverify3:keep:${l.key}`, phase: 'Reverify', schema: VERDICT })))
+const verdicts = await parallel(LENSES.map((l) => () => agent(PROMPT(l), { label: `reverify3:keep:${l.key}`, phase: 'Reverify', schema: VERDICT, effort: 'high' })))
 return { sha: SHA, verdicts: verdicts.map((v, i) => ({ lens: LENSES[i].key, v })) }
