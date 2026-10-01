@@ -1,5 +1,24 @@
 # Resume point — read this first after a restart
 
+> **Update 2026‑10‑01 ≈ 11:45 UTC — PAUSED for a codespace restart, mid Phase 3 wave 1. START HERE.**
+> - `main` = `g2` + Preflight (`4c5c0b8`, D‑0042) + docs; pushed. Tags g0 g1 g2.
+> - Wave 1's four builders FINISHED (foundation = world schema 4, environment = P3.1/P3.2, stage8 = P3.7
+>   framework, art-organisms = 14 species' art). Their work is UNCOMMITTED in the working tree (75 paths) and
+>   backed up on branch `wip/g3-wave-1` = `d015a98` (local and on origin). If the tree is clean after the restart:
+>   `git checkout wip/g3-wave-1 -- .` is NOT right (it stages); use `git diff main wip/g3-wave-1 | git apply` or
+>   `git restore --source=wip/g3-wave-1 --worktree -- .` plus copying untracked files — simplest: `git merge --squash wip/g3-wave-1` into main's tree and do NOT commit until integrated.
+> - Verified ok (MINORs only): foundation, stage8, environment (rules and player). Reports:
+>   `docs/reports/reviews/g3-wave-1/*.md`. NOT yet verified: art-organisms (rules lens was stopped mid-run; the
+>   player lens never started).
+> - **Next, in order (lean, owner's usage note):** (1) one workflow for the art-organisms verification only
+>   (rules + player, effort high: run `docs/agent/g3-wave-1.run.workflow.js.txt` with `A.only = ['art-organisms']`
+>   and the build step replaced by its existing report `docs/reports/reviews/g3-wave-1/art-organisms-build.md`, or
+>   a two-agent verify script); (2) lead integration: read the MINORs in the verify reports and fix the cheap ones,
+>   record decisions D‑0043+ from the builders' PROPOSED DECISIONs, `npm run check`, targeted e2e (the specs the
+>   builders touched: lab-tools, new-dish, garden, inspector, chemistry/habitat journeys), commit, push, tick P3.1
+>   and P3.2, mark P3.7 `[~]`; (3) write wave 2's task file with ONE writer (as wave 1's), then run wave 2.
+> - Environment: stop servers by port (`for p in $(seq 4173 4399); do lsof -t -i :$p | xargs -r kill; done`).
+
 > **Update 2026‑10‑01 ≈ 09:05 UTC — PHASE 3 WAVE 1 RUNNING. START HERE if this session died.** `g2` tagged
 > (`f6a7dc2`); the Preflight is on `main` (`4c5c0b8`, D‑0042: saves byte-identical on top of g2, check 827/827).
 > Wave 1 (foundation 4211, environment 4212, stage8 4213, art-organisms 4214; builders effort high, one rules
