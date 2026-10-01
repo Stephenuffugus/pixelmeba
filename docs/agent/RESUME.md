@@ -4,9 +4,9 @@
 > - `main` = `g2` + Preflight (`4c5c0b8`, D‑0042) + docs; pushed. Tags g0 g1 g2.
 > - Wave 1's four builders FINISHED (foundation = world schema 4, environment = P3.1/P3.2, stage8 = P3.7
 >   framework, art-organisms = 14 species' art). Their work is UNCOMMITTED in the working tree (75 paths) and
->   backed up on branch `wip/g3-wave-1` = `d015a98` (local and on origin). If the tree is clean after the restart:
->   `git checkout wip/g3-wave-1 -- .` is NOT right (it stages); use `git diff main wip/g3-wave-1 | git apply` or
->   `git restore --source=wip/g3-wave-1 --worktree -- .` plus copying untracked files — simplest: `git merge --squash wip/g3-wave-1` into main's tree and do NOT commit until integrated.
+>   backed up on branch `wip/g3-wave-1` = `d015a98` (local and on origin). The disk normally survives a
+>   restart, so `git status` should still show them; only if the tree is clean, restore them with
+>   `git merge --squash wip/g3-wave-1 && git reset -q` (applies the snapshot without committing).
 > - Verified ok (MINORs only): foundation, stage8, environment (rules and player). Reports:
 >   `docs/reports/reviews/g3-wave-1/*.md`. NOT yet verified: art-organisms (rules lens was stopped mid-run; the
 >   player lens never started).
