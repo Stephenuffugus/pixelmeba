@@ -1,0 +1,109 @@
+export const meta = {
+  name: 'g3-preflight',
+  description: 'Phase 3 Preflight (determinism fence) in the worktree tmp/wt-p3 on branch p3-preflight: gates.ts, trajectory digest, registryWith, g2 saves, g2-replay, trajectory fence, fence-update, pinned-test fixes, manifest bump; adversarial verify, up to two fix rounds',
+  phases: [
+    { title: 'Build', detail: 'one builder in tmp/wt-p3' },
+    { title: 'Verify', detail: 'adversarial rules lens, read-only in tmp/wt-p3' },
+    { title: 'Fix', detail: 'fix and re-verify, at most two rounds' },
+  ],
+}
+
+const WT = '/workspaces/pixelmeba/tmp/wt-p3'
+const R = `${WT}/docs/reports/reviews/g3-preflight`
+
+const WHERE = `You are working in a SEPARATE GIT WORKTREE of Pixelmeba: ${WT} (branch p3-preflight, created from main at 1067637; its node_modules is a symlink to the main checkout's). Work ONLY inside ${WT}: run every shell command there (cd ${WT} && …), read and edit files only by absolute paths under ${WT}. NEVER edit, build or test in /workspaces/pixelmeba itself outside tmp/wt-p3 — other agents are working there right now (reading it is fine). Follow CLAUDE.md. Do NOT run git add/commit/stash/checkout/reset/rm/restore/merge/rebase/worktree; the lead commits after review. Never run prettier/format on files you did not create. The machine has 2 CPUs shared with agents running Playwright: run targeted vitest files; long commands with run_in_background and an until-loop wait (never a bare sleep); give fixture tests generous timeouts.`
+
+const CONTEXT = `CONTEXT: Phase 2 is complete in code and its gate (tag g2) is closing in the main checkout; until the tag only UI-side files change there (src/ui, src/worker, src/persistence/store.ts, tests/e2e, tests/worker, tests/ui) — nothing under src/sim, content/ or the save format. You build the Phase 3 PREFLIGHT (the determinism fence) now, so Phase 3 can start the moment g2 is tagged. The lead will then rebase this branch onto the g2 tag, re-run tools/make-g2-saves.ts there and require byte-identical saves — so make the tool fully deterministic (fixed savedAt, fixed names and order, gzip with a fixed level and no timestamp/filename in the header).
+
+Read: docs/agent/g3-plan.md §0–§3 (lines 1–174; the Preflight is lines 105–136) and its corrections in docs/agent/g3-plan-recheck.md: the global corrections G1–G4, G12, G13, G16, G17 (lines 27–240) and rows P-01…P-28 (lines 241–594), plus rows W1-09, W1-10, W1-11, W2-02 and W2-03 (their "Preflight item 10" parts). Lead rulings in docs/DECISIONS.md: D-0035 (G2 Option A, hash-neutral stateHash — so P-21 keeps plan line 126: expected.json = {hashAtLoad, hashPlus1000, digestPlus1000}) and D-0036 (G3 Option P: this Preflight bumps the manifest, after writing the g2 saves). Line numbers in those documents are hints from older trees: find code by symbol.`
+
+const TASK = `${WHERE}
+
+${CONTEXT}
+
+BUILD (each item = the plan step as corrected by the rows named):
+1. src/sim/gates.ts (P-25): worldHasSystem(world, id), worldHasSpecies(world, id), worldHasModule(world, id) — pure functions reading world.content.manifest only (never a build constant); tests/sim/gates.test.ts (an old-manifest world answers false for a Phase 3 id even while the shipped manifest enables it).
+2. tests/helpers/trajectory.ts: trajectoryDigest(world, mode: 'g2' | 'full') exactly as P-17 and P-18 specify: frozen G2_FIELD_IDS and G2_ENTITY_COLUMNS lists; index-valued columns mapped to IDs (species, genome keys, module ids); lineage arrays mapped; counters nextEntityId/nextBirthId (not nextEventId); ledger initial/inputs/exports/roundoff and exchangeC; pending commands and commands.nextSeq; branch count and root birthIds; 'g2' throws on any non-default post-g2 field/column/store; 'full' hashes non-default post-g2 state by name/id; excludes contentHash, contentVersion, history and events. Unit tests (tests/helpers/trajectory.test.ts or tests/fixtures/…): the digest is independent of species-index order (a registry enabling extra species gives the same digest for the same biology); it changes when any g2 biology value changes (perturb one organism's E by 1e-9); 'g2' throws on a non-zero extra field.
+3. tests/helpers/registry.ts: registryWith(patch, { allowUnimplemented? }) per P-19 (loadRawPacksFs, deep copy, patch every manifest list + developmentalEnabled + buildPhase + the version fields; simulationVersion stays the literal 3; re-validate). Add opts?: { allowUnimplemented?: boolean } to validateContent(raw, opts) in src/sim/content/registry.ts with the current behaviour as default (G13). Export G2_LISTS read from tests/fixtures/saves/g2-manifest.json (it keeps contentVersion 1 and buildPhase 2: G4).
+4. tools/make-g2-saves.ts → tests/fixtures/saves/: the save list of P-20, written through the real buildSaveFile, gzipped, fixed savedAt — BEFORE the manifest bump — plus g2-manifest.json and expected.json ({hashAtLoad, hashPlus1000, digestPlus1000} per save). Run it twice: identical bytes (sha256sum; say so).
+5. tests/fixtures/g2-replay.test.ts (plan line 126, Option A): loadSaveFile → stateHash equals hashAtLoad; +1,000 ticks → stateHash equals hashPlus1000 and trajectoryDigest(world, 'g2') equals digestPlus1000. Plus relational checks: two independent loads agree; buildSaveFile → loadSaveFile round-trips.
+6. tests/fixtures/trajectory-fence.test.ts + tests/fixtures/fence.json per P-22 (the seven g2 recipes; R-G1…R-G3 via realizeVariant; arm B of EXP_106, EXP_B and EXP_102 via realizeExperimentArms; the E01-carrier transform of STARCH_UNLOCK_V1; ticks as P-22 says; each test file ≲ 60 s on an idle machine — split into two files if needed): check (a) under registryWith(G2_LISTS) trajectoryDigest(world, 'g2') equals g2Digest; check (b) under the shipped manifest trajectoryDigest(world, 'full') equals currentDigest; every recipe in content/recipes has an entry.
+7. tools/fence-update.ts per plan lines 132–134 and P-23: --add <recipe>; --recipe <id>|--all --reason D-00xx (refuses without a reason, never touches g2Digest); --g2 --reason D-00xx (the only path that re-records g2Digest and the saves' expected.json). tests/tools/fence-update.test.ts covers the refusals.
+8. "Preflight item 10" / step 3b (P-11, G4, W2-02 (a)–(g), W2-03's item (g), W1-09's literals): make every unit test that reads the shipped manifest independent of it — the wave-A goldens (tests/experiments/helpers.ts: runCard, runTwiceIdentical, expectReplayIdentical and untouchedRecipeHash share ONE registryWith(G2_LISTS) registry with contentVersion 1; tests/sim/comparison.test.ts's three expectWaveAComparison worlds realized under it), tests/worker/host.test.ts speciesIds, tests/content/validator.test.ts (the BIOFILM and "B03 is not enabled" cases), tests/experiments/framework.test.ts (EXP_106 species 'P02'), tests/recipes/variants.test.ts (the "(build phase 2)" message and the 'viruses' requirement), tests/sim/modules.test.ts (buildPhase), tests/sim/lab-commands.test.ts (the "(build phase 2)" message and gardenInfo's DishHost/"Lives here" sentences). Never rewrite tests/experiments/golden/wave-a-measurements.json, never weaken an assertion (each pinned test must still check the same g2 values under G2_LISTS).
+9. THEN the manifest bump (D-0036): content/manifest.json buildPhase 2 → 3 and contentVersion 1 → 2, nothing else; npx tsx tools/content-validate.ts --write. Fence check (a) must still pass. Record currentDigest for every fence entry at this state; no Phase 3 rule exists yet, so assert (and report) that currentDigest equals g2Digest for every entry.
+10. Perf baseline (plan step 8, G12): do not re-run; create docs/reports/perf-g3.md with a "Baseline at g2" section that quotes docs/reports/tune-g2.md's sim:run --perf lines and says g2-close measured them.
+
+DONE WHEN (paste each command and its summary line) in ${WT}: npx tsc -p tsconfig.json --noEmit → exit 0; npx eslint . → exit 0; npx vitest run tests/fixtures/g2-replay.test.ts tests/fixtures/trajectory-fence*.test.ts tests/sim/gates.test.ts tests/tools/fence-update.test.ts plus your helper tests → all pass, with timings; make-g2-saves twice → identical sha256; a throwaway perturbation (E += 1e-9 on one organism of a loaded g2 save) makes the g2-replay digest comparison fail (paste the failure, then delete the throwaway); finally the WHOLE unit suite once: npx vitest run (in the background; ~15–30 min on the shared machine) → all pass. Write your report to ${R}/preflight-build.md and return it: a checklist per item (DONE with file:line + proving test / NOT DONE + why), files created/changed, commands + results, the saves' sha256 list, the fence entries with ticks and timings, and proposed decisions ("PROPOSED DECISION: …").`
+
+const VERDICT = { type: 'object', properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } }, required: ['ok', 'problems'] }
+const serious = (v) => (v && Array.isArray(v.problems) ? v.problems.filter((p) => /^(BLOCKER|MAJOR|MINOR)/.test(p.trim())) : [])
+const blocking = (ps) => ps.filter((p) => /^(BLOCKER|MAJOR)/.test(p.trim()))
+
+const LENS = `LENS: rules, determinism and test strength. Check every Preflight item against the plan step and the correction rows (quote them when you claim a gap). In particular: trajectoryDigest really covers every G2_ENTITY_COLUMNS column, lineage, counters, ledger, pending commands and nextSeq, branches, and every g2 field (diff its lists against src/sim/entities.ts ENTITY_COLUMNS and src/sim/fields.ts at this commit); index mapping makes it independent of species order; 'g2' mode really throws on post-g2 state; the fence covers every entry P-22 lists with the ticks it names, and check (a) runs under registryWith(G2_LISTS); registryWith patches every list and the version fields, never mutates the cached registry, and validateContent's default is unchanged; make-g2-saves is deterministic (run it twice yourself into tmp/ and compare sha256) and wrote the saves BEFORE the bump (the saves' embedded manifest says buildPhase 2, contentVersion 1); the pinned-test fixes did not weaken any assertion (diff each against main: same values checked, now under G2_LISTS); g2-replay passes and a perturbation fails it (try a load-time mutant under tmp/); the manifest bump changed nothing but buildPhase/contentVersion/contentHash; tsc, eslint and the whole unit suite pass (re-run the suite yourself in the background).`
+
+const VERIFY = (built) => `You are an adversarial verifier for Pixelmeba. ${WHERE.replace('the lead commits after review.', 'the lead commits after review. You are READ-ONLY: do not edit any file except your report; scratch in ' + WT + '/tmp/verify-preflight/.')}
+
+${CONTEXT}
+
+A builder was given this assignment:
+---
+${TASK}
+---
+The builder reported:
+---
+${typeof built === 'string' ? built : JSON.stringify(built)}
+---
+${LENS}
+Try to REFUTE that the assignment is done correctly, completely and honestly. Return problems with file:line and a concrete repro, most severe first, each prefixed BLOCKER / MAJOR / MINOR; add "VERIFIED OK — <item> — <evidence>" entries for parts that hold. ok=false if any BLOCKER or MAJOR. Write the same list to ${R}/preflight-verify.md.`
+
+const FIX = (problems, round) => `${WHERE}
+
+${CONTEXT}
+
+You are the round-${round} fixer for the Phase 3 Preflight (the work is in ${WT}; do not start over). The assignment was:
+---
+${TASK}
+---
+Adversarial verification found:
+---
+${problems.join('\n')}
+---
+Fix EVERY BLOCKER and MAJOR and every cheap MINOR; for each behavioural problem add or tighten a test that fails on the old behaviour. If a problem is wrong, say why with quotes instead of changing code. Re-run the affected tests, tsc, eslint, and the whole unit suite once at the end (background). Write ${R}/preflight-fix${round}.md and return it: per problem FIXED (how, test) / NOT A PROBLEM (why) / NOT FIXED (why); files; commands + results.`
+
+const REVERIFY = (fixReport, problems, round) => `You are an adversarial re-verifier for Pixelmeba. ${WHERE.replace('the lead commits after review.', 'the lead commits after review. You are READ-ONLY: do not edit any file except your report; scratch in ' + WT + '/tmp/reverify' + round + '-preflight/.')}
+
+${CONTEXT}
+
+The Preflight assignment:
+---
+${TASK}
+---
+Problems given to the round-${round} fixer:
+---
+${problems.join('\n')}
+---
+The fixer reported:
+---
+${fixReport}
+---
+${LENS}
+For EACH problem try to REFUTE that it is fixed (reproduce, read the diff, check the new test fails on the old behaviour) and look for regressions. Return remaining/new problems prefixed BLOCKER / MAJOR / MINOR with file:line and repro, and "VERIFIED OK — <problem> — <evidence>" for fixed ones. ok=false if any BLOCKER or MAJOR remains. Write the same list to ${R}/preflight-reverify${round}.md.`
+
+phase('Build')
+const built = await agent(TASK, { label: 'build:preflight', phase: 'Build' })
+phase('Verify')
+const v = await agent(VERIFY(built), { label: 'verify:preflight:rules', phase: 'Verify', schema: VERDICT })
+let problems = serious(v)
+let ok = !!v && v.ok && blocking(problems).length === 0
+const rounds = []
+phase('Fix')
+for (let round = 1; round <= 2 && problems.length > 0 && !ok; round++) {
+  const fixReport = await agent(FIX(problems, round), { label: `fix${round}:preflight`, phase: 'Fix' })
+  const rv = await agent(REVERIFY(String(fixReport), problems, round), { label: `reverify${round}:preflight`, phase: 'Fix', schema: VERDICT })
+  rounds.push({ round, fixReport, reverify: rv })
+  if (!rv) break
+  problems = serious(rv)
+  ok = rv.ok && blocking(problems).length === 0
+}
+log(`preflight: ${ok ? 'clean' : 'problems remain'} after ${rounds.length} fix round(s); ${problems.length} open item(s)`)
+return { built, verdict: v, rounds, ok, remaining: problems }

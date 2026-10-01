@@ -13,6 +13,14 @@
 > Phase 3 (four lead choices of g3-plan-recheck.md, preflight with world schema 4, waves).
 > If the session died mid-run: `git status`; keep uncommitted fixer work on a LOCAL `wip/` branch (never push
 > it); read the reports; rerun only what is missing.
+> **Also running since ≈ 01:40 UTC (Phase 3 preparation, off `main`):** `docs/agent/g3-preflight.workflow.js.txt`
+> builds the Preflight (determinism fence, D‑0035/D‑0036) in the git worktree `tmp/wt-p3` on LOCAL branch
+> `p3-preflight` (never push it before g2); after the `g2` tag the lead rebases it onto `g2`, re-runs
+> `tools/make-g2-saves.ts` there (saves must be byte-identical), runs check, merges. `docs/agent/g3-wave-tasks.workflow.js.txt`
+> writes `docs/agent/g3-wave-{1..6}.tasks.js.txt` (TASKS for the one runner `docs/agent/g3-runner.workflow.js.txt`;
+> run a wave by importing the tasks file with node and passing `{wave, state, tasks}` as the Workflow `args`).
+> Lead choices recorded: D‑0035…D‑0039 (`3902fd9`). If the worktree is gone after a restart: `git worktree prune`,
+> check whether branch `p3-preflight` has commits/changes, else rerun the preflight script.
 
 > **Update 2026‑09‑29 ≈ 13:50 UTC — PAUSED FOR A BREAK (owner's request). START HERE.**
 > State: `main` clean and pushed. g2-close part 1 is committed: "keep the open dish first" (D‑0033:

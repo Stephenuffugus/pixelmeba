@@ -1,0 +1,57 @@
+export const meta = {
+  name: 'g3-wave-tasks',
+  description: 'Write the six Phase 3 wave task files (docs/agent/g3-wave-N.tasks.js.txt) from the plan with every re-check correction and the lead choices applied; an adversarial checker fixes each file',
+  phases: [
+    { title: 'Write', detail: 'one writer per wave; docs only, no builds or tests' },
+    { title: 'Check', detail: 'adversarial row-by-row check; the checker fixes the file' },
+  ],
+}
+
+const WAVES = [
+  { n: 1, plan: '175–279', recheck: '594–857', ports: 'foundation 4211 · environment 4212 · stage8 4213 · art-organisms 4214' },
+  { n: 2, plan: '280–399', recheck: '858–1087', ports: 'film-fungi 4221 · organisms 4222 · parasites-phage 4223 · art-features 4224' },
+  { n: 3, plan: '400–517', recheck: '1088–1286', ports: 'e1-producers 4231 · f02-links 4232 · food-objects 4233 · tools-sample 4234' },
+  { n: 4, plan: '518–611', recheck: '1287–1541', ports: 'mod-anchor-light 4241 · mod-feeding 4242 · mod-builders 4243 · mod-adhesion 4244 (+ the lead module flip as LEAD_STEPS)' },
+  { n: 5, plan: '612–716', recheck: '1542–1750', ports: 'field-guide 4251 · experiments-curated 4252 · g3-fixtures 4253 · audio 4254' },
+  { n: 6, plan: '717–887 (wave 6 at 717–786; §5 gate checklist 787–813 and §6 risks 814–887 inform it)', recheck: '1751–1967', ports: 'a11y 4261 · perf 4262 · g3-evidence 4263' },
+]
+
+const RULES = `You are preparing Phase 3 of Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). DOCS-ONLY job: you may create or edit ONLY the file named below (and scratch files under tmp/wave-tasks/). Do not run git add/commit/stash/checkout/reset/restore; do not build, do not run vitest or Playwright, do not run npm scripts (other agents use the 2 CPUs). Reading files, git grep, git show, git log, and node for a syntax check are fine.
+
+INPUTS
+- docs/agent/g3-runner.workflow.js.txt: the lead's wave runner. Every builder receives its PRE (determinism fence, content/manifest rules, ownership, browser-test rules, before-finishing checks), then "Your Playwright port is N", then the task's prompt; verifiers, fixers and re-verifiers are generated from the prompt. So a task prompt must NOT repeat PRE; it must be complete and self-contained otherwise.
+- docs/agent/g3-plan.md §4 (the builder TASKS) and §0–§3, §5, §6 for context.
+- docs/agent/g3-plan-recheck.md: the global corrections G1–G17 (lines 27–240), the section of your wave (rows with "Replace with" blocks: paste-ready, apply verbatim), "Facts builders need" (lines 1968–2149: copy the facts relevant to each task into its prompt) and "Refuted by the skeptic" (lines 2150–2244: do NOT apply refuted items).
+- Lead rulings (docs/DECISIONS.md D-0035…D-0039): D-0035 = G2 Option A (hash-neutral stateHash; g2-replay keeps hashAtLoad/hashPlus1000/digestPlus1000; history-debris literals unchanged) plus the noUsableIntakeSeconds column in schema 4 (so W4-07/W4-19 are taken: E04/E12 read it); D-0036 = G3 Option P (the Preflight ALREADY bumped buildPhase 3 and contentVersion 2, created src/sim/gates.ts, tests/helpers/{trajectory,registry}.ts, tools/{make-g2-saves,fence-update}.ts, tests/fixtures/{g2-replay,trajectory-fence}.test.ts + fence.json + saves/, and fixed the pinned tests of G4 "Preflight item 10" (a)–(g) — so builders never bump versions or create those files, and rows that move items into the Preflight are satisfied there); D-0037 = G10 Option W3 (host-level exact Cancel; Undo while a sample is held acts as Cancel; Sample, Transfer and Clean water offered on every world, so view-switch.test.ts's older-dish case changes accordingly); D-0038 = film eaten as detritus (G9); D-0039 = content/tools pack with ToolSchema and honest "game tool" biology text for UNDO/SNAPSHOT/COMPARE; relationship observations in a device-local store in src/ui/badges.ts (G11 option b). When a row offers options, apply the chosen one and drop the other.
+- The current tree: the plan and the re-check were written at older commits. Since then g2-close committed D-0033 (keep the open dish first: src/ui/panels/Keep{Choice,Sheet,PlanLine}.tsx, src/ui/strings/keep.ts, host keepDish) and D-0034 (sim-tune --presets/--horizon), and it is still editing src/ui and src/worker. For anything under src/ui and src/worker cite symbols (function, component, testid), not line numbers. PROTOCOL_VERSION is 1 at HEAD (check src/worker/protocol.ts). Decision ids: D-0040 onward are free for builders' proposals to be recorded by the lead.
+
+OUTPUT FORMAT (a JavaScript module body; the lead copies it to a .mjs file and imports it with node):
+export const STATE = \`<one paragraph for the builders: what is committed on main when this wave starts — the Preflight (D-0035…D-0039; gates.ts; trajectory/registry helpers; g2 saves and fence) and the earlier Phase 3 waves with their main deliverables>\`
+export const TASKS = [
+  { key: '<key>', port: <the plan's port>, lenses: ['rules'] or ['rules', 'player'], prompt: \`ASSIGNMENT: …\` },
+]
+(lenses: 'player' too when the task changes anything a player sees or hears: UI, copy, art, audio, e2e journeys.)
+Optionally export const LEAD_STEPS = \`…\` for steps the plan assigns to the lead in this wave (corrected text).
+Each prompt: the BUILD_DIRECTIVE item(s); what to read (docs + sections); "You own:" and "SHARED (additive):" lists (disjoint ownership within the wave, consistent with the plan's stage-file owner table as corrected by P-08/P-09/P-10); Build items; "Done when" with named test files and e2e specs (three projects); regression specs to run. Escape backticks inside the template literals as \\\` and every \${ as \\\${.`
+
+const WRITE = (w) => `${RULES}
+
+YOUR FILE: docs/agent/g3-wave-${w.n}.tasks.js.txt — Phase 3 wave ${w.n}. Builders and ports: ${w.ports}. Plan lines ${w.plan}; re-check section lines ${w.recheck}.
+Apply EVERY row of your re-check section and every global correction that names a row of your wave.${w.n === 6 ? ' Add the Keep sheet (KeepChoice/KeepSheet) and the What if? sheet to the a11y screens list (G16).' : ''}${w.n === 4 ? ' The module flip is the lead\'s: export it as LEAD_STEPS with W4-20…W4-24 applied.' : ''}
+When done: (1) mkdir -p tmp/wave-tasks && cp docs/agent/g3-wave-${w.n}.tasks.js.txt tmp/wave-tasks/w${w.n}.mjs && node --check tmp/wave-tasks/w${w.n}.mjs; (2) node -e "import('./tmp/wave-tasks/w${w.n}.mjs').then(m => console.log(JSON.stringify(m.TASKS.map(t => [t.key, t.port, t.lenses, t.prompt.length]))))"; (3) write a row checklist: every row ID of your section → APPLIED (which task, which part) / SATISFIED BY THE PREFLIGHT / NOT APPLIED (why: refuted, superseded by a lead option). Return the checklist and the TASKS summary as your final message.`
+
+const CHECK = (w, written) => `${RULES}
+
+You are the adversarial CHECKER for docs/agent/g3-wave-${w.n}.tasks.js.txt (Phase 3 wave ${w.n}; plan lines ${w.plan}; re-check section lines ${w.recheck}; builders and ports: ${w.ports}). You now own that file and FIX it in place.
+The writer reported:
+---
+${typeof written === 'string' ? written : JSON.stringify(written)}
+---
+Check, row by row: every row of the wave's re-check section is applied correctly (compare with its "Replace with" text) or legitimately not applied; the lead's options are applied consistently (D-0035…D-0039) and nothing contradicts them; ownership is disjoint within the wave (no file owned by two builders; every SHARED edit is additive and its owner exists); every file or symbol a prompt says exists does exist at HEAD (git grep / ls), and files to be created are marked as new; ports match the plan; lenses include 'player' for player-facing tasks; each prompt is self-contained (a builder sees only PRE + port + prompt) and does not repeat PRE; "Done when" lists named tests that would fail without the mechanism; nothing asks a builder to bump versions, edit the fence values, or create the Preflight's files. Fix every problem directly in the file, then re-run the syntax check and the import summary (node commands as the writer did). Return: the list of problems found (BLOCKER/MAJOR/MINOR) with what you changed for each, and the final TASKS summary.`
+
+const out = await pipeline(
+  WAVES,
+  (w) => agent(WRITE(w), { label: `write:wave${w.n}`, phase: 'Write' }),
+  (written, w) => agent(CHECK(w, written), { label: `check:wave${w.n}`, phase: 'Check' }).then((checked) => ({ wave: w.n, written, checked })),
+)
+return out
