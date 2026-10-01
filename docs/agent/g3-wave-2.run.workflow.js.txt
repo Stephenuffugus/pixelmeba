@@ -1,0 +1,312 @@
+export const meta = {
+  name: 'g3-wave-2',
+  description: 'Phase 3 wave 2 (fast track): film-fungi, organisms, parasites-phage, art-features; one wave verifier over the whole diff, a saves lens for parasites-phage, fix rounds only for BLOCKER/MAJOR',
+  phases: [
+    { title: 'Build', detail: 'one builder per task, effort high; unit tests + own e2e on desktop' },
+    { title: 'Verify', detail: 'one rules verifier over the wave diff; a saves lens per critical task' },
+    { title: 'Fix', detail: 'only tasks with a BLOCKER/MAJOR; at most two rounds' },
+  ],
+}
+
+// ---- wave 2 tasks (docs/agent/g3-wave-2.tasks.js.txt)
+// Phase 3 wave 2 tasks for docs/agent/g3-runner-ft.workflow.js.txt (fast track; WAVE_ID 'g3-wave-2').
+// meta.description: "Phase 3 wave 2 (fast track): B02 Velvet + F01 Threadlace (P3.3 part 1), B03/B05/Y01 + P02/P03/P04 and the Add Life/Life tray side of every new species (P3.3 part 2, P3.4 part 1), X01 Hitcher + V01 Pinphage (P3.4 part 2), truthful Phase 3 rendering and protocol 2 (art-features)."
+// Built from docs/agent/g3-plan.md lines 280-399 (wave 2) with every W2 row of docs/agent/g3-plan-recheck.md
+// (lines 858-1087) and G1-G17 applied, checked against the tree with wave 1 as built (D-0043, D-0044, D-0045;
+// docs/reports/reviews/g3-wave-1/*-build.md). Each prompt follows the runner's PRE (not repeated here).
+// Already done before this wave: preflight item 10 (W2-02, W2-10, W2-16: pinned tests read registryWith(G2_LISTS),
+// validator uses B09/B10, framework P05, variants 'developmental'); W1 environment made the Life-brush preview
+// surface-aware with B02 parity (most of W2-03); W1 art packed fungus/virus thumbnails as 'idle' (W2-24 not needed).
+//
+// Stage-file owner this wave (plan table as corrected by W2-07, W2-11, W2-12, W2-14, W2-20, W2-23; one owner per file;
+// everyone else makes additive hook lines into their own new files):
+//   film-fungi:      src/sim/births.ts, src/sim/transport.ts (+ film.ts, fungi.ts)
+//   organisms:       src/sim/movement.ts, src/sim/grid.ts (Life brush), AddLifeSheet.tsx, LabTray.tsx, LabTrayContent.tsx (+ crossing.ts)
+//   parasites-phage: src/sim/contacts.ts, src/sim/intake.ts, src/sim/maintenance.ts, src/sim/commands.ts (+ parasites.ts, viruses.ts)
+//   art-features:    src/worker/protocol.ts, snapshot.ts pack functions, src/render/**, art/src/**, public/atlas/**, tools/art-*,
+//                    tools/asset-preview.*, tools/content-validate.ts (atlas section), OverlayPicker.tsx
+//   untouched by all: entities/world/serialize/ledger, structures.ts, conversion.ts, src/sim/reasons.ts (codes exist)
+//   SHARED (additive) across tasks: content/manifest.json, src/sim/content/implemented.ts, src/sim/suitability.ts,
+//   src/sim/actions.ts, src/sim/phenotype.ts, src/worker/{snapshot (inspectEntity only),protocol,host}.ts,
+//   src/ui/panels/Inspector.tsx, src/ui/strings/{lab,reasons}.ts, src/ui/state.ts, src/persistence/saveFile.ts
+
+const STATE = `On main: g2, the Phase 3 Preflight (D-0042: src/sim/gates.ts worldHasSystem/worldHasSpecies/worldHasModule; tests/helpers/registry.ts registryWith(patch, { allowUnimplemented }) and G2_LISTS; tests/helpers/trajectory.ts trajectoryDigest(world, 'g2' | 'full') with POST_G2_* registration tables; the g2 saves and the four trajectory-fence files; pinned tests read the g2 lists) and wave 1 as built. Versions: buildPhase 3, contentVersion 2, simulationVersion 3 (pinned), world SCHEMA_VERSION 4, PROTOCOL_VERSION 1 (ENT_STRIDE 12), atlas 'pixelmeba-atlas' v1 at 1024x1024. Wave 1: (a) schema 4 (D-0035, D-0043): entity columns filmSeconds, anchorState, anchorSeconds, anchorLockout, adhPartner, adhSeconds, adhLockout, waterCrossed, noUsableIntakeSeconds, fungal links fLink0..3 (i32 slot, -1 empty) / fLinkB0..3 (u32 birthId) / fLinkKind0..3 (1 LINK_VISUAL, 2 LINK_TRANSPORT), adhesion aLink0..1 / aLinkB0..1; all hash-neutral while empty; src/sim/links.ts addFungalLink (refuses a 5th), removeFungalLink, fungalNeighbors, fungalDegree, fungalComponent, adhesion equivalents, removeAllLinks (called in killEntity and in the contacts.ts consumePrey capture), rekeyLinks (called in commitDivision right after the retained daughter gets birthId b0), linksValid; stores world.objects (src/sim/objects.ts, cap 128, kinds pellet/wafer, pools sugar/starch/protein + n) and world.sample; ledger energy category 'construction'; saveFile refuses bad links/objects; FILM_DIGESTION_IMPLEMENTED is gone (the inspector's digestsFilm reads worldHasSystem(world, 'film')); the registry requires systems per species (BIOFILM -> film, BRANCHING -> fungi, HOST_DRAIN -> parasites, LYSIS or category virus -> viruses). (b) P3.1/P3.2 (D-0044): chemistry system and materials, habitats GEL_COLONY and SEDIMENT_EDGE, src/sim/attachment.ts surfaces enforced inside habitatCompatible (so canOccupy, inoculate, births and movement apply them), LifeBrush.surfaces and a stoneEdge input to lifeCellOutcome with a cell-by-cell parity test (B02, B13). (c) stage 8 framework (D-0045): src/sim/actions.ts (nativeAction/moduleAction, the frozen SHIPPED table in canonical order: natives by NativeAbility index, then modules; ActionContext.remainingEnergy/remainingBody/spend/requestConstruction), src/sim/construction.ts constructionPass (per-cell headroom FILM_CAP 0.50 - film, proportional scaling, N moved at N/B, energyPerC x accepted into ledger.energy.construction), src/sim/secretion.ts, phenotype.ts ProducerRules/BuilderRules (Profile.builder null for every species). (d) organism art for all 14 Phase 3 species (D-0046): fungi keyed <assetId>/mask/e/<mask> with N=1 E=2 S=4 W=8, decaying/e/<mask>, tip/e/0, bud/e/0, F02 pulse/e/0..1, idle/e/0 thumbnail; V01 glyph/e/0 + idle/e/0; X01 4-frame move, 1 heading; B02/Y01/Y02 loop idle; checkAtlas is category-aware. Shipped manifest now: enabledSpecies A01, B01, B04, B06, P01; enabledModules E01, E03, E05; enabledSystems chemistry, core, enzymes; enabledMaterials ACID, BASE, BUFFER, CO2, DEBRIS, GEL, INH_BACT, INH_FUNG, INH_PHOTO, METABOLITE, NUTRIENT, OIL, OXYGEN, PROTEIN, SALT, SEDIMENT, SHADE, STARCH, SUGAR, WATER; enabledHabitats GEL_COLONY, SEDIMENT_EDGE, WATER_GARDEN; enabledStructures BEAD, STONE, WALL. IMPLEMENTED_NATIVE_ABILITIES = E_STARCH_SECRETION, PREDATION; IMPLEMENTED_MODULES = E01, E03, E05. Decisions are recorded through D-0046. Wave 2 runs four builders at once in one working tree (film-fungi, organisms, parasites-phage, art-features); it is the first wave that enables species, and three of them insert into content/manifest.json and src/sim/content/implemented.ts.`
+
+const WAVE_TASKS = [
+  {
+    key: 'film-fungi',
+    port: 4221,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.3 part 1: B02 Velvet (BIOFILM) and F01 Threadlace (BRANCHING). Read SPEC §2.5, §3.2 rows 2/8/9, §6.5, §6.8, §6.9, §7.1, §7.2; CT §1 rows B02/F01, §3.1, §3.5, §12.6, §13 (film row), §14; UX §5.2 (DIV_BLOCK_*); D-0002, D-0006, D-0038, D-0043, D-0045; src/sim/{actions,construction,links,attachment,gates}.ts; docs/reports/reviews/g3-wave-1/stage8-build.md.
+
+You own: src/sim/births.ts, src/sim/transport.ts, src/sim/film.ts (new), src/sim/fungi.ts (new), tests/fixtures/film.test.ts, tests/fixtures/fungal-branching.test.ts, tests/fixtures/relationships-film.test.ts, tests/e2e/film-fungi.spec.ts (all new).
+parasites-phage adds one hook line in births.ts (onDivision, after rekeyLinks): keep it.
+SHARED (additive):
+- content/manifest.json: enabledSpecies += B02, F01 and enabledSystems += film, fungi in ONE edit (the registry refuses BIOFILM without film, BRANCHING without fungi).
+- src/sim/content/implemented.ts: BIOFILM, BRANCHING.
+- src/sim/actions.ts: one nativeAction('BIOFILM', …) in SHIPPED, after E_PROTEIN_SECRETION and before E01 (its run lives in film.ts).
+- src/sim/phenotype.ts: Profile.builder for native B02 = BuilderRules {source 'native', minEnergy 40, ratePerSecond 0.05, bodyFloor 1.0, energyPerC 0}.
+- src/sim/intake.ts (parasites-phage owns it): the film request only, computed by a film.ts helper.
+- src/sim/commands.ts (parasites-phage owns it): one hook line in introduceOrganism calling fungi.ts for the subcap.
+- src/worker/snapshot.ts inspectEntity, src/worker/protocol.ts (optional EntityInspect.network), src/ui/panels/Inspector.tsx: the network line, and a film label in the cell lines if missing. Never edit packEntities/packDeposits (art-features).
+Build B02 (SPEC §7.1, CT §12.6):
+- Natively attached. filmSeconds counts continuous attached Active seconds; it resets when either stops.
+- In stage 8, when filmSeconds ≥ 10, remainingEnergy() > 40 and the world has the film system: requestConstruction(cell, min(0.05 × dt, remainingBody() − B0'), 0) only if that amount > 0. constructionPass applies the 0.50 headroom shared proportionally with every builder and moves N at N/B. PROPOSED DECISION: native film costs no energy (energyPerC 0; SPEC §7.1 and CT §12.6 name none; 2 E/C is E10's own).
+- Film halves dissolved transport across every edge of its cell (filmCoefficients: verify all four edges) and halves combined inhibitor exposure once (suitability.ts: verify only).
+- Stage 2 film decay (transport.ts): each tick move film × 0.001 × dt C to detritus and filmN × 0.001 × dt to detritusN; internal; only where world.fields.film exists.
+- Film is eaten as detritus (D-0038, CT §3.5) by digestsFilm species (B04, F01), only in worlds with the film system. It never joins sp.foods (species.ts unchanged). Ordered policy: one film request after the listed foods; weighted policy: film uses the species' detritus weight. Stay within K = 6. Make NO film request when the cell's film is 0, so film-free worlds run bit-identically. Film has no owner.
+- Prey: P01 and P04 ('any'); never P02 (B02 is not in its list).
+Build F01 (SPEC §7.2, §6.9):
+- Attached on gel, sediment or bead (mesh is Phase 5).
+- Daughter placement (fungus category only): the four-neighbour cells E, S, W, N that pass canOccupy and soft capacity and hold no fungal segment; rank by usable food (sum of the species' compatible pools present, film included when it digests film) descending, then suitability descending, then E, S, W, N. Never the parent cell, never a diagonal. No candidate: keep the proposal, no cost, DIV_BLOCK_PLACEMENT. PROPOSED DECISION (supersedes D-0002 and SPEC §6.9 step 2 "parent cell or 8-neighborhood" for fungi only; flag for the owner): ARCH §10.1's 16 connection-mask tiles and SPEC §7.7 "links … on four-neighbor cells" define a four-neighbour topology, and the parent cell holds the retained segment.
+- After commit: addFungalLink(i, newSlot, LINK_VISUAL) (carries nothing).
+- Segments count against AGENT_CAP 6,000 and FUNGAL_CAP 2,000. At 2,000: births get DIV_BLOCK_CAPACITY and the capacity flag the AGENT_CAP branch sets; fungal introductions are refused and counted in rejected (SPEC §2.5). Nothing is killed. Count from alive slots, deterministically; nothing saved.
+- Removal paths remove links (wave 1 hooks; verify).
+- PROPOSED DECISION (W2-08): segments and connected components are reported separately in the inspector: the worker computes, for an inspected fungal segment, the species' segment count, its number of components (fungalComponent) and this thread's size: "Threadlace: {n} segments in {k} separate threads; this one has {m}." HistorySample is unchanged (no save change).
+- D-0045 carry-over: a B02 carrying E01 (eligible) shows the BIOFILM reservation runs before the E01 producer and the ledger closes.
+Done when:
+- tests/fixtures/film.test.ts: one B02 on gel with B 1.2 and E 60 deposits nothing for the first 100 ticks, then exactly 0.005 C per tick with N at N/B, and stops exactly at B = B0' (film 0.20). A second B02 at B 1.5 in a cell preloaded with film 0.40 stops exactly at film 0.50. Two B02 in one cell share headroom proportionally; film never exceeds 0.50. E ≤ 40 blocks. Decay matches the closed form over 1,000 ticks, N included. A pulse crosses each of the four edges at half rate with film. Exposure halves once. B04 and F01 eat film: the pool falls by exactly what they took and checkLedger holds. A B04 preference mutation draws identically with and without the film system (D-0038). The construction-before-E01 case.
+- tests/fixtures/fungal-branching.test.ts: each ranking key decides a case; a daughter never lands in open water, on a diagonal, in the parent cell or on a fungal segment; blocked placement keeps the proposal at no cost; at 2,000 segments births and introductions are refused with no deaths; killing a segment removes its links; linksValid and the parent-daughter link after every division; components counted.
+- tests/fixtures/relationships-film.test.ts: P01 eats B02; P04 eats B02 (registryWith, allowUnimplemented for SEDIMENT_WATER_CROSSING, which organisms implements now); P02 never captures B02; B02 eats sugar, then protein; F01 eats detritus, starch, protein and film.
+- A 10,000-tick closed-lid Gel Colony run with B02 + F01 + B04 closes the ledger < 1e-5 relative; trajectoryDigest(world, 'full') is equal at 1× and 4× and across serialize → deserialize mid-run.
+- Non-vacuity: removing film decay, the B0' floor or the four-neighbour rule makes a named test fail (say how you checked).
+- tests/e2e/film-fungi.spec.ts (desktop): New Dish → Empty Gel Colony → Life → Velvet: the preview refuses the water channel and accepts gel; place, run about 30 s, tap the cell: film is listed; place Threadlace, run, inspect a segment: the network line; axe clean.
+- Fence unchanged. If a test outside your files fails only because of your manifest edit, report it; do not edit it.`,
+  },
+  {
+    key: 'organisms',
+    port: 4222,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.3 part 2 (B03 Dusk, B05 Crossfeeder, Y01 Bubble), P3.4 part 1 (P02 Ciliate, P03 Rotifer, P04 Siltworm), and the Add Life / Lab Life tray side of every species this wave enables (diet symbol and line, V01 dose copy and preview). Read SPEC §4.3, §6.3, §6.4, §6.5, §7.3, §10.2, §10.8; CT §1.1–1.3, §2, §3.1, §3.2, §12.3, §12.5; UX §4.3, §4.4, §5.2; D-0006, D-0007, D-0044.
+
+You own: src/sim/movement.ts, src/sim/crossing.ts (new), src/sim/grid.ts (LifeBrush/lifeCellOutcome), src/ui/panels/AddLifeSheet.tsx, src/ui/panels/LabTray.tsx, src/ui/panels/LabTrayContent.tsx, the 'Life brush preview' describe block of tests/sim/lab-commands.test.ts, and new tests/fixtures/predation-matrix.test.ts, tests/fixtures/dusk-suitability.test.ts, tests/fixtures/relationships-w2.test.ts, tests/sim/siltworm-crossing.test.ts, tests/ui/diet-line.test.ts, tests/e2e/add-life-w2.spec.ts.
+parasites-phage adds hook lines in movement.ts (free X01 seeks a host; an attached parasite follows its host): keep them.
+SHARED (additive):
+- content/manifest.json: enabledSpecies += B03, B05, P02, P03, P04, Y01.
+- src/sim/content/implemented.ts: OXYGEN_SUPPRESSED, SEDIMENT_WATER_CROSSING.
+- src/sim/suitability.ts (W2-11): an entity-aware crossing check (e.g. crossingCompatible(world, slot, cell), or an optional habitat override for suitabilityAt) used by stage 4; habitatCompatible and canOccupy(world, sp, cell) stay unchanged.
+- src/worker/snapshot.ts inspectEntity: the same call, so the inspector shows stage 4's value.
+- src/worker/protocol.ts: DishInfo.speciesDiets?: {metabolism, foods, prey: {id, requires}[], hosts, digestsFilm}[] in speciesIds order; src/worker/host.ts info(): fill it from w.species[].def, with digestsFilm only when worldHasSystem(w, 'film').
+- src/ui/strings/lab.ts: LIFE_COPY phage dose copy and livesHereText (art-features adds OVERLAYS rows).
+- src/ui/state.ts: reportCommand's V01 toast only. src/ui/strings/reasons.ts if you need copy.
+Build:
+- B03: anaerobic (no O2 debit, 18 E per C from its record); OXYGEN_SUPPRESSED suitability × clamp(1 − O2/0.40, 0, 1) with SUIT_OXYGEN_HIGH already exists in suitability.ts: verify. B05 eats metabolite only. Y01: anaerobic, 18 E per C, 0.20 acid per consumed C (verify intake emits it), speed 0, water/gel.
+- P02, P03, P04 run on their records (CT §1.2) and the existing hunt rules (E < 80, meal < 0.5 B0', contact 0.5 cells, cooldown, meal cap 2 B0'). Prey per CT §3.2 through movement.ts preyAllowed ('any', 'free', 'inSediment' exist: verify, W2-12; contacts.ts needs no edit).
+- P04 SEDIMENT_WATER_CROSSING (D-0007, SPEC §6.4), in crossing.ts: from sediment it may enter up to two consecutive water cells; they are passable and habitat-compatible while crossing (stage 4 suitability uses the crossing check: no SUIT_HABITAT, no stress damage); a third water cell is refused both as a decision candidate and in the edge trace. waterCrossed (schema 4 column) counts consecutive water cells entered and resets on re-entering sediment. Inoculation, births and the Life-brush parity keep refusing water for P04.
+- Add Life (W2-13, UX §4.3): replace AddLifeSheet's DIETS map with a diet symbol plus a short diet line built from DishInfo.speciesDiets, e.g. "Eats sugar, then protein.", "Makes food from light.", "Hunts Sprinters, Velvet … (only free-swimming Crumbsmiths)", "Drains Sunbeads.", "Infects Sprinters." Names are the dish's own species names. PROPOSED DECISION: prey or hosts this dish does not record are summed ("and 6 kinds not in this dish"); 'free' and 'inSediment' read "only free-swimming" and "only in sediment". Keep data-testid species-<ID>.
+- V01 (W2-14): its tile and count read units per cell (1/5/20). LifeBrush gains viral (lifeBrushFor: speciesDiets metabolism 'viral'); lifeCellOutcome for viral returns brushCellOutcome('material', structure, false) (open cells and porous beads), stated over grid codes only: grid.ts never imports src/sim/viruses.ts. It must equal parasites-phage's phageCellAccepts(world, cell) exported from src/sim/viruses.ts (the same rule). LabTray dose line and LIFE_COPY: "Adds {n} Pinphage units to every covered cell." reportCommand: "Added {n} Pinphage units to each of {cells} cells." (accepted = cells dosed), never "Added N Pinphage".
+- livesHereText (W2-03, D-0006): pass speciesAttachment; attached species are named with their surfaces, e.g. "Velvet and Threadlace live in water only on a stone edge or bead." PROPOSED wording; never claims open water.
+Done when:
+- predation-matrix: every predator enabled after this wave (P01–P04) × every enabled species except V01 (a field, never an entity), under registryWith with B02, F01 and X01 added (allowUnimplemented for BIOFILM, BRANCHING, HOST_DRAIN: film-fungi and parasites-phage implement them now): a hand-built contact (prey centre at 0.3 cells, predator hungry, cooldown 0) captures iff CT §3.2 allows, including P02 vs attached B02 never, P02 vs free B06 yes, P04 vs B06 in water never and in sediment yes, P03 vs B01 never. Two runs give equal outcomes. Flipping one requirement in a patched record fails the test.
+- siltworm-crossing: crosses 1 and 2 water cells, never a 3rd; waterCrossed resets in sediment; no SUIT_HABITAT or stress damage while crossing; inspector suitability equals stage 4's; canOccupy(P04, water) stays false.
+- dusk-suitability: the factor is exactly 1, 0.75, 0.5 and 0 at O2 0, 0.1, 0.2 and ≥ 0.4 with SUIT_OXYGEN_HIGH. Closed lid, 20 B01 + 20 B03 at (50,70), sugar 0.50 and nutrient 0.20 per cell: O2 falls, B01 records OXYGEN_LIMITED, B03's suitability rises.
+- relationships-w2: B05 grows only from metabolite; Y01 adds exactly 0.20 acid per consumed C and pH follows the SPEC §4.3 formula; B03 and Y01 earn 18 E per C and consume no O2; P03 eats Y01; P04 eats B05.
+- lab-commands Life brush: the parity case covers F01 (and its flip) in all three habitats; V01's viral rule equals phageCellAccepts cell by cell; a livesHereText case for attached species.
+- tests/ui/diet-line.test.ts: the derivation for every enabled species (qualifiers, absent prey summed); it fails if a qualifier is dropped.
+- tests/e2e/add-life-w2.spec.ts (desktop): Add Life shows each new tile with its diet line; the P04 preview refuses open water; V01's count reads units per cell; a Lab Pinphage dose shows the units toast; axe clean, targets ≥ 48 px, text ≥ 16 px.
+- Fence unchanged. If a test outside your files fails only because of your manifest edit, report it; do not edit it.`,
+  },
+  {
+    key: 'parasites-phage',
+    port: 4223,
+    // critical: writes the saved host/parasite reference and infection columns, adds saveFile import checks for
+    // them, and makes the first draws on the 'infect' stream and a new 'contact' KIND.
+    critical: true,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.4 part 2: X01 Hitcher (parasite), V01 Pinphage (viral-unit field) and phage doses. Read SPEC §3.2 rows 5–7, §6.5 (host drains), §6.8, §6.9, §7.4, §7.5, §10.2, §12.2; CT §1 rows X01/V01, §3.3, §12.5, §13 (V01 row); UX §5.2 (INFECTED, PARASITIZED, DEATH_*); docs/source/D01 "Host specificity" (~line 476); D-0043.
+
+You own: src/sim/contacts.ts, src/sim/intake.ts, src/sim/maintenance.ts, src/sim/commands.ts, src/sim/parasites.ts (new), src/sim/viruses.ts (new), tests/fixtures/host-specificity.test.ts, tests/fixtures/parasite.test.ts, tests/fixtures/phage.test.ts, tests/e2e/phage.spec.ts (all new).
+film-fungi adds the film request in intake.ts and a fungal-subcap hook in introduceOrganism: keep them.
+SHARED (additive):
+- content/manifest.json: enabledSpecies += V01, X01; enabledSystems += parasites, viruses (one edit).
+- src/sim/content/implemented.ts: HOST_DRAIN, LYSIS.
+- src/sim/movement.ts (organisms owns it): hook calls into parasites.ts: a free X01 seeks a host within sensing 3 (target like a predator's, speed 0.4); after all moves an attached parasite takes its host's position at no movement cost.
+- src/sim/births.ts (film-fungi owns it): one hook right after rekeyLinks: parasites.ts onDivision(world, i, newSlot, parentBirthId).
+- src/persistence/saveFile.ts: import refuses a host/parasite pair that is not mutual (host.parasiteSlot ↔ parasite.hostSlot with birthIds), a parasite whose host is not in its hostIds, infectedBy ≠ 0 in a world without the viruses system, and a negative or non-finite infectionTimer; each message ends "Nothing was loaded."
+- src/worker/snapshot.ts inspectEntity, src/worker/protocol.ts (optional EntityInspect fields), src/ui/panels/Inspector.tsx, src/ui/strings/reasons.ts: "Infected by Pinphage; lysis in {t}s." and "Hitcher draining 0.02 C/s." (UX §5.2 Lab wording). Never edit packEntities (art-features packs CUE2_INFECTED/CUE2_PARASITIZED from your columns).
+Build X01 (SPEC §7.4):
+- Free: cannot feed (intakeRate 0); maintenance 0.15 E/s.
+- Stage 5, after predation: attaches on contact (centres ≤ 0.5 cells) to an unparasitized host listed in hostIds (A01). Competing claims for one host: highest det(seed, STREAMS.contact, tick, KIND_PARASITE, birthId) wins (a new KIND constant on the same stream). Set hostSlot/hostBirthId and the host's parasiteSlot/parasiteBirthId.
+- Stage 6, reserved before ordinary requests: C = min(0.02 × dt, host B) with N = host N × C / host B. 50 % to parasite B, 30 % cell CO2, 20 % cell metabolite, E += 30 per C, no O2 debit; N per §6.5 (0.05 per C, bound first); unused bound N to the cell's free nutrient. Internal moves only.
+- Stage 7 (W2-17): a host with a live attached parasite and B < 0.25 × B0' dies through killEntity(world, i, R.DEATH_PARASITE_DRAIN) (explicit trigger: §6.8 has no biomass floor).
+- Release alive in place, clearing both references, on every host removal (killEntity, the consumePrey capture, lysis) and on host rest (lifeState Preparing or Resting). Host division: the retained daughter keeps it; re-point the parasite's hostBirthId to b0 in the same commit. A dividing parasite keeps its host on the retained half (re-point the host's parasiteBirthId) and its offspring is free (G8).
+- W2-21: shipped content cannot make an A01 rest (E03 excludes algae). Test the rest path with a test-only registry where E03 is eligible for A01 (as tests/fixtures/registry-imports.test.ts builds one) or a labelled test state lifeState = Resting; say so in the report.
+Build V01 (SPEC §7.5):
+- v01 holds units (0.01 C each), diffuses and decays 1 %/s to detritus C with no N (transport.ts decayViral exists: verify; do not edit transport.ts).
+- Stage 5, after parasite attachment: each alive B01-ancestor (V01.hostIds) with infectedBy 0 whose cell holds ≥ 1 unit at the start of the stage: p = 1 − exp(−0.05 × units × dt), u = detFloat(seed, STREAMS.infect, tick, birthId), infected iff u < p. PROPOSED DECISION: when more hosts pass than whole units remain in a cell, units go in descending det(seed, STREAMS.contact, tick, KIND_INFECT, birthId) order (SPEC §3.2 row 5).
+- Infection consumes exactly 1 unit, whose 0.01 C transfers to the host (SPEC §7.5). PROPOSED DECISION: it joins B, with no N. infectedBy = 1; infectionTimer counts to 20 s. Division and healing are already blocked while infectedBy ≠ 0 (W2-20): do not add them again.
+- Stage 7, before ordinary death, at infectionTimer ≥ 20 s: units = Math.floor(0.40 × B / 0.01 + 1e-9) (0.4 × 0.7 / 0.01 = 27.999…) into the host cell; the remaining B, all N and any meal to detritus/detritusN; then the host is removed (DEATH_LYSIS) through killEntity's path, so parasites are released and links removed.
+- Doses (SPEC §10.2): inoculate with speciesId V01 adds count (1/5/20) units to each footprint cell where phageCellAccepts(world, cell) (export it from viruses.ts: grid.ts brushCellOutcome('material', structure, false) === 'ok'; organisms' preview uses the same rule); recordInput of count × 0.01 C per dosed cell, no N, no entities; result {accepted: cells dosed, rejected: cells refused}; refused in worlds without the viruses system; never introduceOrganism for V01.
+Done when:
+- host-specificity (D01): a dense dish with every enabled species (registryWith with this wave's species; allowUnimplemented for OXYGEN_SUPPRESSED, SEDIMENT_WATER_CROSSING, BIOFILM, BRANCHING) and 5 units per cell infects only B01 over 600 ticks. X01 in contact with every other species never attaches. With no host, units only decay and the ledger closes. Fewer than 1 unit never infects.
+- parasite: drain exactly 0.002 C per tick with proportional N, the 50/30/20 split and +30 E per C; the host dies below 0.25 B0' with DEATH_PARASITE_DRAIN; the parasite is released alive on drain death, age death, capture by P01 and rest; the retained-daughter and parasite-offspring rules hold with re-pointed birthIds.
+- phage: for a fixed seed every draw and threshold matches the formula over 1,000 host-ticks; lysis exactly 200 ticks after infection; units × 0.01 + remainder = B (B 0.7 → 28 units); N to detritus; a closed-lid 10,000-tick B01 + V01 run closes < 1e-5 with ≥ 1 lysis.
+- Saves: stateHash equal at 1× and 4× and after buildSaveFile → loadSaveFile mid-infection and with an X01 attached; each new import refusal tested.
+- Non-vacuity: dropping the hostIds check or the 1-unit floor fails a named test.
+- tests/e2e/phage.spec.ts (desktop): Lab Life → Pinphage dose over B01 → run → inspect an infected B01: "Infected by Pinphage; lysis in"; axe clean.
+- Fence unchanged. If a test outside your files fails only because of your manifest edit, report it; do not edit it.`,
+  },
+  {
+    key: 'art-features',
+    port: 4224,
+    prompt: `ASSIGNMENT: render Phase 3 truthfully from snapshot data only (ARCH §3, D-0032: src/render reads snapshot types and the atlas manifest, never art/src): film, fungal networks, adhesion links, infection, parasites, food objects, the film deposit band, and every Phase 3 module feature layer. You own the protocol bump (PROTOCOL_VERSION 1 → 2, D-0036). Read UX §4.4, §6.2, §6.5, §7.1–7.4; SPEC §7.5 (last line), §9 (E04, E06–E10, E12 visuals), §10.8; ARCH §7–§10.1; D-0016, D-0032, D-0046; docs/reports/reviews/g3-wave-1/art-organisms-build.md "Notes for the wave that enables these species".
+
+You own: src/worker/protocol.ts, snapshot.ts packEntities/packDeposits and any new pack function, src/render/**, art/src/**, public/atlas/** (npm run art:build), tools/art-build.ts, tools/asset-preview.{html,ts}, tools/content-validate.ts (atlas section), src/ui/panels/OverlayPicker.tsx, tests/content/atlas.test.ts, tests/render/**, tests/worker/protocol.test.ts, tests/sim/module-visuals.test.ts (generalize the 32-frame count and E01/E03/E05 loops to every layer; keep featureLayers callable with four arguments, cue2 an optional fifth; keep the renderer lines its regexes match), tests/e2e/infection-overlay.spec.ts (new).
+Others add optional inspector/DishInfo fields to protocol.ts and inspectEntity lines to snapshot.ts: keep them.
+SHARED (additive): src/worker/host.ts (the snapshot message's new fields only), src/ui/strings/lab.ts (OVERLAYS += v01 "Pinphage", units per cell; film "Biofilm", C per cell), src/ui/state.ts (one infection-markers signal + renderer call, like setOverlay), docs/ARCHITECTURE.md (§7 heading "protocolVersion: 2" and the §8 field list only).
+Protocol (W2-23: you are the only builder packing these; buffers are pooled, so write every slot for every entity, 0 when none):
+- ENT_STRIDE 12 → 14: E_CUE2 = 12, E_LINKMASK = 13.
+- E_CUE2 bits: CUE2_INFECTED 1 (infectedBy ≠ 0), CUE2_PARASITIZED 2 (a live parasiteSlot/parasiteBirthId pair), CUE2_ANCHORED 4 (anchorState 1), CUE2_LINKED 8 (any adhesion link), CUE2_MOD_E04 16, E06 32, E07 64, E08 128, E09 256, E10 512, E12 1024 (genome modules, like the CUE_MOD_E0x lines), CUE2_SEEKING_LIGHT 2048 (E07 and FLAG.moving), CUE2_DETRITUS_INTAKE 4096 and CUE2_RELEASING_PROTEIN 8192 (constants only: their FLAG bits 1 << 13 / 1 << 12 arrive in wave 4, which packs them).
+- E_LINKMASK: low 4 bits = fungal links by partner direction N 1, E 2, S 4, W 8 (y grows south; art mask bits, D-0046); bit 4 = a transport transfer this second (0 until wave 3's F02).
+- SnapshotMsg.links: Float32Array [x1, y1, x2, y2, kind] per adhesion link (kind 3), each pair once. SnapshotMsg.objects: [{id, x, y, kind, fill}] from world.objects, fill = remaining C / full inventory (CT §5.2: M10 10 C, M11 10 C).
+- DEPOSIT_BANDS 6 → 7: film appended as band 6 after catalysis (oil and protein bands and their sheen/mote glyphs exist, W2-26). PROPOSED DECISION: low 7 bits = film C band (0.50 = 127); bit 7 = eroding (film lower than at this packer's previous pack and nothing deposited), kept in worker-side scratch, never in the sim.
+- VisualEvent type += 'objectEmptied' (stain, cosmetic, fading). Do not touch visualEvents() (W2-25: wave 3 food-objects adds the EventType and pass-through).
+Build:
+- Film textures isolated/edge/center/eroding from the four-neighbour film mask, opacity by the film band; atlas frames checked like the others (name the key scheme in your report).
+- Fungal segments drawn by mask (<assetId>/mask/e/<mask>), never through the body path (fix renderer.ts's move ?? idle fallback for fungi); tip/e/0 when the mask has ≤ 1 bit; bud/e/0 when E_GROWTH ≥ 1 (PROPOSED DECISION: a bud = B ≥ 2 B0'); decaying/e/<mask> played from that slot's 'death' visual event (there is no dying flag, W2-27); F02 pulse/e/0..1 only when bit 4 is set, ≤ 1/s.
+- Adhesion link pixels between member positions.
+- Infection glyph (v01_pinphage/glyph/e/0) only on a CUE2_INFECTED host that is inspected, or while the Observe tray's "Infection markers" toggle is on (W2-28, UX §4.4, SPEC §10.8): a toggle in OverlayPicker, separate from the one-at-a-time overlay. Pinphage units and Biofilm are ordinary density overlays (packOverlay handles allocated fields).
+- A parasite is drawn at its host (the snapshot position).
+- Food objects: 4 fill steps (outline shrinks with fill) and a fading stain from objectEmptied.
+- Seven module feature layers in art/src/layers/modules.ts (16 px, 4 headings, anchor [8,8]): anchor_foot (E04, only while CUE2_ANCHORED), shade_patch (E06), light_trail (E07, two trailing pixels only with CUE2_SEEKING_LIGHT), debris_granule (E08, pulses only on CUE2_DETRITUS_INTAKE), protein_notches (E09, pale marks only on CUE2_RELEASING_PROTEIN), matrix_edge (E10, by the film band), adhesion_link (E12). FEATURE_FRAMES rows for all seven (W2-29).
+- At most two feature cues at normal zoom (MAX_UNSELECTED_MARKS); the rest on selection.
+- Reduced motion (UX §7.4): static link with a dot, static bright centre, no trails, no particles.
+- Nothing is drawn that the snapshot does not report.
+Done when:
+- tests/render/**: every bit maps to exactly one layer and nothing shows when it is 0 (no pulse without bit 4, no foot without CUE2_ANCHORED, no glyph without infection unless inspected/toggle); reduced-motion variants chosen when the setting is on; ≤ 2 cues at normal zoom; fungi never take the body path.
+- tests/worker/protocol.test.ts: version 2; stride 14; a hand-built world (registryWith + allowUnimplemented; film cells, a linked F01 pair via linkFungal, an infected B01, an X01 on an A01, a pellet via placeObject) decodes to masks equal to the link table, the expected bits and objects; a pooled buffer that held set bits packs 0 for a plain entity.
+- tests/content/atlas.test.ts: checkAtlas(atlas, species, { marks }) passes with the visualLayer of every Phase 3 module record (E04, E06–E10, E12) whatever the manifest says; one missing frame per new kind gives one precise error.
+- npm run art:build twice gives the same hash and --check passes; the asset preview shows every new frame.
+- grep: src/render imports nothing from art/src and no @sim module beyond the existing @sim/constants and @sim/grid (W2-30).
+- tests/e2e/infection-overlay.spec.ts (desktop): Observe lists Pinphage and Biofilm overlays in a new dish; the Infection markers toggle is a labelled 48 px button with aria-pressed; axe clean.
+- Fence unchanged. Lead after this wave: tick P3.4 only when the overlay and the toggle work.`,
+  },
+]
+
+// The runner reads WAVE_TASKS.
+
+const WAVE_ID = 'g3-wave-2'
+
+// ---- runner (docs/agent/g3-runner-ft.workflow.js.txt)
+// A = { wave, state, tasks: [{ key, port, prompt, critical?: true, finish?: '<resume note>' }], only?: ['key', ...] }
+const A = { wave: WAVE_ID, state: STATE, tasks: WAVE_TASKS }
+const WAVE = A.wave
+const R = `docs/reports/reviews/${WAVE}`
+const TASKS = A.only ? A.tasks.filter((t) => A.only.includes(t.key)) : A.tasks
+const KEYS = TASKS.map((t) => t.key)
+
+const PRE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Phases 0–2 are tagged g0/g1/g2. ${A.state} You build part of Phase 3 "Launch Ecology" (docs/BUILD_DIRECTIVE.md "Phase 3"). Canonical rules: docs/PIXELMEBA_IMPLEMENTATION_SPEC.md (SPEC), docs/CONTENT_TABLES.md (CT, every number), docs/ARCHITECTURE.md (ARCH), docs/UX_SPEC.md (UX), docs/CONFLICT_REGISTER.md. docs/DECISIONS.md holds rulings: read every title, and in full the ones your assignment names. Most relevant: D-0006, D-0007 and D-0008 were written for Phase 3; D-0019 schema bump + migration by copy + old-save test; D-0024/D-0028 Lab edits, structures as content; D-0030 founder modes, import refusal of unimplemented modules; D-0032 module marks in the atlas; D-0033 keep the open dish first; D-0035 world schema 4 with a hash-neutral stateHash; D-0036 version bumps (buildPhase 3, contentVersion 2; simulationVersion stays 3); D-0037 Sample; D-0038 film is eaten as detritus; D-0039 tool texts as content; D-0043 links as entity columns; D-0044 chemistry and habitats as built; D-0045 the stage 8 reservation framework as built; D-0046 organism art as built. Contract (CLAUDE.md): determinism (randomness only via det(seed, stream, ...keys) in src/sim/rng.ts; prefer an existing stream with a new KIND key; add a NEW stream id only if unavoidable and never reuse one; never Math.random, Date, or Map/Set/object-key iteration order in src/sim), conservation ledger (every material move is internal and balanced, or an input/export), no hidden rescue, honest labels ("coincided with" until a mechanism supports "because"; never "superior/advanced/perfect/adapted/immune"), content is validated JSON, the UI changes the world only through commands, saves are sacred (no world schema bump in this wave unless your assignment says so).
+
+PHASE 3 DETERMINISM FENCE. tests/fixtures/g2-replay.test.ts (saves written by the g2 build load and continue bit-identically) and the four tests/fixtures/trajectory-fence*.test.ts files (each registered recipe's biology digest under registryWith(G2_LISTS) and under the shipped manifest) must pass after your change. Gate every new rule on the world's own recorded manifest through src/sim/gates.ts (worldHasSystem / worldHasSpecies / worldHasModule; or world.fields[id] !== undefined, world.modules[id] !== undefined), or on the presence of the organisms it concerns — never on a build constant — so an old save never gains a Phase 3 rule. Never hard-code stateHash literals in new tests; compare relationally or with tests/helpers/trajectory.ts trajectoryDigest(world, 'g2' | 'full'). tests/helpers/trajectory.ts is SHARED only to register new post-g2 state in its POST_G2_* tables. If your work would change a fence value, do not make that change: report "FENCE: <recipe> <why>". Only the lead updates the fence; you may run "npx tsx tools/fence-update.ts --add <recipe>" for recipes you create.
+
+CONTENT AND MANIFEST. content/manifest.json is SHARED: only insert the IDs your assignment names (arrays sorted ascending), never remove IDs, never change version fields unless your assignment says so. Add the native abilities/modules you implement to src/sim/content/implemented.ts (additive). For content another builder of this wave enables, test through registryWith({...}) (allowUnimplemented only for species whose ability another builder of this wave implements; say so). After changing anything under content/ run "npx tsx tools/content-validate.ts --write" (a contentHash or atlas mismatch caused by another agent's in-flight edit is not your bug; say so). An enabled species needs its atlas frames (all 14 Phase 3 species have them since wave 1), an enabled module its feature-mark frames (D-0032). Update any test that pins a shipped list your edit moves (e.g. tests/worker/host.test.ts speciesIds).
+
+OWNERSHIP. The lead commits: do NOT run git add/commit/stash/checkout/reset/rm/restore and do not delete files you did not create. Other agents edit the same working tree right now. Edit ONLY the files your assignment lets you own. SHARED files: additive edits only (new functions, cases, fields, or a one-line hook call into your own new file), re-read the file immediately before each edit, keep edits small, never reformat/reorder/rename code you did not write. Only the wave's art owner edits art/src/** or runs npm run art:build. Never run prettier on files you do not own. If you need a change elsewhere, describe it precisely in your report. Line numbers in your assignment are hints: find code by symbol (git grep -n) before editing.
+
+TESTS (fast track). The machine has 2 CPUs shared by several agents. Run targeted vitest files only (never the whole suite), long commands with run_in_background and an until-loop wait (never a bare sleep). Browser tests: ONLY your own new or changed journeys, on the desktop project only, with your own port and build folder: E2E_PORT=<port> E2E_OUTDIR=tmp/dist-<key> npx playwright test <your specs> --project=desktop. Do not re-run other specs and do not run the phone projects: the lead runs the whole three-project suite at the gate. Playwright silently reuses a server already on your port: stop your port before and after each run (lsof -t -i :<port> | xargs -r kill; never pkill). The e2e app has no test hook: journeys that need the worker wrap Worker in an init script and speak the protocol, as tests/e2e/lab-tools.spec.ts watchWorker/workerHash do. Timings taken while others run are inflated; leave perf numbers to the lead.
+
+BEFORE FINISHING: npx tsc -p tsconfig.json --noEmit and npx eslint <your files> clean; npx vitest run tests/fixtures/g2-replay.test.ts tests/fixtures/trajectory-fence tests/fixtures/conservation-closed-lid.test.ts tests/fixtures/determinism.test.ts <your tests> all pass; your own e2e journeys pass on desktop; screens you touched have no serious/critical axe violations (expectNoSeriousA11yViolations), touch targets ≥ 48 px and text ≥ 16 px. Put proposed decisions in your report as "PROPOSED DECISION: …".`
+
+const FINISH_NOTE = (what) => `IMPORTANT — RESUMING INTERRUPTED WORK. A previous builder with exactly this assignment was cut off; its uncommitted work is in the working tree (git status / git diff). ${what} Do NOT start over and do not discard its work. First audit the existing work against EVERY item of the assignment's Build and "Done when" lists: per item DONE (file:line + the test that proves it, re-run now) / PARTIAL / MISSING / WRONG. Then complete everything PARTIAL/MISSING/WRONG and re-run your tests.`
+const REPORT = (key, suffix) => `When you finish, write your final report ALSO to ${R}/${key}-${suffix}.md (create the folder if needed; this is the only docs file you may create), then return the same report as your final message.`
+const BUILD_FINAL = `Final message: a plain report — a checklist of every Build and "Done when" item (DONE with file:line and the proving test / NOT DONE and why), files created/changed, what each test proves (and how you checked it fails without the mechanism), commands with results (paste the pass/fail summary lines), FENCE notes, bugs noticed elsewhere, proposed decisions.`
+
+const SAFE = (dir, port) => `Do NOT edit any repository file except your own report file named below, and do NOT run git add/commit/stash/checkout/reset/restore. Scratch goes in tmp/${dir}/ (git-ignored). 2 CPUs shared: targeted commands, generous timeouts, run_in_background + an until-loop for long runs. Browser tests only to prove a UI problem you suspect: E2E_PORT=${port} E2E_OUTDIR=tmp/dist-${dir}, desktop project only; stop only that port before and after (lsof -t -i :${port} | xargs -r kill). Never pkill.`
+const RULES_LENS = `LENS: rules, determinism, conservation, tests and player-facing truth. Check every rule and number against the cited canonical docs (quote the doc line when you claim a mismatch). Run tests/fixtures/g2-replay.test.ts, tests/fixtures/trajectory-fence (the four-file prefix), tests/fixtures/conservation-closed-lid.test.ts and the builders' new tests yourself. Read the diff (git status / git diff; new files are untracked). Look for: vacuous tests or weaker proxies (would the test fail if the mechanism were deleted? try it with a load-time mutant under tmp/, never by editing tracked files); rules gated on a build constant instead of the world's manifest; determinism leaks (Math.random, Date, Map/Set/object-key iteration in src/sim, reused RNG streams, float order changed for existing species); unledgered material moves; save-shape changes without a schema bump and migration; hard-coded stateHash literals; edits outside a task's ownership; non-additive edits to SHARED files; manifest or version-field edits no assignment allowed; and, by reading the UI code and strings, visible claims that do not trace to a measured value or reason code, marks or animations without the state behind them, and copy against UX_SPEC tone.`
+const SAVES_LENS = `LENS: saves and determinism only, for the task named below. Prove or refute: same seed + content + command log gives the identical stateHash at 1×, at 4× (run(world, n) vs four quarter runs), and across serialize → deserialize and saveFile build → load at awkward moments (mid-transaction, right after the new state appears, right before it ends); g2 saves load and continue bit-identically; any new saved state is canonical (order-independent), validated on import (refused with a message that ends "Nothing was loaded."), counted in the ledger, and either hash-neutral while empty or deliberately hashed; nothing outside src/sim draws simulation randomness. Write load-time probes under tmp/; never edit tracked files.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+const graded = (v) => (v && Array.isArray(v.problems) ? v.problems.filter((p) => /^(BLOCKER|MAJOR|MINOR)/.test(p.trim())) : [])
+const blocking = (ps) => ps.filter((p) => /^(BLOCKER|MAJOR)/.test(p.trim()))
+const keyOf = (p) => {
+  const m = /^\s*(?:BLOCKER|MAJOR|MINOR)\s*\[([^\]]+)\]/.exec(p)
+  return m && KEYS.includes(m[1].trim()) ? m[1].trim() : null
+}
+const FORMAT = `Prefix every problem with its grade and the task key it belongs to, exactly like "MAJOR [${KEYS[0]}] <file:line> — <what is wrong> — <repro>" (task keys: ${KEYS.join(', ')}; use [lead] for a problem no single task owns). Most severe first. Add "VERIFIED OK — <item> — <evidence>" entries for parts that hold. ok=false if any BLOCKER or MAJOR.`
+
+log(`${WAVE}: ${TASKS.length} task(s): ${KEYS.join(', ')}`)
+
+phase('Build')
+const builds = await parallel(
+  TASKS.map((t) => () =>
+    agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\n${t.finish ? FINISH_NOTE(t.finish) + '\n\n' : ''}${t.prompt}\n\n${REPORT(t.key, 'build')} ${BUILD_FINAL}`, {
+      label: `${t.finish ? 'finish' : 'build'}:${t.key}`,
+      phase: 'Build',
+      effort: 'high',
+    }),
+  ),
+)
+const built = {}
+TASKS.forEach((t, i) => {
+  built[t.key] = builds[i] ? String(builds[i]) : 'NO REPORT (the builder failed or was skipped)'
+})
+log(`builders done: ${TASKS.filter((t, i) => builds[i]).map((t) => t.key).join(', ')}`)
+
+const ASSIGNMENTS = TASKS.map((t) => `=== TASK ${t.key} (port ${t.port}) ===\nASSIGNMENT:\n${t.prompt}\n\nBUILDER REPORT:\n${built[t.key]}`).join('\n\n')
+
+phase('Verify')
+const verifyJobs = [
+  () =>
+    agent(`You are the adversarial wave verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-${WAVE}`, 4395)}
+Wave ${WAVE} ran ${TASKS.length} builders in one working tree; their work is uncommitted (git status / git diff). Their assignments and reports:
+${ASSIGNMENTS}
+
+${RULES_LENS}
+Try to REFUTE that each assignment is done correctly, completely and honestly — every item of its Build and "Done when" lists. ${FORMAT} Write the same list to ${R}/wave-verify.md.`, { label: `verify:${WAVE}`, phase: 'Verify', schema: VERDICT, effort: 'high' }),
+  ...TASKS.filter((t) => t.critical).map((t, i) => () =>
+    agent(`You are an adversarial saves/determinism verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-${t.key}-saves`, 4396 + i)}
+Task ${t.key} of wave ${WAVE}; its work is uncommitted in the tree with other builders' work.
+ASSIGNMENT:
+${t.prompt}
+
+BUILDER REPORT:
+${built[t.key]}
+
+${SAVES_LENS}
+${FORMAT} Write the same list to ${R}/${t.key}-verify-saves.md.`, { label: `verify:${t.key}:saves`, phase: 'Verify', schema: VERDICT, effort: 'high' }),
+  ),
+]
+const verdicts = (await parallel(verifyJobs)).filter(Boolean)
+let problems = verdicts.flatMap(graded)
+const toLead = problems.filter((p) => !blocking([p]).length || keyOf(p) === null)
+log(`verify: ${verdicts.length} verdict(s), ${problems.length} graded item(s), ${blocking(problems).length} BLOCKER/MAJOR`)
+
+const rounds = []
+for (let round = 1; round <= 2; round++) {
+  const open = blocking(problems).filter((p) => keyOf(p) !== null)
+  if (!open.length) break
+  const fixKeys = KEYS.filter((k) => open.some((p) => keyOf(p) === k))
+  log(`fix round ${round}: ${fixKeys.join(', ')}`)
+  phase('Fix')
+  const fixes = await parallel(
+    fixKeys.map((k) => () => {
+      const t = TASKS.find((x) => x.key === k)
+      const mine = problems.filter((p) => keyOf(p) === k)
+      return agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\nYou are the round-${round} fixer for this assignment (the work is in the tree; do not start over):\n---\n${t.prompt}\n---\nThe adversarial verifier found these problems in it (full list: ${R}/wave-verify.md${round > 1 ? ` and ${R}/wave-reverify${round - 1}.md` : ''}):\n---\n${mine.join('\n')}\n---\nFix EVERY BLOCKER and MAJOR, and every MINOR that is cheap and inside your files. For each behavioural problem add or tighten a test that fails on the old behaviour and passes now. If a problem is wrong (the verifier misread a rule), say why with quotes from the canonical docs instead of changing code. If a fix needs a file outside your ownership, make it only if it is small and additive, or describe it precisely for the lead. Re-run your unit tests, the fence fixtures and your own e2e journeys (desktop) before finishing. ${REPORT(k, `fix${round}`)} Final message: per problem FIXED (how, which test) / NOT A PROBLEM (why, quotes) / NOT FIXED (why); files changed; commands + results.`, { label: `fix${round}:${k}`, phase: 'Fix', effort: 'high' })
+    }),
+  )
+  const fixReports = fixKeys.map((k, i) => `=== FIXER ${k} ===\n${fixes[i] ? String(fixes[i]) : 'NO REPORT'}`).join('\n\n')
+  const fixedProblems = problems.filter((p) => fixKeys.includes(keyOf(p)))
+  const rv = await agent(`You are the adversarial re-verifier for wave ${WAVE} of Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`reverify${round}-${WAVE}`, 4395)}
+The assignments of the fixed tasks:
+${TASKS.filter((t) => fixKeys.includes(t.key)).map((t) => `=== TASK ${t.key} ===\n${t.prompt}`).join('\n\n')}
+
+The verifier found these problems:
+---
+${fixedProblems.join('\n')}
+---
+Round-${round} fixers reported:
+${fixReports}
+
+${RULES_LENS}
+For EACH problem try to REFUTE that it is fixed: reproduce the original finding against the current tree, read the diff, check the new test fails on the old behaviour (load-time mutant under tmp/), and check nothing regressed (the touched unit tests and the fence fixtures). ${FORMAT} Write the same list to ${R}/wave-reverify${round}.md.`, { label: `reverify${round}:${WAVE}`, phase: 'Fix', schema: VERDICT, effort: 'high' })
+  rounds.push({ round, fixKeys, fixes: fixes.map((f) => (f ? String(f) : null)), reverify: rv })
+  if (!rv) break
+  const unfixed = problems.filter((p) => !fixKeys.includes(keyOf(p)))
+  problems = [...unfixed, ...graded(rv)]
+}
+
+const remaining = blocking(problems)
+log(`${WAVE}: ${remaining.length ? `${remaining.length} BLOCKER/MAJOR remain` : 'no BLOCKER/MAJOR remains'}; ${problems.length - remaining.length} MINOR for the lead`)
+return { wave: WAVE, built, verdicts, rounds, remaining, minors: problems.filter((p) => !blocking([p]).length), toLead }

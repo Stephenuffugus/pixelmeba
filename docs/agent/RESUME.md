@@ -3,6 +3,28 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑01 ≈ 14:30 UTC — WAVE 1 COMMITTED (`08768df`), WAVE 2 RUNNING. START HERE if this session died.**
+> - P3.1, P3.2 ticked; P3.7 `[~]`. Decisions D‑0043…D‑0046 (owner flags: D‑0044 bead surfaces, D‑0046 B01/B06).
+> - Wave 2 runs from `docs/agent/g3-wave-2.run.workflow.js.txt` (copy to the scratchpad as .js, pass as `scriptPath`):
+>   film-fungi 4221, organisms 4222, parasites-phage 4223 (critical → saves lens), art-features 4224; builders edit
+>   the main tree and never commit; reports in `docs/reports/reviews/g3-wave-2/`.
+> - If the session died mid-wave: `git status`; keep uncommitted work on a LOCAL `wip/g3-wave-2` branch; read the
+>   reports; rerun only unfinished tasks (`A.only = [...]` and a `finish` note per task in the run file).
+> - After wave 2: lead integration (MINORs, D‑0047+, `npm run check`, desktop e2e of the touched journeys, commit,
+>   tick P3.3/P3.4) → wave 3 task file (one writer, same prompt shape as `g3-wave-2-tasks`) → wave 3.
+
+> **Update 2026‑10‑01 ≈ 13:40 UTC — RESUMED (owner: "lets get started"). START HERE if this session died.**
+> - Wave 1 work is still uncommitted in the tree (backup `wip/g3-wave-1`). The lead fixed the cheap wave 1 MINORs
+>   (construction above the cap, B13 bead preview test, Gel Colony keep-dish case, 1 → 4 migration fixture,
+>   module-accounting `construction`, chemistry journey budget) and recorded D‑0043…D‑0045 — also uncommitted.
+> - Running: the art-organisms verification (one combined rules + player verifier; report
+>   `docs/reports/reviews/g3-wave-1/art-organisms-verify.md`) and the wave 2 task writer
+>   (→ `docs/agent/g3-wave-2.tasks.js.txt`). New fast-track runner template: `docs/agent/g3-runner-ft.workflow.js.txt`
+>   (builders unit + own e2e on desktop; one wave verifier; a saves lens only for `critical` tasks).
+> - Next: art findings → D‑0046 → `npm run check` + desktop e2e of the touched journeys → commit wave 1 → tick P3.1,
+>   P3.2, mark P3.7 `[~]` → assemble `docs/agent/g3-wave-2.run.workflow.js.txt` (meta + tasks + runner, `WAVE_ID`)
+>   → run wave 2.
+
 > **Update 2026‑10‑01 ≈ 11:45 UTC — PAUSED for a codespace restart, mid Phase 3 wave 1. START HERE.**
 > - `main` = `g2` + Preflight (`4c5c0b8`, D‑0042) + docs; pushed. Tags g0 g1 g2.
 > - Wave 1's four builders FINISHED (foundation = world schema 4, environment = P3.1/P3.2, stage8 = P3.7

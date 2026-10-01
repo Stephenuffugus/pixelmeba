@@ -416,3 +416,43 @@ Decision:
 - The Preflight bumped buildPhase 3 and contentVersion 2 (D-0036); the wave-A goldens and other pinned tests run on the g2 lists.
 Evidence: on the rebased branch `npm run check` → 91 files, 827/827; `make-g2-saves` → "all 10 g2 fixtures are byte-identical".
 Owner review: no
+
+## D-0043 · 2026-10-01 · Phase 3 wave 1 · World schema 4 as built: links as entity columns
+Context: wave 1 foundation (docs/reports/reviews/g3-wave-1/foundation-build.md; rules verifier ok with 4 MINOR).
+Decision:
+- Fungal links are entity columns fLink0..3 (i32 slot, −1 empty), fLinkB0..3 (u32 birthId) and fLinkKind0..3 (u8: 1 visual F01, 2 transport F02); adhesion links are aLink0..1 (i32, −1) and aLinkB0..1 (u32). This is ARCH §5's Int32Array(6000×4) and (6000×2) split by position, with the birthId every reference needs. Links are symmetric, filled lowest-free-first, saved, migrated (−1 fill via `emptyValueOf`, the single source of a column's empty value), cleared on free, hash-neutral while empty (D-0035) and digested by the existing column code. Because the degree limit is structural, an import with more than 4 fungal or 2 adhesion links per organism is refused.
+- Food objects (`objects`, cap 128 per SPEC §2.5 / CT §14) and the held sample (`sample`) are world stores; computeTotals counts them (objectsC/N, sampleC/N/M).
+- Carried to the wave that owns `sampleSlot.ts` (P3.5 Sample): the import must also refuse held rows with negative pools, an invalid life state, or a slot/birthId that collides with a living organism or another held row (SPEC §14.3); the trajectory digest's `canonSample` should hash each row's original slot (Cancel restores into it). Carried to Phases 5 and 7: `speciesSystemNeeds` and `MODULE_SYSTEM_NEEDS` must gain SHELL/E11 → silicate, SIGNAL_GLOW/E02 → signals, RIVALRY → rivalry and E17 → foodObjects when that content arrives.
+Reason: ARCH §5, SPEC §6.8 (remove incident links at death), §14.3, D-0035.
+Owner review: no
+
+## D-0044 · 2026-10-01 · P3.1/P3.2 · Chemistry and habitats as built
+Context: wave 1 environment (docs/reports/reviews/g3-wave-1/environment-build.md; rules and player verifiers ok, 5 MINOR).
+Decision:
+- Sediment Edge preloads 0.010 bound nutrient (detritusN) per sediment cell with its 0.10 detritus carbon: the DEBRIS ratio of 0.10 N per C (CT §5.1) and FIRST_DISH_V1's debris patch ratio. CT §8.1 names only "detritus 0.10"; carbon-only debris would be the one exception in the game.
+- A habitat start on another preset drops the recipe's backgroundOverrides (`withHabitatOverride`), so the dish equals CT §8.1 exactly (Gel Colony keeps its sugar 0.10). The New Dish note quotes the habitat's own rules text and never says "no food" there; Empty Water Garden is unchanged. Every rebuild from recorded overrides (keep-dish `freshStart`, What if?, New Dish preview) re-applies the habitat.
+- Attachment: a porous bead cell offers only the 'bead' surface, and the bead hides the ground under it. An attached species may sit on a bead only if 'bead' is in its own surface list, so B13 (gel, sediment, mesh, stone edge) is refused a bead placed on gel, on sediment or beside stone, and F03 a bead over sediment. SPEC §2.2 lists the surfaces without saying whether a bead keeps its substrate's; this ruling follows CT §1.3's per-species lists. Free-living species still cannot enter beads. The Life brush preview and the command agree cell by cell (tested for B02 and B13 in all three habitats).
+- The Lab's lid buttons read the world's lid from snapshots (`SnapshotMsg.lid`, cached as `SimClient.lidOf`): an optional reply field, so PROTOCOL_VERSION stays 1.
+Reason: CT §1.3, §5.1, §8.1; SPEC §2.2; honest labels (the summary states what is preloaded).
+Owner review: yes — whether a bead should keep offering its substrate's surface (gel, sediment, stone edge) to attached species. Changing it later is a rules change for worlds that hold B13/F03.
+
+## D-0045 · 2026-10-01 · P3.7 · The stage 8 reservation framework as built
+Context: wave 1 stage8 (docs/reports/reviews/g3-wave-1/stage8-build.md; rules verifier ok, 4 MINOR).
+Decision:
+- Action order (SPEC §3.2 row 8, D04 §9): mandatory transitions, then native optional actions by action ID, then modules E01…E17 ascending. A native action's ID is its index in the `NativeAbility` enum (E_STARCH 0 < E_OIL 1 < E_PROTEIN 2 < BIOFILM 3 < …), so that enum is append-only; a module's ID is its number. Mandatory entries run only for Active organisms, after dormancy and link release; dormancy stays the hard-wired first step for every living organism (it must also run while Preparing, Resting or Waking).
+- Shared construction resolves all requests from one snapshot: per cell, requests above the headroom max(0, 0.50 − film) are scaled together; a scaled cell is pinned to exactly FILM_CAP and the float dust (≤ 1e-12, else a defect) goes to `ledger.roundoff.c`. A cell already at or above the cap (an imported or patched value) accepts nothing, charges nothing and is left as it is (lead fix of verifier MINOR 1; tested).
+- Two producers on one organism (e.g. a native starch producer that gains E09): `secreting` is the OR of the producers; `secretionCode` shows SECRETING if any producer secreted this tick, otherwise the last producer's refusal. Unproven until a two-producer organism exists: the wave that implements E09 adds the test, and the wave that enables B02 with E01 adds a test where a construction reservation precedes a producer.
+- `tests/fixtures/module-accounting.test.ts` energy balance includes the `construction` category.
+Reason: SPEC §3.2, §7.1, §9 E10; CT §12.6; D04 §2 C08 and §9; conservation.
+Owner review: no
+
+## D-0046 · 2026-10-01 · Phase 3 wave 1 · Organism art for the 14 Phase 3 species as built
+Context: wave 1 art-organisms (docs/reports/reviews/g3-wave-1/art-organisms-{build,verify,fix1,reverify1}.md: 1 MAJOR fixed in round 1, re-verify ok).
+Decision:
+- The atlas is 1024 px wide (1024×1024 for Phase 1–3 content) instead of 512×256: a 512-wide sheet would need 512×2048. A square 1024 sheet stays inside every WebGL limit we target and leaves room for Phase 5. The five shipped sprites and three feature layers are byte-identical frame by frame (only packing positions moved).
+- Fungi: `mask/e/<0..15>` tiles with bits N=1, E=2, S=4, W=8 (`MASK_*` in art/src/sprite.ts); `decaying/e/<mask>` is mask-indexed too (a dying segment keeps its visible connections while its links exist); `tip/e/0` and `bud/e/0` are centred overlays drawn over the mask tile; F02 has `pulse/e/0..1`, drawn only while a transfer happens. Fungus and virus thumbnails are a one-frame `idle` animation, so Add Life, the Lab tray and History find them without an explicit animation. checkAtlas's category rules require all of these, F02's pulse included.
+- A colour belongs to the state it shows: F02's pulse colour #F6D7B0 appears only in its pulse frames (tested), its growing tips are light copper.
+- Phase 3 small organisms have an 8–12 px visible body with a clear 1 px margin (UX §6.2; tested). Shipped B04 (16×6) keeps its art.
+- The UX §6.1 grayscale rule is measured as: alpha differs on ≥ 12 % of the union, or, for a pair with the same outline (alpha difference below 12 %), luminance (Δ ≥ 32/255) differs on ≥ 12 % of shared body pixels. The same-outline pairs are B03/B07 (UX §6.3 curved rods) and the shipped pair B01/B06 (alpha 7.0 %, luminance 31 %), whose art must stay byte-identical. F01/F02 differ in alpha by 33 % and are held to the alpha rule.
+Reason: UX §6.1–§6.3, ARCH §10.1, CT §1.3; every visible feature maps to real state.
+Owner review: yes — B01/B06 pass the grayscale rule by luminance only; holding them to the alpha rule means redrawing B06, which changes shipped atlas frames (no simulation state).

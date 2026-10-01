@@ -47,13 +47,13 @@ with the next task).
 - [x] (tag g2) G2 gate: module‑accounting · registry‑imports · branch‑evidence · comparison · variants · experiments · e2e whatif/lab‑tools · view‑switch hash · comprehension self‑review → tag `g2`
 
 ## Phase 3 — Launch Ecology
-- [ ] P3.1 Chemistry and environment materials (all D01 materials, pH/salinity/inhibitors, closed lid, shade)
-- [ ] P3.2 Habitat presets (Water Garden, Gel Colony, Sediment Edge) and substrate rules
+- [x] (08768df) P3.1 Chemistry and environment materials (all D01 materials, pH/salinity/inhibitors, closed lid, shade)
+- [x] (08768df) P3.2 Habitat presets (Water Garden, Gel Colony, Sediment Edge) and substrate rules
 - [ ] P3.3 Wave A organisms: B02 + biofilm, B03, B05, Y01, F01 + branching
 - [ ] P3.4 Wave B organisms: P02, P03, P04, X01, V01
 - [ ] P3.5 Tools: Sample (paused transaction), Transfer, Clean water, Erase structure, phage doses
 - [ ] P3.6 Wave E1 living chemistry: B07, B08, Y02, F02 + links; E_OIL/E_PROTEIN/broth/breaker; M01, M03–M05, M09, M10, M11; food objects; reaction ledger; food‑access overlay
-- [ ] P3.7 Modules E04, E06, E07, E08, E09, E10, E12 + stage 8 reservation order
+- [~] (08768df: stage 8 framework; modules land in wave 3) P3.7 Modules E04, E06, E07, E08, E09, E10, E12 + stage 8 reservation order
 - [ ] P3.8 Field Guide, journal, badges
 - [ ] P3.9 Experiments (A hidden neighborhood, One compatible host, E201–E204, E212) + curated L301, L303, L304, L306
 - [ ] P3.10 Audio SoundKit + settings

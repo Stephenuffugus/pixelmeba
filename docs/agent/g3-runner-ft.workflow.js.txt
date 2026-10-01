@@ -1,0 +1,145 @@
+// ---- fast-track wave runner (docs/agent/fast-track.md). Build a wave's run file as:
+//   1. the meta block below with name set to the wave id;
+//   2. the wave's tasks file (STATE and WAVE_TASKS, with "export" removed);
+//   3. this runner body from "// ---- runner" on, with A.wave set.
+// Builders: effort high, unit tests + their own new e2e journeys on the desktop project only.
+// One rules verifier over the whole wave diff (effort high), plus a targeted saves/determinism verifier for
+// each task marked critical: true. Fix rounds only for tasks with a BLOCKER or MAJOR (at most two);
+// MINORs go to the lead's integration.
+//
+// export const meta = {
+//   name: 'g3-wave-N',
+//   description: 'Phase 3 wave N (fast track): file-disjoint builders, one wave verifier over the whole diff, a saves lens for critical tasks, fix rounds only for BLOCKER/MAJOR',
+//   phases: [
+//     { title: 'Build', detail: 'one builder per task, effort high; unit tests + own e2e on desktop' },
+//     { title: 'Verify', detail: 'one rules verifier over the wave diff; a saves lens per critical task' },
+//     { title: 'Fix', detail: 'only tasks with a BLOCKER/MAJOR; at most two rounds' },
+//   ],
+// }
+
+// ---- runner
+// A = { wave, state, tasks: [{ key, port, prompt, critical?: true, finish?: '<resume note>' }], only?: ['key', ...] }
+const A = { wave: WAVE_ID, state: STATE, tasks: WAVE_TASKS }
+const WAVE = A.wave
+const R = `docs/reports/reviews/${WAVE}`
+const TASKS = A.only ? A.tasks.filter((t) => A.only.includes(t.key)) : A.tasks
+const KEYS = TASKS.map((t) => t.key)
+
+const PRE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Phases 0–2 are tagged g0/g1/g2. ${A.state} You build part of Phase 3 "Launch Ecology" (docs/BUILD_DIRECTIVE.md "Phase 3"). Canonical rules: docs/PIXELMEBA_IMPLEMENTATION_SPEC.md (SPEC), docs/CONTENT_TABLES.md (CT, every number), docs/ARCHITECTURE.md (ARCH), docs/UX_SPEC.md (UX), docs/CONFLICT_REGISTER.md. docs/DECISIONS.md holds rulings: read every title, and in full the ones your assignment names. Most relevant: D-0006, D-0007 and D-0008 were written for Phase 3; D-0019 schema bump + migration by copy + old-save test; D-0024/D-0028 Lab edits, structures as content; D-0030 founder modes, import refusal of unimplemented modules; D-0032 module marks in the atlas; D-0033 keep the open dish first; D-0035 world schema 4 with a hash-neutral stateHash; D-0036 version bumps (buildPhase 3, contentVersion 2; simulationVersion stays 3); D-0037 Sample; D-0038 film is eaten as detritus; D-0039 tool texts as content; D-0043 links as entity columns; D-0044 chemistry and habitats as built; D-0045 the stage 8 reservation framework as built; D-0046 organism art as built. Contract (CLAUDE.md): determinism (randomness only via det(seed, stream, ...keys) in src/sim/rng.ts; prefer an existing stream with a new KIND key; add a NEW stream id only if unavoidable and never reuse one; never Math.random, Date, or Map/Set/object-key iteration order in src/sim), conservation ledger (every material move is internal and balanced, or an input/export), no hidden rescue, honest labels ("coincided with" until a mechanism supports "because"; never "superior/advanced/perfect/adapted/immune"), content is validated JSON, the UI changes the world only through commands, saves are sacred (no world schema bump in this wave unless your assignment says so).
+
+PHASE 3 DETERMINISM FENCE. tests/fixtures/g2-replay.test.ts (saves written by the g2 build load and continue bit-identically) and the four tests/fixtures/trajectory-fence*.test.ts files (each registered recipe's biology digest under registryWith(G2_LISTS) and under the shipped manifest) must pass after your change. Gate every new rule on the world's own recorded manifest through src/sim/gates.ts (worldHasSystem / worldHasSpecies / worldHasModule; or world.fields[id] !== undefined, world.modules[id] !== undefined), or on the presence of the organisms it concerns — never on a build constant — so an old save never gains a Phase 3 rule. Never hard-code stateHash literals in new tests; compare relationally or with tests/helpers/trajectory.ts trajectoryDigest(world, 'g2' | 'full'). tests/helpers/trajectory.ts is SHARED only to register new post-g2 state in its POST_G2_* tables. If your work would change a fence value, do not make that change: report "FENCE: <recipe> <why>". Only the lead updates the fence; you may run "npx tsx tools/fence-update.ts --add <recipe>" for recipes you create.
+
+CONTENT AND MANIFEST. content/manifest.json is SHARED: only insert the IDs your assignment names (arrays sorted ascending), never remove IDs, never change version fields unless your assignment says so. Add the native abilities/modules you implement to src/sim/content/implemented.ts (additive). For content another builder of this wave enables, test through registryWith({...}) (allowUnimplemented only for species whose ability another builder of this wave implements; say so). After changing anything under content/ run "npx tsx tools/content-validate.ts --write" (a contentHash or atlas mismatch caused by another agent's in-flight edit is not your bug; say so). An enabled species needs its atlas frames (all 14 Phase 3 species have them since wave 1), an enabled module its feature-mark frames (D-0032). Update any test that pins a shipped list your edit moves (e.g. tests/worker/host.test.ts speciesIds).
+
+OWNERSHIP. The lead commits: do NOT run git add/commit/stash/checkout/reset/rm/restore and do not delete files you did not create. Other agents edit the same working tree right now. Edit ONLY the files your assignment lets you own. SHARED files: additive edits only (new functions, cases, fields, or a one-line hook call into your own new file), re-read the file immediately before each edit, keep edits small, never reformat/reorder/rename code you did not write. Only the wave's art owner edits art/src/** or runs npm run art:build. Never run prettier on files you do not own. If you need a change elsewhere, describe it precisely in your report. Line numbers in your assignment are hints: find code by symbol (git grep -n) before editing.
+
+TESTS (fast track). The machine has 2 CPUs shared by several agents. Run targeted vitest files only (never the whole suite), long commands with run_in_background and an until-loop wait (never a bare sleep). Browser tests: ONLY your own new or changed journeys, on the desktop project only, with your own port and build folder: E2E_PORT=<port> E2E_OUTDIR=tmp/dist-<key> npx playwright test <your specs> --project=desktop. Do not re-run other specs and do not run the phone projects: the lead runs the whole three-project suite at the gate. Playwright silently reuses a server already on your port: stop your port before and after each run (lsof -t -i :<port> | xargs -r kill; never pkill). The e2e app has no test hook: journeys that need the worker wrap Worker in an init script and speak the protocol, as tests/e2e/lab-tools.spec.ts watchWorker/workerHash do. Timings taken while others run are inflated; leave perf numbers to the lead.
+
+BEFORE FINISHING: npx tsc -p tsconfig.json --noEmit and npx eslint <your files> clean; npx vitest run tests/fixtures/g2-replay.test.ts tests/fixtures/trajectory-fence tests/fixtures/conservation-closed-lid.test.ts tests/fixtures/determinism.test.ts <your tests> all pass; your own e2e journeys pass on desktop; screens you touched have no serious/critical axe violations (expectNoSeriousA11yViolations), touch targets ≥ 48 px and text ≥ 16 px. Put proposed decisions in your report as "PROPOSED DECISION: …".`
+
+const FINISH_NOTE = (what) => `IMPORTANT — RESUMING INTERRUPTED WORK. A previous builder with exactly this assignment was cut off; its uncommitted work is in the working tree (git status / git diff). ${what} Do NOT start over and do not discard its work. First audit the existing work against EVERY item of the assignment's Build and "Done when" lists: per item DONE (file:line + the test that proves it, re-run now) / PARTIAL / MISSING / WRONG. Then complete everything PARTIAL/MISSING/WRONG and re-run your tests.`
+const REPORT = (key, suffix) => `When you finish, write your final report ALSO to ${R}/${key}-${suffix}.md (create the folder if needed; this is the only docs file you may create), then return the same report as your final message.`
+const BUILD_FINAL = `Final message: a plain report — a checklist of every Build and "Done when" item (DONE with file:line and the proving test / NOT DONE and why), files created/changed, what each test proves (and how you checked it fails without the mechanism), commands with results (paste the pass/fail summary lines), FENCE notes, bugs noticed elsewhere, proposed decisions.`
+
+const SAFE = (dir, port) => `Do NOT edit any repository file except your own report file named below, and do NOT run git add/commit/stash/checkout/reset/restore. Scratch goes in tmp/${dir}/ (git-ignored). 2 CPUs shared: targeted commands, generous timeouts, run_in_background + an until-loop for long runs. Browser tests only to prove a UI problem you suspect: E2E_PORT=${port} E2E_OUTDIR=tmp/dist-${dir}, desktop project only; stop only that port before and after (lsof -t -i :${port} | xargs -r kill). Never pkill.`
+const RULES_LENS = `LENS: rules, determinism, conservation, tests and player-facing truth. Check every rule and number against the cited canonical docs (quote the doc line when you claim a mismatch). Run tests/fixtures/g2-replay.test.ts, tests/fixtures/trajectory-fence (the four-file prefix), tests/fixtures/conservation-closed-lid.test.ts and the builders' new tests yourself. Read the diff (git status / git diff; new files are untracked). Look for: vacuous tests or weaker proxies (would the test fail if the mechanism were deleted? try it with a load-time mutant under tmp/, never by editing tracked files); rules gated on a build constant instead of the world's manifest; determinism leaks (Math.random, Date, Map/Set/object-key iteration in src/sim, reused RNG streams, float order changed for existing species); unledgered material moves; save-shape changes without a schema bump and migration; hard-coded stateHash literals; edits outside a task's ownership; non-additive edits to SHARED files; manifest or version-field edits no assignment allowed; and, by reading the UI code and strings, visible claims that do not trace to a measured value or reason code, marks or animations without the state behind them, and copy against UX_SPEC tone.`
+const SAVES_LENS = `LENS: saves and determinism only, for the task named below. Prove or refute: same seed + content + command log gives the identical stateHash at 1×, at 4× (run(world, n) vs four quarter runs), and across serialize → deserialize and saveFile build → load at awkward moments (mid-transaction, right after the new state appears, right before it ends); g2 saves load and continue bit-identically; any new saved state is canonical (order-independent), validated on import (refused with a message that ends "Nothing was loaded."), counted in the ledger, and either hash-neutral while empty or deliberately hashed; nothing outside src/sim draws simulation randomness. Write load-time probes under tmp/; never edit tracked files.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+const graded = (v) => (v && Array.isArray(v.problems) ? v.problems.filter((p) => /^(BLOCKER|MAJOR|MINOR)/.test(p.trim())) : [])
+const blocking = (ps) => ps.filter((p) => /^(BLOCKER|MAJOR)/.test(p.trim()))
+const keyOf = (p) => {
+  const m = /^\s*(?:BLOCKER|MAJOR|MINOR)\s*\[([^\]]+)\]/.exec(p)
+  return m && KEYS.includes(m[1].trim()) ? m[1].trim() : null
+}
+const FORMAT = `Prefix every problem with its grade and the task key it belongs to, exactly like "MAJOR [${KEYS[0]}] <file:line> — <what is wrong> — <repro>" (task keys: ${KEYS.join(', ')}; use [lead] for a problem no single task owns). Most severe first. Add "VERIFIED OK — <item> — <evidence>" entries for parts that hold. ok=false if any BLOCKER or MAJOR.`
+
+log(`${WAVE}: ${TASKS.length} task(s): ${KEYS.join(', ')}`)
+
+phase('Build')
+const builds = await parallel(
+  TASKS.map((t) => () =>
+    agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\n${t.finish ? FINISH_NOTE(t.finish) + '\n\n' : ''}${t.prompt}\n\n${REPORT(t.key, 'build')} ${BUILD_FINAL}`, {
+      label: `${t.finish ? 'finish' : 'build'}:${t.key}`,
+      phase: 'Build',
+      effort: 'high',
+    }),
+  ),
+)
+const built = {}
+TASKS.forEach((t, i) => {
+  built[t.key] = builds[i] ? String(builds[i]) : 'NO REPORT (the builder failed or was skipped)'
+})
+log(`builders done: ${TASKS.filter((t, i) => builds[i]).map((t) => t.key).join(', ')}`)
+
+const ASSIGNMENTS = TASKS.map((t) => `=== TASK ${t.key} (port ${t.port}) ===\nASSIGNMENT:\n${t.prompt}\n\nBUILDER REPORT:\n${built[t.key]}`).join('\n\n')
+
+phase('Verify')
+const verifyJobs = [
+  () =>
+    agent(`You are the adversarial wave verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-${WAVE}`, 4395)}
+Wave ${WAVE} ran ${TASKS.length} builders in one working tree; their work is uncommitted (git status / git diff). Their assignments and reports:
+${ASSIGNMENTS}
+
+${RULES_LENS}
+Try to REFUTE that each assignment is done correctly, completely and honestly — every item of its Build and "Done when" lists. ${FORMAT} Write the same list to ${R}/wave-verify.md.`, { label: `verify:${WAVE}`, phase: 'Verify', schema: VERDICT, effort: 'high' }),
+  ...TASKS.filter((t) => t.critical).map((t, i) => () =>
+    agent(`You are an adversarial saves/determinism verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-${t.key}-saves`, 4396 + i)}
+Task ${t.key} of wave ${WAVE}; its work is uncommitted in the tree with other builders' work.
+ASSIGNMENT:
+${t.prompt}
+
+BUILDER REPORT:
+${built[t.key]}
+
+${SAVES_LENS}
+${FORMAT} Write the same list to ${R}/${t.key}-verify-saves.md.`, { label: `verify:${t.key}:saves`, phase: 'Verify', schema: VERDICT, effort: 'high' }),
+  ),
+]
+const verdicts = (await parallel(verifyJobs)).filter(Boolean)
+let problems = verdicts.flatMap(graded)
+const toLead = problems.filter((p) => !blocking([p]).length || keyOf(p) === null)
+log(`verify: ${verdicts.length} verdict(s), ${problems.length} graded item(s), ${blocking(problems).length} BLOCKER/MAJOR`)
+
+const rounds = []
+for (let round = 1; round <= 2; round++) {
+  const open = blocking(problems).filter((p) => keyOf(p) !== null)
+  if (!open.length) break
+  const fixKeys = KEYS.filter((k) => open.some((p) => keyOf(p) === k))
+  log(`fix round ${round}: ${fixKeys.join(', ')}`)
+  phase('Fix')
+  const fixes = await parallel(
+    fixKeys.map((k) => () => {
+      const t = TASKS.find((x) => x.key === k)
+      const mine = problems.filter((p) => keyOf(p) === k)
+      return agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\nYou are the round-${round} fixer for this assignment (the work is in the tree; do not start over):\n---\n${t.prompt}\n---\nThe adversarial verifier found these problems in it (full list: ${R}/wave-verify.md${round > 1 ? ` and ${R}/wave-reverify${round - 1}.md` : ''}):\n---\n${mine.join('\n')}\n---\nFix EVERY BLOCKER and MAJOR, and every MINOR that is cheap and inside your files. For each behavioural problem add or tighten a test that fails on the old behaviour and passes now. If a problem is wrong (the verifier misread a rule), say why with quotes from the canonical docs instead of changing code. If a fix needs a file outside your ownership, make it only if it is small and additive, or describe it precisely for the lead. Re-run your unit tests, the fence fixtures and your own e2e journeys (desktop) before finishing. ${REPORT(k, `fix${round}`)} Final message: per problem FIXED (how, which test) / NOT A PROBLEM (why, quotes) / NOT FIXED (why); files changed; commands + results.`, { label: `fix${round}:${k}`, phase: 'Fix', effort: 'high' })
+    }),
+  )
+  const fixReports = fixKeys.map((k, i) => `=== FIXER ${k} ===\n${fixes[i] ? String(fixes[i]) : 'NO REPORT'}`).join('\n\n')
+  const fixedProblems = problems.filter((p) => fixKeys.includes(keyOf(p)))
+  const rv = await agent(`You are the adversarial re-verifier for wave ${WAVE} of Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`reverify${round}-${WAVE}`, 4395)}
+The assignments of the fixed tasks:
+${TASKS.filter((t) => fixKeys.includes(t.key)).map((t) => `=== TASK ${t.key} ===\n${t.prompt}`).join('\n\n')}
+
+The verifier found these problems:
+---
+${fixedProblems.join('\n')}
+---
+Round-${round} fixers reported:
+${fixReports}
+
+${RULES_LENS}
+For EACH problem try to REFUTE that it is fixed: reproduce the original finding against the current tree, read the diff, check the new test fails on the old behaviour (load-time mutant under tmp/), and check nothing regressed (the touched unit tests and the fence fixtures). ${FORMAT} Write the same list to ${R}/wave-reverify${round}.md.`, { label: `reverify${round}:${WAVE}`, phase: 'Fix', schema: VERDICT, effort: 'high' })
+  rounds.push({ round, fixKeys, fixes: fixes.map((f) => (f ? String(f) : null)), reverify: rv })
+  if (!rv) break
+  const unfixed = problems.filter((p) => !fixKeys.includes(keyOf(p)))
+  problems = [...unfixed, ...graded(rv)]
+}
+
+const remaining = blocking(problems)
+log(`${WAVE}: ${remaining.length ? `${remaining.length} BLOCKER/MAJOR remain` : 'no BLOCKER/MAJOR remains'}; ${problems.length - remaining.length} MINOR for the lead`)
+return { wave: WAVE, built, verdicts, rounds, remaining, minors: problems.filter((p) => !blocking([p]).length), toLead }
