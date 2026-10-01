@@ -1,5 +1,16 @@
 # Resume point — read this first after a restart
 
+> **Update 2026‑10‑01 ≈ 09:05 UTC — PHASE 3 WAVE 1 RUNNING. START HERE if this session died.** `g2` tagged
+> (`f6a7dc2`); the Preflight is on `main` (`4c5c0b8`, D‑0042: saves byte-identical on top of g2, check 827/827).
+> Wave 1 (foundation 4211, environment 4212, stage8 4213, art-organisms 4214; builders effort high, one rules
+> verifier each, player lens for environment and art; fix rounds only for BLOCKER/MAJOR) runs from
+> `docs/agent/g3-wave-1.run.workflow.js.txt` (runner + `docs/agent/g3-wave-1.tasks.js.txt` in one file; copy it to
+> a .js path and pass it as `scriptPath`). Builders edit the main tree and never commit; reports go to
+> `docs/reports/reviews/g3-wave-1/`. If the session died mid-wave: `git status`, keep uncommitted work on a LOCAL
+> `wip/` branch, read the reports, rerun only the unfinished tasks (`only: [...]` in the runner's `A`).
+> Then: lead integration (MINORs, decisions D‑0043+, check, targeted e2e) → commit → tick P3.1/P3.2 (P3.7 `[~]`)
+> → write wave 2's task file (one writer) → wave 2.
+
 > **Update 2026‑10‑01 ≈ 08:30 UTC — G2 TAGGED. START HERE if this session died.** `g2` is on the gate commit
 > (check 755/755, e2e 174/174, EXPANSION_RESPONSE G2). Next: rebase the local branch `p3-preflight` (worktree
 > `tmp/wt-p3`, commit `02c7774`: determinism fence, verified) onto `main`; resolve `tools/deploy-arcade.mjs` in
