@@ -19,6 +19,7 @@ import { emit, milestone } from './events';
 import { FLAG } from './entities';
 import { cellIndex, inBounds, inMask } from './grid';
 import { recordBirth, recordDivisionEnd } from './lineage';
+import { rekeyLinks } from './links';
 import { canOccupy, initialDecisionTimer } from './movement';
 import { onDaughter, onParentEnds } from './branches';
 import { proposeDaughters } from './mutation';
@@ -276,6 +277,7 @@ function commitDivision(world: World, i: number, slot: number, targetCell: numbe
   const b0 = world.counters.nextBirthId++;
   const b1 = world.counters.nextBirthId++;
   c.birthId[i] = b0;
+  rekeyLinks(world, i, parentBirth); // partners stored the parent's birthId (SPEC §9.19: F02 links follow branching)
   c.birthId[slot] = b1;
   const spIdx = c.species[i]!;
   const gen = parentInfo.generation + 1;

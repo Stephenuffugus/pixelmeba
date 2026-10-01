@@ -32,7 +32,9 @@ import {
   habitatMaskOf,
   inBounds,
   inMask,
+  isStoneEdge,
   lifeCellOutcome,
+  maskCells,
   planSealing,
   strokeFootprint,
   strokeSampleCount,
@@ -46,7 +48,9 @@ import {
   SUB_WATER,
   transportOpen,
   type Grid,
+  type LifeBrush,
 } from '../../src/sim/grid';
+import { buildSpeciesTable, type SpeciesRT } from '../../src/sim/species';
 import { checkLedger, computeTotals } from '../../src/sim/ledger';
 import { realizeRecipe } from '../../src/sim/recipes';
 import { deserializeWorld, serializeWorld, stateHash } from '../../src/sim/serialize';
@@ -948,6 +952,25 @@ describe('Lab content comes from the world (P2.7)', () => {
 // The Life brush preview marks exactly the cells the inoculate command can use.
 
 describe('Life brush preview (P2.7)', () => {
+  /** The preview's rule for a species, built as LabTrayContent.lifeBrushFor builds it from DishInfo. */
+  function brushOf(habitats: readonly string[], attachment: readonly string[] | null): LifeBrush {
+    return attachment === null
+      ? { habitatMask: habitatMaskOf(habitats), attached: false }
+      : { habitatMask: habitatMaskOf(habitats), attached: true, surfaces: [...attachment] };
+  }
+
+  /** Preview vs command over every cell of the grid; returns [checked, mismatches]. */
+  function compare(w: World, sp: SpeciesRT, rule: LifeBrush): [number, number] {
+    let checked = 0;
+    let mismatches = 0;
+    for (let cell = 0; cell < CELL_COUNT; cell++) {
+      const preview = lifeCellOutcome(w.grid.structure[cell]!, w.grid.substrate[cell]!, rule, isStoneEdge(w.grid, cell)) === 'ok';
+      if (preview !== canOccupy(w, sp, cell)) mismatches++;
+      checked++;
+    }
+    return [checked, mismatches];
+  }
+
   it('agrees with the inoculate command (canOccupy) cell by cell, for every species, ground and structure', () => {
     const w = garden();
     cmd(w, { kind: 'paintSubstrate', substrate: 'gel', points: [[30.5, 64.5], [40.5, 64.5]], radius: 6 });
@@ -958,20 +981,49 @@ describe('Life brush preview (P2.7)', () => {
     let mismatches = 0;
     for (const sp of w.species) {
       // The preview builds its rule from the species' recorded habitats and attachment (DishInfo).
-      const life = { habitatMask: habitatMaskOf(sp.def.habitats), attached: sp.def.attachment !== null };
-      expect(life).toEqual({ habitatMask: sp.habitatMask, attached: sp.attached });
+      const life = brushOf(sp.def.habitats, sp.def.attachment?.surfaces ?? null);
+      expect({ habitatMask: life.habitatMask, attached: life.attached }).toEqual({ habitatMask: sp.habitatMask, attached: sp.attached });
       // Attached variants too (beads admit attached organisms only).
       for (const variant of [sp, { ...sp, attached: !sp.attached }]) {
-        const rule = { habitatMask: variant.habitatMask, attached: variant.attached };
-        for (let cell = 0; cell < CELL_COUNT; cell++) {
-          const preview = lifeCellOutcome(w.grid.structure[cell]!, w.grid.substrate[cell]!, rule) === 'ok';
-          if (preview !== canOccupy(w, variant, cell)) mismatches++;
-          checked++;
-        }
+        const rule: LifeBrush = { ...life, attached: variant.attached };
+        const [c, m] = compare(w, variant, rule);
+        checked += c;
+        mismatches += m;
       }
     }
     expect(checked).toBe(w.species.length * 2 * CELL_COUNT);
     expect(mismatches).toBe(0);
+  });
+
+  it('Velvet (B02, built from its record) needs a surface: the preview equals canOccupy in every habitat, ground and structure (P3.2)', () => {
+    const reg = registry();
+    const b02 = reg.species.B02!;
+    expect(b02.attachment?.surfaces).toEqual(['gel', 'sediment', 'stoneEdge', 'bead', 'mesh']);
+    const [velvet] = buildSpeciesTable([b02]);
+    const rule = brushOf(b02.habitats, b02.attachment!.surfaces);
+    for (const habitatId of ['WATER_GARDEN', 'GEL_COLONY', 'SEDIMENT_EDGE']) {
+      const w = clearWater({ habitatId, removeStones: false, backgroundOverrides: {} });
+      // Mixed ground, beads on water, gel and sediment, a wall and a fresh stone (new stone edges).
+      cmd(w, { kind: 'paintSubstrate', substrate: 'gel', points: [[30.5, 64.5], [40.5, 64.5]], radius: 6 });
+      cmd(w, { kind: 'paintSubstrate', substrate: 'sediment', points: [[64.5, 100.5]], radius: 6 });
+      cmd(w, { kind: 'placeStructure', structure: 'bead', points: [[30.5, 64.5], [64.5, 100.5], [90.5, 60.5]], radius: 1 });
+      cmd(w, { kind: 'placeStructure', structure: 'stone', points: [[80.5, 30.5]], radius: 3 });
+      cmd(w, { kind: 'placeStructure', structure: 'wall', points: [[90.5, 40.5], [100.5, 40.5]], radius: 1 });
+      let refusedWater = 0;
+      for (const variant of [velvet!, { ...velvet!, attached: false }]) {
+        const [checked, mismatches] = compare(w, variant, { ...rule, attached: variant.attached });
+        expect(checked).toBe(CELL_COUNT);
+        expect(mismatches, habitatId).toBe(0);
+      }
+      for (const cell of maskCells()) {
+        if (w.grid.structure[cell] === ST_NONE && w.grid.substrate[cell] === SUB_WATER && !isStoneEdge(w.grid, cell)) {
+          expect(lifeCellOutcome(ST_NONE, SUB_WATER, rule, false)).toBe('habitat');
+          expect(canOccupy(w, velvet!, cell)).toBe(false);
+          refusedWater++;
+        }
+      }
+      expect(refusedWater, habitatId).toBeGreaterThan(0);
+    }
   });
 
   it('a Sunbead over painted gel: the preview crosses out the gel cells and the command places nothing there', () => {
@@ -979,10 +1031,11 @@ describe('Life brush preview (P2.7)', () => {
     cmd(w, { kind: 'paintSubstrate', substrate: 'gel', points: [[60.5, 64.5]], radius: 6 });
     const sunbead = w.species.find((s) => s.id === 'A01')!;
     expect(sunbead.def.habitats).toEqual(['water']); // algae live only in water
-    const life = { habitatMask: habitatMaskOf(sunbead.def.habitats), attached: sunbead.def.attachment !== null };
+    const life = brushOf(sunbead.def.habitats, sunbead.def.attachment?.surfaces ?? null);
     const cells = brushCells(64.5, 64.5, 6);
-    const ok = cells.filter((c) => lifeCellOutcome(w.grid.structure[c]!, w.grid.substrate[c]!, life) === 'ok');
-    const crossed = cells.filter((c) => lifeCellOutcome(w.grid.structure[c]!, w.grid.substrate[c]!, life) === 'habitat');
+    const outcome = (c: number) => lifeCellOutcome(w.grid.structure[c]!, w.grid.substrate[c]!, life, isStoneEdge(w.grid, c));
+    const ok = cells.filter((c) => outcome(c) === 'ok');
+    const crossed = cells.filter((c) => outcome(c) === 'habitat');
     expect(crossed.length).toBeGreaterThan(0);
     expect(ok.length + crossed.length).toBe(cells.length);
     const res = cmd(w, { kind: 'inoculate', speciesId: 'A01', x: 64.5, y: 64.5, radius: 6, count: 20 });

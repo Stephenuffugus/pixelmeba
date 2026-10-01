@@ -7,6 +7,7 @@ import type { Profile } from './phenotype';
 import type { SpeciesRT } from './species';
 import { habitatBit } from './species';
 import { ST_BEAD, ST_NONE } from './grid';
+import { attachmentBits, onAttachmentSurface } from './attachment';
 import type { World } from './world';
 
 export const SHOULDER_PH = 1.0;
@@ -34,10 +35,20 @@ export interface SuitResult {
 
 const out: SuitResult = { value: 1, reason: 0, exposure: 0 };
 
+/**
+ * Whether a species can live in a cell (SPEC §2.2, §6.3): no structure in the way (a porous bead admits
+ * attached organisms only), a substrate among its recorded habitats, and, for a species whose record
+ * lists attachment surfaces, one of those surfaces in the cell (attachment.ts; D-0006, P3.2), so plain
+ * open water is off-limits to it. Free-living species (attachment null) never reach the surface rule,
+ * so worlds without attached species keep their recorded behaviour exactly. grid.ts lifeCellOutcome
+ * states the same rule for the Life brush preview.
+ */
 export function habitatCompatible(world: World, sp: SpeciesRT, cell: number): boolean {
   const st = world.grid.structure[cell]!;
   if (st !== ST_NONE && !(st === ST_BEAD && sp.attached)) return false;
-  return (sp.habitatMask & habitatBit(world.grid.substrate[cell]!)) !== 0;
+  if ((sp.habitatMask & habitatBit(world.grid.substrate[cell]!)) === 0) return false;
+  const bits = attachmentBits(sp.def);
+  return bits < 0 || onAttachmentSurface(world, bits, cell);
 }
 
 export function inhibitorExposure(world: World, sp: SpeciesRT, cell: number): number {

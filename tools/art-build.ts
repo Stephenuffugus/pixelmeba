@@ -12,13 +12,30 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SPRITES } from '../art/src/index';
 import { FEATURE_LAYERS, type FeatureLayerDef } from '../art/src/layers/modules';
-import { frameRgba, HEADING_NAMES, LARGE_REQUIRED, orient, paletteRgba, SMALL_REQUIRED, SMALL_STATIC_REQUIRED, type AnimName, type SpriteDef } from '../art/src/sprite';
+import {
+  frameRgba,
+  FUNGUS_REQUIRED,
+  HEADING_NAMES,
+  LARGE_REQUIRED,
+  orient,
+  paletteRgba,
+  SMALL_REQUIRED,
+  SMALL_STATIC_REQUIRED,
+  VIRUS_REQUIRED,
+  type AnimName,
+  type SpriteDef,
+} from '../art/src/sprite';
 import { blit, createImage, encodePng } from './lib/png';
 import { REPO_ROOT, loadRegistryFs } from './lib/content-fs';
-import { checkAtlas, enabledMarks, FEATURE_HEADINGS, FEATURE_SIZE, featureFrameKey } from './content-validate';
+import { atlasSpeciesRef, checkAtlas, enabledMarks, FEATURE_HEADINGS, FEATURE_SIZE, featureFrameKey } from './content-validate';
 
 const PAD = 2;
-const ATLAS_W = 512;
+/**
+ * Atlas width. 1024 since Phase 3 (14 more species: ~760 frames do not fit 512 wide without a
+ * 2048-tall sheet); the height stays the next power of two of the packed shelves, so the sheet is
+ * 1024×1024 at most for this content, inside every WebGL texture limit we target.
+ */
+const ATLAS_W = 1024;
 
 export interface AtlasFrame {
   readonly key: string;
@@ -78,7 +95,9 @@ export interface AtlasManifest {
 
 function validate(def: SpriteDef): string[] {
   const errors: string[] = [];
-  const need = def.size >= 32 ? LARGE_REQUIRED : def.animations.idle ? SMALL_STATIC_REQUIRED : SMALL_REQUIRED;
+  const form = def.form ?? 'organism';
+  const need = form === 'fungus' ? FUNGUS_REQUIRED : form === 'virus' ? VIRUS_REQUIRED : def.size >= 32 ? LARGE_REQUIRED : def.animations.idle ? SMALL_STATIC_REQUIRED : SMALL_REQUIRED;
+  if (form !== 'organism' && def.headings !== 1) errors.push(`${def.assetId}: ${form} tiles and glyphs have one heading (never rotated)`);
   for (const [name, count] of Object.entries(need)) {
     const a = def.animations[name as AnimName];
     if (!a) errors.push(`${def.assetId}: missing required animation "${name}"`);
@@ -87,7 +106,8 @@ function validate(def: SpriteDef): string[] {
   for (const [name, a] of Object.entries(def.animations)) {
     a.frames.forEach((f, i) => {
       if (f.w !== def.size || f.h !== def.size) errors.push(`${def.assetId}: ${name}[${i}] is ${f.w}×${f.h}, expected ${def.size}`);
-      if (f.count() === 0 && name !== 'death') errors.push(`${def.assetId}: ${name}[${i}] is empty`);
+      // Death dissolves to nothing; decaying fungal tiles may erode away entirely at a lone knot.
+      if (f.count() === 0 && name !== 'death' && name !== 'decaying') errors.push(`${def.assetId}: ${name}[${i}] is empty`);
     });
     if (a.reducedMotionFrame >= a.frames.length) errors.push(`${def.assetId}: ${name} reducedMotionFrame out of range`);
   }
@@ -116,15 +136,21 @@ export function buildAtlas(): { png: Buffer; manifest: AtlasManifest; errors: st
   for (const def of FEATURE_LAYERS) errors.push(...validateLayer(def));
   // Every enabled species needs a sprite.
   const reg = loadRegistryFs();
-  for (const id of reg.manifest.enabledSpecies) {
-    const sp = reg.species[id]!;
-    const def = SPRITES.find((s) => s.speciesId === id);
-    if (!def) errors.push(`enabled species ${id} has no sprite`);
-    else {
-      if (def.assetId !== sp.assetId) errors.push(`${id}: sprite assetId ${def.assetId} ≠ content assetId ${sp.assetId}`);
-      if (def.size !== sp.frameSize) errors.push(`${id}: sprite size ${def.size} ≠ content frameSize ${sp.frameSize}`);
-      if (def.headings !== sp.headings) errors.push(`${id}: sprite headings ${def.headings} ≠ content headings ${sp.headings}`);
+  for (const id of reg.manifest.enabledSpecies) if (!SPRITES.some((s) => s.speciesId === id)) errors.push(`enabled species ${id} has no sprite`);
+  // Every sprite (enabled or not yet) must agree with its species record, so a later phase can
+  // enable it without touching the art.
+  for (const def of SPRITES) {
+    const id = def.speciesId;
+    const sp = reg.species[id];
+    if (!sp) {
+      errors.push(`${def.assetId}: no species record ${id} in content`);
+      continue;
     }
+    if (def.assetId !== sp.assetId) errors.push(`${id}: sprite assetId ${def.assetId} ≠ content assetId ${sp.assetId}`);
+    if (def.size !== sp.frameSize) errors.push(`${id}: sprite size ${def.size} ≠ content frameSize ${sp.frameSize}`);
+    if (def.headings !== sp.headings) errors.push(`${id}: sprite headings ${def.headings} ≠ content headings ${sp.headings}`);
+    const form = sp.category === 'fungus' ? 'fungus' : sp.category === 'virus' ? 'virus' : 'organism';
+    if ((def.form ?? 'organism') !== form) errors.push(`${id}: sprite form ${def.form ?? 'organism'} ≠ content category ${sp.category}`);
   }
 
   // Every enabled module needs its feature mark (content visualLayer → art/src/layers).
@@ -214,12 +240,9 @@ export function buildAtlas(): { png: Buffer; manifest: AtlasManifest; errors: st
     features,
     frames,
   };
-  // The packed result must pass the same completeness check content:validate applies (P1.4, and the
-  // enabled modules' marks).
-  const refs = reg.manifest.enabledSpecies.map((id) => {
-    const sp = reg.species[id]!;
-    return { id, assetId: sp.assetId, frameSize: sp.frameSize, headings: sp.headings };
-  });
+  // The packed result must pass the same completeness check content:validate applies (P1.4, the
+  // enabled modules' marks), for every species that has a sprite, enabled or not.
+  const refs = SPRITES.filter((d) => reg.species[d.speciesId]).map((d) => atlasSpeciesRef(reg.species[d.speciesId]!));
   for (const i of checkAtlas(manifest, refs, { png, marks })) errors.push(`${i.path}: ${i.message}`);
   return { png, manifest, errors };
 }

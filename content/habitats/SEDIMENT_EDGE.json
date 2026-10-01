@@ -1,0 +1,31 @@
+{
+  "id": "SEDIMENT_EDGE",
+  "name": "Sediment Edge",
+  "baseSubstrate": "water",
+  "baseLight": 0.8,
+  "warmth": 0.5,
+  "baseFields": { "oxygen": 0.8, "co2": 0.5, "nutrient": 0.1 },
+  "ops": [
+    {
+      "op": "rect",
+      "x0": 0,
+      "x1": 127,
+      "y0": 64,
+      "y1": 127,
+      "substrate": "sediment",
+      "light": 0.15,
+      "fields": { "oxygen": 0.2, "detritus": 0.1, "detritusN": 0.01 }
+    },
+    { "op": "disk", "center": [45, 43], "radius": 13, "substrate": "stone" }
+  ],
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "guide": {
+    "summary": "Bright water above, dim sediment below, and one large stone.",
+    "biology": "Where water meets a muddy bottom, light and oxygen fade quickly with depth while dead material collects below.",
+    "rules": "Water in the upper half (y below 64) and sediment in the lower half, with a stone circle of radius 13 at (45,43). Over water: light 0.8 and oxygen 0.8. Over sediment: light 0.15, oxygen 0.2, and 0.10 debris carbon with 0.010 bound nutrient in every cell. Everywhere: warmth 0.5, carbon dioxide 0.5 and nutrient 0.10. Dissolved amounts spread ten times slower in sediment than in water, and sediment trades gases with the air ten times slower. Sediment cells and the open cells touching the stone are surfaces that attached organisms can live on.",
+    "example": "Watch whether debris eaters stay in the sediment while light-feeders stay near the top."
+  },
+  "phase": 3
+}

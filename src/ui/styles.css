@@ -1264,6 +1264,53 @@ html[data-text-scale='2'] .lab-cat span {
   border-radius: 4px;
   background: repeating-linear-gradient(0deg, #3d7a3a 0 2px, #96d278 2px 6px);
 }
+/* P3.1 food and chemistry swatches: each a distinct colour and pattern (layers.ts deposit colours for food). */
+.sw-oil {
+  background: radial-gradient(circle at 40% 40%, #fbe9a8 0 22%, transparent 24%), #e8c54a;
+}
+.sw-protein {
+  background: radial-gradient(circle at 30% 35%, #f6dde2 0 14%, transparent 16%), radial-gradient(circle at 68% 65%, #f6dde2 0 14%, transparent 16%), #d99ba6;
+}
+.sw-metabolite {
+  background: repeating-radial-gradient(circle at 50% 50%, #c9a4dc 0 2px, #f1e6f7 2px 4px);
+}
+.sw-oxygen {
+  background: radial-gradient(circle at 35% 40%, #ffffff 0 16%, transparent 18%), radial-gradient(circle at 66% 62%, #ffffff 0 12%, transparent 14%), #7fb8e0;
+}
+.sw-co2 {
+  background: radial-gradient(circle at 35% 40%, #4a5560 0 16%, transparent 18%), radial-gradient(circle at 66% 62%, #4a5560 0 12%, transparent 14%), #b9c3cc;
+}
+.sw-acid {
+  border-radius: 4px;
+  background: repeating-linear-gradient(135deg, #c8462f 0 3px, #f6c7b8 3px 6px);
+}
+.sw-base {
+  border-radius: 4px;
+  background: repeating-linear-gradient(45deg, #2f5fc8 0 3px, #bccdf6 3px 6px);
+}
+.sw-buffer {
+  border-radius: 4px;
+  background: linear-gradient(90deg, #c8462f 0 33%, #ece6d6 33% 67%, #2f5fc8 67%);
+}
+.sw-salt {
+  border-radius: 2px;
+  background: repeating-conic-gradient(#ffffff 0 25%, #9aa6ad 0 50%) 0 0 / 8px 8px;
+}
+.sw-inh_bact,
+.sw-inh_fung,
+.sw-inh_photo {
+  border-radius: 2px;
+  transform: rotate(45deg) scale(0.85);
+}
+.sw-inh_bact {
+  background: repeating-linear-gradient(0deg, #6b2f7a 0 2px, #e3c6ea 2px 5px);
+}
+.sw-inh_fung {
+  background: repeating-linear-gradient(90deg, #7a4f1f 0 2px, #ecd6b8 2px 5px);
+}
+.sw-inh_photo {
+  background: repeating-linear-gradient(45deg, #2f6a2f 0 2px, #c9e6c0 2px 5px);
+}
 .lab-options {
   display: flex;
   flex-wrap: wrap;

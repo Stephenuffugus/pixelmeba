@@ -1,0 +1,19 @@
+{
+  "id": "GEL_COLONY",
+  "name": "Gel Colony",
+  "baseSubstrate": "gel",
+  "baseLight": 0.5,
+  "warmth": 0.5,
+  "baseFields": { "oxygen": 0.8, "co2": 0.5, "nutrient": 0.1, "sugar": 0.1 },
+  "ops": [{ "op": "rect", "x0": 59, "x1": 68, "y0": 0, "y1": 127, "substrate": "water" }],
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "guide": {
+    "summary": "Soft gel with one straight water channel down the middle.",
+    "biology": "In a gel, dissolved food and gases spread slowly, so neighbours share what is close by while a stream of water carries things much farther.",
+    "rules": "Gel everywhere except a water channel ten cells wide (x 59 to 68) running from rim to rim; no stones. Light 0.5, warmth 0.5, oxygen 0.8, carbon dioxide 0.5, nutrient 0.10 and sugar 0.10 in every cell. Dissolved amounts spread four times slower in gel than in water. Gel cells are a surface that attached organisms can live on; water-only organisms can live only in the channel.",
+    "example": "Drop sugar eaters in the gel and in the channel and compare how far each group spreads."
+  },
+  "phase": 3
+}

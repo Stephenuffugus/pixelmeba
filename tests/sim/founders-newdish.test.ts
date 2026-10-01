@@ -77,7 +77,14 @@ describe('P2.2 New Dish preview and dish descriptions', () => {
         founderMode: overrides.founderMode,
         empty: overrides.empty,
       });
-      expect(p.habitat).toEqual({ name: 'Water Garden', summary: 'Clear water with two stone islands.' });
+      expect(p.habitat).toMatchObject({
+        name: 'Water Garden',
+        summary: 'Clear water with two stone islands.',
+      });
+      // P3.2: the preview also carries the habitat's rules text and the layout the dish starts with.
+      expect(p.habitat.rules).toBe(w.content.habitat.guide.rules);
+      expect(Array.from(p.habitat.grid!.substrate)).toEqual(Array.from(w.grid.substrate));
+      expect(Array.from(p.habitat.grid!.structure)).toEqual(Array.from(w.grid.structure));
       expect(p.rates).toEqual(ratesFor(overrides.mutationPreset, false));
       const rows = founderSummary(w);
       expect(p.founders.map((f) => [f.speciesId, f.count, f.eligible, f.withModule])).toEqual(

@@ -20,6 +20,9 @@ import { isMutationPreset } from '@sim/mutation';
 import { historyProblem, journalProblem } from '@sim/history';
 import { generatedBranchName } from '@sim/branches';
 import type { Command } from '@sim/commands';
+import { ADHESION_LINK_MAX, ADHESION_SLOT_COLUMNS, FUNGAL_LINK_MAX, FUNGAL_SLOT_COLUMNS, linkProblem } from '@sim/links';
+import { foodObjectsProblem } from '@sim/objects';
+import { savedSampleProblem } from '@sim/sampleSlot';
 
 export const SAVE_FORMAT = 'pixelmeba-save';
 export const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
@@ -384,12 +387,40 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
   if (historyError) fail('integrity', `The dish's recorded history cannot be read (${historyError}). Nothing was loaded.`);
   const journalError = journalProblem((s.history as { journal?: unknown } | undefined)?.journal);
   if (journalError) fail('integrity', `The dish's journal has an entry this version of Pixelmeba cannot read (${journalError}). Nothing was loaded.`);
+  // Schema 4 (Phase 3 foundation): links, finite food objects and the held sample.
+  const phase3Error = phase3StateProblem(s, cols, hw, speciesIds);
+  if (phase3Error) fail('integrity', `${phase3Error} Nothing was loaded.`);
   if (!Number.isInteger(s.tick) || s.tick < 0) fail('integrity', 'The tick is invalid.');
   if (!Number.isInteger(s.seed) || s.seed < 0) fail('integrity', 'The seed is invalid.');
 
   const expected = `sha256:${await sha256Hex(canonicalJson(original))}`;
   if (f.checksum !== expected) fail('checksum', 'The file is damaged or was edited (checksum mismatch).');
   return { ...(f as SaveFile), schemaVersion: SCHEMA_VERSION, state: s };
+}
+
+/**
+ * The first problem with a (migrated) state's schema 4 records, as a player-facing sentence, or null:
+ * link columns beyond the 4 fungal / 2 adhesion positions (more links than an organism may have),
+ * asymmetric or dangling links, more than 128 food objects or one outside the dish or on a structure,
+ * and a held sample that cannot be read or refers to an unknown species or genome.
+ */
+function phase3StateProblem(s: WorldState, cols: Record<string, ArrayLike<number>>, hw: number, speciesIds: readonly string[]): string | null {
+  const saved = Object.keys(s.entities.columns);
+  const extra = (prefix: RegExp, known: readonly string[]) => saved.some((k) => prefix.test(k) && !known.includes(k));
+  if (extra(/^fLink(B|Kind)?[0-9]+$/, [...FUNGAL_SLOT_COLUMNS, 'fLinkB0', 'fLinkB1', 'fLinkB2', 'fLinkB3', 'fLinkKind0', 'fLinkKind1', 'fLinkKind2', 'fLinkKind3'])) {
+    return `An organism has more than ${FUNGAL_LINK_MAX} fungal links.`;
+  }
+  if (extra(/^aLinkB?[0-9]+$/, [...ADHESION_SLOT_COLUMNS, 'aLinkB0', 'aLinkB1'])) return `An organism has more than ${ADHESION_LINK_MAX} adhesion links.`;
+  const links = linkProblem(cols, hw);
+  if (links) return `The dish's links are inconsistent (${links}).`;
+  const next = (s.counters as { nextObjectId?: unknown }).nextObjectId ?? 1;
+  if (!Number.isInteger(next) || (next as number) < 1) return 'The food object counter is invalid.';
+  const structure = base64ToBytes(s.grid.structure.b64);
+  const objects = foodObjectsProblem(s.objects ?? [], structure, next as number);
+  if (objects) return `The dish's food objects cannot be loaded (${objects}).`;
+  const sample = savedSampleProblem(s.sample ?? null, { speciesIds, genomes: s.genomes ?? [] });
+  if (sample) return `The held sample cannot be loaded (${sample}).`;
+  return null;
 }
 
 /** Validate and build a world. Any failure throws a SaveFileError and builds nothing. */

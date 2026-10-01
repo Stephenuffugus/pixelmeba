@@ -556,10 +556,17 @@ export async function startCustom(
     mutationPreset: 'standard' | 'accelerated' | 'fixed';
     founderMode: 'identical' | 'varied' | 'diverse';
     empty: boolean;
+    /** P3.2: a habitat preset instead of the recipe's own (an 'Empty Gel Colony' start). */
+    habitatId?: string;
   },
   onStarted?: (info: DishInfo) => void,
 ): Promise<ReplaceOutcome> {
-  const source: DishSource = { kind: 'recipe', recipeId: opts.recipeId, seed: opts.seed, overrides: { mutationPreset: opts.mutationPreset, founderMode: opts.founderMode, empty: opts.empty } };
+  const source: DishSource = {
+    kind: 'recipe',
+    recipeId: opts.recipeId,
+    seed: opts.seed,
+    overrides: { mutationPreset: opts.mutationPreset, founderMode: opts.founderMode, empty: opts.empty, ...(opts.habitatId !== undefined ? { habitatId: opts.habitatId } : {}) },
+  };
   return startDish(source, opts.name, null, onStarted);
 }
 

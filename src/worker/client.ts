@@ -72,6 +72,8 @@ export class SimClient {
   private nextRequest = 1;
   private readonly pending: Record<number, Pending> = {};
   private readonly lastGen: Record<string, number> = {};
+  /** P3.1: each dish's lid setting from its latest snapshot (the Habitat tray's lid toggle). */
+  private readonly lastLid: Record<string, 'open' | 'closed'> = {};
   private readonly snapshotListeners: ((s: SnapshotMsg) => void)[] = [];
   private readonly errorListeners: ((e: WorkerErrorNotice) => void)[] = [];
   private readonly compareListeners: ((s: ComparisonState) => void)[] = [];
@@ -85,6 +87,11 @@ export class SimClient {
   static create(): SimClient {
     const w = new Worker(new URL('./sim.worker.ts', import.meta.url), { type: 'module' });
     return new SimClient(w);
+  }
+
+  /** P3.1: a dish's lid setting as its latest snapshot reported it, or null before one arrived. */
+  lidOf(dishId: string): 'open' | 'closed' | null {
+    return this.lastLid[dishId] ?? null;
   }
 
   onSnapshot(fn: (s: SnapshotMsg) => void): () => void {
@@ -139,6 +146,7 @@ export class SimClient {
       const last = this.lastGen[msg.dishId] ?? 0;
       if (msg.gen <= last) return; // stale
       this.lastGen[msg.dishId] = msg.gen;
+      if (msg.lid) this.lastLid[msg.dishId] = msg.lid;
       for (const fn of this.snapshotListeners) fn(msg);
       return;
     }

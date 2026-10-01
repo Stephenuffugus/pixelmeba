@@ -7,6 +7,8 @@ import { CARBON_WITH_COMPANION, FIELD_DEFS, FIELD_IDS } from './fields';
 import { LEDGER_RELATIVE_TOLERANCE } from './constants';
 import type { World } from './world';
 import { maskCells } from './grid';
+import { objectTotals } from './objects';
+import { sampleTotals } from './sampleSlot';
 
 export interface MaterialTotals {
   c: number;
@@ -46,6 +48,8 @@ export interface Ledger {
     upkeep: number;
     /** One-off dormancy costs: 10 E to prepare, 5 E to wake (SPEC §7.6). */
     dormancy: number;
+    /** Stage 8 shared building (film, E10 construction; P3.7). Older saves load it as 0. */
+    construction: number;
   };
   /** Most recent external inputs/exports (bounded) for the ledger panel. */
   entries: LedgerEntry[];
@@ -62,7 +66,7 @@ export function createLedger(): Ledger {
     exchangeC: 0,
     exchangeO2: 0,
     roundoff: { c: 0, n: 0, m: 0 },
-    energy: { earned: 0, maintenance: 0, movement: 0, division: 0, secretion: 0, dissipated: 0, other: 0, surcharge: 0, upkeep: 0, dormancy: 0 },
+    energy: { earned: 0, maintenance: 0, movement: 0, division: 0, secretion: 0, dissipated: 0, other: 0, surcharge: 0, upkeep: 0, dormancy: 0, construction: 0 },
     entries: [],
   };
 }
@@ -138,6 +142,18 @@ export function computeTotals(world: World): MaterialTotals & { breakdown: Recor
   c += bodyC + mealC;
   n += bodyN + mealN;
   m += mineral;
+  // Schema 4 compartments (SPEC §3.4): finite food objects and the sample slot. Adding their zero
+  // totals leaves every older sum bit-identical.
+  const obj = objectTotals(world.objects);
+  const smp = sampleTotals(world.sample);
+  breakdown.objectsC = obj.c;
+  breakdown.objectsN = obj.n;
+  breakdown.sampleC = smp.c;
+  breakdown.sampleN = smp.n;
+  breakdown.sampleM = smp.m;
+  c += obj.c + smp.c;
+  n += obj.n + smp.n;
+  m += smp.m;
   return { c, n, m, breakdown };
 }
 

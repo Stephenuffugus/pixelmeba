@@ -14,6 +14,7 @@ import { CONTACT_DISTANCE, GRID_H, GRID_W, MEAL_CAP_MULTIPLE } from './constants
 import { emit } from './events';
 import { cellIndex } from './grid';
 import { recordDeath } from './lineage';
+import { removeAllLinks } from './links';
 import { onDeath } from './branches';
 import { hungryPredator, preyAllowed } from './movement';
 import { profileOf } from './profiles';
@@ -136,6 +137,7 @@ export function consumePrey(world: World, pred: number, prey: number): void {
   onDeath(world, prey);
   const preySp = c.species[prey]!;
   world.history.pendingDeaths[preySp] = (world.history.pendingDeaths[preySp] ?? 0) + 1;
+  removeAllLinks(world, prey); // SPEC §6.8: incident links leave both endpoints
   world.ents.free(prey);
   markField(world, 'detritus');
 }

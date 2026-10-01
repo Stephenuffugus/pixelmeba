@@ -9,7 +9,7 @@
 import { applyNow, type CommandPayload } from '@sim/commands';
 import type { ContentRegistry } from '@sim/content/registry';
 import type { RecipeDef } from '@sim/content/schema';
-import { realizeRecipe, recipeOverridesOf, type RecipeOverridesRecord, type RecipeWorldProvenance } from '@sim/recipes';
+import { habitatGrid, realizeRecipe, recipeOverridesOf, withHabitatOverride, type RecipeOverridesRecord, type RecipeWorldProvenance } from '@sim/recipes';
 import { deserializeWorld, serializeWorld, stateHash, type WorldState } from '@sim/serialize';
 import { canonicalJson } from '@sim/hash';
 import { step } from '@sim/tick';
@@ -1302,6 +1302,9 @@ export class DishHost {
       const o0 = source.overrides;
       if (o0?.mutationPreset !== undefined && !isMutationPreset(o0.mutationPreset)) throw new Error(`Unknown evolution setting "${String(o0.mutationPreset)}".`);
       if (o0?.founderMode !== undefined && !['identical', 'varied', 'diverse'].includes(o0.founderMode)) throw new Error(`Unknown founder mode "${String(o0.founderMode)}".`);
+      // P3.2: only a habitat preset this build enables.
+      if (o0?.habitatId !== undefined && (typeof o0.habitatId !== 'string' || !this.registry.manifest.enabledHabitats.includes(o0.habitatId) || !this.registry.habitats[o0.habitatId]))
+        throw new Error(`There is no habitat "${String(o0.habitatId)}" in this version of Pixelmeba.`);
       const o = source.overrides;
       return realizeRecipe(this.registry, source.recipeId, {
         worldId: dishId,
@@ -1309,7 +1312,7 @@ export class DishHost {
         ...(o
           ? {
               transform: (r) => ({
-                ...r,
+                ...withHabitatOverride(r, o.habitatId),
                 ...(o.mutationPreset ? { mutationPreset: o.mutationPreset } : {}),
                 ...(o.founderMode ? { founderMode: o.founderMode } : {}),
                 ...(o.empty ? { founders: [], fieldPatches: [], scheduledCommands: [] } : {}),
@@ -1331,6 +1334,7 @@ export class DishHost {
       ...(o?.mutationPreset ? { mutationPreset: o.mutationPreset } : {}),
       ...(o?.founderMode ? { founderMode: o.founderMode } : {}),
       ...(o?.empty ? { empty: true } : {}),
+      ...(o?.habitatId !== undefined ? { habitatId: o.habitatId } : {}),
     };
     return { recipeId: source.recipeId, recipeRevision: this.registry.recipes[source.recipeId]?.revision ?? null, createdFrom: 'recipe', overrides };
   }
@@ -1375,6 +1379,7 @@ export class DishHost {
     }
     return (
       o.empty !== true &&
+      (o.habitatId ?? recipe.habitatId) === recipe.habitatId &&
       (o.seed ?? recipe.seed) === recipe.seed &&
       (o.mutationPreset ?? recipe.mutationPreset) === recipe.mutationPreset &&
       (o.founderMode ?? recipe.founderMode) === recipe.founderMode
@@ -1491,14 +1496,14 @@ export class DishHost {
     // Undefined overrides: an older save that did not record its choices. Its start is only guessed at
     // here, and any difference (a custom seed or setting) makes the comparison below fail: it is kept.
     if (!recipe || p.recipeRevision !== recipe.revision || o === null) return null;
-    const changed = o !== undefined && (o.mutationPreset !== undefined || o.founderMode !== undefined || o.empty === true);
+    const changed = o !== undefined && (o.mutationPreset !== undefined || o.founderMode !== undefined || o.empty === true || o.habitatId !== undefined);
     return realizeRecipe(this.registry, recipe.id, {
       worldId: w.worldId,
       ...(o?.seed !== undefined ? { seed: o.seed } : {}),
       ...(changed
         ? {
             transform: (r: RecipeDef): RecipeDef => ({
-              ...r,
+              ...withHabitatOverride(r, o.habitatId),
               ...(o.mutationPreset ? { mutationPreset: o.mutationPreset } : {}),
               ...(o.founderMode ? { founderMode: o.founderMode } : {}),
               ...(o.empty ? { founders: [], fieldPatches: [], scheduledCommands: [] } : {}),
@@ -1967,10 +1972,17 @@ export class DishHost {
     for (const d of w.content.modules) names[d.id] = d.name;
     const total = computeTotals(w);
     const L = w.ledger;
+    const layout = habitatGrid(w.content.habitat, { removeStones: recipe.removeStones });
     return {
       recipeId: recipe.id,
       recipeName: recipe.name,
-      habitat: { name: w.content.habitat.name, summary: w.content.habitat.guide.summary },
+      habitat: {
+        name: w.content.habitat.name,
+        summary: w.content.habitat.guide.summary,
+        rules: w.content.habitat.guide.rules,
+        // P3.2: the layout the dish starts with (recipe stone removal included), for the preview map.
+        grid: { substrate: layout.substrate, structure: layout.structure },
+      },
       seed: w.seed,
       mutationPreset: w.settings.mutationPreset,
       founderMode: w.settings.founderMode,
@@ -2113,6 +2125,8 @@ export class DishHost {
       ...(lineage ? { lineage } : {}),
       // P2.2: with the founders the dish was made with, so the Evolution sheet can say what they carried.
       evolution: { ...evolutionState(w), creation: creationFounders(w) },
+      // P3.1: the lid setting now in effect (the Habitat tray's lid toggle shows it).
+      lid: w.settings.lid,
     };
     const transfer: Transferable[] = [packed.ents.buffer, packed.ids.buffer, deposits.buffer];
     if (overlay) transfer.push(overlay.data.buffer);

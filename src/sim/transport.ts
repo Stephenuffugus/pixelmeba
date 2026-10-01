@@ -42,6 +42,12 @@ export interface TransportCache {
   readonly rowX0: Int16Array;
   readonly rowX1: Int16Array;
   lightVersion: number;
+  /**
+   * Per-cell attachment surfaces (src/sim/attachment.ts SURF_* bits; SPEC §2.2, D-0006), built lazily
+   * for this world only and rebuilt when its grid.geometryVersion moves past `attachVersion`.
+   */
+  readonly attach: Uint8Array;
+  attachVersion: number;
 }
 
 const scratch = new Float64Array(CELL_COUNT);
@@ -73,16 +79,27 @@ function createCache(): TransportCache {
     rowX0,
     rowX1,
     lightVersion: -1,
+    attach: new Uint8Array(CELL_COUNT),
+    attachVersion: -1,
   };
 }
 
-export function transportCache(world: World): TransportCache {
+/**
+ * This world's transport cache object, created if missing, WITHOUT rebuilding its transport
+ * coefficients (attachment.ts keeps its own version stamp on it). Derived state, never saved.
+ */
+export function transportCacheObject(world: World): TransportCache {
   const d = world.derived;
   let tc = d.transport;
   if (!tc) {
     tc = createCache();
     d.transport = tc;
   }
+  return tc;
+}
+
+export function transportCache(world: World): TransportCache {
+  const tc = transportCacheObject(world);
   if (tc.version === world.grid.geometryVersion) return tc;
   const g = world.grid;
   tc.kR.fill(0);

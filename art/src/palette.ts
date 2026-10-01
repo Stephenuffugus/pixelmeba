@@ -59,6 +59,69 @@ export const P = {
   amoebaLight: '#DCD6F0',
   amoebaNucleus: '#6E63A0',
 
+  // Phase 3 organisms (UX §6.1 base + accent; the deep/light tones are local shades for volume)
+  // B02 Velvet
+  velvetTeal: '#32A89A',
+  velvetLight: '#BFE9E1',
+  velvetDeep: '#227A70',
+  // B03 Dusk
+  duskViolet: '#8B82C6',
+  duskLight: '#D9D4F2',
+  duskDeep: '#6A619F',
+  // B05 Crossfeeder
+  crossBlue: '#4A90C2',
+  crossTip: '#F2F7FB',
+  crossDeep: '#336D96',
+  // B07 Oilwick
+  oilNavy: '#2E4A7A',
+  oilAmber: '#E5A83B',
+  oilDeep: '#1F3357',
+  oilLight: '#5A74A3',
+  // B08 Brothmaker
+  brothRose: '#D98CA6',
+  brothBand: '#FFFFFF',
+  brothDeep: '#B26A84',
+  // Y01 Bubble
+  bubbleCream: '#F2E6C9',
+  bubbleBud: '#7A2E3F',
+  bubbleDeep: '#D8C8A2',
+  // Y02 Creambud
+  creamIvory: '#F5EBD3',
+  creamBud: '#E6923A',
+  creamDeep: '#DCCDA8',
+  // F01 Threadlace
+  laceIvory: '#EFE3C6',
+  laceOutline: '#4A3B2A',
+  laceTip: '#E08A3C',
+  laceSeptum: '#CDBE9C',
+  // F02 Cordweaver
+  cordCopper: '#B87333',
+  cordPulse: '#F6D7B0',
+  cordDeep: '#7E4C1F',
+  cordLight: '#D69A5E',
+  // P02 Ciliate
+  ciliateCyan: '#7FD6E8',
+  ciliateCilia: '#FFFFFF',
+  ciliateDeep: '#4FA9BE',
+  ciliateGroove: '#2F6F80',
+  // P03 Rotifer
+  rotiferPeach: '#F3B48E',
+  rotiferCrown: '#C97A4E',
+  rotiferDeep: '#D48F69',
+  rotiferGut: '#9C5B39',
+  // P04 Siltworm
+  siltBrown: '#8A5A3C',
+  siltHead: '#E8D3BD',
+  siltDeep: '#68412A',
+  siltRing: '#A97653',
+  // X01 Hitcher
+  hitcherGold: '#E3C15A',
+  hitcherDeep: '#A88A2E',
+  // V01 Pinphage
+  phageBlue: '#3E7BC4',
+  phageLight: '#A9C8EE',
+  phageDeep: '#264F82',
+
   // Feature layers
   reserveAmber: '#E0A53A',
   reserveEmpty: '#F6E3B0',

@@ -144,5 +144,8 @@ export function lifeBrushFor(info: DishInfo, speciesId: string): LifeBrush | nul
   const habitats = i < 0 ? undefined : info.speciesHabitats?.[i];
   const attachment = i < 0 ? undefined : info.speciesAttachment?.[i];
   if (!habitats || attachment === undefined) return null;
-  return { habitatMask: habitatMaskOf(habitats), attached: attachment !== null };
+  // An attached species also needs one of its recorded surfaces in the cell (SPEC §2.2, D-0006).
+  return attachment === null
+    ? { habitatMask: habitatMaskOf(habitats), attached: false }
+    : { habitatMask: habitatMaskOf(habitats), attached: true, surfaces: [...attachment] };
 }
