@@ -404,3 +404,15 @@ Decision:
 Reason: D06 §18, honest labels, UX §4.1/§5.2–§5.4.
 Affects: src/ui/** (Inspector, HistorySheet, CompareResults, CompareText, MoreSheet, DishScreen, CompareViewport, Notebook, Saves, SimplePage, App, state, feed, strings), src/worker/{protocol,snapshot,host}.ts (display-only fields), src/persistence/{appVersion,saveFile}.ts; tests/ui/{dish-point,inherited-differences,comprehension-labels}.test.ts; tests/e2e/{inspector,compare,garden}.spec.ts.
 Owner review: no
+
+## D-0042 · 2026-10-01 · Phase 3 preflight · The determinism fence as built
+Context: g3-plan.md §2 Preflight with the re-check corrections and D-0035/D-0036; reports in docs/reports/reviews/g3-preflight/ (build; verify 2 MAJOR fixed in round 1; re-verify ok with 4 MINOR).
+Decision:
+- `src/sim/gates.ts` (worldHasSystem / worldHasSpecies / worldHasModule) reads only the world's recorded manifest. `validateContent(raw, opts)` gains `allowUnimplemented` (off by default). `tests/helpers/registry.ts` `registryWith(patch)` re-validates patched packs; `G2_LISTS` comes from `tests/fixtures/saves/g2-manifest.json` (buildPhase 2, contentVersion 1).
+- `tests/helpers/trajectory.ts` `trajectoryDigest(world, 'g2' | 'full')` hashes the g2 biology with index-valued columns mapped to IDs; 'g2' throws on any non-default post-g2 state, 'full' hashes it by name. New WorldSettings keys and derived properties must be registered in its POST_G2_* tables (the file is SHARED for that one purpose).
+- Nine g2 saves (`tools/make-g2-saves.ts`, deterministic, refuses to change a file without `--force`) with `expected.json` {hashAtLoad, hashPlus1000, digestPlus1000}; EXP_106 arm B is saved at t300, where P01 are hunting and holding meals (at t600 none holds a meal; the save makes four captures in its next 1,000 ticks). Regenerated on top of `g2`: all ten files byte-identical.
+- The fence is four files (`tests/fixtures/trajectory-fence{,-arms,-current,-current-arms}.test.ts`, 14 entries in `fence.json`), run together by the path prefix `tests/fixtures/trajectory-fence`. Check (a) runs under `registryWith(G2_LISTS)`; check (b) under the shipped manifest; after the bump every currentDigest equals its g2Digest.
+- `tools/fence-update.ts`: `--add`; `--recipe|--all --reason D-xxxx`; `--g2 --reason D-xxxx` (lead only; the named decision must name a version bump — known limit: it also accepts a decision that only restates D-0036's bump).
+- The Preflight bumped buildPhase 3 and contentVersion 2 (D-0036); the wave-A goldens and other pinned tests run on the g2 lists.
+Evidence: on the rebased branch `npm run check` → 91 files, 827/827; `make-g2-saves` → "all 10 g2 fixtures are byte-identical".
+Owner review: no
