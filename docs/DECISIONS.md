@@ -336,3 +336,45 @@ Decision:
 Reason: BUILD_DIRECTIVE P2.9 and Appendix B, D06 §9/§18, D-0015.
 Affects: tools/{sim-tune,sim-run}.ts, tests/tools/sim-tune.test.ts, docs/reports/tune-g2.md.
 Owner review: no
+
+## D-0035 · 2026-10-01 · Phase 3 preflight · World schema 4 keeps old saves' hashes; a usable-intake seconds column
+Context: lead choices 1 and 6 of docs/agent/g3-plan-recheck.md (G1, G2, G17 #1 and #6), made before the Preflight.
+Decision:
+- Phase 3 bumps the world schema once, 3 → 4, in wave 1 (foundation): `SCHEMA_VERSION` 4, `COLUMNS_ADDED_IN[4]`, a `v === 4` migration step after P2.8's `v === 3` history step, the stores `objects` (`[]`) and `sample` (`null`), and a −1 fill for the new link-slot columns through one exported `emptyValueOf(name)` (src/sim/entities.ts) that the migration and stateHash both use (a zero-filled link would point at slot 0 and make every migrated organism carry a dangling link).
+- stateHash is hash-neutral for Phase 3 state (Option A): a post-g2 column is hashed, with its name, only when some slot in [0, highWater) differs from its empty value; a store or link table only when non-empty; a new counter or settings key only when it differs from its initial value. A loaded world holding no Phase 3 state hashes exactly as the g2 build hashed it, so g2 saves keep their recorded hashes (the g2-replay fixture's hashAtLoad and hashPlus1000; tests/sim/history-debris.test.ts's two literals stay unchanged). Newly realized recipes still change hash with every content edit (contentHash), as before.
+- Schema 4 includes an f64 column `noUsableIntakeSeconds` (default 0): seconds since the organism's last usable intake under D-0019's 1 % rule (the `FLAG.usableIntake` test). E04's and E12's "10 s without intake" rules read it, not `lastIntakeTick`, which also counts diffusion traces and is −1 for introduced organisms and 0 for new daughters.
+Reason: saves are sacred and old saves keep their recorded ruleset (CLAUDE.md); one bump instead of three; the digest-only alternative (Option B) would weaken the g2 replay guarantee from exact hashes to trajectory digests.
+Affects (wave 1 foundation): src/sim/{world,entities,serialize}.ts, tests/sim/history-debris.test.ts, tests/persistence/migration.test.ts.
+Owner review: no
+
+## D-0036 · 2026-10-01 · Phase 3 preflight · The lead bumps buildPhase 3 and contentVersion 2 in the Preflight commit
+Context: lead choice 2 (g3-plan-recheck.md G3, G4, G17 #2 and #11).
+Decision:
+- The Preflight commit (lead) writes `tests/fixtures/saves/*` with the g2 build first, then bumps `content/manifest.json` buildPhase 2 → 3 and contentVersion 1 → 2, together with the G4 pinned-test fixes (tests that read the shipped manifest read the g2 lists through `registryWith(G2_LISTS)`, which carries contentVersion 1 so the wave-A golden stamps stay valid). The wave 1 foundation does not bump them.
+- simulationVersion stays 3 (pinned by `ManifestSchema` and `loadSaveFile`). A decided rules change bumps evolutionRulesVersion or moduleRegistryVersion with a DECISIONS entry; moduleRegistryVersion 1 → 2 at the wave 4 module flip (lead). PROTOCOL_VERSION 1 → 2 once, by wave 2's art-features builder (ARCH §7 updated in the same change).
+- WORKLOG: P3.7 (modules and the stage 8 order) starts in wave 1 (the stage 8 framework) and ends at the wave 4 flip; it stays `[~]` meanwhile while waves 2 and 3 tick P3.3–P3.6 (an exception to the legend's "at most one").
+Reason: every Phase 3 material is phase 3 and `validateContent` refuses it while buildPhase is 2, so the bump must land before any builder starts; one lead commit avoids a race inside wave 1.
+Owner review: no
+
+## D-0037 · 2026-10-01 · P3.5 · Sample: Begin and Cancel are host-level and exact; the tools are offered on every world
+Context: lead choice 3 (g3-plan-recheck.md G10, G17 #3 and #19), made before wave 3.
+Decision:
+- Begin is host-level: it pauses and records the pre-begin stateHash. Take (`sampleTake`), Transfer and Discard are commands. While a sample is held the host refuses Run, Step and every other dish-changing command before `applyNow`, so no command sequence number is taken and the vacated slots and cells stay free.
+- Cancel is host-level and exact: an exact inverse move into the original slots and cells (an allocate-at-slot helper), then the command state is restored as Undo restores it: the `sampleTake` entry leaves `commands.log`, `commands.nextSeq` returns to that command's seq (recorded in `world.sample`), and the host's rollback checkpoint, replay list and undo slot are reset. The stateHash equals the pre-begin hash, also after a save and reload in between. Undo while a sample is held acts as Cancel. `nextSeq` stays in stateHash.
+- Sample, Transfer and Clean water are offered on every world, g2-recorded worlds included: R18 gives D07's transaction semantics to all worlds from the moment Sample exists, and these are player tools recorded as commands, not biology rules.
+Reason: SPEC §10.5, D07 §09 and BUILD_DIRECTIVE P3.5 say Cancel restores exactly; a command-based Cancel would advance `nextSeq` by two and could never give back the pre-begin hash.
+Owner review: no
+
+## D-0038 · 2026-10-01 · P3.3 · Film is eaten as detritus and never joins a species' food list
+Context: g3-plan-recheck.md G9, G17 #12, made before wave 2.
+Decision: film is eaten "as detritus" (CT §3.5). It never joins `sp.foods` (`src/sim/species.ts` keeps filtering it); intake adds a film request after the listed foods (ordered policy) or with the detritus weight (weighted policy), within the K = 6 request limit. Film digestion and the film system land together in wave 2, and the build constant `FILM_DIGESTION_IMPLEMENTED` gives way to `worldHasSystem(world, 'film')`. Test: a B04 preference mutation draws exactly the same with and without the film system.
+Reason: preference mutations draw over n = `sp.foods.length`; adding film would silently change every B04 preference mutation in FIRST_DISH_V1, CLEANING_CREW_V1, EXP_103 and EXP_B.
+Owner review: yes — if film should be a separate food, that is a forced rules change (evolutionRulesVersion bump, fence update with a DECISIONS id).
+
+## D-0039 · 2026-10-01 · P3.8 · Tool texts are content; relationship observations are device progress
+Context: g3-plan-recheck.md G11, W5-02, G17 #4 and #22, decided before writing the wave 5 file.
+Decision:
+- Field Guide tool entries are data: `content/tools/*.json` validated by a new ToolSchema and included in contentHash (ARCH §2/§4 gain the pack). UNDO, SNAPSHOT and COMPARE have no lab analogue; their "biology" text says plainly that they are game tools.
+- Relationship observations (what the Field Guide records as seen, and the G3 relationship-matrix evidence) live in a device-local store (`src/ui/badges.ts`, localStorage key `pixelmeba.relationships`, every read and write in try/catch), not in a dish's journal and not in saves. They come from recorded events (captures, lysis and parasite-drain deaths) and an observation-only watcher in the worker that never touches simulation state.
+Reason: content is data (CLAUDE.md); discovery is per-device progress like badges and must not change what a save holds or how it hashes.
+Owner review: no
