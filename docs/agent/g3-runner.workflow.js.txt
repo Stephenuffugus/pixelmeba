@@ -1,0 +1,128 @@
+export const meta = {
+  name: 'g3-wave',
+  description: 'Phase 3 wave runner: file-disjoint builders, adversarial verifier lenses, up to two fix rounds with re-verification; reports in docs/reports/reviews/<wave>/',
+  phases: [
+    { title: 'Build', detail: 'one builder per task, own Playwright port' },
+    { title: 'Verify', detail: 'adversarial lenses: rules (always) and player (UI tasks)' },
+    { title: 'Fix', detail: 'fix BLOCKER/MAJOR and cheap MINOR, re-verify; at most two rounds' },
+  ],
+}
+
+// args (passed by the lead, built from docs/agent/g3-wave-N.tasks.js.txt):
+// { wave: 'g3-wave-1', state: '<one sentence: what is committed on main>',
+//   tasks: [{ key, port, prompt, lenses?: ['rules'] | ['rules', 'player'], finish?: '<resume note>' }],
+//   only?: ['key', ...] }
+const A = args
+const WAVE = A.wave
+const R = `docs/reports/reviews/${WAVE}`
+const TASKS = A.only ? A.tasks.filter((t) => A.only.includes(t.key)) : A.tasks
+
+const PRE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Phases 0–2 are tagged g0/g1/g2. ${A.state} You build part of Phase 3 "Launch Ecology" (docs/BUILD_DIRECTIVE.md "Phase 3"). Canonical rules: docs/PIXELMEBA_IMPLEMENTATION_SPEC.md (SPEC), docs/CONTENT_TABLES.md (CT, every number), docs/ARCHITECTURE.md (ARCH), docs/UX_SPEC.md (UX), docs/CONFLICT_REGISTER.md. docs/DECISIONS.md holds rulings: read every title. Most relevant: D-0006, D-0007 and D-0008 were written for Phase 3; D-0019 schema bump + migration by copy + old-save test; D-0024/D-0028 Lab edits, structures as content, the sealing planner and the SHADE factor; D-0029 migration provenance (migratedFrom); D-0030 founder modes, the registry label, import refusal of unimplemented modules; D-0031 world schema 3 (history.traits/journal); D-0032 module marks in the atlas (feature/<layer>/<heading>/<frame>); D-0033 keep the open dish first; D-0035 world schema 4 with a hash-neutral stateHash and the noUsableIntakeSeconds column; D-0036 version bumps (buildPhase 3 and contentVersion 2 are set; simulationVersion stays 3); D-0037 Sample; D-0038 film is eaten as detritus; D-0039 tool texts as content and device-local relationship observations. Contract (CLAUDE.md): determinism (randomness only via det(seed, stream, ...keys) in src/sim/rng.ts; prefer an existing stream with a new KIND key, e.g. 'contact' with a new kind constant; add a NEW stream id only if unavoidable and never reuse one; never Math.random, Date, or Map/Set/object-key iteration order in src/sim), conservation ledger (every material move is internal and balanced, or an input/export), no hidden rescue, honest labels ("coincided with" until a mechanism supports "because"; never "superior/advanced/perfect/adapted/immune"), content is validated JSON, the UI changes the world only through commands, saves are sacred (Phase 3's only world schema bump is 3 → 4, made by the wave 1 foundation; D-0035).
+
+PHASE 3 DETERMINISM FENCE. tests/fixtures/g2-replay.test.ts (saves written by the g2 build load through the import path and continue bit-identically: the same stateHash at load and after 1,000 ticks, D-0035) and tests/fixtures/trajectory-fence.test.ts (each registered recipe's biology digest, checked under the g2 content lists via tests/helpers/registry.ts registryWith(G2_LISTS) and under the shipped manifest) must pass after your change. Gate every new rule on the world's own recorded manifest through src/sim/gates.ts (worldHasSystem / worldHasSpecies / worldHasModule; existing equivalents: world.fields[id] !== undefined, world.modules[id] !== undefined, structures.ts structureEnabled/paintMaterial), or on the presence of the organisms it concerns — never on a build constant — so an old save never gains a Phase 3 rule. Never hard-code stateHash literals in new tests: every content edit changes the contentHash and therefore every new world's stateHash; compare relationally or with tests/helpers/trajectory.ts (trajectoryDigest(world, 'g2' | 'full')). If your work would change a fence value, do not make that change: report "FENCE: <recipe> <why>". Only the lead updates the fence (tools/fence-update.ts with a DECISIONS id); you may run "npx tsx tools/fence-update.ts --add <recipe>" for recipes you create.
+
+CONTENT AND MANIFEST. content/manifest.json is SHARED: only insert the IDs your assignment names (arrays stay sorted ascending), never remove IDs, never change version fields unless your assignment says so. Add the native abilities/modules you implement to src/sim/content/implemented.ts (additive). Before your flip, and for content another builder enables in this wave, test through registryWith({...}) (validated; enabled lists sorted ascending; allowUnimplemented only for species whose ability another builder of this wave is implementing, and say so). After changing anything under content/ run "npx tsx tools/content-validate.ts --write" (a contentHash or atlas mismatch caused by another agent's in-flight edit is not your bug; say so). An enabled species needs its atlas frames, and an enabled module needs its feature-mark frames (D-0032). Update any test that pins a shipped list your edit moves (e.g. tests/worker/host.test.ts speciesIds when you enable a species, tests/e2e/experiments.spec.ts's card count when you ship a card).
+
+OWNERSHIP. The lead commits: do NOT run git add/commit/stash/checkout/reset/rm/restore and do not delete files you did not create. Other agents edit the same working tree right now. Edit ONLY the files your assignment lets you own. SHARED files: additive edits only (new functions, cases, fields, or a one-line hook call into your own new file, which is the preferred pattern for stage files), re-read the file immediately before each edit, keep edits small, never reformat/reorder/rename code you did not write. Entity columns, world stores and SCHEMA_VERSION change only if your assignment says so. Only the wave's art owner edits art/src/** or runs npm run art:build. Never run "npm run format" or prettier on files you do not own. If you need a change elsewhere, describe it precisely in your report. Line numbers in your assignment are hints from an earlier tree: find code by symbol (git grep -n) before editing.
+
+BROWSER TESTS only with your own port and build folder: E2E_PORT=<port> E2E_OUTDIR=tmp/dist-<key> npx playwright test <your specs> --project=phone-portrait --project=desktop, then --project=phone-landscape. Playwright silently reuses a server already on your port: stop your port before and after each run (lsof -t -i :<port> | xargs -r kill; never pkill -f). The e2e app has no test hook: journeys that need the worker wrap Worker in an init script and speak the protocol, as tests/e2e/lab-tools.spec.ts watchWorker/workerHash do; never add a hook to the app. The machine has 2 CPUs shared by several agents: targeted vitest files only (never the whole suite repeatedly); long commands with run_in_background and an until-loop wait (never a bare sleep); timings taken while others run are inflated — leave final perf numbers to the lead.
+
+BEFORE FINISHING: npx tsc -p tsconfig.json --noEmit and npx eslint <your files> clean; npx vitest run tests/fixtures/g2-replay.test.ts tests/fixtures/trajectory-fence.test.ts tests/fixtures/conservation-closed-lid.test.ts tests/fixtures/determinism.test.ts <your tests> all pass; your e2e specs pass on phone-portrait, phone-landscape and desktop; no serious/critical axe violations on screens you touched (tests/e2e/helpers.ts expectNoSeriousA11yViolations); touch targets ≥ 48 px, text ≥ 16 px, 200 % text works in phone portrait and landscape. Put proposed decisions in your report as "PROPOSED DECISION: …".`
+
+const FINISH_NOTE = (what) => `IMPORTANT — RESUMING INTERRUPTED WORK. A previous builder with exactly this assignment was cut off; its uncommitted work is in the working tree (git status / git diff). ${what} Do NOT start over and do not discard its work. First audit the existing work against EVERY item of the assignment's Build and "Done when" lists: per item DONE (file:line + the test that proves it, re-run now) / PARTIAL / MISSING / WRONG. Then complete everything PARTIAL/MISSING/WRONG and re-run all your tests.`
+
+const REPORT = (key, suffix) => `When you finish, write your final report ALSO to ${R}/${key}-${suffix}.md (create the folder if needed; this is the only docs file you may create), then return the same report as your final message.`
+
+const BUILD_FINAL = `Final message: a plain report — a checklist of every Build and "Done when" item (DONE with file:line and the proving test / NOT DONE and why), files created/changed, what each test proves (and how you checked it fails without the mechanism), commands with results (paste the pass/fail summary lines), FENCE notes, bugs noticed elsewhere, proposed decisions.`
+
+const LENSES = {
+  rules: `LENS: rules, determinism, conservation and tests. Check every rule and number against the cited canonical docs (quote the doc line when you claim a mismatch). Run tests/fixtures/g2-replay.test.ts, tests/fixtures/trajectory-fence.test.ts and tests/fixtures/conservation-closed-lid.test.ts yourself, and the builder's tests. Read the diff (git status / git diff). Look for: vacuous tests or weaker proxies (would the test fail if the mechanism were deleted? try it with a load-time mutant under tmp/, never by editing tracked files); rules gated on a build constant instead of the world's manifest; determinism leaks (Math.random, Date, Map/Set/object-key iteration in src/sim, reused RNG streams, float order changed for existing species); unledgered material moves; saves (schema bump + migration by copy + old-save test where the saved shape changed); hard-coded stateHash literals; edits outside ownership; non-additive edits to SHARED files (reformatting, removed lines); manifest or version-field edits the assignment did not allow.`,
+  player: `LENS: player-facing truth and usability. Build and drive the app yourself (a throwaway Playwright spec under tmp/verify-<key>-player/ with a --config or testDir override; screenshots on phone-portrait and desktop, then Read the PNGs). Check copy against UX_SPEC tone and honest labels (every visible claim traces to a measured value or reason code; "coincided with" not "because"; no "superior/advanced"); every visible feature maps to real state (no animation or mark without the state behind it); accessibility (axe serious/critical, keyboard reachability and focus order, ARIA roles/names, 48 px targets, 16 px text, 200 % text in phone portrait and landscape, contrast ≥ 4.5:1 text / 3:1 graphics, reduced motion); the e2e spec really exercises what the "Done when" list says. Re-run the task's e2e specs on all three projects.`,
+}
+
+const lensPort = (t, lens) => t.port + (lens === 'rules' ? 5 : 75)
+
+const VERIFY = (t, built, lens) => `You are an adversarial verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). Do NOT edit any repository file except your own report file named below, and do NOT run git add/commit/stash/checkout/reset/restore. Other agents may still be editing other files. Scratch goes in tmp/verify-${t.key}-${lens}/ (git-ignored). 2 CPUs shared: targeted commands, generous timeouts, run_in_background + until-loop for long runs. Playwright: E2E_PORT=${lensPort(t, lens)} E2E_OUTDIR=tmp/dist-verify-${t.key}-${lens}; stop only that port before and after.
+
+A builder was given this assignment:
+---
+${t.prompt}
+---
+The builder reported:
+---
+${typeof built === 'string' ? built : JSON.stringify(built)}
+---
+${LENSES[lens]}
+Try to REFUTE that the assignment is done correctly, completely and honestly — every item of its Build and "Done when" lists. Return problems with file:line and a concrete repro, most severe first, each prefixed BLOCKER / MAJOR / MINOR; add "VERIFIED OK — <item> — <evidence>" entries for parts that hold. ok=false if any BLOCKER or MAJOR. Write the same list to ${R}/${t.key}-verify-${lens}.md.`
+
+const FIX = (t, problems, round) => `${PRE}
+
+Your Playwright port is ${t.port}.
+
+You are the round-${round} fixer for this assignment (the work is in the tree; do not start over):
+---
+${t.prompt}
+---
+Adversarial verifiers found these problems (reports in ${R}/${t.key}-verify-*.md${round > 1 ? ` and ${R}/${t.key}-reverify${round - 1}-*.md` : ''}):
+---
+${problems.join('\n')}
+---
+Fix EVERY BLOCKER and MAJOR, and every MINOR that is cheap and within your files. For each behavioural problem add or tighten a test that fails on the old behaviour and passes now. If a problem is wrong (the verifier misread a rule), say why with quotes from the canonical docs instead of changing code. If a fix needs a file outside your ownership, make it only if it is small and additive, or describe it precisely for the lead. Re-run your unit tests, the fence fixtures and the task's e2e specs (all three projects) before finishing. ${REPORT(t.key, `fix${round}`)} Final message: per problem FIXED (how, which test) / NOT A PROBLEM (why, quotes) / NOT FIXED (why); files changed; commands + results.`
+
+const REVERIFY = (t, fixReport, problems, round, lens) => `You are an adversarial re-verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). Do NOT edit any repository file except your report file, and do NOT run git add/commit/stash/checkout/reset/restore. Other agents may still be editing other files. Scratch in tmp/reverify${round}-${t.key}-${lens}/. 2 CPUs: targeted commands. Playwright: E2E_PORT=${lensPort(t, lens)} E2E_OUTDIR=tmp/dist-reverify-${t.key}-${lens}; stop only that port before and after.
+
+Original assignment:
+---
+${t.prompt}
+---
+Verifiers found these problems:
+---
+${problems.join('\n')}
+---
+A fixer (round ${round}) reported:
+---
+${fixReport}
+---
+${LENSES[lens]}
+For EACH problem try to REFUTE that it is fixed: reproduce the original finding against the current tree, read the diff, check the new test fails on the old behaviour, and check nothing regressed (re-run the touched unit tests, the fence fixtures, and the task's e2e specs). Return remaining/new problems with file:line and repro, prefixed BLOCKER / MAJOR / MINOR, and "VERIFIED OK — <problem> — <evidence>" for fixed ones. ok=false if any BLOCKER or MAJOR remains. Write the same list to ${R}/${t.key}-reverify${round}-${lens}.md.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+const serious = (v) => (v && Array.isArray(v.problems) ? v.problems.filter((p) => /^(BLOCKER|MAJOR|MINOR)/.test(p.trim())) : [])
+const blocking = (ps) => ps.filter((p) => /^(BLOCKER|MAJOR)/.test(p.trim()))
+
+log(`${WAVE}: ${TASKS.length} task(s): ${TASKS.map((t) => t.key).join(', ')}`)
+
+return await pipeline(
+  TASKS,
+  (t) =>
+    agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\n${t.finish ? FINISH_NOTE(t.finish) + '\n\n' : ''}${t.prompt}\n\n${REPORT(t.key, 'build')} ${BUILD_FINAL}`, {
+      label: `${t.finish ? 'finish' : 'build'}:${t.key}`,
+      phase: 'Build',
+    }),
+  async (built, t) => {
+    const lenses = t.lenses && t.lenses.length ? t.lenses : ['rules']
+    const verdicts = await parallel(lenses.map((l) => () => agent(VERIFY(t, built, l), { label: `verify:${t.key}:${l}`, phase: 'Verify', schema: VERDICT })))
+    return { built, lenses, verdicts: verdicts.filter(Boolean) }
+  },
+  async (v, t) => {
+    const rounds = []
+    let problems = v.verdicts.flatMap(serious)
+    let ok = v.verdicts.length > 0 && v.verdicts.every((x) => x.ok) && blocking(problems).length === 0
+    for (let round = 1; round <= 2 && problems.length > 0; round++) {
+      const fixReport = await agent(FIX(t, problems, round), { label: `fix${round}:${t.key}`, phase: 'Fix' })
+      const rv = (await parallel(v.lenses.map((l) => () => agent(REVERIFY(t, String(fixReport), problems, round, l), { label: `reverify${round}:${t.key}:${l}`, phase: 'Fix', schema: VERDICT })))).filter(Boolean)
+      rounds.push({ round, fixReport, reverify: rv })
+      if (!rv.length) break
+      const remaining = rv.flatMap(serious)
+      ok = rv.every((x) => x.ok) && blocking(remaining).length === 0
+      problems = remaining
+      if (ok) break
+    }
+    log(`${t.key}: ${ok ? 'clean' : 'problems remain'} after ${rounds.length} fix round(s); ${problems.length} open item(s), ${blocking(problems).length} blocking`)
+    return { key: t.key, built: v.built, verdicts: v.verdicts, rounds, ok, remaining: problems }
+  },
+)
