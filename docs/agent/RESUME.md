@@ -3,6 +3,18 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑01 ≈ 18:15 UTC — WAVE 2 COMMITTED (`1cfe848`), WAVE 3 RUNNING. START HERE if this session died.**
+> - P3.3, P3.4 ticked. Decisions D‑0047…D‑0050 (owner flags: D‑0047 four-neighbour fungi, D‑0048 Dusk needs low oxygen).
+> - Wave 3 (eight builders: e1-producers 4231, f02-links 4232, food-objects 4233, tools-sample 4234, mod-anchor-light 4235,
+>   mod-feeding 4236, mod-builders 4237, mod-adhesion 4238) runs from `docs/agent/g3-wave-3.run.workflow.js.txt`
+>   (copy to the scratchpad as .js, pass as `scriptPath`). Two rules verifiers, two saves verifiers (tools-sample alone;
+>   f02-links + food-objects + mod-adhesion). Reports in `docs/reports/reviews/g3-wave-3/`.
+> - If the session died mid-wave: `git status`; keep uncommitted work on a LOCAL `wip/g3-wave-3` branch; read the reports;
+>   rerun only unfinished tasks (`A.only = [...]` and a `finish` note per task).
+> - After wave 3: lead integration → the LEAD MODULE FLIP checklist in the header of `docs/agent/g3-wave-3.tasks.js.txt`
+>   (moduleRegistryVersion 2, fence-update with a decision, pinned tests, full Playwright once) → tick P3.5–P3.7 → wave 4
+>   (plan W5 + W6) task file → wave 4 → G3 gate.
+
 > **Update 2026‑10‑01 ≈ 14:30 UTC — WAVE 1 COMMITTED (`08768df`), WAVE 2 RUNNING. START HERE if this session died.**
 > - P3.1, P3.2 ticked; P3.7 `[~]`. Decisions D‑0043…D‑0046 (owner flags: D‑0044 bead surfaces, D‑0046 B01/B06).
 > - Wave 2 runs from `docs/agent/g3-wave-2.run.workflow.js.txt` (copy to the scratchpad as .js, pass as `scriptPath`):

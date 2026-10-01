@@ -456,3 +456,43 @@ Decision:
 - The UX §6.1 grayscale rule is measured as: alpha differs on ≥ 12 % of the union, or, for a pair with the same outline (alpha difference below 12 %), luminance (Δ ≥ 32/255) differs on ≥ 12 % of shared body pixels. The same-outline pairs are B03/B07 (UX §6.3 curved rods) and the shipped pair B01/B06 (alpha 7.0 %, luminance 31 %), whose art must stay byte-identical. F01/F02 differ in alpha by 33 % and are held to the alpha rule.
 Reason: UX §6.1–§6.3, ARCH §10.1, CT §1.3; every visible feature maps to real state.
 Owner review: yes — B01/B06 pass the grayscale rule by luminance only; holding them to the alpha rule means redrawing B06, which changes shipped atlas frames (no simulation state).
+
+## D-0047 · 2026-10-01 · P3.3 · Velvet biofilm and Threadlace branching as built
+Context: wave 2 film-fungi (no build report: the builder ended before writing it; the wave verifier supplied the evidence in docs/reports/reviews/g3-wave-2/wave-verify.md — film, fungal-branching and relationships-film tests pass, mutants killed, desktop e2e 4.0 m).
+Decision:
+- Native film deposition costs no energy (energyPerC 0): SPEC §7.1 and CT §12.6 name no cost for B02; 2 E/C is E10's own. B02 requests min(0.05 × dt, body above B0') into its cell's film through the shared construction pass (D-0045) after 10 attached Active seconds with remaining energy > 40.
+- Fungal daughters go only to the four side cells E, S, W, N that pass canOccupy and soft capacity and hold no fungal segment, ranked by usable food (film included when it digests film), then suitability, then E, S, W, N; never the parent cell, never a diagonal; no candidate → DIV_BLOCK_PLACEMENT. This supersedes D-0002 and SPEC §6.9 step 2 ("parent cell or 8-neighborhood") for fungi only: ARCH §10.1's 16 connection-mask tiles and SPEC §7.7 ("links … on four-neighbor cells") define a four-neighbour topology.
+- The inspector reports a fungal network from the worker (W2-08): "Threadlace: {n} segments in {k} separate threads; this one has {m}." History samples are unchanged (no save change).
+- At the fungal limit (FUNGAL_CAP 2,000 across all fungi) births get DIV_BLOCK_CAPACITY; the split-blocker detail names the fungal limit, not the 6,000 organism limit (lead fix of a verifier MINOR).
+Reason: SPEC §7.1, §7.2, §7.7; CT §12.6; ARCH §10.1.
+Owner review: yes — four-neighbour fungal growth (no diagonals) is a rules choice; the 8-neighbour version would need diagonal connection art.
+
+## D-0048 · 2026-10-01 · P3.3/P3.4 · B03, B05, Y01, P02–P04, Add Life and the Life tray as built
+Context: wave 2 organisms (docs/reports/reviews/g3-wave-2/organisms-build.md).
+Decision:
+- Siltworm (P04) water crossing (SPEC §6.4, src/sim/crossing.ts): up to two consecutive open-water cells from sediment; from its second water cell it may step back into the cell it came from ("otherwise turns back"), so a worm facing wide water is never stuck. `waterCrossed` holds the count (bits 0–1) and the direction of the last step into water (bits 2–4). A worm in water it did not enter by crossing (water painted under it, an imported state) is not crossing: SUIT_HABITAT and stress apply, and it may only step onto its habitat. Inoculation, births and the Life brush still refuse water for P04.
+- Diet lines use content names as they are; prey the dish does not record are summed ("and N kinds not in this dish"); qualified prey follow in parentheses ("(Crumbsmith only free-swimming; …)"); anaerobic feeders read "… without oxygen"; film digesters read "…, and digests film" only when the dish's own manifest enables film; hosts read "Drains …" / "Infects …". Attached species are named per surface set ("Velvet lives in water only on stone edges or porous beads."); a bead or mesh surface is named only when the dish enables that structure.
+- The closed-lid Dusk (B03) fixture uses an all-sediment dish at O2 0.10: in a Water Garden B01 runs out of sugar before oxygen and diffusion refills dips, so B01 is never oxygen-limited there, and B03 (suitability 0 at O2 ≥ 0.4) dies within 50 s.
+Reason: SPEC §6.4, CT §1.3/§3.2, UX §4.3.
+Owner review: yes — balance: Dusk cannot survive in a default oxygenated dish; it needs a low-oxygen habitat (sediment, a closed lid with heavy aerobic use). That follows CT's numbers; changing it is a content tuning question.
+
+## D-0049 · 2026-10-01 · P3.4 · Hitcher, Pinphage and phage doses as built
+Context: wave 2 parasites-phage (build, saves verifier 1 MAJOR fixed, re-verify ok; docs/reports/reviews/g3-wave-2/parasites-phage-*.md, wave-reverify1.md).
+Decision:
+- Contact kinds on the 'contact' stream are frozen: 1 attack, 2 parasite attachment, 3 infection order (E12/E16 use 4 and 5). When more hosts pass their infection draw than whole units remain in a cell, units go in descending det(seed, 'contact', tick, 3, birthId) order (ties to the lower birthId); the draw reads the units the cell held at the start of stage 5.
+- An infection consumes exactly 1 unit; its 0.01 C joins the host's B with no N. Lysis releases floor(40 × B + 1e-9) units, the rest of B, all N and any meal to detritus.
+- X01 pursues the nearest valid host (Active, unparasitized, listed) afresh every tick and stores no target. A parasite is released alive on every host removal and one tick after its host enters Preparing (no drain in between: stage 6 skips non-Active hosts). A drain limited by free nutrient scales C, bound N and the free-N take by the same fraction L; the drain reservation takes free nutrient before ordinary allocation. A host dying of the drain is checked after H ≤ 0 and age; lysis is checked before all three.
+- The import refuses: an unknown virus code, infection of a species the virus cannot infect, a non-zero timer while not infected, non-mutual host/parasite pairs, a host not in the parasite's host list; messages end "Nothing was loaded.". Phage doses accept a whole count 1–20 and radius 0–6, else refused whole.
+- The inspector's drain line shows the measured drain (intake last second), not the record's rate. INFECTED and PARASITIZED use UX §5.2's Explore copy in Explore and the Lab copy in the Lab.
+- The Infection markers toggle appears in Observe only when the dish allocates a viral field; it is a view setting, never sent to the worker and never saved.
+Reason: SPEC §3.2 row 5, §6.5, §7.4, §7.5, §10.2, §14.3; UX §5.2; honest labels.
+Owner review: no
+
+## D-0050 · 2026-10-01 · P3.3/P3.4 · Truthful Phase 3 rendering (protocol 2) and stale prey links in saves
+Context: wave 2 art-features (docs/reports/reviews/g3-wave-2/art-features-build.md) and the wave verifier's lead MAJORs.
+Decision:
+- PROTOCOL_VERSION is 2 (D-0036), with ARCH §7/§8 updated in the same change: E_LINKMASK (fungal directions + transfer bit), film band 6 (low 7 bits film C on a linear scale, bit 7 "eroding": lower than at the last tick the packer saw; worker-side scratch in a WeakMap, never sim state), CUE2_INFECTED (the status glyph) and CUE2_PARASITIZED (the rider order: a parasite is drawn after, and over, its host).
+- World tiles (film, objects, stain) and fungal segment tiles are drawn one cell per 16 px frame, centred on their cell (lead fix: tiles no longer follow a segment's jittered position, so threads meet); bodies keep ARCH §9's scale. The bud overlay shows when E_GROWTH ≥ 1 (B ≥ 2·B0). Feature marks show only with their state bit and module bit together.
+- Saves: a predator's prey link may name a prey removed in this tick (taken by another predator, dead of age, starvation or lysis) until its next decision re-validates it. The game saves that state itself, so the import accepts a stale prey link and refuses only a slot outside the entity table; the inspector no longer names a removed prey as the target. This fixes a g2 defect that could make an autosave unloadable ("A prey link points at an organism that is not there."). Host/parasite links stay strictly checked (they are kept mutual). Test: tests/persistence/stale-prey.test.ts (age, lysis, contested capture; save → load → same hash, +50 ticks equal).
+Reason: saves are sacred; every visible feature maps to real state; ARCH §7–§10.
+Owner review: no

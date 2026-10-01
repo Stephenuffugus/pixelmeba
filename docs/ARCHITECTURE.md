@@ -135,7 +135,7 @@ sha256(bytes): Promise<string>  // Web Crypto; pure-JS fallback in Node tests
 per session, never saved, never read by the sim. ESLint forbids `Math.random` outside
 `src/render` and `src/audio`.
 
-## 7. Worker protocol (versioned; `protocolVersion: 1`)
+## 7. Worker protocol (versioned; `protocolVersion: 2`)
 
 Main → Worker:
 ```
@@ -174,6 +174,17 @@ wide zoom; `overlayField` only for the active overlay (Float32 copy); film/depos
 summary; structure/device/object list; selection detail on request (full inspector payload with
 reason codes and measured values). Renderer interpolates positions between snapshots and plays
 state animations from flags; nothing else.
+
+As built (protocol 2, Phase 3 wave 2; `src/worker/protocol.ts`): `ents` has ENT_STRIDE 14 per
+entity — slot, species, x, y, heading, flags, growth (B / 2·B0), energy, health, life state, size,
+`E_CUE` (Phase 1–2 cue and module bits), `E_CUE2` (Phase 3 bits: infected, parasitized, anchored,
+linked, E04/E06/E07/E08/E09/E10/E12 carried, seeking light, detritus intake, releasing protein) and
+`E_LINKMASK` (fungal link directions N 1, E 2, S 4, W 8; bit 4 = a transport transfer this second);
+every slot is written for every entity (0 when none). `deposits` has 7 bands per cell: starch,
+detritus, oil, protein, sugar haze, catalysis, film (low 7 bits = film C, 0.50 C = 127; bit 7 =
+eroding, from worker-side scratch). `links` is a `Float32Array` [x1, y1, x2, y2, kind] per adhesion
+link (each pair once); `objects` lists the food objects [{id, x, y, kind, fill}] with fill = remaining
+C / full inventory. VisualEvent types add `objectEmptied` (a fading stain).
 
 ## 9. Rendering (PixiJS 8)
 - World unit = one cell. Base scale 4 px/cell at zoom 1 (512 px dish). Zoom presets: whole dish

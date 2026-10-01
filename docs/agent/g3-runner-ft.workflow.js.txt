@@ -18,7 +18,8 @@
 // }
 
 // ---- runner
-// A = { wave, state, tasks: [{ key, port, prompt, critical?: true, finish?: '<resume note>' }], only?: ['key', ...] }
+// A = { wave, state, tasks: [{ key, port, prompt, critical?: true | 'own', finish?: '<resume note>' }], only?: ['key', ...], verifyGroups?: [['key', ...], ...] }
+// critical: 'own' → its own saves verifier; critical: true → one saves verifier shared by all such tasks.
 const A = { wave: WAVE_ID, state: STATE, tasks: WAVE_TASKS }
 const WAVE = A.wave
 const R = `docs/reports/reviews/${WAVE}`
@@ -33,7 +34,7 @@ CONTENT AND MANIFEST. content/manifest.json is SHARED: only insert the IDs your 
 
 OWNERSHIP. The lead commits: do NOT run git add/commit/stash/checkout/reset/rm/restore and do not delete files you did not create. Other agents edit the same working tree right now. Edit ONLY the files your assignment lets you own. SHARED files: additive edits only (new functions, cases, fields, or a one-line hook call into your own new file), re-read the file immediately before each edit, keep edits small, never reformat/reorder/rename code you did not write. Only the wave's art owner edits art/src/** or runs npm run art:build. Never run prettier on files you do not own. If you need a change elsewhere, describe it precisely in your report. Line numbers in your assignment are hints: find code by symbol (git grep -n) before editing.
 
-TESTS (fast track). The machine has 2 CPUs shared by several agents. Run targeted vitest files only (never the whole suite), long commands with run_in_background and an until-loop wait (never a bare sleep). Browser tests: ONLY your own new or changed journeys, on the desktop project only, with your own port and build folder: E2E_PORT=<port> E2E_OUTDIR=tmp/dist-<key> npx playwright test <your specs> --project=desktop. Do not re-run other specs and do not run the phone projects: the lead runs the whole three-project suite at the gate. Playwright silently reuses a server already on your port: stop your port before and after each run (lsof -t -i :<port> | xargs -r kill; never pkill). The e2e app has no test hook: journeys that need the worker wrap Worker in an init script and speak the protocol, as tests/e2e/lab-tools.spec.ts watchWorker/workerHash do. Timings taken while others run are inflated; leave perf numbers to the lead.
+TESTS (fast track). The machine has 2 CPUs shared by several agents. Run targeted vitest files only (never the whole suite), long commands with run_in_background and an until-loop wait (never a bare sleep). Browser tests: ONLY your own new or changed journeys, on the desktop project only, with your own port and build folder: E2E_PORT=<port> E2E_OUTDIR=tmp/dist-<key> npx playwright test <your specs> --project=desktop. Do not re-run other specs and do not run the phone projects: the lead runs the whole three-project suite at the gate. Playwright silently reuses a server already on your port: stop your port before and after each run (lsof -t -i :<port> | xargs -r kill; never pkill). The e2e app has no test hook: journeys that need the worker wrap Worker in an init script and speak the protocol, as tests/e2e/lab-tools.spec.ts watchWorker/workerHash do. Timings taken while others run are inflated; leave perf numbers to the lead. NEVER end your turn while a command you started is still running: no notification can reach you after you return, so wait for it in the same turn (an until-loop on its output file or exit marker) and only then write your report; your final message must be the full report, never a promise to report later.
 
 BEFORE FINISHING: npx tsc -p tsconfig.json --noEmit and npx eslint <your files> clean; npx vitest run tests/fixtures/g2-replay.test.ts tests/fixtures/trajectory-fence tests/fixtures/conservation-closed-lid.test.ts tests/fixtures/determinism.test.ts <your tests> all pass; your own e2e journeys pass on desktop; screens you touched have no serious/critical axe violations (expectNoSeriousA11yViolations), touch targets ≥ 48 px and text ≥ 16 px. Put proposed decisions in your report as "PROPOSED DECISION: …".`
 
@@ -41,9 +42,9 @@ const FINISH_NOTE = (what) => `IMPORTANT — RESUMING INTERRUPTED WORK. A previo
 const REPORT = (key, suffix) => `When you finish, write your final report ALSO to ${R}/${key}-${suffix}.md (create the folder if needed; this is the only docs file you may create), then return the same report as your final message.`
 const BUILD_FINAL = `Final message: a plain report — a checklist of every Build and "Done when" item (DONE with file:line and the proving test / NOT DONE and why), files created/changed, what each test proves (and how you checked it fails without the mechanism), commands with results (paste the pass/fail summary lines), FENCE notes, bugs noticed elsewhere, proposed decisions.`
 
-const SAFE = (dir, port) => `Do NOT edit any repository file except your own report file named below, and do NOT run git add/commit/stash/checkout/reset/restore. Scratch goes in tmp/${dir}/ (git-ignored). 2 CPUs shared: targeted commands, generous timeouts, run_in_background + an until-loop for long runs. Browser tests only to prove a UI problem you suspect: E2E_PORT=${port} E2E_OUTDIR=tmp/dist-${dir}, desktop project only; stop only that port before and after (lsof -t -i :${port} | xargs -r kill). Never pkill.`
+const SAFE = (dir, port) => `Do NOT edit any repository file except your own report file named below, and do NOT run git add/commit/stash/checkout/reset/restore. Scratch goes in tmp/${dir}/ (git-ignored). 2 CPUs shared: targeted commands, generous timeouts, run_in_background + an until-loop for long runs. Browser tests only to prove a UI problem you suspect: E2E_PORT=${port} E2E_OUTDIR=tmp/dist-${dir}, desktop project only; stop only that port before and after (lsof -t -i :${port} | xargs -r kill). Never pkill. Never end your turn while a command you started is still running: wait for it first (no notification reaches you after you return).`
 const RULES_LENS = `LENS: rules, determinism, conservation, tests and player-facing truth. Check every rule and number against the cited canonical docs (quote the doc line when you claim a mismatch). Run tests/fixtures/g2-replay.test.ts, tests/fixtures/trajectory-fence (the four-file prefix), tests/fixtures/conservation-closed-lid.test.ts and the builders' new tests yourself. Read the diff (git status / git diff; new files are untracked). Look for: vacuous tests or weaker proxies (would the test fail if the mechanism were deleted? try it with a load-time mutant under tmp/, never by editing tracked files); rules gated on a build constant instead of the world's manifest; determinism leaks (Math.random, Date, Map/Set/object-key iteration in src/sim, reused RNG streams, float order changed for existing species); unledgered material moves; save-shape changes without a schema bump and migration; hard-coded stateHash literals; edits outside a task's ownership; non-additive edits to SHARED files; manifest or version-field edits no assignment allowed; and, by reading the UI code and strings, visible claims that do not trace to a measured value or reason code, marks or animations without the state behind them, and copy against UX_SPEC tone.`
-const SAVES_LENS = `LENS: saves and determinism only, for the task named below. Prove or refute: same seed + content + command log gives the identical stateHash at 1×, at 4× (run(world, n) vs four quarter runs), and across serialize → deserialize and saveFile build → load at awkward moments (mid-transaction, right after the new state appears, right before it ends); g2 saves load and continue bit-identically; any new saved state is canonical (order-independent), validated on import (refused with a message that ends "Nothing was loaded."), counted in the ledger, and either hash-neutral while empty or deliberately hashed; nothing outside src/sim draws simulation randomness. Write load-time probes under tmp/; never edit tracked files.`
+const SAVES_LENS = `LENS: saves and determinism only, for the task(s) named below. Prove or refute: same seed + content + command log gives the identical stateHash at 1×, at 4× (run(world, n) vs four quarter runs), and across serialize → deserialize and saveFile build → load at awkward moments (mid-transaction, right after the new state appears, right before it ends); g2 saves load and continue bit-identically; any new saved state is canonical (order-independent), validated on import (refused with a message that ends "Nothing was loaded."), counted in the ledger, and either hash-neutral while empty or deliberately hashed; nothing outside src/sim draws simulation randomness. Write load-time probes under tmp/; never edit tracked files.`
 
 const VERDICT = {
   type: 'object',
@@ -76,28 +77,27 @@ TASKS.forEach((t, i) => {
 })
 log(`builders done: ${TASKS.filter((t, i) => builds[i]).map((t) => t.key).join(', ')}`)
 
-const ASSIGNMENTS = TASKS.map((t) => `=== TASK ${t.key} (port ${t.port}) ===\nASSIGNMENT:\n${t.prompt}\n\nBUILDER REPORT:\n${built[t.key]}`).join('\n\n')
 
 phase('Verify')
+// Rules verifiers: one per group in A.verifyGroups (task keys), else one over the whole wave.
+const VGROUPS = (A.verifyGroups || [KEYS]).map((g) => TASKS.filter((t) => g.includes(t.key))).filter((g) => g.length)
 const verifyJobs = [
-  () =>
-    agent(`You are the adversarial wave verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-${WAVE}`, 4395)}
-Wave ${WAVE} ran ${TASKS.length} builders in one working tree; their work is uncommitted (git status / git diff). Their assignments and reports:
-${ASSIGNMENTS}
+  ...VGROUPS.map((group, gi) => () =>
+    agent(`You are an adversarial wave verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-${WAVE}-${gi}`, 4390 + gi)}
+Wave ${WAVE} ran ${TASKS.length} builders in one working tree; their work is uncommitted (git status / git diff). You verify ${group.length === TASKS.length ? 'all of them' : `these ${group.length}: ${group.map((t) => t.key).join(', ')} (others verify the rest; read their diffs only where they meet yours)`}. Assignments and reports:
+${group.map((t) => `=== TASK ${t.key} (port ${t.port}) ===\nASSIGNMENT:\n${t.prompt}\n\nBUILDER REPORT:\n${built[t.key]}`).join('\n\n')}
 
 ${RULES_LENS}
-Try to REFUTE that each assignment is done correctly, completely and honestly — every item of its Build and "Done when" lists. ${FORMAT} Write the same list to ${R}/wave-verify.md.`, { label: `verify:${WAVE}`, phase: 'Verify', schema: VERDICT, effort: 'high' }),
-  ...TASKS.filter((t) => t.critical).map((t, i) => () =>
-    agent(`You are an adversarial saves/determinism verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-${t.key}-saves`, 4396 + i)}
-Task ${t.key} of wave ${WAVE}; its work is uncommitted in the tree with other builders' work.
-ASSIGNMENT:
-${t.prompt}
-
-BUILDER REPORT:
-${built[t.key]}
+Try to REFUTE that each assignment is done correctly, completely and honestly — every item of its Build and "Done when" lists. ${FORMAT} Write the same list to ${R}/wave-verify${VGROUPS.length > 1 ? `-${gi + 1}` : ''}.md.`, { label: `verify:${WAVE}${VGROUPS.length > 1 ? `:${gi + 1}` : ''}`, phase: 'Verify', schema: VERDICT, effort: 'high' }),
+  ),
+  // Saves/determinism lens: one verifier per task marked critical: 'own'; one shared verifier for every task marked critical: true.
+  ...[...TASKS.filter((t) => t.critical === 'own').map((t) => [t]), ...(TASKS.some((t) => t.critical === true) ? [TASKS.filter((t) => t.critical === true)] : [])].map((group, i) => () =>
+    agent(`You are an adversarial saves/determinism verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-saves-${i}`, 4396 + i)}
+Task(s) ${group.map((t) => t.key).join(', ')} of wave ${WAVE}; their work is uncommitted in the tree with other builders' work.
+${group.map((t) => `=== TASK ${t.key} ===\nASSIGNMENT:\n${t.prompt}\n\nBUILDER REPORT:\n${built[t.key]}`).join('\n\n')}
 
 ${SAVES_LENS}
-${FORMAT} Write the same list to ${R}/${t.key}-verify-saves.md.`, { label: `verify:${t.key}:saves`, phase: 'Verify', schema: VERDICT, effort: 'high' }),
+${FORMAT} Write the same list to ${R}/saves-verify-${group.map((t) => t.key).join('+')}.md.`, { label: `verify:saves:${group.map((t) => t.key).join('+')}`, phase: 'Verify', schema: VERDICT, effort: 'high' }),
   ),
 ]
 const verdicts = (await parallel(verifyJobs)).filter(Boolean)
@@ -116,12 +116,12 @@ for (let round = 1; round <= 2; round++) {
     fixKeys.map((k) => () => {
       const t = TASKS.find((x) => x.key === k)
       const mine = problems.filter((p) => keyOf(p) === k)
-      return agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\nYou are the round-${round} fixer for this assignment (the work is in the tree; do not start over):\n---\n${t.prompt}\n---\nThe adversarial verifier found these problems in it (full list: ${R}/wave-verify.md${round > 1 ? ` and ${R}/wave-reverify${round - 1}.md` : ''}):\n---\n${mine.join('\n')}\n---\nFix EVERY BLOCKER and MAJOR, and every MINOR that is cheap and inside your files. For each behavioural problem add or tighten a test that fails on the old behaviour and passes now. If a problem is wrong (the verifier misread a rule), say why with quotes from the canonical docs instead of changing code. If a fix needs a file outside your ownership, make it only if it is small and additive, or describe it precisely for the lead. Re-run your unit tests, the fence fixtures and your own e2e journeys (desktop) before finishing. ${REPORT(k, `fix${round}`)} Final message: per problem FIXED (how, which test) / NOT A PROBLEM (why, quotes) / NOT FIXED (why); files changed; commands + results.`, { label: `fix${round}:${k}`, phase: 'Fix', effort: 'high' })
+      return agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\nYou are the round-${round} fixer for this assignment (the work is in the tree; do not start over):\n---\n${t.prompt}\n---\nThe adversarial verifier found these problems in it (full lists: ${R}/wave-verify*.md and saves-verify-*.md${round > 1 ? `, and ${R}/wave-reverify${round - 1}.md` : ''}):\n---\n${mine.join('\n')}\n---\nFix EVERY BLOCKER and MAJOR, and every MINOR that is cheap and inside your files. For each behavioural problem add or tighten a test that fails on the old behaviour and passes now. If a problem is wrong (the verifier misread a rule), say why with quotes from the canonical docs instead of changing code. If a fix needs a file outside your ownership, make it only if it is small and additive, or describe it precisely for the lead. Re-run your unit tests, the fence fixtures and your own e2e journeys (desktop) before finishing. ${REPORT(k, `fix${round}`)} Final message: per problem FIXED (how, which test) / NOT A PROBLEM (why, quotes) / NOT FIXED (why); files changed; commands + results.`, { label: `fix${round}:${k}`, phase: 'Fix', effort: 'high' })
     }),
   )
   const fixReports = fixKeys.map((k, i) => `=== FIXER ${k} ===\n${fixes[i] ? String(fixes[i]) : 'NO REPORT'}`).join('\n\n')
   const fixedProblems = problems.filter((p) => fixKeys.includes(keyOf(p)))
-  const rv = await agent(`You are the adversarial re-verifier for wave ${WAVE} of Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`reverify${round}-${WAVE}`, 4395)}
+  const rv = await agent(`You are the adversarial re-verifier for wave ${WAVE} of Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`reverify${round}-${WAVE}`, 4394)}
 The assignments of the fixed tasks:
 ${TASKS.filter((t) => fixKeys.includes(t.key)).map((t) => `=== TASK ${t.key} ===\n${t.prompt}`).join('\n\n')}
 

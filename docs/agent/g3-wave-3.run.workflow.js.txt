@@ -1,0 +1,480 @@
+export const meta = {
+  name: 'g3-wave-3',
+  description: 'Phase 3 wave 3 (fast track): e1-producers, f02-links, food-objects, tools-sample, mod-anchor-light, mod-feeding, mod-builders, mod-adhesion; two rules verifiers, two saves verifiers, fix rounds only for BLOCKER/MAJOR',
+  phases: [
+    { title: 'Build', detail: 'eight builders, two at a time, effort high; unit tests + own e2e on desktop' },
+    { title: 'Verify', detail: 'two rules verifiers (W3 half, module half) and two saves verifiers (tools-sample; f02-links + food-objects + mod-adhesion)' },
+    { title: 'Fix', detail: 'only tasks with a BLOCKER/MAJOR; at most two rounds' },
+  ],
+}
+
+// ---- wave 3 tasks (docs/agent/g3-wave-3.tasks.js.txt; tools-sample critical: 'own')
+// Phase 3 wave 3 tasks for docs/agent/g3-runner-ft.workflow.js.txt (fast track; WAVE_ID 'g3-wave-3').
+// meta.description: "Phase 3 wave 3 (fast track): B07/B08/Y02 + enzymes, reaction ledger, food access, E201–E204 (P3.6 part 1), F02 transport links (P3.6 part 2), food objects (P3.6 part 3), Sample/Transfer/Clean water (P3.5), and modules E04/E07, E06/E08, E09/E10 + stage 8 order, E12 (P3.7), then the lead's module flip."
+// Built from docs/agent/fast-track.md (wave 3 = plan W3 + W4), docs/agent/g3-plan.md lines 400-611 and 69-90, with every
+// W3 and W4 row of docs/agent/g3-plan-recheck.md (lines 1088-1541), its facts (All waves, Wave 3, Wave 4) and G1-G17
+// applied, checked against the tree with waves 1 and 2 as built (D-0043..D-0050; docs/reports/reviews/g3-wave-{1,2}/).
+// Each prompt follows the runner's PRE (not repeated here).
+//
+// Recheck rows: W3-01..W3-25 and W4-01..W4-24 applied, with these notes:
+// - W3-05 moot: tests/worker/host.test.ts already compares speciesIds with registry().manifest.enabledSpecies.
+// - W3-17/W3-22: Erase structure exists since P2.7; tools-sample adds nothing. W3-19/20/23/24/25 follow D-0037 (G10 Option W3).
+// - W4-02: module builders test through registryWith({ enabledModules: [...shipped, 'E0x'].sort() }).
+// - W4-04: the moduleView activeNow switch is a LEAD PRE-LAUNCH step below; every module prompt carries a fallback.
+// - W4-07/W4-19: the D-0035 clock lives in src/sim/intakeClock.ts (mod-anchor-light), advanced from the stage 8 release
+//   hook (actions.ts releaseInvalidLinks) before the E04 and E12 checks, so no extra edit of intake.ts is needed.
+// - W4-12/W4-16: FLAG 1 << 13 = detritusIntake (mod-feeding). For protein release mod-builders takes W4-16's alternative:
+//   c.secreting becomes a producer bit set (starch 1, oil 2, protein 4; starch stays 1, so g2 hashes are unchanged) and
+//   1 << 12 stays unused. Reason: with E01 + E09 on one B04, a single FLAG bit cannot tell which producer released.
+// - W4-22/23: the first paragraph is dropped: fence check (b) already digests in 'full' mode (D-0042). W4-24: the wave-A
+//   goldens already run under registryWith(G2_LISTS) (D-0042); the step keeps the rerun and the report.
+// - Carried items: D-0043 sample import checks and canonSample original slots -> tools-sample; D-0045 two-producer test ->
+//   mod-builders (E09); parasites-phage note (release a host pair before removing a held organism: whole units keep it) ->
+//   tools-sample; wave 2 verify MINOR (new inspector sentences in the 14 px .kv grid) -> e1-producers (Inspector owner).
+//
+// Stage-file owner this wave (plan section 1 table as corrected by W3-06, W3-12, W3-15, W3-18, W4-03, W4-04, W4-15, G6;
+// one owner per file; everyone else makes the additive hook lines their prompt names, into their own new files):
+//   e1-producers:     src/worker/snapshot.ts, src/ui/panels/Inspector.tsx (+ reactions.ts, ReactionLedger.tsx, recipes, EXP_201-204)
+//   f02-links:        src/sim/births.ts, src/sim/fungi.ts (+ fungalTransport.ts)
+//   food-objects:     src/sim/conversion.ts, src/sim/objects.ts, src/sim/grid.ts, src/render/** (renderer.ts preview)
+//   tools-sample:     src/sim/commands.ts, src/sim/sampleSlot.ts, src/worker/{protocol,host,client}.ts, src/ui/views/LabView.tsx,
+//                     src/ui/panels/LabTray.tsx, src/ui/strings/lab.ts, src/ui/panels/CompareText.tsx (+ sample.ts, tools.ts)
+//   mod-anchor-light: src/sim/movement.ts, src/sim/phenotype.ts (+ anchor.ts, lightSeeker.ts, intakeClock.ts)
+//   mod-feeding:      src/sim/intake.ts (+ debrisFeeder.ts)
+//   mod-builders:     src/sim/structures.ts (stage 8 part only), src/sim/actions.ts, construction.ts, secretion.ts, film.ts,
+//                     src/sim/moduleView.ts, src/ui/strings/modules.ts (+ matrixBuilder.ts)
+//   mod-adhesion:     src/sim/contacts.ts, src/sim/maintenance.ts (+ adhesion.ts)
+// Collisions resolved: secretion.ts (plan W3 e1 vs W4 mod-builders) -> mod-builders; the native oil/protein actions already
+// sit in SHIPPED, so e1-producers only maps phenotype rules. structures.ts -> mod-builders; food-objects edits only the Lab
+// part (one object-cell refusal), f02-links only the fungalTransportPass body. phenotype.ts -> mod-anchor-light (E07's
+// speed/sensing edits are the only non-additive ones). movement.ts foodScore gets additive terms from e1-producers and
+// mod-feeding. births.ts gets one hook line each from mod-anchor-light and mod-adhesion.
+// Untouched by all: transport.ts, suitability.ts, dormancy.ts, serialize.ts, ledger.ts, reasons.ts, art/src/**,
+// public/atlas/** (every frame needed exists: B07/B08/Y02/F02 sprites with F02 pulse, all ten module marks, tiles
+// film/pellet/wafer/stain; nobody runs art:build this wave).
+// SHARED (additive) across tasks: content/manifest.json, src/sim/content/{implemented,moduleRules}.ts, src/sim/{world,
+// events,entities}.ts, src/sim/{publish,history,lineage}.ts, src/worker/*, src/ui/state.ts, src/ui/styles.css,
+// src/ui/strings/{experiments,lineage}.ts, src/persistence/saveFile.ts, tests/helpers/trajectory.ts (POST_G2_* only).
+// Order: W3 tasks first, then modules; mod-anchor-light runs before mod-adhesion (intakeClock.ts) and tools-sample before
+// mod-adhesion (sample.ts).
+//
+// LEAD PRE-LAUNCH (W4-04): in src/sim/moduleView.ts moduleSummaries, turn activeNow's nested ternary into a function with a
+// switch (E01 c.secreting[i] === 1, E03 lifeState !== LIFE_ACTIVE, E05 true, default false). Optional; prompts carry a fallback.
+//
+// LEAD MODULE FLIP (after every wave 3 builder is integrated and npm run check is green; W4-20, W4-21, W4-22/23, W4-24):
+//  1. Confirm public/atlas/manifest.json features lists anchor_foot, shade_patch, light_trail, debris_granule,
+//     protein_notches, matrix_edge, adhesion_link (present since wave 2) and IMPLEMENTED_MODULES holds E04, E06-E10, E12.
+//     Add E04, E06, E07, E08, E09, E10, E12 to enabledModules (sorted: E01 E03 E04 E05 E06 E07 E08 E09 E10 E12); bump
+//     moduleRegistryVersion 1 -> 2; npx tsx tools/content-validate.ts --write (hash written only with zero errors);
+//     npm run art:build -- --check.
+//  1b. Update the tests that pin the shipped registry (W4-20): tests/sim/modules.test.ts (47, 51, 56, 62, 98-99, 117, 119,
+//     122), tests/fixtures/module-accounting.test.ts (128-130), tests/fixtures/registry-imports.test.ts (196: its 'changed
+//     build' becomes version 3; 226, 229-231, 245-247, 265-269), tests/sim/founders.test.ts (188-192),
+//     tests/sim/founders-newdish.test.ts (90-95, 146-149), tests/content/atlas.test.ts (134-138, 142, 197: enabled marks
+//     become the ten visualLayers; FEATURE_FRAMES rows exist), tests/e2e/new-dish.spec.ts (93, 134). Pin Phase 2 subjects
+//     to registryWith(G2_LISTS); else new values: A01 E05 E06 E07; B01 E01 E03 E04 E05 E10 E12; B04 E01 E03 E04 E05 E09
+//     E10 E12; B06 E03 E04 E05 E10 E12; P01 E05 E08 (Phase 3 species per CT 7.1); registry version 2; '10 of 17 abilities'.
+//  2. Fence: check (b) already uses trajectoryDigest(world, 'full'); confirm it hashes film/filmN, the anchor, adhesion and
+//     usable-intake columns, link columns, objects and the sample without throwing. Run g2-replay and the four fence files.
+//     Expect currentDigest mismatches only for recipes with module rate > 0 whose species gained options and where a
+//     module-gain draw fires within the horizon: FIRST_DISH_V1 (Standard), its R-G1..R-G3 variant entries, Standard P2
+//     recipes and this wave's EXP_201-204 recipes. Fixed Traits recipes and every g2Digest must be unchanged.
+//  3. Prove the cause: registryWith(shipped minus the seven modules, moduleRegistryVersion 1) reproduces each old
+//     currentDigest (one-off test).
+//  4. DECISIONS D-00xx "Phase 3 modules enabled (moduleRegistryVersion 2); recipe trajectories change only through mutation
+//     module options"; npx tsx tools/fence-update.ts --all --reason D-00xx.
+//  5. Rerun tests/experiments/* and tests/sim/comparison.test.ts; never rewrite tests/experiments/golden/wave-a-measurements.json
+//     (expectWaveANumbers/expectWaveAComparison stay on registryWith(G2_LISTS)); record shipped-manifest gate and
+//     measurement changes (EXP_101/102/103/106/B, hunters and feed comparisons, EXP_201-204) in docs/reports/experiments-g2.md.
+//  6. The accelerated seed-101 FIRST_DISH_V1 tests (lineage-panel, lineage-host, branch-evidence, strip-names, e2e
+//     lineage.spec) follow new trajectories: npm run check, then the full Playwright suite once; a saves/determinism lens
+//     on the flip (fast-track 2). Then tick P3.5, P3.6, P3.7.
+//  7. Decisions to record from this wave's PROPOSED DECISIONs: EXP_203 founder order and proteinN reading (G17 16); F02
+//     unlinked daughter (17); F02 donor-then-receiver caps; food-access overlay definition; replace-sample = discard + begin;
+//     slot remap on transfer; E04 rim support and anchored = still 'free' prey (20, owner); E12 'free' excludes anchored
+//     and its 2 E link cost category (21); the secreting bit set; the intake clock in the release hook.
+
+const STATE = `On main: g2, the Phase 3 Preflight (D-0042: src/sim/gates.ts worldHasSystem/worldHasSpecies/worldHasModule; tests/helpers/registry.ts registryWith(patch, { allowUnimplemented }) and G2_LISTS; tests/helpers/trajectory.ts trajectoryDigest(world, 'g2' | 'full'), where every new World key, observation-only ones included, must be registered in its POST_G2_* tables (POST_G2_DERIVED_KEYS for unsaved caches); the g2 saves, the four trajectory-fence files and tools/fence-update.ts), wave 1 (D-0043..D-0046) and wave 2 (D-0047..D-0050). Versions: buildPhase 3, contentVersion 2, simulationVersion 3 (pinned), evolutionRulesVersion 1, moduleRegistryVersion 1, phenotypeMappingVersion 1, world SCHEMA_VERSION 4, PROTOCOL_VERSION 2 (ENT_STRIDE 14, E_CUE2 12, E_LINKMASK 13). Schema 4 (D-0035, D-0043): hash-neutral entity columns filmSeconds, anchorState (0 free, 1 anchored), anchorSeconds, anchorLockout, adhPartner (birthId, 0 none), adhSeconds, adhLockout, waterCrossed, noUsableIntakeSeconds (nothing writes it yet), fungal links fLink0..3/fLinkB0..3/fLinkKind0..3 (1 LINK_VISUAL, 2 LINK_TRANSPORT) and adhesion links aLink0..1/aLinkB0..1; src/sim/links.ts (addFungalLink refuses a 5th, removeFungalLink, fungalNeighbors, fungalDegree, fungalComponent, adhesion equivalents incl. adhesionComponent, removeAllLinks called in killEntity (lysis goes through it) and consumePrey, rekeyLinks in commitDivision, linksValid; the import refuses dangling links); stores world.objects (src/sim/objects.ts createObject/removeObject/objectAt/objectTotals, cap 128, kinds pellet/wafer, pools sugar/starch/protein + n; nothing creates objects yet) and world.sample (src/sim/sampleSlot.ts SampleSlot {txId, seq, mode, origin, radius, rows [{slot, cols}], cells [{dx, dy, fields}], objects, genomes}, encodeSample/decodeSample, savedSampleProblem), both counted by computeTotals; tests/helpers/world.ts clearWater, place, linkFungal, linkAdhesion, placeObject. Stage 8 (D-0045): src/sim/actions.ts frozen SHIPPED table [native E_STARCH, E_OIL, E_PROTEIN producers, native BIOFILM, E01], ActionContext remainingEnergy/remainingBody/spend/requestConstruction, an empty releaseInvalidLinks hook that runs for every living organism; construction.ts constructionPass (FILM_CAP 0.50 headroom, proportional, 'construction' energy category); secretion.ts generic producer (PRODUCER_FIELDS, secrete, producerApplies, producerRun); structures.ts stageStructures with an empty fungalTransportPass after construction; phenotype.ts ProducerRules/BuilderRules with Profile.oil and Profile.protein null for every species. Also built: chemistry, habitats GEL_COLONY (water channel x 59-68) and SEDIMENT_EDGE, attachment surfaces in habitatCompatible (D-0044); B02 film (native builder, decay, eaten as detritus), F01 four-neighbour branching with visual links and FUNGAL_CAP 2,000 (src/sim/{film,fungi}.ts, D-0047); B03, B05, Y01, P02-P04 (D-0048); X01 (src/sim/parasites.ts releaseHostPair) and V01 + phage doses (src/sim/viruses.ts), contact kinds 1 attack, 2 parasite, 3 infection, 4 reserved for E12 (D-0049); protocol 2 (D-0050): CUE2_* bits packed from state in snapshot.ts cue2Of (CUE2_DETRITUS_INTAKE 4096, CUE2_RELEASING_PROTEIN 8192 and LINKMASK_TRANSFER 16 are defined but never packed), SnapshotMsg.links and objects, film band 6, VisualEvent 'objectEmptied' (the renderer draws the stain; src/ui/feed.ts has its case), a predator's stale prey link is accepted on import. The atlas (1024x1024, 856 frames) already holds every frame this wave needs (B07/B08/Y02/F02 sprites with the F02 pulse, all ten module marks, tiles film/pellet/wafer/stain): nobody edits art/src or runs art:build this wave. Shipped manifest now: enabledSpecies A01, B01, B02, B03, B04, B05, B06, F01, P01, P02, P03, P04, V01, X01, Y01; enabledModules E01, E03, E05; enabledSystems chemistry, core, enzymes, film, fungi, parasites, viruses; enabledMaterials ACID, BASE, BUFFER, CO2, DEBRIS, GEL, INH_BACT, INH_FUNG, INH_PHOTO, METABOLITE, NUTRIENT, OIL, OXYGEN, PROTEIN, SALT, SEDIMENT, SHADE, STARCH, SUGAR, WATER; enabledHabitats GEL_COLONY, SEDIMENT_EDGE, WATER_GARDEN; enabledStructures BEAD, STONE, WALL. IMPLEMENTED_NATIVE_ABILITIES = BIOFILM, BRANCHING, E_STARCH_SECRETION, HOST_DRAIN, LYSIS, OXYGEN_SUPPRESSED, PREDATION, SEDIMENT_WATER_CROSSING; IMPLEMENTED_MODULES = E01, E03, E05. tests/worker/host.test.ts already compares speciesIds with the shipped manifest. Decisions are recorded through D-0050. Wave 3 runs eight builders in one working tree, two at a time: e1-producers, f02-links, food-objects, tools-sample, then mod-anchor-light, mod-feeding, mod-builders, mod-adhesion. MODULE RULE: module builders never touch content/manifest.json (each enabled module changes Standard recipes' mutation options, a forced trajectory change); they implement and register, test through registryWith({ enabledModules: [...shipped, 'E0x'].sort() }), and the lead enables E04, E06-E10 and E12 together after the wave (moduleRegistryVersion 1 -> 2).`
+
+const WAVE_TASKS = [
+  {
+    key: 'e1-producers',
+    port: 4231,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.6 part 1: B07 Oilwick, B08 Brothmaker, Y02 Creambud; native E_OIL/E_PROTEIN producers; Lab materials M01, M03, M04, M05, M09; producer movement scoring; the reaction ledger; the food-access overlay; experiments EXP_201-EXP_204. Read SPEC §5.3, §6.4, §10.8, §12.1; CT §1 rows B07/B08/Y02, §3.1, §3.2, §5.2, §10.3, §12.6; UX §4.4, §5.1; D-0022, D-0029, D-0045, docs/reports/experiments-g2.md.
+
+You own: src/worker/snapshot.ts and src/ui/panels/Inspector.tsx (owner this wave; others add their own lines), src/sim/reactions.ts, src/ui/panels/ReactionLedger.tsx, src/ui/strings/reactions.ts, content/recipes/SHARED_LUNCH_V1.json (seed 201), OIL_NEIGHBORHOOD_V1.json (202), PROTEIN_CHAIN_V1.json (203), BROKEN_CATALYST_V1.json (204: SHARED_LUNCH_V1's setup under its own seed, since card seed must equal recipe seed), content/experiments/EXP_201.json..EXP_204.json, tests/fixtures/producers.test.ts, tests/experiments/e201-e204.test.ts, tests/e2e/reactions.spec.ts (all new).
+SHARED (additive):
+- content/manifest.json: enabledSpecies += B07, B08, Y02 and enabledMaterials += M01, M03, M04, M05, M09, one edit, sorted. implemented.ts: E_OIL_SECRETION, E_PROTEIN_SECRETION.
+- src/sim/phenotype.ts (mod-anchor-light owns): Profile.oil / Profile.protein = native ProducerRules {source 'native', ENZYME_EMIT_RATE, ENZYME_EMIT_MIN_ENERGY, ENZYME_EMIT_COST, ENZYME_LOCAL_CAP} for species with E_OIL_SECRETION / E_PROTEIN_SECRETION (mod-builders adds E09's).
+- src/sim/movement.ts foodScore (mod-anchor-light owns): after the starch term, the same term for prof.oil (oil) and prof.protein (protein); B06 and E01 carriers bit-identical.
+- src/sim/conversion.ts (food-objects owns; re-read before editing): one recorder call per rule and cell into reactions.ts. src/sim/world.ts: one observation-only field holding per-cell, per-enzyme C and N converted over the last second (like catalysisCells: never read by the sim, hashed or saved); register it in tests/helpers/trajectory.ts POST_G2_DERIVED_KEYS.
+- src/sim/content/schema.ts and src/sim/experiments.ts: change kind 'omitFounders' {founderIndex}; experimentProblems accepts only the LAST founder group. src/ui/strings/experiments.ts describeArms case ('The same, without the 20 Brothmaker founders'); src/ui/views/ExperimentRun.tsx armTitles case ('B · without Brothmakers').
+- tests/experiments/{framework,app-flow,journal-and-words}.test.ts, tests/e2e/experiments.spec.ts: extend the pinned card lists with EXP_201-204 (paired: 203, 204).
+- protocol.ts (tools-sample owns): OverlayId += 'foodAccess', optional CellInspect reaction rows. lab.ts (tools-sample owns): FOOD_MATERIALS += 'M01', CHEMISTRY_MATERIALS += 'M03', 'M04', 'M05', 'M09', MATERIAL_COPY for each, OVERLAYS 'foodAccess'; OverlayPicker.tsx offers it; styles.css sw-<id> swatches; src/render/layers.ts only for a colormap.
+- tests/fixtures/fence.json only through npx tsx tools/fence-update.ts --add <recipe> for your four recipes.
+Build:
+- Native producer actions already sit in SHIPPED; secretion.ts is mod-builders' (verify only): emit 0.02 activity/s into the own cell while Active, E > 35, a compatible deposit in the cell or a four-neighbour, local activity < 1.0; 0.40 E/s (SPEC §5.3, CT §12.6). Reasons in secretionCode: E ≤ 35 SECRETION_ENERGY_LOW, no substrate SECRETION_NO_SUBSTRATE, activity ≥ 1.0 SECRETION_SATURATED; a non-Active organism keeps its state reason and secretionCode is not written (D-0029). Assert FLAG.secreting and secretionCode, not the secreting column (mod-builders makes it a bit set).
+- Conversion, diffusion and decay already exist (conversion.ts, transport.ts): verify against SPEC §5.3 only.
+- Materials (CT §5.2): M01 0.02/0.10/0.50 C with 0.10 N per C; M03/M04/M05 and M09 0.1/0.5/1.0 activity.
+- Reaction ledger (cell inspector; SPEC §12.1): per enzyme in the cell and the dish: activity, effective activity, substrate present, converted in the last second, product made, bound N moved, cumulative (world.conversionTotals). 'Made here by {species}' only when a producer of that enzyme is in the cell or a four-neighbour, otherwise 'Enzyme present'. Body text ≥ 16 px; also move wave 2's 'Biofilm here' and 'Network' lines out of the 14 px .kv grid.
+- PROPOSED DECISION (food-access overlay): per cell, the carbon of the pools the selected organism's species can eat now (its foods, plus film when it digests film in a film world); with no selection, the carbon enzymes made accessible in the last second. Legend low -> high; observation only (SPEC §10.8); the 'view' message already carries the selection.
+- Experiments (CT §10.3: seed = numeric id, Water Garden without stones, fixed light 0.8, open lid, radius-6 patches, Standard preset, Identical founders, nearest-first placement per D-0022); every card has question, recipe, intervention, predicted tradeoff, measurements, stopping point, confounds, journal stamp; gates use pairedRun.ts parseMeasure (converted.*, intake.SP, consumed.<pool>):
+  - EXP_201 Shared lunch: (45,64) 20 B06 + 20 B01, starch 0.50, nutrient 0.20; gate converted.starch ≥ 1 and intake.B01 ≥ 0.5.
+  - EXP_202 Oil neighborhood (single-arm): (64,64) 20 B07 + 20 B05, oil 0.50, nutrient 0.20; gate converted.oil ≥ 1, intake.B07 > 0, intake.B05 > 0.
+  - EXP_203 Protein chain (paired): (64,64), PROTEIN_CHAIN_V1 lists 10 Y02 first, then 20 B08; protein 0.50 with proteinN 0.05. PROPOSED DECISION: 'N 0.05' is bound N (0.10 N per C, no free nutrient). Gate converted.protein > 0 and intake.Y02 > 0. Arm B omits the last group (B08), so every Y02 keeps arm A's cell and birthId; arm B shows zero broth.
+  - EXP_204 Broken catalyst (paired): BROKEN_CATALYST_V1; arm B 'commands' at atSecond 0: deposit M09, dose 4, points [[45.5, 64.5]], radius 6 (equals the patch disk). stoppingSeconds 120; gate runSeconds (arm A) ≥ 120 with converted.starch measured. The result is the measured comparison (D02 §21), expected B < A, never forced.
+Done when:
+- tests/fixtures/producers.test.ts: B07 and B08 pay exactly 0.40 × dt per emitting tick and nothing otherwise; each refusal gives its code; each enzyme conserves C and N to 1e-12 with checkLedger ok; breaker 1.0 halves conversion; decay and diffusion rates exact; foodScore uses 0.5 × avail(substrate) only while E > 35; the credit rule follows producer position; prey per CT §3.2 (P01 B07/B08/Y02, P02 free B07/B08, P03 Y02, P04 B07/B08 in sediment).
+- tests/experiments/e201-e204.test.ts: each card reaches its gate on the shipped content or the test records the measured limiting factor (never change mechanics or constants to force one); EXP_203 arm B keeps the Y02 cells and birthIds and makes zero broth; EXP_204 reports B − A. Add an 'E201-E204 (G3)' section to docs/reports/experiments-g2.md.
+- tests/e2e/reactions.spec.ts (desktop; W3-10): open EXP_202 from Notebook -> Experiments (single-arm, opens as a dish) -> run at 4× -> tap a patch cell -> the ledger shows oil converted and metabolite made, 'Made here by Oilwick' only with an Oilwick in that cell or a four-neighbour -> Lab -> Observe -> 'Food access' toggles with its legend; axe clean.
+- Non-vacuity: removing the oil term from foodScore, the provenance check or the last-group rule fails a named test (say how you checked).
+- Fence unchanged apart from the four recipes you add.`,
+  },
+  {
+    key: 'f02-links',
+    port: 4232,
+    // critical: writes saved transport-link columns and adds an optional field to saved history samples.
+    critical: true,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.6 part 2: F02 Cordweaver, its transport links and the one simultaneous transport pass, proven by E212 with an exact ledger. Read SPEC §3.2 row 8, §6.9, §7.2, §7.7 (every word), §9.19; CT §1.1-1.3 row F02 (B0 2, Q 0.18, M 0.40, min division 35 s, max age 1400 s; attached gel/sediment/mesh/bead), §3.1 (sugar, detritus), §10.3 E212, §12.6 (F02 transport), §14; docs/source/D04 §9: the paragraph 'Existing F02 fungal transfer remains its own budgeted simultaneous pass …' (post-construction body pools; adhesion links are not fungal links) and the birth bullet 'F02 transport links follow their existing branching rules'; D-0043, D-0045, D-0047, D-0050; src/sim/{fungi,links,structures,construction}.ts.
+
+You own: src/sim/births.ts, src/sim/fungi.ts, src/sim/fungalTransport.ts (new), tests/fixtures/fungal-transport.test.ts, tests/sim/fungal-links.test.ts, tests/e2e/cordweaver.spec.ts (new). mod-anchor-light and mod-adhesion each add one hook line in births.ts after rekeyLinks: keep them.
+SHARED (additive):
+- content/manifest.json: enabledSpecies += F02. implemented.ts: TRANSPORT_LINKS.
+- src/sim/structures.ts (mod-builders owns): the body of fungalTransportPass becomes one call into fungalTransport.ts.
+- src/sim/world.ts: one observation-only field: per-slot transfer carbon over the last second and the last 10 s, cleared when a segment dies or its slot is reused; never an entity column, never hashed or saved; register it in tests/helpers/trajectory.ts POST_G2_DERIVED_KEYS.
+- src/sim/events.ts: EventType += 'linkFormed', 'linkBroken' (detail {kind: 'fungal'}; mod-adhesion reuses them); add a feed case wherever tsc requires one.
+- src/sim/publish.ts and src/sim/history.ts: an optional per-second fungal transfer total on samples, like debrisTotal: validated in sampleProblem, kept by summarize, no schema change.
+- src/worker/snapshot.ts linkMaskOf: LINKMASK_TRANSFER (16) when the segment sent or received this second; src/worker/protocol.ts: an optional EntityInspect transfer field; src/ui/panels/Inspector.tsx: e.g. 'Sent 0.12 C to 2 neighbors in the last 10 s' / 'Received …', body text ≥ 16 px.
+Build:
+- Links: at branching (wave 2's four-neighbour placement, D-0047) an F02 parent and its F02 daughter get a LINK_TRANSPORT link only if both have degree < 4 (F01 keeps LINK_VISUAL). Otherwise the daughter is placed unlinked and the 'birth' event's detail says so ({link: 'degree'}); lineage records are unchanged (PROPOSED DECISION). Undirected; only living F02 transport links carry anything; removing a segment breaks its links (removeAllLinks, existing); crossing threads never connect; degree ≤ 4. Emit linkFormed / linkBroken.
+- Transport pass (stage 8, after construction, before births), reading ONE snapshot of post-construction B and N, B0' = the segment's phenotype b0:
+  - for every transport link (a, b) in canonical order (lower slot first) the donor is the end with more B (equal: no flow);
+  - the edge is active iff donor B > B0', receiver B < 1.5 B0' and B_donor − B_receiver ≥ 0.01 B0';
+  - request r = min(0.02 × dt, (B_donor − B_receiver)/2);
+  - scale every donor's outgoing requests by min(1, (B_donor − B0') / Σout), then every receiver's incoming by min(1, (1.5 B0' − B_receiver) / Σin). PROPOSED DECISION: donor cap first, receiver cap second, no re-offer;
+  - commit all edges together: carbon plus N = donor N × r / B_donor (snapshot values); no energy moves; the ledger is unchanged (internal);
+  - a segment may send and receive in one pass; received carbon relays only on later ticks.
+- The pass acts only where transport links exist, so every other world runs bit-identically.
+Done when:
+- tests/fixtures/fungal-transport.test.ts (E212, W3-14): an all-gel dish built by hand (tests/helpers/world.ts clearWater, set every in-dish cell's substrate to gel, updateDerived; not GEL_COLONY, whose water channel covers x 59-68) with four F02 at (60,64)..(63,64) chained with linkFungal; B = 4, 2, 2, 2; N = 0.10 B; E = 50; H = 100; no food; Fixed Traits.
+  - For 100 ticks the per-tick, per-edge transfers equal an oracle written in the test from SPEC §7.7 alone (no sim imports) to 1e-12.
+  - Σ B and Σ N of the chain are constant each tick to 1e-12 and the ledger closes; each segment's energy equals that of a copy with the links removed.
+  - Segment 3 receives nothing on tick 1 (no relay).
+  - A star donor with four receivers never sends more than B − B0'; a receiver with four donors never exceeds 1.5 B0'.
+  - Killing segment 2 mid-run stops flow across both its links in the same tick; a 5th link is impossible.
+  - Save/reload at tick 50 gives the identical hash at tick 100; 1× equals four quarter runs.
+- tests/sim/fungal-links.test.ts: links form at branching (four-neighbour only, degree cap, visual for F01, transport for F02); the unlinked-daughter detail; removal on death and on capture; linksValid after every division; one event per link change; buildSaveFile -> loadSaveFile succeeds with live transport links and with the new history field.
+- tests/e2e/cordweaver.spec.ts (desktop): New Dish -> Empty Gel Colony -> Lab -> Life -> Cordweaver on gel -> run at 4× until it branches -> tap a segment: the network and transfer lines; axe clean.
+- Non-vacuity: removing the donor cap, the receiver cap or the single snapshot (sequential commits) fails a named test.
+- Fence unchanged.`,
+  },
+  {
+    key: 'food-objects',
+    port: 4233,
+    // critical: creates and consumes records in the saved world.objects store (hashed once non-empty).
+    critical: true,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.6 part 3: finite food objects, M10 Slow feeder pellet and M11 Leaf wafer. Read SPEC §2.4, §3.2 row 3, §3.4, §5.1, §10.1, §10.4; CT §5.2 rows M10/M11, §14; UX §4.3, §4.4, §6.5; D-0043, D-0050; src/sim/{objects,conversion}.ts; content/materials/M10.json, M11.json.
+
+You own: src/sim/objects.ts, src/sim/conversion.ts, src/sim/grid.ts, src/render/** (renderer.ts setBrushPreview), tests/fixtures/food-objects.test.ts, tests/e2e/food-objects.spec.ts (new). e1-producers adds one recorder call in conversion.ts: keep it.
+SHARED (additive):
+- content/manifest.json: enabledMaterials += M10, M11 and enabledSystems += foodObjects, one edit, sorted.
+- src/sim/commands.ts (tools-sample owns): only the kind 'placeObject' {materialId, x, y}.
+- src/sim/structures.ts (mod-builders owns the stage 8 part; touch only the Lab part: occupiedCells/applyHabitatEdit): refuse stone/wall/bead placement on a cell holding an object, counted in HabitatSkips.
+- src/sim/events.ts: EventType += 'objectEmptied' (detail: cell, kind). src/worker/snapshot.ts (e1-producers owns): visualEvents maps it to the existing VisualEvent 'objectEmptied' with its cell; inspectCell lists the cell's object (kind, remaining C per pool, N). src/worker/protocol.ts: optional CellInspect object field. src/ui/panels/Inspector.tsx: the cell line.
+- src/ui/panels/CompareText.tsx (tools-sample owns): describeChange case 'placeObject'.
+- Lab Food tray (tools-sample owns these files): src/ui/views/LabView.tsx (a tap tool 'object:<materialId>' -> placeObject; one tap = one undoable command), src/ui/panels/LabTray.tsx (trayItems 'food', itemCopy, categoryOf), src/ui/strings/lab.ts (item copy, skippedText); src/ui/styles.css swatches. The Explore Feed stays Sugar/Starch/Debris/Nutrient (src/ui/panels/FeedSheet.tsx FOODS; UX §4.3).
+- tests/helpers/trajectory.ts: register world.objects in the POST_G2_* tables only if trajectoryDigest(world, 'full') does not already hash it.
+Build:
+- placeObject: one object per cell; refused on a cell that already holds an object, on a structure or outside the mask (organisms never block an object), at the cap with 'The dish holds up to 128 food objects', and in a world without the foodObjects system or the material. A refusal changes nothing (it still takes a seq). Accepted: an external ledger input of the full inventory (pellet 10 sugar C + 1 N; wafer 6 starch C + 4 protein C + 1 N; CT §5.2).
+- Stage 3, before enzymes, objects in id order (SPEC §3.2 row 3, §5.1):
+  - pellet: releases 0.02 C/s × dt of sugar with proportional N (n × r / C remaining) into sugar/sugarN of its cell;
+  - wafer: releases 0.012 starch C/s and 0.008 protein C/s × dt as deposits into starch/starchN and protein/proteinN, each with 0.10 N per C;
+  - release never exceeds inventory; the last transfer moves the exact remainder of C and N (a pellet leaves 0.0019999999999918 C after 4,999 ticks, so the remainder moves whole at tick 5,000: compare per-tick N with a tolerance); the object then leaves the store and 'objectEmptied' is emitted once;
+  - moves are internal; markField the targets; products are usable in stage 6 the same tick.
+- Objects never move, never diffuse and are not eaten directly. Sampling (tools-sample) is the only other removal in Phase 3 and moves the remaining inventory. A world without objects runs bit-identically.
+- Preview: grid.ts brushCellOutcome's 'place' rule and renderer.ts setBrushPreview treat the snapshot's object cells (SnapshotMsg.objects) as refused, so the preview never promises what the command refuses (G7: grid.ts stays free of sim modules).
+Done when:
+- tests/fixtures/food-objects.test.ts: placement ledgered exactly (+10 C, +1 N); pellet release exactly 0.002 C and 0.0002 N per tick; the emptying tick moves the exact remainder (C and N reach exactly zero, never negative, nothing logged as roundoff); a pellet lasts 5,000 ticks; the wafer's two pools and 0.10 N per C exact to the last tick; C and N close every tick for 6,000 ticks with organisms feeding; cap, occupied and structure refusals change nothing except nextSeq; a stone on an object cell is refused and brushCellOutcome agrees; save/reload mid-release gives the identical hash, and 1× equals four quarter runs; objectEmptied once per object.
+- tests/e2e/food-objects.spec.ts (desktop): Lab -> Food -> Leaf wafer -> tap -> the object shows -> run at 4× -> its fill steps fall (read each 'snapshot' message's objects through an init script that wraps Worker, as tests/e2e/lab-tools.spec.ts watchWorker does; never pixels, no test hook in the app) -> the cell inspector shows the remaining inventory; axe clean.
+- Non-vacuity: releasing r instead of the remainder on the last tick, or skipping the input record, fails a named test.
+- Fence unchanged.`,
+  },
+  {
+    key: 'tools-sample',
+    port: 4234,
+    // critical: a saved transaction store, exact host-level Cancel (stateHash, nextSeq, log), saveFile import checks, canonSample.
+    critical: 'own',
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.5 Sample, Transfer and Clean water, with D07 transaction semantics on every world (R18). Read SPEC §3.4, §10.1, §10.4-10.7, §14.3; docs/source/D07 §09 (line 151), D01 line 359 (Life includes viral units and host-parasite pairs); UX §4.4, §5.11; D-0037 in full, D-0043, D-0049, D-0050; host.ts case 'undo'.
+
+You own: src/sim/commands.ts (food-objects adds 'placeObject'; keep the wave 2 hooks), src/sim/sampleSlot.ts, src/sim/sample.ts (new), src/sim/tools.ts (new: clean water), src/worker/{protocol,host,client}.ts, src/ui/views/LabView.tsx, src/ui/panels/LabTray.tsx, src/ui/strings/lab.ts, src/ui/panels/CompareText.tsx (owner this wave: others add their items and cases), src/ui/panels/Sample*.tsx, src/ui/strings/tools.ts, tests/sim/tools.test.ts, tests/worker/sample-transaction.test.ts, tests/e2e/sample-transfer.spec.ts (new).
+SHARED (additive): src/sim/entities.ts (an allocate-at-slot helper on EntityStore only); src/persistence/saveFile.ts (a pending sample restores; the import checks below); tests/helpers/trajectory.ts canonSample (hash each held row's original slot; D-0043); src/worker/snapshot.ts (sample preview data only; e1-producers owns it); src/ui/{state.ts, views/DishScreen.tsx, styles.css}; src/ui/panels/MoreSheet.tsx; tests/sim/view-switch.test.ts (the Tools tray pins).
+Build (D-0037):
+- Begin is host-level, not a command: pause; record the pre-begin stateHash; preview mode Life / Dissolved / Deposits / All (All excludes structures) at radius 1/3/6 with the held C/N/M. Life = organisms whose centres are in the footprint plus viral units in its cells; Dissolved = every allocated field of kind dissolved, gas or activity with companions; Deposits = starch, oil, protein, detritus and film with companion N, plus food objects.
+- Whole ownership units: a host and its parasite; the complete fungal component (any link kind) and adhesion component of any selected member; a predator and its claimed target (a valid preySlot). If any member lies outside the footprint, reject the whole selection and name each missing member (species, id, cell). Never expand the brush.
+- Take = command 'sampleTake' (paused only): each row's columns with its original slot, field amounts by cell offset, objects and genome copies move into world.sample (seq = this command's seq); slots freed; whole units keep their links and host pairs (nothing dangles, so releaseHostPair is not needed: verify); ledger closed.
+- While a sample is held the host refuses Run, Step and every other dish-changing command before applyNow with 'A sample is held — transfer, cancel or discard it first', so no seq is taken and the vacated slots and cells stay free. Undo while held acts as Cancel.
+- Cancel (host-level, exact): an inverse move into the original slots (allocate-at-slot) and cells; drop the 'sampleTake' entry from commands.log; commands.nextSeq = world.sample.seq; reset the host's rollback checkpoint, replay list and undo slot as Undo does. stateHash equals the pre-begin hash, also after a save and reload in between.
+- Discard = command 'sampleDiscard' (UI confirms first): exports the held C/N/M with ledger entries; removed life is recorded with REMOVED_SAMPLED.
+- Transfer = command 'sampleTransfer' {dx, dy}, same dish: validate every destination first (inside the mask, no structure, habitatCompatible with attachment surfaces, soft capacity 8, AGENT_CAP and FUNGAL_CAP, one object per cell, linked members stay four-adjacent); any failure rejects the whole move (slot intact, still paused). Otherwise move, never copy: fields keep their offsets; organisms keep relative positions and all state; new slots lowest-free-first in ascending original-slot order; every stored slot reference (hostSlot, parasiteSlot, preySlot, fLink*, aLink*) remapped, birthIds unchanged. Document this.
+- PROPOSED DECISION: replacing a held sample (Begin while held, after confirmation) = Discard, then Begin. On reload a pending sample restores and the UI offers Complete (Transfer) / Cancel / Discard without running time.
+- Import (D-0043; SPEC §14.3): refuse held rows with negative pools, an invalid life state, or a slot or birthId that collides with a living organism or another held row; messages end 'Nothing was loaded.'.
+- Clean water = command 'cleanWater' {points, radius, fraction 0.25 | 0.5 | 1}: remove that fraction of every dissolved non-gas field (kinds dissolved, activity, viral; companions in the same fraction) in the footprint as exports; set O2 and CO2 there to the habitat baseline per cell (the habitat's baseFields plus op fields, e.g. SEDIMENT_EDGE O2 0.2 in sediment); the CO2 difference is a carbon input or export; O2 is not ledgered; life, deposits and objects untouched.
+- Erase structure exists ('eraseStructure', tray item 'erase'): add nothing; cite tests/sim/lab-commands.test.ts. Each gesture = one command, undoable with the one-level undo.
+- Tools tray (UX §4.4): Sample and Clean water on every world, g2-recorded ones included (D-0037); Transfer while a sample is held. CompareText describeChange: sampleTake, sampleDiscard, sampleTransfer, cleanWater. Extend view-switch.test.ts (around :358 and the older-dish case, which now offers Sample and Clean water).
+Done when:
+- tests/sim/tools.test.ts: checkLedger ok at begin, after take, transfer, discard and cancel, world + slot totals constant; Take then Cancel restores the pre-begin state exactly (stateHash equal; rows, slots, fields, objects identical), also with a save/reload in between; an A01 with its X01 moves as a pair; selecting 2 of 4 chained segments (an F01 chain via linkFungal, or F02 through registryWith with allowUnimplemented; say which) is rejected naming the other 2 and changes nothing; Transfer is atomic (one invalid destination: fields, rows and world.sample unchanged; stateHash equals the pre-command world's with nextSeq + 1); a transfer moves rather than copies (source cells lose exactly what destination cells gain) and remaps references (linksValid, host pairs mutual); Discard exports exactly the held totals; Clean water at 25/50/100 % removes exactly those fractions as exports, restores the O2/CO2 baseline with the CO2 difference ledgered and leaves life, deposits and objects untouched; each import refusal.
+- tests/worker/sample-transaction.test.ts (DishHost via tests/helpers/host.ts FakeClockHost): Run, Step and an inoculate are refused while held and take no seq; Undo while held = Cancel; a reload restores the slot and offers the three actions; Complete, Cancel and Discard each work after reload; Cancel after reload gives the pre-begin hash.
+- tests/e2e/sample-transfer.spec.ts (desktop; W3-25): Lab -> Tools -> Sample (Life, radius 3) -> preview -> Confirm -> Run shows the refusal -> Transfer -> the dish runs. Cancel path: the worker's 'hash' reply before Begin equals the one after Cancel (init script wrapping Worker, as tests/e2e/lab-tools.spec.ts watchWorker/workerHash do). Clean water at 50 % on a salt patch halves its salinity. Axe clean.
+- Non-vacuity: dropping the nextSeq restore, the ownership-unit check or the slot remap fails a named test.
+- g2-replay and the fence unchanged (an empty slot is hash-neutral).`,
+  },
+  {
+    key: 'mod-anchor-light',
+    port: 4235,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.7 modules E04 Surface anchor and E07 Light seeker, and the D-0035 usable-intake clock. Read SPEC §6.4, §6.7, §9 (general rules, E04, E07), §9.19; CT §7.1, §7.2, §12.6 (E04); BUILD_DIRECTIVE P3.7; docs/source/D04 §2 row C06, §5 'E07 Light seeker', §13 ('A light seeker is trapped or resting'); content/modules/E04.json, E07.json; D-0019, D-0035, D-0045.
+MODULE RULE (STATE): register and implement; never touch content/manifest.json. Test with registryWith({ enabledModules: [...shipped, 'E04', 'E07'].sort() }). The lead's flip enables them.
+
+You own: src/sim/movement.ts and src/sim/phenotype.ts (owner this wave: e1-producers adds oil/protein terms and rules, mod-feeding an E08 foodScore call and E06 rules, mod-builders E09/E10 rules, mod-adhesion a linked-member skip: keep them), src/sim/anchor.ts, src/sim/lightSeeker.ts, src/sim/intakeClock.ts, tests/fixtures/module-e04.test.ts, tests/fixtures/module-e07.test.ts (new).
+SHARED (additive):
+- implemented.ts: IMPLEMENTED_MODULES += E04, E07. moduleRules.ts MODULE_REQUIRED_PARAMS: E04 attachSeconds, minEnergy, attachedUpkeep, detachNoIntakeSeconds, detachEnergy, lockoutSeconds; E07 baseSpeed, lightSensing, moveCostFactor, brighterBy.
+- src/sim/actions.ts releaseInvalidLinks (mod-builders owns): one line calling intakeClock.ts, then one calling anchor.ts (mod-adhesion adds its line after yours).
+- src/sim/maintenance.ts (mod-adhesion owns): replace the movement-cost line with a call into lightSeeker.ts that returns the identical expression for non-E07 carriers; add E04's anchored upkeep inside the maint/upkeep terms through anchor.ts (category 'upkeep').
+- src/sim/births.ts (f02-links owns): one hook after rekeyLinks that resets anchorState, anchorSeconds and noUsableIntakeSeconds of the retained daughter (the new one starts cleared).
+- src/sim/moduleView.ts (mod-builders owns): activeNow E04 = anchored, E07 = moving (if activeNow is still a nested ternary, turn it into a switch with default false, E01/E03/E05 unchanged); upkeepNow adds 0.10 E/s while anchored as anchor upkeep, not 'chamber'. src/ui/strings/modules.ts: upkeepText and E04/E07 texts. src/worker/protocol.ts: an optional UpkeepInspect anchor field.
+- src/sim/lineage.ts and src/ui/strings/lineage.ts (W4-03): for E07 profiles the summary reports the per-second move cost 0.10 × (0.5 + g)² instead of moveCostPerCell; 'Game rule:' says 'moving costs {v} energy per second' and the sensing line 'senses light up to {v} cells away'.
+- snapshot.ts: verify only (CUE2_MOD_E04/E07, CUE2_ANCHORED from anchorState, CUE2_SEEKING_LIGHT from FLAG.moving are packed).
+Build the clock (D-0035): intakeClock.ts advanceIntakeClock(world, i): only for an organism whose genome carries E04 or E12, noUsableIntakeSeconds += DT when FLAG.usableIntake is clear, else 0; once per tick per living organism from the release hook, before the E04/E12 checks; never written for anyone else.
+Build E04 (anchor.ts):
+- Support = a four-neighbour cell whose grid.structure is ST_STONE, ST_WALL or ST_BEAD (BUILD_DIRECTIVE P3.7; mesh is Phase 5); gel and sediment are not support. PROPOSED DECISION (owner): the dish rim (ST_OUTSIDE; SPEC §2.1) counts.
+- An Active carrier with E > 35, out of lockout, four-adjacent to support accumulates anchorSeconds; at 5 continuous seconds anchorState = 1. A gap in adjacency or E ≤ 35 resets the clock.
+- Anchored: speed 0 (movement.ts skips it through anchorState: no self-propulsion, no movement cost); +0.10 E/s upkeep; feeding and predation ordinary. Never set FLAG.attached (movement's gate and PREY_FREE read it). PROPOSED DECISION (owner): an anchored carrier stays 'free' for the CT §3.2 prey rules.
+- Detach at noUsableIntakeSeconds ≥ 10, when support disappears (an erased stone) or at E < 15; then a 10 s reattach lockout (anchorLockout). Resting releases (the hook runs for non-Active organisms); a woken organism attaches again. Division resets both daughters (SPEC §9.19).
+- Non-motile carriers (Y01, Y02) anchor as a state and pay the upkeep; movement unchanged. Transport class unchanged. Reason ANCHORED exists.
+Build E07 (lightSeeker.ts; W4-04, W4-09):
+- phenotype.ts: for E07 carriers the speed and sensing lines use baseSpeed 0.15 and lightSensing 2 in place of def.speed / def.sensingRadius; activeLoci activates L_MOTILITY and L_SENSING (one line each, like E03). The movement gate reads a profile field instead of sp.selfPropelled alone, bit-identical for existing species.
+- Cost 0.10 × (0.5 + g_mot)² × dt only on ticks it actually self-propels; it replaces 0.20 × cells × factor, never both (SPEC §6.7).
+- When Active, unheld and unanchored, each 0.5 s decision runs the ordinary decide() (same candidates, edge-checked trace, habitat rules) with F = effective light (world.derived.light) in 0.5·F + 0.4·S − 0.1·C; ties det(seed, 'tiebreak', tick, birthId). If no candidate is brighter than its cell by ≥ 0.01 it stays (no wander). No crowd avoidance beyond −0.1·C. On module loss it stays where it is.
+Done when:
+- tests/fixtures/module-e04.test.ts: anchors on exactly the 50th tick of continuous adjacency (not the 49th); a gap resets; the E gate; upkeep exactly 0.01 E per tick while anchored with zero movement; each detach cause (100 ticks without usable intake via the clock, stone erased, E < 15) is followed by a 100-tick lockout; resting (an E03 carrier or a labelled forced state) releases; daughters unanchored; a Y01 carrier anchors with no movement change; one rim cell supports; an anchored B01 stays valid prey for P02; the clock stays 0 for non-carriers and resets on usable intake.
+- tests/fixtures/module-e07.test.ts (W4-10): an A01 carrier in a light gradient (set grid.lightBase per cell, bump grid.geometryVersion, call updateDerived; shade paint only gives ×0.1 steps) moves to brighter cells only when the gain is ≥ 0.01, and a 0.009 step is ignored; pays exactly 0.10 × (0.5 + g)² × dt on moving ticks and nothing on stationary or trapped ticks; never crosses a wall; motility and sensing loci are active for carriers in phenotype, mutation and branch qualification; the lineage lines.
+- tests/fixtures/module-accounting.test.ts passes; Σ energy spent = Σ ledger categories.
+- Non-vacuity: removing the gap reset, the lockout or the 0.01 rule fails a named test. Fence unchanged.`,
+  },
+  {
+    key: 'mod-feeding',
+    port: 4236,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.7 modules E06 Shade collector and E08 Debris feeder. Read SPEC §6.4, §6.5, §7.3, §9 (general rules, E06, E08); CT §3.1 (E08 row), §7.1, §7.2; docs/source/D04 §5 (E06, E08) and §13 ('Detritus feeder captures live prey'); content/modules/E06.json (lightHalf 0.35, ceilingFactor 0.7), E08.json; D-0019.
+MODULE RULE (STATE): register and implement; never touch content/manifest.json. Test with registryWith({ enabledModules: [...shipped, 'E06', 'E08'].sort() }) on A01 (E06) and P01 (E08) carriers. The lead's flip enables them.
+
+You own: src/sim/intake.ts, src/sim/debrisFeeder.ts (new), tests/fixtures/module-e06.test.ts, tests/fixtures/module-e08.test.ts (new).
+SHARED (additive):
+- implemented.ts: IMPLEMENTED_MODULES += E06, E08. moduleRules.ts MODULE_REQUIRED_PARAMS: E06 lightHalf, ceilingFactor (E08 has none).
+- src/sim/phenotype.ts (mod-anchor-light owns): one branch each in the modules loop. Keep × 0.70 out of Profile.q: the FLAG.usableIntake threshold and the lineage intake line read prof.q.
+- src/sim/movement.ts foodScore (mod-anchor-light owns): one call into debrisFeeder.ts.
+- src/sim/entities.ts: append FLAG.detritusIntake = 1 << 13 only (no column, no schema change).
+- src/worker/snapshot.ts cue2Of: set CUE2_DETRITUS_INTAKE from FLAG.detritusIntake.
+- src/sim/moduleView.ts (mod-builders owns): activeNow E06 = it photosynthesized this tick, E08 = FLAG.detritusIntake (if activeNow is still a nested ternary, turn it into a switch with default false, E01/E03/E05 unchanged); src/ui/strings/modules.ts: E06/E08 texts.
+- src/sim/contacts.ts: verify only.
+Build E06 (SPEC §9; W4-13):
+- On the photosynthetic route only: lightResponse = min(1, light/0.35) in place of the linear light factor, and the intake ceiling × 0.70 (the feeding locus applies after); oxygen, CO2 and nutrient limits still apply.
+- The leading-constraint check compares the carrier's light response, not raw light, with the other supplied fractions; it still reports the measured light as the value the Lab line prints.
+Build E08 (SPEC §9, §6.5; W4-11, W4-12, W4-14):
+- With no held meal (mealC = 0) a carrier requests local detritus (with its bound detritusN) under its ordinary ceiling × suitability, with aerobic conversion: O2 0.30 per C, 30 E per C, the N rules of field feeding. A held meal has exclusive priority. A capture fills mealC in stage 5, so stage 6 already takes the meal route that tick: verify it, and add a marker only if a capture can leave mealC = 0. It grants digestion, never new prey.
+- Stage 6 sets FLAG.detritusIntake on a detritus-route tick with Cs > 0 and clears it with FLAG.feeding at the start of stage 6.
+- Movement: for E08 carriers foodScore returns max(existing F, avail(detritus)), never a sum; pursuit of a valid prey keeps priority (it runs before decide()).
+- No carrier exists in shipped worlds, so every shipped world runs bit-identically.
+Done when:
+- tests/fixtures/module-e06.test.ts: at light 0.10 the photosynthetic request is exactly 0.70 × (0.10/0.35) = 0.20 of the ancestral ceiling (0.10 without E06); at light 1.0 exactly 0.70; at light 0.50 the carrier is not LIGHT_LIMITED; at light 0.10 it is, with value 0.10, when that response (0.2857) is the smallest fraction; the ledger closes.
+- tests/fixtures/module-e08.test.ts: detritus intake only with an empty meal; a capture on the same tick leaves detritus untouched; bound N moves with detritus carbon exactly; no new prey species; with detritus in view and no prey it moves toward the detritus, with a prey in range it still pursues; the score is the max, not the sum; FLAG.detritusIntake only on detritus ticks; the ledger closes and Σ energy earned matches 30 E per C.
+- Non-vacuity: using raw light in the leading-constraint check, or summing the scores, fails a named test.
+- tests/fixtures/module-accounting.test.ts passes. Fence unchanged.`,
+  },
+  {
+    key: 'mod-builders',
+    port: 4237,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.7 modules E09 Protein release and E10 Matrix builder, the final stage 8 reservation order, and the C08 shared-budget fixture with real modules. Read SPEC §3.2 row 8, §5.3, §7.1, §9 (general rules, E09, E10); CT §7.1, §12.6; docs/source/D04 §2 row C08, §6 (E09, E10), §9, §13 ('Two matrix builders fill the same cell'); content/modules/E09.json (emitRate 0.02, minEnergy 35, emitCost 0.4, localCap 1), E10.json (minEnergy 35, minBodyMultiple 1.2, filmCap 0.5, rate 0.02, energyPerCarbon 2); D-0045 in full, D-0047.
+MODULE RULE (STATE): register and implement; never touch content/manifest.json. Test with registryWith({ enabledModules: [...shipped, 'E09', 'E10'].sort() }). The lead's flip enables them.
+
+You own: src/sim/structures.ts (the stage 8 part only, top of file through stageStructures; never the Lab habitat-edit section, where food-objects adds one refusal; f02-links fills the fungalTransportPass body), src/sim/actions.ts (mod-anchor-light and mod-adhesion add lines in releaseInvalidLinks), src/sim/construction.ts, src/sim/secretion.ts, src/sim/film.ts (only to share a helper), src/sim/matrixBuilder.ts (new), src/sim/moduleView.ts and src/ui/strings/modules.ts (owner: the other module builders add their cases), tests/fixtures/shared-budget.test.ts, tests/fixtures/module-accounting.test.ts, tests/sim/stage8-order.test.ts, tests/fixtures/module-e09-e10.test.ts (new).
+SHARED (additive):
+- implemented.ts: IMPLEMENTED_MODULES += E09, E10. moduleRules.ts MODULE_REQUIRED_PARAMS: E09 emitRate, minEnergy, emitCost, localCap; E10 minEnergy, minBodyMultiple, filmCap, rate, energyPerCarbon.
+- src/sim/phenotype.ts (mod-anchor-light owns): E09 -> Profile.protein {source 'E09', the world's recorded params}; E10 -> Profile.builder {source 'E10', minEnergy 35, ratePerSecond 0.02, bodyFloor 1.2, energyPerC 2} from the record.
+- src/worker/snapshot.ts cue2Of: CUE2_RELEASING_PROTEIN; tools/sim-tune.ts: its secreting tally reads !== 0.
+Build:
+- moduleView activeNow: if still a nested ternary, make it a switch with default false first (E01/E03/E05 unchanged), so each module builder adds one case.
+- PROPOSED DECISION (W4-16 alternative): c.secreting becomes a producer bit set (starch 1, oil 2, protein 4; producerRun ORs its bit); FLAG.secreting stays the OR; starch stays 1, so B06, E01 carriers and g2 hashes are unchanged. activeNow E01 reads bit 1, E09 bit 4; CUE2_RELEASING_PROTEIN = bit 4. FLAG 1 << 12 stays unused.
+- E09: moduleAction('E09', producerApplies('protein', 'E09'), producerRun('protein')) after E01 in SHIPPED: exactly E_PROTEIN secretion (0.02 activity/s, 0.40 E/s, E > 35, protein deposit in the cell or a four-neighbour, local activity < 1.0) with the world's recorded E09 params. It grants no broth feeding; moduleView/strings say 'Produces broth; cannot consume broth' when the species cannot eat broth.
+- E10 (matrixBuilder.ts): moduleAction('E10', …) after E09: while Active, remaining E > 35, B > 1.2 B0' and local film < 0.50, request min(0.02 × dt, B − 1.2 B0', 0.50 − film) body C, limited to what the remaining energy can pay at 2 E per C, through requestConstruction(cell, c, 2): one film snapshot, proportional headroom shared with B02 and every builder, committed together, 2 E charged per accepted C only ('construction'), the rest returned, N proportional. No extra protection; film rules unchanged. activeNow E10 = its request was accepted in this tick's pass (an observation-only value, never hashed or saved).
+- Document the final stage 8 table in the structures.ts header: mandatory transitions -> natives by NativeAbility index (E_STARCH 0, E_OIL 1, E_PROTEIN 2, BIOFILM 3) -> modules E01, E09, E10 ascending; and where the others act: the usable-intake clock, E04 anchoring and E12 severance in the release hook; E04/E07 in movement and stage 7; E06/E08 in intake; E12 links in stage 5, upkeep in stage 7.
+- Update the SHIPPED pin in tests/sim/stage8-order.test.ts.
+Done when:
+- tests/fixtures/shared-budget.test.ts (C08, W4-17), registryWith: a B04 carrying E01 + E09 + E10 with starch and protein beside it, B > 1.2 B0' + 0.002 and film ≤ 0.498; energy entering stage 8 set with step's afterStage hook at stage 7 (labelled test state) to 35.042. Order E01, E09, E10: E01 fires (35.002 left), E09 fires (34.962), E10 is refused with its energy reason. Test-only order E10, E01, E09: E10 reserves 0.004 (35.038), E01 fires (34.998), E09 is refused. Nothing is double-spent; Σ energy spent = Σ ledger categories, construction included.
+- tests/fixtures/module-e09-e10.test.ts: E09 pays exactly 0.04 E per emitting tick, each refusal code; a B04 + E09 never takes broth; the D-0045 two-producer cases: an F02 (native starch, via registryWith with F02 enabled; allowUnimplemented only if f02-links has not landed, say so) gaining E09, and a B04 with E01 + E09: SECRETING if either released, each bit set by its own producer, the ledger closes; two E10 builders and a B02 in one cell never push film above 0.50; proportional scaling exact; each builder charged 2 E × accepted C; the unused reservation returns; N moves proportionally; diverted B delays division.
+- tests/fixtures/module-accounting.test.ts: the surcharge is charged once per module (E09, E10).
+- The stage8-order 'bit-identical' tests still pass. Non-vacuity: removing the energy limit on E10's request, or making secreting a plain 1 again, fails a named test.
+- Fence unchanged under the shipped manifest.`,
+  },
+  {
+    key: 'mod-adhesion',
+    port: 4238,
+    // critical: writes saved adhesion link columns and pairing clocks; a dangling link would make an autosave unloadable.
+    critical: true,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.7 module E12 Colony adhesion. Read SPEC §3.2 rows 5, 7 and 8, §6.8, §9 (general rules, E12), §9.19; CT §7.1, §7.2 (E13 exclusion), §12.6 (E12); R17 (links share nothing without E15); docs/source/D04 §6 'E12 Colony adhesion' and §13 ('A cluster member divides or dies', 'A gate is painted through a cluster'); content/modules/E12.json; D-0035, D-0043, D-0049 (contact kind 4), D-0050.
+MODULE RULE (STATE): register and implement; never touch content/manifest.json. Test with registryWith({ enabledModules: [...shipped, 'E12'].sort() }) on B01/B04/B06 carriers. The lead's flip enables it.
+
+You own: src/sim/contacts.ts, src/sim/maintenance.ts (mod-anchor-light replaces the movement-cost line with a lightSeeker.ts call and adds anchor upkeep: keep them), src/sim/adhesion.ts (new), tests/fixtures/module-e12.test.ts (new).
+SHARED (additive):
+- implemented.ts: IMPLEMENTED_MODULES += E12. moduleRules.ts MODULE_REQUIRED_PARAMS E12: linkDistance, linkSeconds, minEnergy, linkCost, maxLinks, maxComponent, perLinkUpkeep, severNoIntakeSeconds, severEnergy, severDistance, lockoutSeconds.
+- src/sim/movement.ts (mod-anchor-light owns): one call: linked members stop self-propelling.
+- src/sim/births.ts (f02-links owns): one hook after rekeyLinks: remove the parent's adhesion links, so both daughters start unlinked.
+- src/sim/actions.ts releaseInvalidLinks (mod-builders owns): one call into adhesion.ts after the anchor call.
+- src/sim/intakeClock.ts (mod-anchor-light's): use advanceIntakeClock. If it does not exist yet, create it exactly as specified (only for E04 or E12 carriers, noUsableIntakeSeconds += DT without FLAG.usableIntake, else 0, once per tick per living organism from the release hook before the E04/E12 checks) with its one hook line, and say so.
+- src/sim/events.ts: reuse 'linkFormed'/'linkBroken' with detail {kind: 'adhesion'} (add them if f02-links has not) and add 'linkRefused'.
+- src/sim/moduleView.ts (mod-builders owns): activeNow E12 = at least one valid link (if still a nested ternary, make it a switch with default false, E01/E03/E05 unchanged); upkeepNow adds 0.01 E/s × incident links. src/ui/strings/modules.ts: upkeepText and E12 text. src/worker/protocol.ts: an optional UpkeepInspect link-upkeep field.
+- src/worker/snapshot.ts: verify only (CUE2_MOD_E12, CUE2_LINKED and 'links' kind 3 are packed). src/sim/sample.ts (tools-sample): verify adhesion components are whole ownership units and move with their links; report, do not edit.
+Build:
+- Pairing in stage 5 after attacks, parasite attachment and infection: two free, Active carriers of the same ancestor, both E ≥ 20, out of lockout, whose centres stay within 0.5 cells continuously for 5 s. PROPOSED DECISION: 'free' = not FLAG.attached and not E04-anchored. Each tracks its lowest-birthId eligible neighbour in adhPartner/adhSeconds; the clock resets when the pair separates or the candidate changes.
+- Linking: pairs resolve greedily in sorted-birthId order; each partner pays 2 E once (PROPOSED DECISION, G17 21: ledger category 'other'); rejected pairs pay nothing; any draw uses contact kind 4 (none expected).
+- Caps: ≤ 2 links per organism, ≤ 8 members per component (adhesionComponent); a link that would exceed a cap fails with a 'linkRefused' event and no cost.
+- Linked members stop self-propelling; +0.01 E/s per incident link in stage 7 ('upkeep'); links convey nothing (R17).
+- Severance in the release hook, each followed by a 10 s relink lockout (adhLockout) for the survivors: noUsableIntakeSeconds ≥ 10, E < 15, entering dormancy (not Active), module loss, forced separation > 0.75 cells. Death and capture already remove links (removeAllLinks); division removes them (births hook); sampling moves whole components. Newborns start unlinked; members count individually; no prohibited edges exist before Phase 5.
+- Saves: every path leaves linksValid true at the end of every tick, so an autosave always loads (the import refuses dangling links, D-0043).
+Done when:
+- tests/fixtures/module-e12.test.ts: the link forms on exactly the 50th tick, not the 49th; the E ≥ 20 gate; each partner pays 2 E once; rejected pairs pay nothing; the degree-2 and component-8 caps (the 9th member fails with an event; genomes unchanged); the result depends only on birthIds (permuting slots gives the same pairs); linked members do not move; upkeep is exactly 0.001 E per link per tick; each severance cause is followed by a 100-tick lockout; division and death remove incident links and survivors stay valid (D04 §13); over a 2,000-tick run with E12 carriers dividing, dying and being eaten, linksValid holds and buildSaveFile -> loadSaveFile succeeds after every 100 ticks; save/reload mid-pairing gives an identical hash 100 ticks later; 1× equals four quarter runs; sampling half a cluster is rejected.
+- tests/fixtures/module-accounting.test.ts passes with the link cost category included.
+- Non-vacuity: removing the separation reset, the component cap or the division hook fails a named test.
+- Fence unchanged.`,
+  },
+]
+
+// The runner reads WAVE_TASKS.
+
+
+const WAVE_ID = 'g3-wave-3'
+
+// ---- runner (docs/agent/g3-runner-ft.workflow.js.txt)
+// A = { wave, state, tasks: [{ key, port, prompt, critical?: true | 'own', finish?: '<resume note>' }], only?: ['key', ...], verifyGroups?: [['key', ...], ...] }
+// critical: 'own' → its own saves verifier; critical: true → one saves verifier shared by all such tasks.
+const A = { wave: WAVE_ID, state: STATE, tasks: WAVE_TASKS, verifyGroups: [['e1-producers', 'f02-links', 'food-objects', 'tools-sample'], ['mod-anchor-light', 'mod-feeding', 'mod-builders', 'mod-adhesion']] }
+const WAVE = A.wave
+const R = `docs/reports/reviews/${WAVE}`
+const TASKS = A.only ? A.tasks.filter((t) => A.only.includes(t.key)) : A.tasks
+const KEYS = TASKS.map((t) => t.key)
+
+const PRE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Phases 0–2 are tagged g0/g1/g2. ${A.state} You build part of Phase 3 "Launch Ecology" (docs/BUILD_DIRECTIVE.md "Phase 3"). Canonical rules: docs/PIXELMEBA_IMPLEMENTATION_SPEC.md (SPEC), docs/CONTENT_TABLES.md (CT, every number), docs/ARCHITECTURE.md (ARCH), docs/UX_SPEC.md (UX), docs/CONFLICT_REGISTER.md. docs/DECISIONS.md holds rulings: read every title, and in full the ones your assignment names. Most relevant: D-0006, D-0007 and D-0008 were written for Phase 3; D-0019 schema bump + migration by copy + old-save test; D-0024/D-0028 Lab edits, structures as content; D-0030 founder modes, import refusal of unimplemented modules; D-0032 module marks in the atlas; D-0033 keep the open dish first; D-0035 world schema 4 with a hash-neutral stateHash; D-0036 version bumps (buildPhase 3, contentVersion 2; simulationVersion stays 3); D-0037 Sample; D-0038 film is eaten as detritus; D-0039 tool texts as content; D-0043 links as entity columns; D-0044 chemistry and habitats as built; D-0045 the stage 8 reservation framework as built; D-0046 organism art as built. Contract (CLAUDE.md): determinism (randomness only via det(seed, stream, ...keys) in src/sim/rng.ts; prefer an existing stream with a new KIND key; add a NEW stream id only if unavoidable and never reuse one; never Math.random, Date, or Map/Set/object-key iteration order in src/sim), conservation ledger (every material move is internal and balanced, or an input/export), no hidden rescue, honest labels ("coincided with" until a mechanism supports "because"; never "superior/advanced/perfect/adapted/immune"), content is validated JSON, the UI changes the world only through commands, saves are sacred (no world schema bump in this wave unless your assignment says so).
+
+PHASE 3 DETERMINISM FENCE. tests/fixtures/g2-replay.test.ts (saves written by the g2 build load and continue bit-identically) and the four tests/fixtures/trajectory-fence*.test.ts files (each registered recipe's biology digest under registryWith(G2_LISTS) and under the shipped manifest) must pass after your change. Gate every new rule on the world's own recorded manifest through src/sim/gates.ts (worldHasSystem / worldHasSpecies / worldHasModule; or world.fields[id] !== undefined, world.modules[id] !== undefined), or on the presence of the organisms it concerns — never on a build constant — so an old save never gains a Phase 3 rule. Never hard-code stateHash literals in new tests; compare relationally or with tests/helpers/trajectory.ts trajectoryDigest(world, 'g2' | 'full'). tests/helpers/trajectory.ts is SHARED only to register new post-g2 state in its POST_G2_* tables. If your work would change a fence value, do not make that change: report "FENCE: <recipe> <why>". Only the lead updates the fence; you may run "npx tsx tools/fence-update.ts --add <recipe>" for recipes you create.
+
+CONTENT AND MANIFEST. content/manifest.json is SHARED: only insert the IDs your assignment names (arrays sorted ascending), never remove IDs, never change version fields unless your assignment says so. Add the native abilities/modules you implement to src/sim/content/implemented.ts (additive). For content another builder of this wave enables, test through registryWith({...}) (allowUnimplemented only for species whose ability another builder of this wave implements; say so). After changing anything under content/ run "npx tsx tools/content-validate.ts --write" (a contentHash or atlas mismatch caused by another agent's in-flight edit is not your bug; say so). An enabled species needs its atlas frames (all 14 Phase 3 species have them since wave 1), an enabled module its feature-mark frames (D-0032). Update any test that pins a shipped list your edit moves (e.g. tests/worker/host.test.ts speciesIds).
+
+OWNERSHIP. The lead commits: do NOT run git add/commit/stash/checkout/reset/rm/restore and do not delete files you did not create. Other agents edit the same working tree right now. Edit ONLY the files your assignment lets you own. SHARED files: additive edits only (new functions, cases, fields, or a one-line hook call into your own new file), re-read the file immediately before each edit, keep edits small, never reformat/reorder/rename code you did not write. Only the wave's art owner edits art/src/** or runs npm run art:build. Never run prettier on files you do not own. If you need a change elsewhere, describe it precisely in your report. Line numbers in your assignment are hints: find code by symbol (git grep -n) before editing.
+
+TESTS (fast track). The machine has 2 CPUs shared by several agents. Run targeted vitest files only (never the whole suite), long commands with run_in_background and an until-loop wait (never a bare sleep). Browser tests: ONLY your own new or changed journeys, on the desktop project only, with your own port and build folder: E2E_PORT=<port> E2E_OUTDIR=tmp/dist-<key> npx playwright test <your specs> --project=desktop. Do not re-run other specs and do not run the phone projects: the lead runs the whole three-project suite at the gate. Playwright silently reuses a server already on your port: stop your port before and after each run (lsof -t -i :<port> | xargs -r kill; never pkill). The e2e app has no test hook: journeys that need the worker wrap Worker in an init script and speak the protocol, as tests/e2e/lab-tools.spec.ts watchWorker/workerHash do. Timings taken while others run are inflated; leave perf numbers to the lead. NEVER end your turn while a command you started is still running: no notification can reach you after you return, so wait for it in the same turn (an until-loop on its output file or exit marker) and only then write your report; your final message must be the full report, never a promise to report later.
+
+BEFORE FINISHING: npx tsc -p tsconfig.json --noEmit and npx eslint <your files> clean; npx vitest run tests/fixtures/g2-replay.test.ts tests/fixtures/trajectory-fence tests/fixtures/conservation-closed-lid.test.ts tests/fixtures/determinism.test.ts <your tests> all pass; your own e2e journeys pass on desktop; screens you touched have no serious/critical axe violations (expectNoSeriousA11yViolations), touch targets ≥ 48 px and text ≥ 16 px. Put proposed decisions in your report as "PROPOSED DECISION: …".`
+
+const FINISH_NOTE = (what) => `IMPORTANT — RESUMING INTERRUPTED WORK. A previous builder with exactly this assignment was cut off; its uncommitted work is in the working tree (git status / git diff). ${what} Do NOT start over and do not discard its work. First audit the existing work against EVERY item of the assignment's Build and "Done when" lists: per item DONE (file:line + the test that proves it, re-run now) / PARTIAL / MISSING / WRONG. Then complete everything PARTIAL/MISSING/WRONG and re-run your tests.`
+const REPORT = (key, suffix) => `When you finish, write your final report ALSO to ${R}/${key}-${suffix}.md (create the folder if needed; this is the only docs file you may create), then return the same report as your final message.`
+const BUILD_FINAL = `Final message: a plain report — a checklist of every Build and "Done when" item (DONE with file:line and the proving test / NOT DONE and why), files created/changed, what each test proves (and how you checked it fails without the mechanism), commands with results (paste the pass/fail summary lines), FENCE notes, bugs noticed elsewhere, proposed decisions.`
+
+const SAFE = (dir, port) => `Do NOT edit any repository file except your own report file named below, and do NOT run git add/commit/stash/checkout/reset/restore. Scratch goes in tmp/${dir}/ (git-ignored). 2 CPUs shared: targeted commands, generous timeouts, run_in_background + an until-loop for long runs. Browser tests only to prove a UI problem you suspect: E2E_PORT=${port} E2E_OUTDIR=tmp/dist-${dir}, desktop project only; stop only that port before and after (lsof -t -i :${port} | xargs -r kill). Never pkill. Never end your turn while a command you started is still running: wait for it first (no notification reaches you after you return).`
+const RULES_LENS = `LENS: rules, determinism, conservation, tests and player-facing truth. Check every rule and number against the cited canonical docs (quote the doc line when you claim a mismatch). Run tests/fixtures/g2-replay.test.ts, tests/fixtures/trajectory-fence (the four-file prefix), tests/fixtures/conservation-closed-lid.test.ts and the builders' new tests yourself. Read the diff (git status / git diff; new files are untracked). Look for: vacuous tests or weaker proxies (would the test fail if the mechanism were deleted? try it with a load-time mutant under tmp/, never by editing tracked files); rules gated on a build constant instead of the world's manifest; determinism leaks (Math.random, Date, Map/Set/object-key iteration in src/sim, reused RNG streams, float order changed for existing species); unledgered material moves; save-shape changes without a schema bump and migration; hard-coded stateHash literals; edits outside a task's ownership; non-additive edits to SHARED files; manifest or version-field edits no assignment allowed; and, by reading the UI code and strings, visible claims that do not trace to a measured value or reason code, marks or animations without the state behind them, and copy against UX_SPEC tone.`
+const SAVES_LENS = `LENS: saves and determinism only, for the task(s) named below. Prove or refute: same seed + content + command log gives the identical stateHash at 1×, at 4× (run(world, n) vs four quarter runs), and across serialize → deserialize and saveFile build → load at awkward moments (mid-transaction, right after the new state appears, right before it ends); g2 saves load and continue bit-identically; any new saved state is canonical (order-independent), validated on import (refused with a message that ends "Nothing was loaded."), counted in the ledger, and either hash-neutral while empty or deliberately hashed; nothing outside src/sim draws simulation randomness. Write load-time probes under tmp/; never edit tracked files.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+const graded = (v) => (v && Array.isArray(v.problems) ? v.problems.filter((p) => /^(BLOCKER|MAJOR|MINOR)/.test(p.trim())) : [])
+const blocking = (ps) => ps.filter((p) => /^(BLOCKER|MAJOR)/.test(p.trim()))
+const keyOf = (p) => {
+  const m = /^\s*(?:BLOCKER|MAJOR|MINOR)\s*\[([^\]]+)\]/.exec(p)
+  return m && KEYS.includes(m[1].trim()) ? m[1].trim() : null
+}
+const FORMAT = `Prefix every problem with its grade and the task key it belongs to, exactly like "MAJOR [${KEYS[0]}] <file:line> — <what is wrong> — <repro>" (task keys: ${KEYS.join(', ')}; use [lead] for a problem no single task owns). Most severe first. Add "VERIFIED OK — <item> — <evidence>" entries for parts that hold. ok=false if any BLOCKER or MAJOR.`
+
+log(`${WAVE}: ${TASKS.length} task(s): ${KEYS.join(', ')}`)
+
+phase('Build')
+const builds = await parallel(
+  TASKS.map((t) => () =>
+    agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\n${t.finish ? FINISH_NOTE(t.finish) + '\n\n' : ''}${t.prompt}\n\n${REPORT(t.key, 'build')} ${BUILD_FINAL}`, {
+      label: `${t.finish ? 'finish' : 'build'}:${t.key}`,
+      phase: 'Build',
+      effort: 'high',
+    }),
+  ),
+)
+const built = {}
+TASKS.forEach((t, i) => {
+  built[t.key] = builds[i] ? String(builds[i]) : 'NO REPORT (the builder failed or was skipped)'
+})
+log(`builders done: ${TASKS.filter((t, i) => builds[i]).map((t) => t.key).join(', ')}`)
+
+
+phase('Verify')
+// Rules verifiers: one per group in A.verifyGroups (task keys), else one over the whole wave.
+const VGROUPS = (A.verifyGroups || [KEYS]).map((g) => TASKS.filter((t) => g.includes(t.key))).filter((g) => g.length)
+const verifyJobs = [
+  ...VGROUPS.map((group, gi) => () =>
+    agent(`You are an adversarial wave verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-${WAVE}-${gi}`, 4390 + gi)}
+Wave ${WAVE} ran ${TASKS.length} builders in one working tree; their work is uncommitted (git status / git diff). You verify ${group.length === TASKS.length ? 'all of them' : `these ${group.length}: ${group.map((t) => t.key).join(', ')} (others verify the rest; read their diffs only where they meet yours)`}. Assignments and reports:
+${group.map((t) => `=== TASK ${t.key} (port ${t.port}) ===\nASSIGNMENT:\n${t.prompt}\n\nBUILDER REPORT:\n${built[t.key]}`).join('\n\n')}
+
+${RULES_LENS}
+Try to REFUTE that each assignment is done correctly, completely and honestly — every item of its Build and "Done when" lists. ${FORMAT} Write the same list to ${R}/wave-verify${VGROUPS.length > 1 ? `-${gi + 1}` : ''}.md.`, { label: `verify:${WAVE}${VGROUPS.length > 1 ? `:${gi + 1}` : ''}`, phase: 'Verify', schema: VERDICT, effort: 'high' }),
+  ),
+  // Saves/determinism lens: one verifier per task marked critical: 'own'; one shared verifier for every task marked critical: true.
+  ...[...TASKS.filter((t) => t.critical === 'own').map((t) => [t]), ...(TASKS.some((t) => t.critical === true) ? [TASKS.filter((t) => t.critical === true)] : [])].map((group, i) => () =>
+    agent(`You are an adversarial saves/determinism verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-saves-${i}`, 4396 + i)}
+Task(s) ${group.map((t) => t.key).join(', ')} of wave ${WAVE}; their work is uncommitted in the tree with other builders' work.
+${group.map((t) => `=== TASK ${t.key} ===\nASSIGNMENT:\n${t.prompt}\n\nBUILDER REPORT:\n${built[t.key]}`).join('\n\n')}
+
+${SAVES_LENS}
+${FORMAT} Write the same list to ${R}/saves-verify-${group.map((t) => t.key).join('+')}.md.`, { label: `verify:saves:${group.map((t) => t.key).join('+')}`, phase: 'Verify', schema: VERDICT, effort: 'high' }),
+  ),
+]
+const verdicts = (await parallel(verifyJobs)).filter(Boolean)
+let problems = verdicts.flatMap(graded)
+const toLead = problems.filter((p) => !blocking([p]).length || keyOf(p) === null)
+log(`verify: ${verdicts.length} verdict(s), ${problems.length} graded item(s), ${blocking(problems).length} BLOCKER/MAJOR`)
+
+const rounds = []
+for (let round = 1; round <= 2; round++) {
+  const open = blocking(problems).filter((p) => keyOf(p) !== null)
+  if (!open.length) break
+  const fixKeys = KEYS.filter((k) => open.some((p) => keyOf(p) === k))
+  log(`fix round ${round}: ${fixKeys.join(', ')}`)
+  phase('Fix')
+  const fixes = await parallel(
+    fixKeys.map((k) => () => {
+      const t = TASKS.find((x) => x.key === k)
+      const mine = problems.filter((p) => keyOf(p) === k)
+      return agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\nYou are the round-${round} fixer for this assignment (the work is in the tree; do not start over):\n---\n${t.prompt}\n---\nThe adversarial verifier found these problems in it (full lists: ${R}/wave-verify*.md and saves-verify-*.md${round > 1 ? `, and ${R}/wave-reverify${round - 1}.md` : ''}):\n---\n${mine.join('\n')}\n---\nFix EVERY BLOCKER and MAJOR, and every MINOR that is cheap and inside your files. For each behavioural problem add or tighten a test that fails on the old behaviour and passes now. If a problem is wrong (the verifier misread a rule), say why with quotes from the canonical docs instead of changing code. If a fix needs a file outside your ownership, make it only if it is small and additive, or describe it precisely for the lead. Re-run your unit tests, the fence fixtures and your own e2e journeys (desktop) before finishing. ${REPORT(k, `fix${round}`)} Final message: per problem FIXED (how, which test) / NOT A PROBLEM (why, quotes) / NOT FIXED (why); files changed; commands + results.`, { label: `fix${round}:${k}`, phase: 'Fix', effort: 'high' })
+    }),
+  )
+  const fixReports = fixKeys.map((k, i) => `=== FIXER ${k} ===\n${fixes[i] ? String(fixes[i]) : 'NO REPORT'}`).join('\n\n')
+  const fixedProblems = problems.filter((p) => fixKeys.includes(keyOf(p)))
+  const rv = await agent(`You are the adversarial re-verifier for wave ${WAVE} of Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`reverify${round}-${WAVE}`, 4394)}
+The assignments of the fixed tasks:
+${TASKS.filter((t) => fixKeys.includes(t.key)).map((t) => `=== TASK ${t.key} ===\n${t.prompt}`).join('\n\n')}
+
+The verifier found these problems:
+---
+${fixedProblems.join('\n')}
+---
+Round-${round} fixers reported:
+${fixReports}
+
+${RULES_LENS}
+For EACH problem try to REFUTE that it is fixed: reproduce the original finding against the current tree, read the diff, check the new test fails on the old behaviour (load-time mutant under tmp/), and check nothing regressed (the touched unit tests and the fence fixtures). ${FORMAT} Write the same list to ${R}/wave-reverify${round}.md.`, { label: `reverify${round}:${WAVE}`, phase: 'Fix', schema: VERDICT, effort: 'high' })
+  rounds.push({ round, fixKeys, fixes: fixes.map((f) => (f ? String(f) : null)), reverify: rv })
+  if (!rv) break
+  const unfixed = problems.filter((p) => !fixKeys.includes(keyOf(p)))
+  problems = [...unfixed, ...graded(rv)]
+}
+
+const remaining = blocking(problems)
+log(`${WAVE}: ${remaining.length ? `${remaining.length} BLOCKER/MAJOR remain` : 'no BLOCKER/MAJOR remains'}; ${problems.length - remaining.length} MINOR for the lead`)
+return { wave: WAVE, built, verdicts, rounds, remaining, minors: problems.filter((p) => !blocking([p]).length), toLead }
