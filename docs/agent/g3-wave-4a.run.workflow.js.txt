@@ -1,0 +1,477 @@
+export const meta = {
+  name: 'g3-wave-4a',
+  description: 'Phase 3 wave 4, stage 1 (fast track): field-guide (P3.8), experiments-curated (P3.9), g3-fixtures (G3 gate fixtures), audio (P3.10); two rules verifiers; fix rounds only for BLOCKER/MAJOR',
+  phases: [
+    { title: 'Build', detail: 'four builders, two at a time, effort high; unit tests + own e2e on desktop' },
+    { title: 'Verify', detail: 'two rules verifiers: field-guide + audio; experiments-curated + g3-fixtures' },
+    { title: 'Fix', detail: 'only tasks with a BLOCKER/MAJOR; at most two rounds' },
+  ],
+}
+
+// ---- wave 4 tasks (docs/agent/g3-wave-4.tasks.js.txt); this run = stage 1 only (A.only). The experiments-curated saves
+// lens is folded into its rules verifier (lean; the fence fixtures guard existing recipes).
+// Phase 3 wave 4 tasks for docs/agent/g3-runner-ft.workflow.js.txt (fast track; WAVE_ID 'g3-wave-4'), extended with a
+// 'stage' field: stage 2 starts only after every stage 1 builder has finished.
+// meta.description: "Phase 3 wave 4 (fast track): Field Guide, relationships seen and badges (P3.8), P3.9 experiments and
+// curated dishes, the G3 gate fixtures, audio (P3.10); then accessibility (P3.11), performance (P3.12) and the G3 evidence."
+// Built from docs/agent/fast-track.md (wave 4 = plan W5 + W6), docs/agent/g3-plan.md lines 612-790 (W5/W6 prompts, "Lead
+// after"), 786-830 (§5 checklist) and §6 risks, with every W5 and W6 row of docs/agent/g3-plan-recheck.md (lines 1542-1967),
+// its facts (All waves, Wave 5, Wave 6) and G11-G14/G17 applied, checked against the tree with waves 1-3 as built
+// (D-0043..D-0058) and the lead's module flip (D-0059). Each prompt follows the runner's PRE (not repeated here).
+//
+// Recheck rows:
+// - W5-01 applied: content/structures/{STONE,WALL,BEAD}.json exist (D-0024/D-0028): SHARED additive, never recreated.
+// - W5-02 moot: settled by D-0039 (a 'tools' pack + ToolSchema in contentHash; UNDO/SNAPSHOT/COMPARE say they are game tools).
+// - W5-03 applied (registry.ts RawPacks :43, contentHashInput :157, validateContent :197; content-fs.ts :38; raw-vite.ts :35;
+//   saveFile.ts :269-286 re-validates embedded content). Changed: RawPacks.tools is optional so other RawPacks builders compile.
+// - W5-04 applied: App.tsx:48 placeholder, MoreSheet.tsx:114, Home.tsx:72, pause effect state.ts ~:884, newDishReturn pattern.
+// - W5-05 changed: W3 built no per-food intake split (pairedRun intake.SP is the all-route total), so field-guide adds an
+//   observation-only per-tick (species x pool) intake record in intake.ts (a World field like reactionCells, registered in
+//   POST_G2_DERIVED_KEYS) instead of inferring it; wave 3 events (linkFormed/linkBroken/objectEmptied) and D-0051's
+//   provenance rule (snapshot.ts producersNear) are used as built. The watcher hooks DishHost.stepDish (host.ts ~:1076).
+// - W5-06 applied: SUGAR, NUTRIENT, DEBRIS still lack the sentence; the one exceptions list is
+//   tests/content/material-guide-text.test.ts EXCEPTIONS (now imported from guideRules.ts).
+// - W5-07 applied as D-0039 option (b): src/ui/badges.ts, localStorage 'pixelmeba.relationships' (not 'pixelmeba.seen').
+// - W5-08, W5-09, W5-10, W5-11, W5-13, W5-15, W5-16, W5-17 applied (line hints re-derived: registry.ts founder loop :276,
+//   host.ts experimentSteps :1030, playerStepText strings/experiments.ts:309, recipes.ts founders :284, startRecipe
+//   state.ts:581, NewDish RECIPE_ID :33). W5-13 changed: 'initial' is a per-member array aligned with 'cells', because
+//   EXP_212 needs B = 4 on the first of four chained members of one group. W5-17 uses the post-flip eligibility.
+// - W5-12 applied with the new stream 'founder.place' (task brief: one new stream; never reuse).
+// - W5-14 applied (playerSteps enum schema.ts:299, PAIRED_STEPS experiments.ts:176, inspectShowsFoodUse :723).
+// - W5-18, W5-19, W5-21, W5-23 applied (W5-23: desktop now; the lead runs all three projects at the gate).
+// - W5-20 applied with today's lines: sendCommand state.ts:935 / reportCommand :944, select :830, saveToSlot :371, snapshot
+//   events pushFeed :246, sendLabCommand LabView.tsx:269; 'wake' added to VisualEvent (protocol.ts:340) and visualEvents
+//   (snapshot.ts:383).
+// - W5-22 changed: no android/ edit this wave; PROPOSED DECISION "the Android build has no haptics until P4.10 adds the
+//   VIBRATE permission (PLAY_STORE_CHECKLIST)".
+// - W6-01..W6-09, W6-11..W6-18, W6-25 applied (W6-05: DishScreen.tsx key handler ~:140-165, handleViewKey LabView.tsx:477;
+//   W6-06: attachGestures(labGestures(...)) DishScreen.tsx:95, labGestures LabView.tsx:450; W6-07: toast hosts DishScreen.tsx
+//   :251, CompareScreen.tsx:140, ExperimentRun.tsx:173, App.tsx:24; W6-08 widened to src/render/** for reduced-motion and
+//   overlay-palette switches only; W6-09 adds the Keep sheet, Sample session, Field Guide tabs and sound settings; W6-18:
+//   sim-tune has --presets now, tools/sim-tune.ts:2263-2287).
+// - W6-10 applied with DEPOSIT_BANDS 7 (snapshot.ts:298) and DishHost.sendSnapshot at host.ts:2193.
+// - W6-19 applied (checklist row in g3-evidence). W6-20 moot: schema 4 and its migrations are built (D-0043;
+//   tests/persistence/migration.test.ts uses SCHEMA_VERSION; history-debris and g2-replay hold). W6-21 moot (D-0037, D-0054).
+//   W6-22 moot (D-0035 hash-neutral stateHash as built). W6-23 moot (PRE: never bump simulationVersion; perf proposes
+//   instead). W6-24 moot (D-0039 option b). W6-26 moot (every path in this file was checked with git grep). W6-27 moot
+//   (schema 4 built). W6-28 moot (the fast-track runner replaces both templates).
+// - Carried: D-0051 owner note (Oilwick/Brothmaker starve under CT numbers) -> experiments-curated records L303's outcome as
+//   measured; the tune-g3 timings are regenerated by the lead after perf is integrated (W6 facts, concurrency).
+//
+// Stage-file owner this wave (one owner per file across all seven tasks; everyone else makes only the additive lines their
+// prompt names):
+//   field-guide (1):  FieldGuide*.tsx, strings/guide.ts, badges.ts, guideRules.ts, content/tools/*, worker/relationships.ts,
+//                     src/ui/app/App.tsx, src/ui/panels/MoreSheet.tsx, src/worker/{protocol,host,client}.ts,
+//                     src/sim/content/registry.ts, tools/lib/content-fs.ts, src/sim/content/raw-vite.ts,
+//                     src/ui/panels/{LabTray,LabTrayContent}.tsx, src/ui/strings/{lab,tools}.ts, src/sim/intake.ts (record only),
+//                     content/materials/{SUGAR,NUTRIENT,DEBRIS}.json, tests/content/material-guide-text.test.ts
+//   experiments-curated (1): src/sim/{recipes,pairedRun,experiments}.ts, src/sim/variants.ts (recipeGrid), src/sim/content/schema.ts,
+//                     src/ui/views/NewDish.tsx, src/ui/strings/experiments.ts, the seven recipes and three experiments
+//   g3-fixtures (1):  tests/helpers/tables.ts, the three gate fixtures, tools/relationship-matrix.ts
+//   audio (1):        src/audio/**, src/ui/state.ts, src/ui/main.tsx, src/ui/views/SimplePage.tsx, SoundSettings.tsx
+//   a11y (2):         src/ui/styles.css, src/ui/views/DishScreen.tsx, src/ui/a11y/**, tools/contrast-audit.ts
+//   perf (2):         src/sim/** hot paths (hash-neutral), src/worker/snapshot.ts, tools/{sim-run,perf-stress}.ts,
+//                     tools/render-bench*.{ts,html}, docs/reports/perf-g3.md
+//   g3-evidence (2):  tests/fixtures/determinism-g3.test.ts, tests/e2e/launch-ecology.spec.ts, docs/reports/tune-g3.md,
+//                     docs/EXPANSION_RESPONSE.md (draft of the G3 sections)
+// SHARED (additive) across tasks: content/structures/*.json, content/**/*.json guide text (field-guide, defects only),
+// src/sim/rng.ts (experiments-curated appends 'founder.place'), src/sim/world.ts (field-guide's observation field),
+// src/worker/protocol.ts + snapshot.ts (audio: 'wake'; field-guide: export producersNear), src/worker/host.ts
+// (experiments-curated: player-step notes), src/ui/state.ts (field-guide guide-return, a11y simplifiedOverlayPalette),
+// src/ui/views/SimplePage.tsx (a11y toggle), src/ui/views/LabView.tsx and the cue sites (audio: one line each),
+// src/ui/styles.css (stage 1 builders append their own blocks), src/ui/views/** and src/ui/panels/** (a11y in stage 2:
+// labels, roles, focus order, keyboard), src/render/** (a11y: reduced motion and overlay palette only), tests/helpers/world.ts
+// (helpers only), tests/helpers/trajectory.ts (POST_G2_* only), tests/experiments/{framework,app-flow,journal-and-words}.test.ts
+// and tests/e2e/experiments.spec.ts (pinned card lists), tests/fixtures/fence.json (tools/fence-update.ts --add only).
+// Content editors: field-guide and experiments-curated (stage 1 only; each reruns content-validate --write; a contentHash
+// mismatch from the other's in-flight edit is not their bug). STAGE 2 RULE: nobody edits content/ (or art/src) in stage 2.
+// Order inside stage 1: field-guide, g3-fixtures, experiments-curated, audio (the two content editors are not first paired).
+// Untouched by all: serialize.ts, ledger.ts, reasons.ts, src/sim/history.ts (D-0039: nothing in saves), art/src/**,
+// public/atlas/**, android/** (nobody runs art:build).
+//
+// LEAD PRE-LAUNCH:
+//  1. D-0059 (module flip) committed, npm run check green, WORKLOG P3.5-P3.7 ticked; the STATE below then holds.
+//  2. Free the ports: for p in $(seq 4173 4299); do lsof -t -i :$p | xargs -r kill; done
+//  3. The runner's REPORT says the build report is "the only docs file you may create". Six assignments below name their
+//     own docs files (experiments-g3.md, relationships-g3.md, contrast.md, perf-g3.md, tune-g3.md, EXPANSION_RESPONSE.md)
+//     and say the assignment overrides that line; either keep that or soften REPORT to "the only docs file not named in
+//     your assignment".
+//  4. Add the stage gate to the runner (stage 2 waits for every stage 1 builder). Recommended: integrate and commit stage 1
+//     (npm run check green) before stage 2, so perf's hash-neutrality proof and g3-evidence's runs start from a clean base.
+//
+// LEAD AFTER WAVE 4 (G3 gate; plan "Lead after W5" and "Lead after W6"):
+//  1. Integrate: MINORs, decisions below, npm run check, content-validate, the new journeys on desktop; commit; tick P3.8,
+//     P3.9, P3.10 (stage 1) and P3.11, P3.12 (stage 2) in docs/WORKLOG.md.
+//  2. On a quiet machine (no agent running): re-run perf's final table (npx tsx tools/perf-stress.ts ... as perf-g3.md says)
+//     and npm run render:bench; regenerate tune-g3.md timings if perf changed hot paths after g3-evidence ran.
+//  3. Appendix A ritual (BUILD_DIRECTIVE line 800): npm run check; npm run test:e2e once (all three projects; this also
+//     covers field-guide, curated-dishes, sound-settings, keyboard, a11y-screens and launch-ecology on the phone projects);
+//     npm run content:validate; npm run sim:tune (tune-g3.md); the perf line; determinism 1x == 4x == reload hashes
+//     (determinism-g3); conservation C/N errors (conservation-all-pools).
+//  4. Finish docs/EXPANSION_RESPONSE.md §1-§8 from g3-evidence's draft (G3 relationship table included, BUILD_DIRECTIVE G3),
+//     owner items in §8; commit "gate: g3" with the Appendix A block; tag g3; push.
+//
+// Decisions to record (from this wave's PROPOSED DECISIONs; next id after D-0059):
+//  - field-guide: tools pack as built (ToolSchema fields, enabled = phase <= buildPhase, RawPacks.tools optional); where
+//    modules and habitats appear in the guide; not-enabled names = error in summary/example, warning in rules; the
+//    observation-only intake record and the relationships watcher (what counts as "seen"); guide Back restores speed; badges.
+//  - experiments-curated: recipe 'ops'; founder placement/cells/initial/links; stream 'founder.place'; curated recipe ids
+//    (CT L301/L303/L304/L306 -> L301_TWO_LUNCHES, ...); mutationPreset 'standard' for curated dishes; L303 "free nutrient
+//    0.1" reading; EXP_104/105 stoppingSeconds and player steps; new measures; measured limiters (EXP_105 diffusion risk).
+//  - audio: quiet audio (effects -12 dB, ambient off) and default volumes 0.7/0.4/0.8; cue-id mapping (ARCH placement_ok vs
+//    UX placement_error; gate_click deferred); 'wake' as a VisualEvent; no Android haptics until P4.10 (VIBRATE).
+//  - a11y: keyboard reticle + Enter through DishScreen's gesture handler; companion focus ring; one always-mounted live
+//    region; simplified overlay palette; contrast fixes and justified exceptions.
+//  - perf: optimizations as built (all hash-neutral) and proposals that would change results; device items for the owner.
+//  - g3-fixtures: every BUG id it reports and how it was resolved. g3-evidence: D-0015 re-measurement outcome.
+
+const STATE = `On main: g2, the Phase 3 Preflight (D-0042: src/sim/gates.ts worldHasSystem/worldHasSpecies/worldHasModule; tests/helpers/registry.ts registryWith(patch, { allowUnimplemented }) and G2_LISTS; tests/helpers/trajectory.ts trajectoryDigest(world, 'g2' | 'full') with every new World key registered in its POST_G2_* tables (POST_G2_DERIVED_KEYS = reactionCells, fungalFlow for unsaved caches); the g2 saves, the four trajectory-fence files and tools/fence-update.ts), waves 1-3 of Phase 3 (D-0043..D-0058) and the lead's module flip D-0059 (E04, E06, E07, E08, E09, E10, E12 enabled; moduleRegistryVersion 2; fence updated with reason D-0059; the registry-pinning tests updated). WORKLOG P3.1-P3.7 are ticked. Versions: buildPhase 3, contentVersion 2, simulationVersion 3 (pinned by ManifestSchema and loadSaveFile), evolutionRulesVersion 1, moduleRegistryVersion 2, phenotypeMappingVersion 1, world SCHEMA_VERSION 4 (src/sim/world.ts), PROTOCOL_VERSION 2 (ENT_STRIDE 14, E_CUE2 12, E_LINKMASK 13, CUE2_* and LINKMASK_* in protocol.ts, DEPOSIT_BANDS 7 in snapshot.ts). Shipped manifest: enabledSpecies A01, B01, B02, B03, B04, B05, B06, B07, B08, F01, F02, P01, P02, P03, P04, V01, X01, Y01, Y02 (19); enabledModules E01, E03, E04, E05, E06, E07, E08, E09, E10, E12; enabledSystems chemistry, core, enzymes, film, foodObjects, fungi, parasites, viruses; enabledMaterials ACID, BASE, BUFFER, CO2, DEBRIS, GEL, INH_BACT, INH_FUNG, INH_PHOTO, M01, M03, M04, M05, M09, M10, M11, METABOLITE, NUTRIENT, OIL, OXYGEN, PROTEIN, SALT, SEDIMENT, SHADE, STARCH, SUGAR, WATER; enabledHabitats GEL_COLONY, SEDIMENT_EDGE, WATER_GARDEN; enabledStructures BEAD, STONE, WALL. IMPLEMENTED_MODULES = the ten enabled; IMPLEMENTED_NATIVE_ABILITIES = BIOFILM, BRANCHING, E_OIL_SECRETION, E_PROTEIN_SECRETION, E_STARCH_SECRETION, HOST_DRAIN, LYSIS, OXYGEN_SUPPRESSED, PREDATION, SEDIMENT_WATER_CROSSING, TRANSPORT_LINKS. Recipes: FIRST_DISH_V1, CLEANING_CREW_V1, FOOD_TRAIL_V1, LIGHT_AND_LIFE_V1, PREDATOR_BALANCE_V1, RESERVE_COMPARE_V1, STARCH_UNLOCK_V1, SHARED_LUNCH_V1, OIL_NEIGHBORHOOD_V1, PROTEIN_CHAIN_V1, BROKEN_CATALYST_V1; experiments EXP_101-103, 106, A, B, C, 201-204. Wave 3 as built: Sample/Transfer/Discard (src/sim/sample.ts sampleTake/sampleTransfer/sampleDiscard commands; Begin/Cancel host-level 'sampleBegin'/'sampleCancel', D-0037/D-0054; world.sample in src/sim/sampleSlot.ts) and Clean water (src/sim/tools.ts cleanWater, fractions 0.25/0.5/1), tray copy in src/ui/strings/tools.ts TOOLS_COPY and src/ui/panels/{SamplePanel,SampleSession}.tsx; food objects M10 pellet / M11 wafer (src/sim/objects.ts placeFoodObject via command 'placeObject', releaseFoodObjects in stage 3, 'objectEmptied' event, D-0053); F02 transport (src/sim/fungalTransport.ts fungalTransport called from structures.ts fungalTransportPass, observation fungalFlowOf/transferredThisSecond, history sample fungalTransfer; 'linkFormed'/'linkBroken'/'linkRefused' events; D-0052); reaction ledger (src/sim/reactions.ts recordReaction/reactionInCell/reactionInDish, world.reactionCells observation-only, world.conversionTotals; src/ui/panels/ReactionLedger.tsx; provenance 'Made here by' from snapshot.ts producersNear, D-0051) and the 'foodAccess' overlay (OverlayId, snapshot.ts packOverlay); the producer bit set (src/sim/secretion.ts PRODUCER_BIT starch 1, oil 2, protein 4 in the secreting column, D-0057); modules E04 (src/sim/anchor.ts), E07 (lightSeeker.ts), the usable-intake clock (intakeClock.ts), E06/E08 (intake.ts, debrisFeeder.ts; FLAG.detritusIntake 1 << 13), E09/E10 (secretion.ts, matrixBuilder.ts; final stage 8 order in the structures.ts header), E12 (adhesion.ts; contact kind 4). Measurement grammar and ArmObserver/stepObserved live in src/sim/pairedRun.ts (experiments.ts re-exports). The open dish steps in DishHost.stepDish (src/worker/host.ts ~:1076). Decisions are recorded through D-0059. Wave 4 runs seven builders in one working tree, about two at a time, in two stages: stage 1 field-guide, g3-fixtures, experiments-curated, audio; stage 2 (after every stage 1 builder finished) a11y, perf, g3-evidence. STAGE 2 RULE: nobody edits content/ or art/src in stage 2 (perf's hash-neutrality proof compares stateHash, and contentHash is inside it).`
+
+const WAVE_TASKS = [
+  {
+    key: 'field-guide',
+    port: 4251,
+    stage: 1,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.8 "Field Guide, journal, badges" end to end (BUILD_DIRECTIVE lines 538-542). Read UX lines 8-31 (principles and tone; IA; blocking panels pause and restore), 93-104 (§4.2, '/' search), 194-198 (§5.7), 282-288 (§6.4), 347-355 (§9); SPEC §12.3 (lines 876-882), §12.9 (926-933), §18 (1079 to the end); CT §3 (165-212), §4 (213-238), §5 (239-295); ARCH §2 and §4 (24-102); docs/source/D01 ~line 382; D-0024, D-0028, D-0038, D-0039 and D-0051 in full.
+
+You own: src/ui/views/FieldGuide*.tsx, src/ui/strings/guide.ts (tab names, glossary, the fictional-units notice, every new sentence), src/ui/badges.ts, src/sim/content/guideRules.ts, src/worker/relationships.ts, content/tools/*.json, tests/content/guide.test.ts, tests/worker/relationships.test.ts, tests/ui/badges.test.ts, tests/e2e/field-guide.spec.ts (all new); content/materials/{SUGAR,NUTRIENT,DEBRIS}.json and tests/content/material-guide-text.test.ts; and, as this wave's owner (others add lines), src/ui/app/App.tsx, src/ui/panels/MoreSheet.tsx, src/worker/{protocol,host,client}.ts, src/sim/content/registry.ts, tools/lib/content-fs.ts, src/sim/content/raw-vite.ts, src/ui/panels/{LabTray,LabTrayContent}.tsx, src/ui/strings/{lab,tools}.ts.
+SHARED (additive):
+- src/sim/content/schema.ts (experiments-curated owns): a new ToolSchema; StructureSchema gets optional fields at most.
+- content/structures/{STONE,WALL,BEAD}.json: additive edits only; never recreate them (the tray and tests/sim/{view-switch,lab-commands}.test.ts pin them). content/**/*.json guide text: only defects your validator finds; list each edit.
+- src/sim/intake.ts + src/sim/world.ts: the observation-only intake record (Build 6); register it in tests/helpers/trajectory.ts POST_G2_DERIVED_KEYS.
+- src/worker/snapshot.ts (perf owns): export producersNear (used at snapshot.ts:713) for provenance. src/ui/state.ts (audio owns): the guide-return record only. src/ui/styles.css (a11y owns): append your own blocks.
+Build:
+1. Tools pack (D-0039): content/tools/{SAMPLE,TRANSFER,CLEAN_WATER,ERASE_STRUCTURE,SNAPSHOT,DUPLICATE,COMPARE,UNDO,OVERLAYS,INSPECT}.json, each {id, name, phase, guide {summary, biology, rules, example}, changes, doesNotChange, watchFor}. MOVE (do not rewrite) the Sample/Transfer/Clean water copy from TOOLS_COPY (src/ui/strings/tools.ts) and ERASE_STRUCTURE (src/ui/strings/lab.ts) into the records and make the Lab tray read them (LabTrayContent.tsx already imports content/structures and content/materials with import.meta.glob; do the same for content/tools), so tray and guide never disagree; the tests pinning tray copy keep passing. UNDO, SNAPSHOT, COMPARE and DUPLICATE say plainly in "biology" that they are game tools with no lab analogue.
+2. Schema and registry (W5-03): ToolSchema = a Structure-style record plus changes/doesNotChange/watchFor. registry.ts: an optional 'tools' collection in RawPacks (:43; optional so every other RawPacks builder still compiles), contentHashInput (:157), validateContent (:197), ContentRegistry; enabled tool = phase <= buildPhase; no manifest list. Loaders: content-fs.ts (beside structures, :38) and raw-vite.ts (:35). Never add required fields to GuideSchema, SpeciesSchema, MaterialSchema, ModuleSchema, HabitatSchema or ManifestSchema: src/persistence/saveFile.ts:269-286 re-validates every saved world's embedded content with them. Run npx tsx tools/content-validate.ts --write (tests/content/validator.test.ts checks the hash).
+3. Validator (guideRules.ts, run inside validateContent), for the enabled set of whichever manifest is validated (shipped AND registryWith(G2_LISTS) must stay valid):
+   - every enabled species, material, module, habitat, structure and tool has complete, non-empty guide text (tools also changes/doesNotChange/watchFor): error with file -> field;
+   - a material's guide.rules contains "No additional modeled reaction." unless guideRules.ts lists a modeled reaction it takes part in. SUGAR, NUTRIENT and DEBRIS lack it today: append the sentence or list their reactions, keeping NUTRIENT's pinned "Nutrient alone is not food: it adds no carbon or energy." (tests/sim/lab-commands.test.ts) and DEBRIS's example (tests/content/debris-text.test.ts). Replace the EXCEPTIONS map of tests/content/material-guide-text.test.ts with an import from guideRules.ts (one list);
+   - summary and example never name a species that is not enabled (names are plural too: "Crumbsmiths"): error, fixed by editing the text; in rules text only a warning. PROPOSED DECISION.
+4. Guide UI (UX §5.7): the FieldGuide view replaces App.tsx's 'guide' placeholder (:48). Tabs Species · Materials · Structures & tools · Rules glossary; every enabled entry visible at once, no locks. PROPOSED DECISION (G17 22): modules appear in each Species entry as "Abilities it can gain" plus their own entries in the Species tab; habitats appear in Structures & tools. A species entry shows: its atlas thumbnail (src/ui/atlas.ts drawFrame); diet (src/ui/strings/shortcuts.ts foodWord/listWords/dietAnswer); habitat and attachment (src/ui/strings/lab.ts habitatList); preferred ranges (pH, warmth, salinity, moisture) from the record; predators and prey from content prey lists limited to enabled species, with 'free' and 'in sediment' qualifiers; hosts and parasites; products (enzymes, film, acid, metabolite) from native abilities and metabolism; one example interaction (guide.example); and two headed sections "General biology" (guide.biology) and "Rules of this game" (guide.rules). Materials show their guide text. Structures and tools show Changes / Does not change / Watch for (structures use the tray's mapping: Changes = guide.rules, Does not change = BRUSH_COPY.place.sealedUnchanged/beadUnchanged in src/ui/strings/lab.ts:147-149, Watch for = guide.example). The glossary covers SPEC §18 plus "All numbers are fictional game units." '/' focuses search while the guide is open (the guide's own handler; never a second window keydown listener on the dish); search matches names and ids ("vel" -> Velvet). Every new line is body text >= 16 px (no 14 px .kv grids), wraps at 200 % text, uses UX tone, and claims nothing it cannot trace (no "superior/advanced/perfect/adapted/immune", no claim that the game is real biology).
+5. Pause and restore (W5-04): leaving the dish already pauses it (the route effect in src/ui/state.ts ~:884). Add only the restore: when More opens the guide (MoreSheet.tsx:114) record {dishId, speed} (as newDishReturn does, src/ui/panels/AdvancedEvolution.tsx:35/242); the guide's Back returns to the dish at that speed; opened from Home (Home.tsx:72), Back returns Home.
+6. Relationships seen (D-0039 option b; W5-05, W5-07). The worker notes, for the open dish only, the first time each relationship shows, from recorded state only:
+   - predation: 'capture' events (detail.preySpecies is a species index); lysis and drain: 'death' events with cause DEATH_LYSIS / DEATH_PARASITE_DRAIN;
+   - infection (infectedBy 0 -> non-zero) and parasite attachment (hostBirthId 0 -> non-zero), by an after-tick scan;
+   - feeding by pool (sugar, starch, oil, protein, broth, detritus, metabolite, film ...): no per-food split exists (pairedRun intake.SP is all routes), so add an observation-only per-tick record in src/sim/intake.ts: a World field (like reactionCells) with one bit per (species, pool) set where an organism's intake from that pool is > 0 this tick, cleared at the start of stage 6, never read by the sim, never saved or hashed;
+   - conversion with provenance: world.reactionCells conversions, credited to a species only where producersNear names it (D-0051's rule); otherwise not a relationship.
+   The watcher (src/worker/relationships.ts) runs in DishHost.stepDish (host.ts ~:1076) through step(world, { afterStage }) plus an after-tick pass over new ring events (the ring keeps 500), like ArmObserver/stepObserved (src/sim/pairedRun.ts:222, :483); when an experiment observer is active both must run. Never on comparison copies, rollback replays or experiment arms. Its first-seen table is worker state: never saved, never read by the sim. Add a protocol request/reply ('relationships') and a client method; the UI merges new entries {relationshipId, dishName, worldId, second, eventId?} into src/ui/badges.ts's device store (localStorage 'pixelmeba.relationships', every read and write in try/catch), never through setJournalSink or journalRecordProblem and never into a save. Add no new sim events. Sentences name only what was measured ("Recycler ate debris", "Ciliate caught a Sprinter", "Pinphage burst a Sprinter").
+7. Badges are cosmetic: derived only from the device store, shown in the guide, no timers, streaks or counts that pressure, no effect on any world. Each guide entry shows "Seen in your dishes" from the store.
+Done when:
+- tests/content/guide.test.ts: removing each guide field from an enabled record of each kind (species, material, module, habitat, structure, tool) fails with file -> field; the "No additional modeled reaction." rule and the not-enabled-name rule each have a failing and a passing case (rules text: a warning); shipped and registryWith(G2_LISTS) both validate; the derived predator, prey and host lists equal CT §3.2-3.3 parsed from docs/CONTENT_TABLES.md inside this test (W5-08: do not edit tests/helpers/tables.ts, g3-fixtures owns it; expand ranges like 'B06–B12'; keep 'free', 'while in sediment' and 'within 1 cell'; ignore parenthetical notes) filtered to enabled species.
+- A test shows tray and guide read the same tool record.
+- tests/worker/relationships.test.ts: a capture, an infection, a parasite attachment, a lysis, a Recycler eating debris, a film digester eating film and a provenance-backed conversion are each recorded once at the right second; a pool the species did not take is never recorded; stateHash and trajectoryDigest(world, 'full') are identical with and without the watcher and the intake record.
+- tests/ui/badges.test.ts (pure functions): badges derive only from store records; a throwing localStorage leaves the guide working; nothing writes a world.
+- tests/e2e/field-guide.spec.ts (desktop now; the lead runs all three projects at the gate): Home -> Field Guide; from a running dish, More -> Field Guide pauses it and Back restores the speed; '/' then "vel" -> Velvet shows General biology, Rules of this game and its predators; Materials -> Salt shows "No additional modeled reaction."; Structures & tools -> Sample shows Changes / Does not change / Watch for; a Lab dish with Recyclers and a debris dose run at 4x until the Recycler entry shows "Seen in your dishes" and its badge; axe clean; 200 % text.
+E2E: E2E_PORT=4251 E2E_OUTDIR=tmp/dist-guide.`,
+  },
+  {
+    key: 'g3-fixtures',
+    port: 4253,
+    stage: 1,
+    prompt: `ASSIGNMENT: the three G3 gate fixtures that span every system: the generated every-catalog-relationship matrix, conservation-all-pools and transport-obstacles. Read BUILD_DIRECTIVE "G3 gate — evidence" (lines 572-576); SPEC §2.4 (64-75), §3.4 (117-129), §4.1 (139-147), §7.1-7.7 (391-459), §10.5-10.6 (749-768), §17 (1065-1078); CT §3 (165-212), §7.1 (334-354), §12.5-12.6 (573-596), §14 (653 on); docs/source/D01 acceptance table (~lines 470-480: transport and obstacles; resource accounting incl. feeding, predation, parasites, film and phage lysis); D-0038, D-0047..D-0058 (what each mechanism does as built).
+
+You own: tests/fixtures/relationship-matrix.test.ts, tests/fixtures/conservation-all-pools.test.ts, tests/fixtures/transport-obstacles.test.ts, tools/relationship-matrix.ts (all new), tests/helpers/tables.ts (additive parsers), docs/reports/relationships-g3.md (generated; you may create it: this assignment overrides REPORT's one-docs-file line).
+SHARED (additive): tests/helpers/world.ts (helpers only). Do NOT change src/** or content/**. A failing relationship is a bug: report it with file:line and a repro, mark that case it.fails with the bug id, never weaken an assertion.
+Build:
+0. tests/helpers/tables.ts parses only CT §1.2-1.3 today (profileTable, movementTable). Add parsers (W5-18) and use them as the oracle (from the doc, not content JSON, so content drift is caught): §3.1 prose 'ID foods · …' lists; §3.2/§3.3 rows whose first cell is 'ID Name' (expand ranges such as 'B06–B12'; keep 'free', 'while in sediment' and 'within 1 cell'; ignore parenthetical notes); §3.4 rows keyed by field name; §3.5 prose; §7.1 E-ID rows (eligible ancestors, exclusions).
+1. Relationship matrix for every enabled species, material and module, one tiny deterministic world per row (tests/helpers/world.ts clearWater, place, setField, linkFungal, linkAdhesion, placeObject; modules through introduceOrganism's { modules, exactCenter } as tests/fixtures/module-accounting.test.ts placeWith does); the file runs in <= 90 s. Rows:
+   - diets: each species x each food in its diet takes intake > 0 with only that food present; every food outside its diet gives zero (negative controls); film for film digesters (eaten as detritus, D-0038);
+   - prey: each predator x every enabled species, including 'free' (an E04-anchored carrier stays free, D-0055) and 'in sediment';
+   - hosts: X01 and V01 x every species;
+   - inhibitor targets: INH_BACT, INH_FUNG, INH_PHOTO x every species;
+   - enzymes: each enzyme x each substrate (it converts only its own); breaker;
+   - producers: native B06/B07/B08 and module E01/E09 x their enzyme (the PRODUCER_BIT they set);
+   - module eligibility: each enabled module x each enabled species: a gain is possible iff CT §7.1 makes it eligible and it is not a native duplicate, checked through moduleSetProblem (src/sim/content/moduleRules.ts:71).
+   tools/relationship-matrix.ts runs the same rows and writes docs/reports/relationships-g3.md (row, expected, observed, pass, row counts) for g3-evidence to copy into EXPANSION_RESPONSE.
+2. conservation-all-pools: closed lid, no inputs after setup, 10,000 ticks, one dish holding film (B02 + an E10 carrier), fungi (F01 + a linked F02 chain that really transfers), parasites (X01 on A01), phage (V01 + B01 reaching lysis), enzymes (B06/B07/B08 on their deposits, plus M09 breaker), food objects (an M10 pellet and an M11 wafer), obstacles (walls, stones, beads, gel and sediment), P01-P04, B03 and Y01 (anaerobes/acid), E04, E07 and E12 carriers. Keep it small (a few hundred agents, <= 60 s). C, N and M relative error < 1e-5 at every 100th tick (computeTotals/checkLedger). Non-vacuity: assert each mechanism happened (film > 0, fungal transfer > 0, infections >= 1 and lyses >= 1, parasite drain > 0, each enzyme converted > 0, each object released > 0 and one emptied, captures > 0, an adhesion link formed).
+3. transport-obstacles: a sugar pulse spreads with its sum constant to 1e-12 and a falling maximum; a wall ring isolates inside from outside for dissolved, activity and viral fields and for organisms (zero crossings over 1,000 ticks); a stone blocks; a bead passes solutes but not swimmers; film halves edge flux; sampling (sampleTake / sampleTransfer / sampleDiscard through applyNow, as tests/sim/tools.test.ts does; Begin/Cancel are host-level and not needed headless) and Clean water reconcile exports and inputs exactly against the ledger.
+Done when: the three files pass (paste row counts, pass/fail and runtimes); docs/reports/relationships-g3.md is generated; every failing row is reported as "BUG: …" with a repro; each fixture fails when its mechanism is removed (say how you checked, e.g. a load-time mutant under tmp/).
+E2E: none needed; if you run any, E2E_PORT=4253 E2E_OUTDIR=tmp/dist-fixtures.`,
+  },
+  {
+    key: 'experiments-curated',
+    port: 4252,
+    stage: 1,
+    // critical: recipe realizer and founder extensions, a new RNG stream, fence entries.
+    critical: true,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.9 "Experiments and curated dishes" (lines 544-548): A hidden neighborhood (EXP_104), One compatible host (EXP_105), Fungal supply line (EXP_212) and the curated dishes L301, L303, L304, L306. Read SPEC §7.7 (450-459), §13.1-13.2 (936-952); CT §9.3 (426-436), §10.1 (462-471), §10.3 header and E212 (479-500), §11 (528-539); docs/source/D04 §8 ("Initial organisms scatter uniformly among valid patch cells using the recipe seed …"; "not demonstrations that spontaneous evolution has already occurred"); UX §2.3 (41-48); D-0005, D-0022, D-0027, D-0030, D-0051, D-0052 in full; docs/reports/experiments-g2.md (card conventions).
+
+You own: content/recipes/HIDDEN_NEIGHBORHOOD_V1.json (seed 104), ONE_HOST_V1.json (105), FUNGAL_SUPPLY_LINE_V1.json (212), L301_TWO_LUNCHES.json (301), L303_PUBLIC_KITCHEN.json (303), L304_EMPTY_AFTER_THE_FEAST.json (304), L306_BORROWED_SHELTER.json (306), content/experiments/EXP_104.json, EXP_105.json, EXP_212.json, tests/experiments/{hidden-neighborhood,one-host,fungal-supply-line}.test.ts, tests/recipes/curated.test.ts, tests/e2e/curated-dishes.spec.ts, docs/reports/experiments-g3.md (all new; you may create that report: this assignment overrides REPORT's one-docs-file line); and, as this wave's owner, src/sim/{recipes,pairedRun,experiments}.ts, src/sim/variants.ts (recipeGrid only), src/sim/content/schema.ts (field-guide adds ToolSchema), src/ui/views/NewDish.tsx, src/ui/strings/experiments.ts.
+SHARED (additive): src/sim/rng.ts (append founderPlace: 'founder.place' to STREAMS; never rename or reorder); src/sim/content/registry.ts (field-guide owns): founder and ops validation beside the recipe founder loop (:276); src/worker/host.ts (field-guide owns): player-step note calls in experimentSteps (:1030) only; src/ui/state.ts (audio owns): only if startRecipe needs a parameter; tests/experiments/{framework,app-flow,journal-and-words}.test.ts and tests/e2e/experiments.spec.ts: extend the pinned card lists with EXP_104, EXP_105, EXP_212; tests/fixtures/fence.json only through npx tsx tools/fence-update.ts --add <recipe> for your seven recipes. Run content-validate --write after content edits (field-guide edits content too; a hash mismatch from its in-flight edit is not your bug).
+Build recipe and founder extensions (PROPOSED DECISIONS; defaults keep every existing recipe bit-identical):
+- Recipe 'ops' (W5-11): an optional list of GeometryOpSchema (schema.ts:154), default []. Apply it in the habitat step right after the habitat's own ops under applyHabitat's rules (recipes.ts:100: structure cells hold no inventory; geometryVersion bumps once), before background overrides, patches and founders. Include it in habitatGrid()/recipeGrid() (recipes.ts:82, variants.ts recipeGrid) so What if? validation and previews see the same grid. Validate rect/disk bounds in registry.ts as for habitats.
+- Founder placement 'nearest' (default; D-0005, D-0022) | 'scatter' (W5-12): take the realizer's eligible cells (inMask, canOccupy, unused; row-major diskCells order, before the nearest-first sort at recipes.ts:284) and use the first count of detPermutation(eligible.length, world.seed, STREAMS.founderPlace, founderIndex); never a repeated cell.
+- Founder 'cells': an explicit list (length = count; inside the mask, distinct, canOccupy, else RecipeError and a registry error).
+- Founder 'initial' (W5-13): an optional array aligned with the members ('cells' order), entries {B?, N?, E?}, shown as "labelled setup"; it is NOT RecipeSchema.testOnlyOverrides (SPEC §13.1 keeps those out of play). introduceOrganism already logs b0 and 0.10·b0 N as 'introduce:recipe:<id>'; log the B and N difference as recordInput(world, 'recipe:<id>:initial', ΔB, ΔN); energy is not a material: an E other than 50 goes to world.ledger.energy, not an input.
+- Founder 'links': 'chain' for a group of four-adjacent F02 founders in listed order (species with TRANSPORT_LINKS only; degree <= 4): addFungalLink(..., LINK_TRANSPORT) from src/sim/links.ts; validated in registry.ts.
+- Measures in src/sim/pairedRun.ts (W5-09; observation only; computed only when a card measures them, since the comparison engine shares the observer): infections.SP (new infections during the run); limitSeconds.SP.REASON (species first like deaths.SP.CAUSE; from the limitCode column, or for SUIT_OXYGEN_HIGH from suitabilityAt() each tick); transfer.fungal (carbon moved by the F02 pass during the run, from fungalTransport's edges); and a whole-unit presence measure for EXP_105 (e.g. wholeUnitCells.SP: the most cells at any tick holding >= 1 whole v01 unit and a living SP).
+- Player steps (W5-14): CT §10.1's in-app evidence ("both species inspected with different O2 limitations", "B01 infection observed") needs steps: add each to the playerSteps enum (schema.ts:299; single-arm, so not in PAIRED_STEPS experiments.ts:176), a read-only check beside inspectShowsFoodUse (experiments.ts:723), the note call in host experimentSteps (:1030) and a playerStepText case (strings/experiments.ts:309, exhaustive switch); or record in your report why a card has none.
+Experiments (D-0022 card fields: question, recipe, intervention, predictedTradeoff, measurements, tick-aligned stoppingSeconds, confounds, journal stamp that says only what the gate measured, as D-0051 did for EXP_201):
+- EXP_104 A hidden neighborhood (seed 104): Water Garden, lid closed; 20 B01 + 20 B03 at (50,70) r 6; sugar 0.50 and nutrient 0.20 per patch cell; suggests the O2 overlay; stoppingSeconds 180 (PROPOSED, as EXP_103). Gate: limitSeconds.B01.OXYGEN_LIMITED > 0 and limitSeconds.B03.SUIT_OXYGEN_HIGH > 0.
+- EXP_105 One compatible host (seed 105): 30 B01 at (35,64) r 6 with sugar 0.50; 30 B05 at (90,64) r 6 with metabolite 0.50; nutrient 0.20 in both; V01 5 units per patch cell in both; stoppingSeconds 180 (PROPOSED). Gate: infections.B01 >= 1, infections.B05 = 0, and >= 1 whole unit was present in some B05 cell (non-vacuity). Risk: water diffusion may drop cells below 1 whole unit quickly; record the measured limiter, never change the rule.
+- EXP_212 Fungal supply line (seed 212; W5-15): WATER_GARDEN with removeStones true and backgroundOverrides {sugar: 0} (its 0.02 background sugar is F02 food; CT says no food); recipe ops {op:'rect', x0:56, x1:67, y0:60, y1:68, substrate:'gel'} (never GEL_COLONY: its water channel x 59-68 holds exactly these cells); one F02 group with cells [[60,64],[61,64],[62,64],[63,64]], links 'chain', initial [{B:4, N:0.4}, {}, {}, {}] (b0 2 and N 0.2 for the others = 0.10 B), E 50; stoppingSeconds 10. Gate on transfer.fungal and the exact donor/receiver ledger.
+Curated dishes (CT §9.3; W5-16, W5-17), each with its question and a "Pre-seeded genomes" label where modules are seeded: Water Garden defaults elsewhere (stones, background sugar 0.02), lid open, fixed light 0.8, mutationPreset 'standard' (CT is silent; PROPOSED), scatter placement, seed = recipe number. Recipe ids keep the file names; record the mapping L301 -> L301_TWO_LUNCHES etc. (PROPOSED).
+- L301 Two Lunches: two r 8 patches at (40,64) and (88,64), each 30 B01, sugar 0.5, nutrient 0.2; Varied Traits.
+- L303 Public Kitchen: r 8 at (64,64): 20 Y02 + 20 B08, protein 0.5 C with proteinN 0.05 (bound N, D-0051's reading), "free nutrient 0.1" read as nutrient set to 0.1 in the patch (PROPOSED); Diverse. D-0051 notes Brothmakers starve under CT's numbers: report what happens, never tune.
+- L304 Empty After the Feast: r 10 at (64,64): 60 B01, sugar 0.8, nutrient 0.2; Diverse; no replenishment.
+- L306 Borrowed Shelter: ops {op:'disk', center:[64,64], radius:8, substrate:'gel'} and a gel field patch r 8 at (64,64): 40 B06, sugar 0.6, nutrient 0.2; E10 with moduleAssignment 'alternate-odd' (20 with, 20 without).
+- New Dish: the curated dishes appear in the Basics picker (NewDish.tsx; RECIPE_ID is hard-coded at :33). Picking one starts it as the authored recipe: startRecipe(recipeId, name) (state.ts:581), or set the seed field to the recipe seed and its preset and founder mode, so host recipeProvenance/isAuthoredRecipe record it as authored, not custom; Randomize stays available and is recorded as an override. The summary names recipe-assigned modules (L306's E10) as well as Diverse draws ("present at creation"). The Play shelf is unchanged until Phase 4.
+Done when:
+- The three experiment fixtures reach their gates on the shipped content, or record the measured limiting factor in docs/reports/experiments-g3.md (never change mechanics or constants to force a gate). EXP_212's donor/receiver amounts equal an oracle written only from SPEC §7.7 and D-0052 to 1e-12, with C and N conserved.
+- tests/recipes/curated.test.ts: each curated recipe realizes with exact counts, patch cells, patch totals and seeds; modules: L306 has E10 on exactly the 20 alternate-assigned founders; L301 none; L303 and L304 (Diverse) carry only founder.module draws at creation (lineage origin 2), equal to founderSummary() (src/sim/founders.ts:136) — after D-0059, B01 can also draw E04, E10, E12 and Y02/B08 E04 (Y02 E09); placement is deterministic (two realizations identical; another seed scatters differently; no repeated cell); the initial ledger equals the preloads including 'recipe:<id>:initial'; the ops grid equals recipeGrid().
+- Every existing recipe's fence digest is unchanged (g2-replay and the four trajectory-fence files pass); your seven recipes are added with fence-update --add.
+- tests/experiments/* pass with the extended card lists.
+- tests/e2e/curated-dishes.spec.ts (desktop now; the lead runs all three projects at the gate): New Dish -> a curated dish shows its question and, for L306, the "Pre-seeded genomes" / "present at creation" label; Create opens it; axe clean; 200 % text.
+E2E: E2E_PORT=4252 E2E_OUTDIR=tmp/dist-curated.`,
+  },
+  {
+    key: 'audio',
+    port: 4254,
+    stage: 1,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.10 "Audio" (lines 550-555). Read ARCH §10.3 (234-242); UX lines 16-31 (Settings: sound/music/voice, haptics, reduced motion), 329-340 (§8.1-8.2: cues; <= 4 world cues/s; coalescing; every audible cue has a visible equivalent), 347-355 (§9: quiet audio); CT §12.10 (613-621).
+
+You own: src/audio/** (new: SoundKit.ts, patches.ts, rateLimiter.ts, ambient.ts, haptics.ts, cues.ts), src/ui/panels/SoundSettings.tsx, tests/audio/**, tools/audio-preview.html, tests/e2e/sound-settings.spec.ts (all new); and, as this wave's owner (others add lines), src/ui/state.ts, src/ui/main.tsx, src/ui/views/SimplePage.tsx.
+SHARED (additive): src/worker/protocol.ts (field-guide owns) and src/worker/snapshot.ts (perf owns): add 'wake' to VisualEvent.type (protocol.ts:340) and to visualEvents()'s filter (snapshot.ts:383); dormancy.ts:263 already emits it; make every exhaustive switch over VisualEvent (src/render/**, src/ui/feed.ts) ignore it; no PROTOCOL_VERSION bump. One cue line at each call site: src/ui/views/LabView.tsx sendLabCommand (:269), src/ui/panels/DiscoveryCard.tsx or DiscoveryPacer.tsx, src/ui/panels/CompareResults.tsx, src/ui/views/ExperimentCard.tsx. src/ui/styles.css (a11y owns): append your own blocks.
+Build:
+- SoundKit synthesizes each stable cue id with Web Audio from a patch {cueId, oscillator|noise, envelope, pitch, filter, gain}. Cue ids (ARCH §10.3 + UX §8.1): drop, select, save, discovery, compare_result, division, card_open, wake, placement_error; placement_ok is ARCH's name for drop, gate_click is deferred (P3.10 "gate click later"). Log the mapping as a PROPOSED DECISION.
+- Call sites (W5-20): sendCommand/reportCommand (src/ui/state.ts:935/:944) and sendLabCommand: accepted > 0 -> drop, accepted 0 -> placement_error; select (state.ts:830), player taps only -> select; saveToSlot (state.ts:371) -> save; snapshot events (state.ts:246, where pushFeed runs): 'birth' -> division (coalesced), 'wake' -> wake; the discovery card -> discovery; CompareResults -> compare_result; experiment card open (ExperimentCard.tsx) -> card_open. No cue is triggered by the renderer or consumes simulation randomness; src/audio never imports src/sim (the LIFE_* codes stay out: use the VisualEvent type).
+- World cues (division, wake, discovery) pass a rate limiter: <= 4 per rolling second, repeats of a cue in the window coalesce into one play with a count; different world cues share the budget; UI cues bypass it.
+- Ambient loop: low-passed noise + a slow detuned sine pad at -24 dB on the music bus. Separate effects, music and voice gains; mute; quiet audio. PROPOSED DECISION (W5-21; not in the docs): quiet audio = effects -12 dB and ambient off; defaults effectsVolume 0.7, musicVolume 0.4, voiceVolume 0.8, muted false, quietAudio false, haptics false. Add them to Settings (state.ts:63) as optional fields with these defaults so stored prefs from older builds still load.
+- No sound before the first user gesture (autoplay); lazy init in src/ui/main.tsx on the first gesture; suspend on visibilitychange (main.tsx:15) and on 'pixelmeba:pause' (:30), resume when visible.
+- Haptics only on intentional tool actions (a Lab or Add Life placement the player made), via feature-detected navigator.vibrate, off by default, no new dependency. Do not edit android/: PROPOSED DECISION (W5-22) "the Android build has no haptics until P4.10 adds android.permission.VIBRATE (PLAY_STORE_CHECKLIST)".
+- Every cue has a visible equivalent; list the pairs in src/audio/cues.ts's header (e.g. drop = the accepted toast and the new organisms; wake = the resting mark leaving).
+- Settings: a SoundSettings section on the Settings page (SimplePage settings, ~:35): mute, three volume sliders, quiet audio, haptics; labelled controls, >= 48 px targets, >= 16 px text, keyboard operable.
+Done when:
+- tests/audio/rate-limiter.test.ts (fake clock): 10 division cues in 1 s give <= 4 plays with a coalesced count of 10; different world cues share the 4/s budget; UI cues are not limited.
+- tests/audio/settings.test.ts: mute, quiet audio and volumes map to gains (pure functions).
+- tests/audio/imports.test.ts: no file under src/audio imports src/sim or @sim (W5-19: ESLint's determinism rules cover only src/sim/**, so this test is the proof); cosmetic Math.random in src/audio is allowed.
+- tools/audio-preview.html plays every cue for the owner's manual listen (list it as an owner item: "manual listen").
+- tests/e2e/sound-settings.spec.ts (W5-23; desktop now; the lead runs all three projects at the gate): the sound controls are reachable by keyboard, mute and a volume change the stored settings, axe clean (expectNoSeriousA11yViolations), 200 % text works.
+E2E: E2E_PORT=4254 E2E_OUTDIR=tmp/dist-audio.`,
+  },
+  {
+    key: 'a11y',
+    port: 4261,
+    stage: 2,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.11 "Accessibility pass 1" (lines 557-563). Read UX lines 88-104 (§4.1-4.2: sizes; input contract incl. the keyboard map), 177-181 (§5.4 chart tables), 229-253 (§6.1 palette), 316-328 (§7.4 reduced motion), 347-355 (§9); D-0014, D-0017, D-0026 (What if? is a blocking modal; no dish key acts behind it), D-0029 (Space modality rule; choice groups own their keys). STAGE 2: stage 1 (Field Guide, curated dishes, sound settings) is in the tree; do not edit content/ or art/src.
+
+You own: src/ui/styles.css, src/ui/views/DishScreen.tsx, src/ui/a11y/** (new: DishSummary.tsx, CellDescription.tsx, LiveRegion.tsx, focus utilities), tools/contrast-audit.ts, docs/reports/contrast.md (new; you may create it: this assignment overrides REPORT's one-docs-file line), tests/e2e/keyboard.spec.ts, tests/e2e/a11y-screens.spec.ts, tests/ui/a11y*.test.ts (new).
+SHARED (additive, never a behaviour change): every file under src/ui/views and src/ui/panels (labels, roles, focus order, keyboard handlers), src/ui/app/App.tsx (the live region's mount point), src/ui/state.ts (setting simplifiedOverlayPalette, optional with default false), src/ui/views/SimplePage.tsx (its toggle), src/render/** (reduced-motion and overlay-palette switches only). No content/, art/src, src/sim or src/worker edits (perf owns those this stage).
+Build:
+- Semantic controls and a visible focus indicator everywhere (W6-04): keep the global ring (styles.css:61, 3 px var(--focus) #F2B84B per UX §6.1) and add a dark companion ring (e.g. box-shadow 0 0 0 5px #172C35), since #F2B84B alone is 1.3-1.6:1 on the light surfaces (UX §4.1 needs >= 3:1).
+- The UX §4.2 keyboard map already exists (W6-05): DishScreen.tsx's window keydown handler (~:140-165: Space with the D-0029 modality rule, 1/2/4, '.', Esc, U, +/=/-, arrows; ignored while What if? is open) and LabView.tsx handleViewKey (:477: I, L, F, Esc). Verify it; add only what is missing (Enter at the reticle, keyboard selection; '/' already focuses Field Guide search: verify). Extend these handlers; never add a second window keydown listener.
+- Keyboard placement and selection (W6-06; PROPOSED DECISION): with the dish focused, a visible centre reticle (an HTML element over the viewport) marks the target cell; Enter sends one tap there through the same handler DishScreen passes to attachGestures (DishScreen.tsx:95, labGestures LabView.tsx:450), so a placement tool commits one gesture and Look / Lab Inspect selects (the candidate list when the tap is ambiguous); the arrows pan the dish under the reticle.
+- ARIA labels for panels, inspector values and charts; verify every chart's table alternative (D-0014).
+- The canvas is summarized by DishSummary (W6-03: species name, count from SnapshotMsg.speciesCounts, biomass trend from the existing client.history(dishId, lastSeconds) -> HistorySample.biomass per species (src/worker/client.ts:260; no protocol change), extinct state = count 0 after members were seen) and CellDescription (the selected cell).
+- One always-mounted polite live region (W6-07) announces one-line results (placement accepted with count, saved, card available): mount one sr-only region in App.tsx that reads out toast.value, and drop role/aria-live from the visible toasts (DishScreen.tsx:251, CompareScreen.tsx:140, ExperimentRun.tsx:173, App.tsx PageToast :24) so nothing is announced twice; keep the sr-only statuses in LabView (:537) and DiscoveryCard.
+- Reduced motion honored everywhere (UX §7.4); a simplified overlay palette setting (src/render/layers.ts colormapFor/RAMPS/legendStops and OverlayLegend.tsx).
+- 200 % text reflows without hiding primary controls at 360x800, 800x360 and 1440x900.
+- Contrast audit (W6-08), tools/contrast-audit.ts: every text/background and essential-graphic pair in art/src/palette.ts, src/ui/styles.css, src/render/layers.ts (dish and deposit colours C, overlay RAMPS), src/render/speciesColors.ts and TRAIT_BAND_COLORS (src/render/renderer.ts:70): text >= 4.5:1, essential graphics >= 3:1, organisms against water, gel and sediment, the focus ring against every surface. Fix what is yours; fixes in art/src are proposals (no art:build this wave); justify each remaining failure in docs/reports/contrast.md.
+Done when:
+- tests/ui/a11y*.test.ts (W6-02: pure functions only; vitest runs in 'node' with no DOM library): the DishSummary/CellDescription text builders and the contrast math.
+- tests/e2e/a11y-screens.spec.ts (W6-09) visits every screen and sheet with zero serious/critical axe violations: Home, Play, New Dish (Basics incl. a curated dish, Evolution with Advanced rates, Content, summary), Saves (named slots and checkpoints), Settings (incl. sound settings), About, each Field Guide tab, Dish Explore (Add Life and Feed sheets, candidate list), Dish Lab with each tray (inspect, life, food, chemistry, habitat, tools, observe), every Inspector depth (Summary, "Why did it stop?", Happening now, Passed to offspring, Details, cell inspector with the reaction ledger), More, Save, the Keep sheet, Evolution settings (Advanced), History (Charts, Regions, Table, What happened), Lineage, the discovery card, Compare setup/results, What if?, each Notebook tab (Journal, Experiments), an experiment card and its paired run, the Sample session.
+- tests/e2e/keyboard.spec.ts completes Home -> Play -> Garden -> run -> Add Life (L) -> place with Enter -> Inspect (I) -> Why? (the "Why did it stop?" button, data-testid shortcut-why) -> Esc -> Undo (U) -> More -> Save -> Field Guide '/' search -> back, with no mouse, asserting a visible focus outline at each step.
+- 200 % text checks at the three sizes show primary controls reachable (page.setViewportSize inside the desktop project; tests/e2e/helpers.ts expectReachable, expectNoHorizontalOverflow).
+- Run both specs on desktop now; the lead runs all three projects at the gate. docs/reports/contrast.md lists every pair with its ratio.
+E2E: E2E_PORT=4261 E2E_OUTDIR=tmp/dist-a11y.`,
+  },
+  {
+    key: 'perf',
+    port: 4262,
+    stage: 2,
+    // critical: hash-neutral changes to sim hot paths and the snapshot builder.
+    critical: 'own',
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P3.12 "Performance pass 1" (lines 565-570). Read ARCH §5 (103-124), §8 (169-188), §13 (294-305); SPEC §2.5 (76-85), §16 (1055-1064); CT §14 (653 on); docs/source/D02 ~line 761; docs/reports/render-perf-g1.md; docs/EXPANSION_RESPONSE.md §7 (G1: p50 1.28 ms at <= 710 agents); docs/reports/perf-g3.md ("Baseline at g2"); tools/sim-run.ts (--perf), tools/render-bench*. STAGE 2: a11y (Playwright) and g3-evidence (sim:tune, determinism-g3) run on the same 2 CPUs; nobody edits content/.
+
+You own: tools/perf-stress.ts (new), tests/perf/stress-shape.test.ts (new), tools/sim-run.ts, tools/render-bench.ts, tools/render-bench.html, tools/render-bench-run.ts, docs/reports/perf-g3.md (you may write it: this assignment overrides REPORT's one-docs-file line), and, for optimizations only, src/sim/** hot paths and src/worker/snapshot.ts (internal changes; every change hash-neutral). No content/, src/render or src/ui edits (renderer gains are proposals; src/worker/host.ts is not yours: propose snapshot-assembly changes).
+Build:
+- tools/perf-stress.ts builds the target population in memory (not a content recipe): 6,000 live agents including 2,000 fungal segments (F01 plus linked F02 networks; AGENT_CAP 6000, FUNGAL_CAP 2000 in src/sim/constants.ts), with every Phase 3 system on: film (B02 + E10 carriers), fungal transport, X01 on A01, V01 + B01, enzymes B06/B07/B08 with deposits and M09 breaker, M10 pellets and M11 wafers, walls/beads/gel/sediment, P01-P04, and E04/E07/E12 carriers.
+- Run 15 simulated minutes (9,000 ticks) at 1x headless. Record tick p50/p95/p99/max; the per-stage breakdown; heap (process.memoryUsage) every simulated minute; save serialize/deserialize time; and snapshot build time and bytes per part (W6-10): ents, ids, deposits (DEPOSIT_BANDS 7 x 16,384 bytes), overlay, geometry (only when its version changed), lineage marks, events, the inspector payload and the evolution state, measured by calling packEntities/packDeposits/packOverlay/visualEvents/buildInspector (src/worker/snapshot.ts), packLineageMarks (src/sim/lineage.ts:761), evolutionState (src/sim/mutation.ts:233) and creationFounders (src/sim/founders.ts:198) as DishHost.sendSnapshot (src/worker/host.ts:2193; at most every 100 ms while running) does.
+- Renderer budget with aggregation at 6,000 sprites including fungal tiles and links (render-bench; aggregation is the renderer's, renderer.ts paintAggregation). W6-14: tools/render-bench-run.ts hard-codes PORT 4176 (:20) and ignores E2E_PORT/E2E_OUTDIR: read the port from E2E_PORT (default 4176), run it with E2E_PORT=4262 and stop only that port.
+- Optimize hot paths (typed arrays, no per-tick allocation in stages, skip inactive fields and cells, no per-entity closures) WITHOUT changing any float operation or its order. Known cost: deposit fields (diffusion 'none') stay flagged active, so filmCoefficients (src/sim/transport.ts:175) scans the grid every tick once 'film' is allocated, and 'film' is allocated in every new world (film system enabled).
+- Hash-neutrality proof (the hard requirement): before your first optimization record the stress world's stateHash at tick 3,000 and the fence state (g2-replay and the four trajectory-fence files pass; trajectoryDigest of every registered recipe); after each optimization all must be identical. If a gain needs a result change, do not make it: describe it as a proposal (never bump simulationVersion; a result change needs a DECISIONS entry and an evolutionRulesVersion bump the owner approves).
+- Timings taken while a11y's Playwright and g3-evidence's sim:tune run are inflated: record the load average before/after every measurement, the lscpu model, core count and Node version, and write in perf-g3.md the exact commands; the lead re-measures the final table on a quiet machine at the gate (W6-12).
+Done when:
+- 1x tick p95 < 10 ms at 6,000 agents on this machine (also p50 and p99), or the measured limiting stage and the remaining gap; never fabricate a number.
+- No unbounded memory growth: heap slope over minutes 5-15 < 1 % per minute (show the series).
+- Snapshot size and cost per part are recorded.
+- docs/reports/perf-g3.md has before/after tables, the machine and load records, the hash-neutrality proof (hashes before == after), and the owner items (W6-11): the renderer numbers are SwiftShader lower bounds; a GPU/device frame-rate measurement (WORKLOG P1.5, EXPANSION_RESPONSE §7), the 15-minute Android stress session (D02 §25) and D-0017's device check of sheet/canvas compositing are owner items.
+- tests/perf/stress-shape.test.ts (W6-13; it runs in every npm run check, so keep it under about 20 s: build the world and run only until each mechanism has fired once) asserts the builder creates 6,000 agents with 2,000 fungal segments and every system active (non-vacuity).
+- g2-replay, the four fence files, tests/fixtures/conservation-all-pools.test.ts, determinism.test.ts and deterministic-state.test.ts still pass.
+E2E: E2E_PORT=4262 E2E_OUTDIR=tmp/dist-perf for Playwright; render-bench on E2E_PORT=4262 as above.`,
+  },
+  {
+    key: 'g3-evidence',
+    port: 4263,
+    stage: 2,
+    prompt: `ASSIGNMENT: assemble the G3 gate evidence (BUILD_DIRECTIVE "G3 gate — evidence", lines 572-576, and Appendix A, line 800) except the tag; you DRAFT the G3 sections of docs/EXPANSION_RESPONSE.md for the lead to finish. Read docs/EXPANSION_RESPONSE.md (the G2 edition: §1 identity, §2 scope, §3, §4 G2 evidence, §4b G1, §4c G0, §5-§8; keep the G1/G2 evidence style); CT §11 (528-539, tuning protocol); D-0015, D-0034 and docs/reports/tune-g1.md ("Proposals only" and "Candidate measurements"); docs/reports/tune-g2.md; the owner-review lines of D-0051, D-0055, D-0056, D-0058. STAGE 2: perf may be editing src/sim hot paths (hash-neutral) while you run; if a run crashes on a half-edited file, rerun it; nobody edits content/.
+
+You own: tests/fixtures/determinism-g3.test.ts, tests/e2e/launch-ecology.spec.ts, docs/reports/tune-g3.md (all new), docs/EXPANSION_RESPONSE.md (draft of the G3 edition), docs/reports/opening-loop-g3.md and docs/reports/img/g3/ (optional). You may create and edit these docs files: this assignment overrides REPORT's one-docs-file line. No src/** or content/** edits: report bugs instead.
+Build:
+- tests/fixtures/determinism-g3.test.ts: a hand-built Phase-3-heavy world (film, fungi with F02 transport, phage, parasites, enzymes, food objects, a held-then-transferred sample, E04/E07/E10/E12 carriers; L303 alone exercises only enzymes, broth and Diverse seeding) gives an identical stateHash at 1x, at 4x through the worker host (the FakeClockHost pattern of tests/fixtures/deterministic-state.test.ts, tests/helpers/host.ts) and through save -> loadSaveFile at the midpoint. Compare relationally; never pin hash literals.
+- tests/e2e/launch-ecology.spec.ts (W6-17; desktop now; the lead runs all three projects at the gate): New Dish -> the 'Empty Gel Colony' start choice (NewDish.tsx ~:292) -> Create (the dish opens paused in the Lab with the Life tray open, D-0030; do not press the view toggle) -> add Velvet on gel, Threadlace, Cordweaver, Brothmaker + a protein dose, a pellet (M10) and a salt brush stroke -> Sample -> Transfer -> Clean water -> Field Guide lookup (More -> Field Guide, Back restores) -> run at 4x -> the inspector shows film, links and the reaction ledger. Worker access only through the Worker wrapper of tests/e2e/lab-tools.spec.ts (watchWorker, workerHash); axe clean.
+- Tuning (W6-18): npm run sim:tune -- --recipes <every id in content/recipes, comma-separated> --seconds 600 --extend 1200 --presets standard --out docs/reports/tune-g3.md (tools/sim-tune.ts:2263-2287; the six DEV_SEEDS). Run it in the background with an until-loop wait; if the full run would exceed about 45 minutes, run the experiment and curated recipes with --extend 0 and say so. Re-measure D-0015's three proposals in memory: call tuneSeed(registry, opts) (tools/sim-tune.ts:1034) on a patched registry (registryWith / mutateRaw on a deep copy); never edit content/. Timings are inflated by the other stage 2 agents: the lead regenerates them after perf is integrated.
+- EXPANSION_RESPONSE G3 draft: §1 build identity (versions from content/manifest.json, contentHash, SCHEMA_VERSION 4, PROTOCOL_VERSION 2, the commit to be tagged left as "<lead>"); §2 scope table: 19 species, modules E01, E03-E10 and E12, systems, materials, habitats, tools; a new "§4. Correctness evidence (G3)" with one row per gate item (keep the G2/G1/G0 sections, renamed 4b/4c/4d), each with the command you ran and its pass/fail line and runtime, plus the generated relationship table copied from docs/reports/relationships-g3.md with its row counts (W6-16: BUILD_DIRECTIVE wants it in the response doc); §7 performance from docs/reports/perf-g3.md marked "provisional: the lead re-measures on a quiet machine"; §8 changes and owner decisions: the owner-review items of D-0051, D-0055, D-0056, D-0058, the audio manual listen (tools/audio-preview.html), the device items from perf-g3.md, no Android haptics until P4.10 if audio proposed it, and every open PROPOSED DECISION in docs/reports/reviews/g3-wave-4/.
+- Gate checklist (plan §5 with W6-19): host-specificity; transport-obstacles; conservation-all-pools; relationship-matrix + relationships-g3.md; module fixtures (module-accounting, shared-budget, module-e04, module-e06, module-e07, module-e08, module-e09-e10, module-e12, stage8-order); experiments (tests/experiments/*, e201-e204, hidden-neighborhood, one-host, fungal-supply-line, tests/recipes/curated.test.ts; experiments-g2.md/-g3.md); P3.1 chemistry.test; P3.2 habitat-presets, attachment; P3.3 film, fungal-branching, dusk-suitability, relationships-film, relationships-w2; P3.4 host-specificity, predation-matrix, parasite, phage, tests/sim/siltworm-crossing; P3.5 tests/sim/tools.test.ts, tests/worker/sample-transaction.test.ts; P3.6 fungal-transport, food-objects, producers, e201-e204; P3.8 guide, badges, relationships; P3.10 tests/audio/*; P3.11 contrast.md (the a11y specs are the lead's full e2e run); P3.12 perf-g3.md, stress-shape; determinism (determinism.test.ts G0 headless, deterministic-state.test.ts G1 host + save, determinism-g3.test.ts, g2-replay.test.ts, the four trajectory-fence files); saves (tests/persistence/migration.test.ts, tests/sim/history-debris.test.ts, g2-replay, tests/sim/world-stores.test.ts, tests/persistence/adhesion-import.test.ts, stale-prey.test.ts). Run each file yourself (targeted vitest, in a few batches) and paste the numbers; the lead runs the full suites and all three e2e projects at the gate.
+- Optional opening-loop screenshots (W6-15): never run tools/review-opening-loop.mjs as it is (it hard-codes 127.0.0.1:4173 and writes into docs/reports/img/g1/, overwriting committed G1 images); copy it to tmp/review-opening-loop-g3.mjs, point it at port 4263 and docs/reports/img/g3/.
+Done when: determinism-g3 and launch-ecology pass (desktop); tune-g3.md is written with the D-0015 re-measurement; the EXPANSION_RESPONSE draft has §1, §2, §4 (G3), §7 and §8 with real commands and numbers and every gap marked "<lead>"; bugs found are reported, not fixed.
+E2E: E2E_PORT=4263 E2E_OUTDIR=tmp/dist-evidence.`,
+  },
+]
+
+
+
+const WAVE_ID = 'g3-wave-4'
+
+// ---- runner" on, with A.wave set.
+// Builders: effort high, unit tests + their own new e2e journeys on the desktop project only.
+// One rules verifier over the whole wave diff (effort high), plus a targeted saves/determinism verifier for
+// each task marked critical: true. Fix rounds only for tasks with a BLOCKER or MAJOR (at most two);
+// MINORs go to the lead's integration.
+//
+// export const meta = {
+//   name: 'g3-wave-N',
+//   description: 'Phase 3 wave N (fast track): file-disjoint builders, one wave verifier over the whole diff, a saves lens for critical tasks, fix rounds only for BLOCKER/MAJOR',
+//   phases: [
+//     { title: 'Build', detail: 'one builder per task, effort high; unit tests + own e2e on desktop' },
+//     { title: 'Verify', detail: 'one rules verifier over the wave diff; a saves lens per critical task' },
+//     { title: 'Fix', detail: 'only tasks with a BLOCKER/MAJOR; at most two rounds' },
+//   ],
+// }
+
+// ---- runner
+// A = { wave, state, tasks: [{ key, port, prompt, critical?: true | 'own', finish?: '<resume note>' }], only?: ['key', ...], verifyGroups?: [['key', ...], ...] }
+// critical: 'own' → its own saves verifier; critical: true → one saves verifier shared by all such tasks.
+const A = { wave: WAVE_ID, state: STATE, tasks: WAVE_TASKS.map((t) => (t.key === 'experiments-curated' ? { ...t, critical: false } : t)), only: ['field-guide', 'g3-fixtures', 'experiments-curated', 'audio'], verifyGroups: [['field-guide', 'audio'], ['experiments-curated', 'g3-fixtures']] }
+const WAVE = A.wave
+const R = `docs/reports/reviews/${WAVE}`
+const TASKS = A.only ? A.tasks.filter((t) => A.only.includes(t.key)) : A.tasks
+const KEYS = TASKS.map((t) => t.key)
+
+const PRE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Phases 0–2 are tagged g0/g1/g2. ${A.state} You build part of Phase 3 "Launch Ecology" (docs/BUILD_DIRECTIVE.md "Phase 3"). Canonical rules: docs/PIXELMEBA_IMPLEMENTATION_SPEC.md (SPEC), docs/CONTENT_TABLES.md (CT, every number), docs/ARCHITECTURE.md (ARCH), docs/UX_SPEC.md (UX), docs/CONFLICT_REGISTER.md. docs/DECISIONS.md holds rulings: read every title, and in full the ones your assignment names. Most relevant: D-0006, D-0007 and D-0008 were written for Phase 3; D-0019 schema bump + migration by copy + old-save test; D-0024/D-0028 Lab edits, structures as content; D-0030 founder modes, import refusal of unimplemented modules; D-0032 module marks in the atlas; D-0033 keep the open dish first; D-0035 world schema 4 with a hash-neutral stateHash; D-0036 version bumps (buildPhase 3, contentVersion 2; simulationVersion stays 3); D-0037 Sample; D-0038 film is eaten as detritus; D-0039 tool texts as content; D-0043 links as entity columns; D-0044 chemistry and habitats as built; D-0045 the stage 8 reservation framework as built; D-0046 organism art as built; D-0047…D-0050 wave 2 as built; D-0051…D-0058 wave 3 as built (Sample D-0054, modules D-0055…D-0058); D-0059 the module flip (moduleRegistryVersion 2). Contract (CLAUDE.md): determinism (randomness only via det(seed, stream, ...keys) in src/sim/rng.ts; prefer an existing stream with a new KIND key; add a NEW stream id only if unavoidable and never reuse one; never Math.random, Date, or Map/Set/object-key iteration order in src/sim), conservation ledger (every material move is internal and balanced, or an input/export), no hidden rescue, honest labels ("coincided with" until a mechanism supports "because"; never "superior/advanced/perfect/adapted/immune"), content is validated JSON, the UI changes the world only through commands, saves are sacred (no world schema bump in this wave unless your assignment says so).
+
+PHASE 3 DETERMINISM FENCE. tests/fixtures/g2-replay.test.ts (saves written by the g2 build load and continue bit-identically) and the four tests/fixtures/trajectory-fence*.test.ts files (each registered recipe's biology digest under registryWith(G2_LISTS) and under the shipped manifest) must pass after your change. Gate every new rule on the world's own recorded manifest through src/sim/gates.ts (worldHasSystem / worldHasSpecies / worldHasModule; or world.fields[id] !== undefined, world.modules[id] !== undefined), or on the presence of the organisms it concerns — never on a build constant — so an old save never gains a Phase 3 rule. Never hard-code stateHash literals in new tests; compare relationally or with tests/helpers/trajectory.ts trajectoryDigest(world, 'g2' | 'full'). tests/helpers/trajectory.ts is SHARED only to register new post-g2 state in its POST_G2_* tables. If your work would change a fence value, do not make that change: report "FENCE: <recipe> <why>". Only the lead updates the fence; you may run "npx tsx tools/fence-update.ts --add <recipe>" for recipes you create.
+
+CONTENT AND MANIFEST. content/manifest.json is SHARED: only insert the IDs your assignment names (arrays sorted ascending), never remove IDs, never change version fields unless your assignment says so. Add the native abilities/modules you implement to src/sim/content/implemented.ts (additive). For content another builder of this wave enables, test through registryWith({...}) (allowUnimplemented only for species whose ability another builder of this wave implements; say so). After changing anything under content/ run "npx tsx tools/content-validate.ts --write" (a contentHash or atlas mismatch caused by another agent's in-flight edit is not your bug; say so). An enabled species needs its atlas frames (all 14 Phase 3 species have them since wave 1), an enabled module its feature-mark frames (D-0032). Update any test that pins a shipped list your edit moves (e.g. tests/worker/host.test.ts speciesIds).
+
+OWNERSHIP. The lead commits: do NOT run git add/commit/stash/checkout/reset/rm/restore and do not delete files you did not create. Other agents edit the same working tree right now. Edit ONLY the files your assignment lets you own. SHARED files: additive edits only (new functions, cases, fields, or a one-line hook call into your own new file), re-read the file immediately before each edit, keep edits small, never reformat/reorder/rename code you did not write. Only the wave's art owner edits art/src/** or runs npm run art:build. Never run prettier on files you do not own. If you need a change elsewhere, describe it precisely in your report. Line numbers in your assignment are hints: find code by symbol (git grep -n) before editing.
+
+TESTS (fast track). The machine has 2 CPUs shared by several agents. Run targeted vitest files only (never the whole suite), long commands with run_in_background and an until-loop wait (never a bare sleep). Browser tests: ONLY your own new or changed journeys, on the desktop project only, with your own port and build folder: E2E_PORT=<port> E2E_OUTDIR=tmp/dist-<key> npx playwright test <your specs> --project=desktop. Do not re-run other specs and do not run the phone projects: the lead runs the whole three-project suite at the gate. Playwright silently reuses a server already on your port: stop your port before and after each run (lsof -t -i :<port> | xargs -r kill; never pkill). The e2e app has no test hook: journeys that need the worker wrap Worker in an init script and speak the protocol, as tests/e2e/lab-tools.spec.ts watchWorker/workerHash do. Timings taken while others run are inflated; leave perf numbers to the lead. NEVER end your turn while a command you started is still running: no notification can reach you after you return, so wait for it in the same turn (an until-loop on its output file or exit marker) and only then write your report; your final message must be the full report, never a promise to report later.
+
+BEFORE FINISHING: npx tsc -p tsconfig.json --noEmit and npx eslint <your files> clean; npx vitest run tests/fixtures/g2-replay.test.ts tests/fixtures/trajectory-fence tests/fixtures/conservation-closed-lid.test.ts tests/fixtures/determinism.test.ts <your tests> all pass; your own e2e journeys pass on desktop; screens you touched have no serious/critical axe violations (expectNoSeriousA11yViolations), touch targets ≥ 48 px and text ≥ 16 px. Put proposed decisions in your report as "PROPOSED DECISION: …".`
+
+const FINISH_NOTE = (what) => `IMPORTANT — RESUMING INTERRUPTED WORK. A previous builder with exactly this assignment was cut off; its uncommitted work is in the working tree (git status / git diff). ${what} Do NOT start over and do not discard its work. First audit the existing work against EVERY item of the assignment's Build and "Done when" lists: per item DONE (file:line + the test that proves it, re-run now) / PARTIAL / MISSING / WRONG. Then complete everything PARTIAL/MISSING/WRONG and re-run your tests.`
+const REPORT = (key, suffix) => `When you finish, write your final report ALSO to ${R}/${key}-${suffix}.md (create the folder if needed; besides the docs files your assignment names, this is the only docs file you may create), then return the same report as your final message.`
+const BUILD_FINAL = `Final message: a plain report — a checklist of every Build and "Done when" item (DONE with file:line and the proving test / NOT DONE and why), files created/changed, what each test proves (and how you checked it fails without the mechanism), commands with results (paste the pass/fail summary lines), FENCE notes, bugs noticed elsewhere, proposed decisions.`
+
+const SAFE = (dir, port) => `Do NOT edit any repository file except your own report file named below, and do NOT run git add/commit/stash/checkout/reset/restore. Scratch goes in tmp/${dir}/ (git-ignored). 2 CPUs shared: targeted commands, generous timeouts, run_in_background + an until-loop for long runs. Browser tests only to prove a UI problem you suspect: E2E_PORT=${port} E2E_OUTDIR=tmp/dist-${dir}, desktop project only; stop only that port before and after (lsof -t -i :${port} | xargs -r kill). Never pkill. Never end your turn while a command you started is still running: wait for it first (no notification reaches you after you return).`
+const RULES_LENS = `LENS: rules, determinism, conservation, tests and player-facing truth. Check every rule and number against the cited canonical docs (quote the doc line when you claim a mismatch). Run tests/fixtures/g2-replay.test.ts, tests/fixtures/trajectory-fence (the four-file prefix), tests/fixtures/conservation-closed-lid.test.ts and the builders' new tests yourself. Read the diff (git status / git diff; new files are untracked). Look for: vacuous tests or weaker proxies (would the test fail if the mechanism were deleted? try it with a load-time mutant under tmp/, never by editing tracked files); rules gated on a build constant instead of the world's manifest; determinism leaks (Math.random, Date, Map/Set/object-key iteration in src/sim, reused RNG streams, float order changed for existing species); unledgered material moves; save-shape changes without a schema bump and migration; hard-coded stateHash literals; edits outside a task's ownership; non-additive edits to SHARED files; manifest or version-field edits no assignment allowed; and, by reading the UI code and strings, visible claims that do not trace to a measured value or reason code, marks or animations without the state behind them, and copy against UX_SPEC tone.`
+const SAVES_LENS = `LENS: saves and determinism only, for the task(s) named below. Prove or refute: same seed + content + command log gives the identical stateHash at 1×, at 4× (run(world, n) vs four quarter runs), and across serialize → deserialize and saveFile build → load at awkward moments (mid-transaction, right after the new state appears, right before it ends); g2 saves load and continue bit-identically; any new saved state is canonical (order-independent), validated on import (refused with a message that ends "Nothing was loaded."), counted in the ledger, and either hash-neutral while empty or deliberately hashed; nothing outside src/sim draws simulation randomness. Write load-time probes under tmp/; never edit tracked files.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+const graded = (v) => (v && Array.isArray(v.problems) ? v.problems.filter((p) => /^(BLOCKER|MAJOR|MINOR)/.test(p.trim())) : [])
+const blocking = (ps) => ps.filter((p) => /^(BLOCKER|MAJOR)/.test(p.trim()))
+const keyOf = (p) => {
+  const m = /^\s*(?:BLOCKER|MAJOR|MINOR)\s*\[([^\]]+)\]/.exec(p)
+  return m && KEYS.includes(m[1].trim()) ? m[1].trim() : null
+}
+const FORMAT = `Prefix every problem with its grade and the task key it belongs to, exactly like "MAJOR [${KEYS[0]}] <file:line> — <what is wrong> — <repro>" (task keys: ${KEYS.join(', ')}; use [lead] for a problem no single task owns). Most severe first. Add "VERIFIED OK — <item> — <evidence>" entries for parts that hold. ok=false if any BLOCKER or MAJOR.`
+
+log(`${WAVE}: ${TASKS.length} task(s): ${KEYS.join(', ')}`)
+
+phase('Build')
+// Tasks may carry stage: 1, 2, ... (default 1); a stage starts only after every builder of the previous stage returned.
+const STAGES = [...new Set(TASKS.map((t) => t.stage || 1))].sort((a, b) => a - b)
+const builds = {}
+for (const s of STAGES) {
+  const group = TASKS.filter((t) => (t.stage || 1) === s)
+  if (STAGES.length > 1) log(`build stage ${s}: ${group.map((t) => t.key).join(', ')}`)
+  const res = await parallel(
+    group.map((t) => () =>
+      agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\n${t.finish ? FINISH_NOTE(t.finish) + '\n\n' : ''}${t.prompt}\n\n${REPORT(t.key, 'build')} ${BUILD_FINAL}`, {
+        label: `${t.finish ? 'finish' : 'build'}:${t.key}`,
+        phase: 'Build',
+        effort: 'high',
+      }),
+    ),
+  )
+  group.forEach((t, i) => {
+    builds[t.key] = res[i]
+  })
+}
+const built = {}
+TASKS.forEach((t) => {
+  built[t.key] = builds[t.key] ? String(builds[t.key]) : 'NO REPORT (the builder failed or was skipped)'
+})
+log(`builders done: ${TASKS.filter((t) => builds[t.key]).map((t) => t.key).join(', ')}`)
+
+
+phase('Verify')
+// Rules verifiers: one per group in A.verifyGroups (task keys), else one over the whole wave.
+const VGROUPS = (A.verifyGroups || [KEYS]).map((g) => TASKS.filter((t) => g.includes(t.key))).filter((g) => g.length)
+const verifyJobs = [
+  ...VGROUPS.map((group, gi) => () =>
+    agent(`You are an adversarial wave verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-${WAVE}-${gi}`, 4390 + gi)}
+Wave ${WAVE} ran ${TASKS.length} builders in one working tree; their work is uncommitted (git status / git diff). You verify ${group.length === TASKS.length ? 'all of them' : `these ${group.length}: ${group.map((t) => t.key).join(', ')} (others verify the rest; read their diffs only where they meet yours)`}. Assignments and reports:
+${group.map((t) => `=== TASK ${t.key} (port ${t.port}) ===\nASSIGNMENT:\n${t.prompt}\n\nBUILDER REPORT:\n${built[t.key]}`).join('\n\n')}
+
+${RULES_LENS}
+Try to REFUTE that each assignment is done correctly, completely and honestly — every item of its Build and "Done when" lists. ${FORMAT} Write the same list to ${R}/wave-verify${VGROUPS.length > 1 ? `-${gi + 1}` : ''}.md.`, { label: `verify:${WAVE}${VGROUPS.length > 1 ? `:${gi + 1}` : ''}`, phase: 'Verify', schema: VERDICT, effort: 'high' }),
+  ),
+  // Saves/determinism lens: one verifier per task marked critical: 'own'; one shared verifier for every task marked critical: true.
+  ...[...TASKS.filter((t) => t.critical === 'own').map((t) => [t]), ...(TASKS.some((t) => t.critical === true) ? [TASKS.filter((t) => t.critical === true)] : [])].map((group, i) => () =>
+    agent(`You are an adversarial saves/determinism verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-saves-${i}`, 4396 + i)}
+Task(s) ${group.map((t) => t.key).join(', ')} of wave ${WAVE}; their work is uncommitted in the tree with other builders' work.
+${group.map((t) => `=== TASK ${t.key} ===\nASSIGNMENT:\n${t.prompt}\n\nBUILDER REPORT:\n${built[t.key]}`).join('\n\n')}
+
+${SAVES_LENS}
+${FORMAT} Write the same list to ${R}/saves-verify-${group.map((t) => t.key).join('+')}.md.`, { label: `verify:saves:${group.map((t) => t.key).join('+')}`, phase: 'Verify', schema: VERDICT, effort: 'high' }),
+  ),
+]
+const verdicts = (await parallel(verifyJobs)).filter(Boolean)
+let problems = verdicts.flatMap(graded)
+const toLead = problems.filter((p) => !blocking([p]).length || keyOf(p) === null)
+log(`verify: ${verdicts.length} verdict(s), ${problems.length} graded item(s), ${blocking(problems).length} BLOCKER/MAJOR`)
+
+const rounds = []
+for (let round = 1; round <= 2; round++) {
+  const open = blocking(problems).filter((p) => keyOf(p) !== null)
+  if (!open.length) break
+  const fixKeys = KEYS.filter((k) => open.some((p) => keyOf(p) === k))
+  log(`fix round ${round}: ${fixKeys.join(', ')}`)
+  phase('Fix')
+  const fixes = await parallel(
+    fixKeys.map((k) => () => {
+      const t = TASKS.find((x) => x.key === k)
+      const mine = problems.filter((p) => keyOf(p) === k)
+      return agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\nYou are the round-${round} fixer for this assignment (the work is in the tree; do not start over):\n---\n${t.prompt}\n---\nThe adversarial verifier found these problems in it (full lists: ${R}/wave-verify*.md and saves-verify-*.md${round > 1 ? `, and ${R}/wave-reverify${round - 1}.md` : ''}):\n---\n${mine.join('\n')}\n---\nFix EVERY BLOCKER and MAJOR, and every MINOR that is cheap and inside your files. For each behavioural problem add or tighten a test that fails on the old behaviour and passes now. If a problem is wrong (the verifier misread a rule), say why with quotes from the canonical docs instead of changing code. If a fix needs a file outside your ownership, make it only if it is small and additive, or describe it precisely for the lead. Re-run your unit tests, the fence fixtures and your own e2e journeys (desktop) before finishing. ${REPORT(k, `fix${round}`)} Final message: per problem FIXED (how, which test) / NOT A PROBLEM (why, quotes) / NOT FIXED (why); files changed; commands + results.`, { label: `fix${round}:${k}`, phase: 'Fix', effort: 'high' })
+    }),
+  )
+  const fixReports = fixKeys.map((k, i) => `=== FIXER ${k} ===\n${fixes[i] ? String(fixes[i]) : 'NO REPORT'}`).join('\n\n')
+  const fixedProblems = problems.filter((p) => fixKeys.includes(keyOf(p)))
+  const rv = await agent(`You are the adversarial re-verifier for wave ${WAVE} of Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`reverify${round}-${WAVE}`, 4394)}
+The assignments of the fixed tasks:
+${TASKS.filter((t) => fixKeys.includes(t.key)).map((t) => `=== TASK ${t.key} ===\n${t.prompt}`).join('\n\n')}
+
+The verifier found these problems:
+---
+${fixedProblems.join('\n')}
+---
+Round-${round} fixers reported:
+${fixReports}
+
+${RULES_LENS}
+For EACH problem try to REFUTE that it is fixed: reproduce the original finding against the current tree, read the diff, check the new test fails on the old behaviour (load-time mutant under tmp/), and check nothing regressed (the touched unit tests and the fence fixtures). ${FORMAT} Write the same list to ${R}/wave-reverify${round}.md.`, { label: `reverify${round}:${WAVE}`, phase: 'Fix', schema: VERDICT, effort: 'high' })
+  rounds.push({ round, fixKeys, fixes: fixes.map((f) => (f ? String(f) : null)), reverify: rv })
+  if (!rv) break
+  const unfixed = problems.filter((p) => !fixKeys.includes(keyOf(p)))
+  problems = [...unfixed, ...graded(rv)]
+}
+
+const remaining = blocking(problems)
+log(`${WAVE}: ${remaining.length ? `${remaining.length} BLOCKER/MAJOR remain` : 'no BLOCKER/MAJOR remains'}; ${problems.length - remaining.length} MINOR for the lead`)
+return { wave: WAVE, built, verdicts, rounds, remaining, minors: problems.filter((p) => !blocking([p]).length), toLead }

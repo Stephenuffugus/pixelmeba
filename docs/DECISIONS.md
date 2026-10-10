@@ -496,3 +496,106 @@ Decision:
 - Saves: a predator's prey link may name a prey removed in this tick (taken by another predator, dead of age, starvation or lysis) until its next decision re-validates it. The game saves that state itself, so the import accepts a stale prey link and refuses only a slot outside the entity table; the inspector no longer names a removed prey as the target. This fixes a g2 defect that could make an autosave unloadable ("A prey link points at an organism that is not there."). Host/parasite links stay strictly checked (they are kept mutual). Test: tests/persistence/stale-prey.test.ts (age, lysis, contested capture; save → load → same hash, +50 ticks equal).
 Reason: saves are sacred; every visible feature maps to real state; ARCH §7–§10.
 Owner review: no
+
+## D-0051 · 2026-10-10 · P3.6 · Crumbsmith, Oilwick, Brothmaker enzymes, the reaction ledger, food access and EXP_201–204 as built
+Context: wave 3 e1-producers (docs/reports/reviews/g3-wave-3/e1-producers-{build,fix2}.md; wave verify 1 MINORs fixed in round 2).
+Decision:
+- Food-access overlay (SPEC §10.8): per cell, the carbon of the pools the selected organism's species can eat now (its profile foods, plus film when it digests film in a film world: the inspector's "Food here" list). With no organism selected, or a cell selected, it shows the carbon every enzyme made accessible in the last whole second. Legend low → high, 'food' colormap, offered in every dish (derived, like light), observation only (tested: state hash unchanged).
+- EXP_203 "protein 0.50 with N 0.05": the 0.05 N is bound nutrient (proteinN 0.05 = 0.10 N per C); no free nutrient beyond the Water Garden's own 0.10 background.
+- Reaction ledger: "last second" is the last complete simulated second (ticks 10s…10s+9), recorded per cell and enzyme in an observation-only store that is never saved or hashed and starts empty after a load or duplicate. "Made here by {species}" names a species only when a living organism of it holds that enzyme's producer rules, sits in the cell or a four-neighbour (SPEC §5.3's emit neighbourhood) and released that enzyme in the last tick (its PRODUCER_BIT in `secreting`); otherwise the row says "Enzyme present". It never claims which producer made which unit.
+- omitFounders: a paired card may omit only the recipe's last founder group, so every earlier group keeps arm A's cells and birth ids (founders are placed group by group).
+- EXP_201 and EXP_202 are single-arm with no player steps; EXP_204's gate is "both copies ran 120 s with converted.starch measured"; the comparison is reported, never forced. EXP_201's journal stamp says only what the gate measures: "Measured a Crumbsmith's starch turning to sugar, and what Sprinters ate".
+Reason: SPEC §5.3, §10.8; CT §10.3, §12.6; honest labels ("coincided with" until a recorded mechanism supports "because").
+Affects: src/worker/snapshot.ts, src/ui/panels/{Inspector,ReactionLedger}.tsx, content/recipes + experiments 201–204, tests/fixtures/producers.test.ts, tests/experiments/e201-e204.test.ts, fence (four entries added).
+Owner review: yes — (1) balance: in EXP_202 and EXP_203 every Oilwick and Brothmaker starves (154 s / 149 s) under CT's numbers (0.02 activity/s, 2 %/s decay and 0.10 × activity conversion feed far less than 0.38–0.40 E/s upkeep plus 0.40 E/s enzyme cost); a fix is a content tuning question. (2) EXP_201's CT §10.3 gate (intake.B01 ≥ 0.5) is reached from the Water Garden's background sugar alone (8 s); a stricter attribution gate is the owner's call.
+
+## D-0052 · 2026-10-10 · P3.6 · Cordweaver (F02) transport links as built
+Context: wave 3 f02-links (docs/reports/reviews/g3-wave-3/f02-links-{build,fix1}.md, wave-reverify1.md).
+Decision:
+- A parent–daughter link forms only when both ends have fewer than 4 fungal links; otherwise the daughter is placed unlinked and the 'birth' event's detail says `{link: 'degree'}` (lineage unchanged). This applies to Threadlace (F01) links too; with today's rules it is reachable only through hand-made links.
+- The transport pass applies the donor cap first and the receiver cap second, to the donor-capped requests, with no re-offer of what a cap removed. "At least 0.01 B0' less" and the 1.5 B0' headroom use the receiver's B0'; the donor threshold uses the donor's.
+- Only Active F02 segments at both ends of a valid LINK_TRANSPORT link take part (a Resting segment has no links in use, SPEC §7.6); a transport-kind link on a species without TRANSPORT_LINKS carries nothing.
+- Transfer observation is per slot and keyed to the segment's birthId (a division starts empty); the window is the current dish second plus the nine before it; it is never saved, so a reload starts it empty. The per-second history total accumulates in an optional saved `history.pendingFungalTransfer`, so samples stay exact across a mid-second save (history is not hashed; no world schema change).
+- Every link change emits one event from the end named by birthId: 'linkFormed' carries the retained parent's birthId with partner = the daughter; 'linkBroken' carries the removed organism's birthId with partner = the survivor.
+- F02 is in the shipped manifest, so every new dish can form transport links and each history sample carries `fungalTransfer` (0 without links). Observation only.
+Reason: SPEC §7.6, §7.7; CT §12.6; ARCH §10.1 (four-neighbour mask tiles, D-0047).
+Affects: src/sim/{births,fungi,fungalTransport,links,publish}.ts, tests/fixtures/fungal-transport.test.ts, tests/sim/fungal-links.test.ts.
+Owner review: no
+
+## D-0053 · 2026-10-10 · P3.6 · Sugar pellets and starch wafers (food objects) as built
+Context: wave 3 food-objects (docs/reports/reviews/g3-wave-3/food-objects-{build,fix1}.md).
+Decision:
+- When a full-rate transfer would leave a pool with less than OBJECT_DUST_C = 1e-9 C, the whole pool moves now (otherwise repeated subtraction leaves 3.8e-13 C for one more tick). The transfer stays within inventory; nothing is zeroed or logged as roundoff.
+- Nutrient release is proportional for both kinds: n × released C / remaining C, split across pools by carbon, the last releasing pool taking the remainder; the emptying transfer moves exactly the remaining n (SPEC §5.1's 0.10 N per C without a second hard-coded ratio).
+- An object holds only its kind's pools (pellet: sugar; wafer: starch); creation, the save import and held-sample objects refuse any other pool (fix round 1: a pellet that also held starch counted as empty and left the store with its carbon).
+- Release runs in stage 3 before the enzymes (tested: a wafer's first starch is catalysed in the tick it is released).
+- A structure stroke skips object cells and reports them as `HabitatSkips.object` (present only when > 0, so older results keep their shape); the Lab toast says "N held a food object". The food-object tap has its own brush rule 'object': a structure or an existing object refuses it; organisms never do.
+Reason: SPEC §5.1, §14.3; CT §5.2; conservation (no free biomass, no lost carbon).
+Affects: src/sim/{objects,conversion,structures}.ts, src/persistence/saveFile.ts, tests/fixtures/food-objects.test.ts.
+Owner review: no
+
+## D-0054 · 2026-10-10 · P3.5 · Sample, Transfer, Discard and Clean water as built
+Context: wave 3 tools-sample (docs/reports/reviews/g3-wave-3/tools-sample-{build,fix1}.md, saves-verify-tools-sample.md); D-0037 defines Cancel as exact.
+Decision:
+- Replacing a held sample (Begin while held, after the player confirms "Replace it?") is Discard, then Begin; the worker refuses a bare second Begin.
+- The take is a non-undoable command (Undo while a sample is held acts as Cancel). Transfer, Discard and Clean water are ordinary undo points. Sample commands are refused on comparison copies, and compareStart is refused while the source holds a sample.
+- Cancel also removes refused sample commands made while held: every log entry with seq ≥ sample.seq leaves the log with its trailing 'command' event, so reused seq numbers never duplicate a log entry.
+- Cancel is exact in D-0037's sense: the stateHash equals the pre-Begin hash, also after a save and reload in between. The capped, unhashed event ring (500) and commands.log (10,000) are not part of that promise: when the take or a refused transfer pushes their oldest entry out, Cancel does not bring it back.
+- Transfer destinations: held field cells need transport-open cells (open water or porous beads, as the source cells were); objects need no structure; organisms need habitatCompatible, except a parasite riding a held host, which follows its host. Soft capacity counts the dish's own cellLoad plus the incoming B/b0 ≤ 8. Sampling never widens the brush. Deposits mode takes every deposit-kind field (grit too, when the silicate system exists).
+- txId = `sample-<tick>-<seq>` (no worldId), so comparison arms and branches hash alike.
+- The import refuses a held sample that the game could not have saved: a negative pool or unknown life state; a slot or birthId shared with a living organism or another held row; held links or host pairs that are not mutual within the sample (a prey link may be stale, D-0050); cell offsets off the grid, an origin or rows outside the dish, a radius outside the Lab brush sizes; an object id that clashes with a world object, sits on a world object's cell or is at or above the object counter; a take that is not the latest command (seq), or a birthId at or above the birth counter. Messages end "Nothing was loaded.".
+Reason: SPEC §10.5–§10.6, §14.3; D-0037; saves are sacred; determinism.
+Affects: src/sim/{sample,sampleSlot,commands,tools}.ts, src/worker/{host,protocol,client}.ts, src/ui/panels/{SampleSession,SamplePanel,LabTray}.tsx, src/persistence/saveFile.ts, tests/sim/tools.test.ts, tests/worker/sample-transaction.test.ts.
+Owner review: no
+
+## D-0055 · 2026-10-10 · P3.7 · E04 Holdfast and E07 Light seeking as built
+Context: wave 3 mod-anchor-light (docs/reports/reviews/g3-wave-3/mod-anchor-light-build.md, wave-verify-2.md).
+Decision:
+- The dish rim (ST_OUTSIDE, or a neighbour off the grid) counts as E04 support (SPEC §2.1: the rim is a solid edge). Gel and sediment are not support; mesh comes in Phase 5.
+- An anchored carrier stays "free" for CT §3.2's prey rules: FLAG.attached is never set by E04, so P02/P05/P07 may take an anchored B06–B12.
+- Every E04 detach starts the 10 s lockout, including the release on Resting. Release happens on Resting only, not Preparing: a Preparing carrier keeps its anchor (and pays its upkeep) until it rests. Attaching does not require recent usable intake.
+- Division clears the retained daughter's anchorLockout as well as anchorState, anchorSeconds and noUsableIntakeSeconds, so both daughters start identical.
+- One lockout convention for E04 and E12 (lead, wave verify 2 MINOR 3): a 10 s lockout blocks the next 100 ticks after the detach or link break, whatever the slot order; the attach or pairing clock may run again from the 101st tick.
+- E07 candidates are the organism's own cell plus cells at least brighterBy (0.01, with 1e-12 float tolerance) brighter; among those, the ordinary 0.5·F + 0.4·S − 0.1·C score (F = effective light) picks the target, so a carrier moves only to brighter cells.
+- An organism that is not self-propelled never keeps FLAG.moving or FLAG.hunting (lead fix: a daughter that lost E07 kept its parent's FLAG.moving, and the inspector said "Moving" for a Sunbead that could not move).
+Reason: SPEC §2.1, §9 (E04, E07, E12); CT §3.2; every visible feature maps to real state.
+Affects: src/sim/{anchor,lightSeeker,movement,phenotype,intakeClock,births}.ts, tests/fixtures/module-e04.test.ts, tests/fixtures/module-e07.test.ts.
+Owner review: yes — the rim counts as E04 support; an anchored carrier is still prey for the free-prey hunters.
+
+## D-0056 · 2026-10-10 · P3.7 · E06 Shade tolerance and E08 Debris feeding as built
+Context: wave 3 mod-feeding (docs/reports/reviews/g3-wave-3/mod-feeding-build.md, wave-verify-2.md).
+Decision:
+- For an E06 carrier, food access on the photosynthetic route is the CO2 supplied against its light-shaped ceiling (budget × 0.70 × min(1, light/0.35)); its light response (raw light, without E06) then competes with that access and with N and O2 on equal terms, and LIGHT_LIMITED reports the measured light. Non-carriers keep the g2 access (C/budget), so the fence and every g2 world hold.
+- An E08 carrier takes the detritus route only where its cell has detritus > 0 and it holds no meal (a held meal keeps exclusive priority); otherwise it keeps the predator's PRED_NO_PREY reason. It eats the detritus field only, never film (D-0038 keeps film for film digesters).
+- On a recorded detritus tick the inspector's action chip says "Eating detritus" ("Finding only traces of detritus" below usable intake), not "Digesting".
+- E06 "active now" means FLAG.feeding on the photosynthetic route; A04 mixotrophy must feed the same helper when it lands.
+- FLAG 1 << 13 = detritusIntake; 1 << 12 stays unused.
+Reason: SPEC §9 (E06, E08); honest labels.
+Affects: src/sim/{intake,debrisFeeder}.ts, src/sim/entities.ts (flag), tests/fixtures/module-e06.test.ts, tests/fixtures/module-e08.test.ts.
+Owner review: yes — a plain (non-E06) photosynthesizer is never labelled LIGHT_LIMITED while light is above 0, because its access C/budget = light × avail(CO2) is always below its light response: a dim Sunbead reads "not enough food here" instead of "too dark". This is g2 behaviour, and limitCode is a hashed column in every Sunbead world, so changing it rewrites old worlds' hashes. Proposed: apply the E06 decomposition to every photosynthesizer in new worlds only, keyed to a recorded ruleset bump, at the next fence-updating change the owner approves.
+
+## D-0057 · 2026-10-10 · P3.7 · E09 Broth making, E10 Matrix building and the final stage 8 order as built
+Context: wave 3 mod-builders (docs/reports/reviews/g3-wave-3/mod-builders-build.md; recheck W4-16 alternative).
+Decision:
+- `secreting` is a producer bit set: starch 1, oil 2, protein 4, each producer ORing its own bit, with FLAG.secreting as the OR. Starch stays 1, so B06, E01 and every g2 hash are unchanged. CUE2_RELEASING_PROTEIN is bit 4 (also set for native B08); the renderer draws the protein marks only together with CUE2_MOD_E09.
+- E10's request is capped at remainingEnergy / energyPerCarbon as well, so it can never reserve energy that is not there (with minEnergy 35 this cap never binds). A refused E10 returns ENERGY_LOW for energy and NONE otherwise; builders keep no saved refusal column.
+- E10 "active now" is an observation-only per-world map (slot → birthId), checked against birthId, rebuilt every stage 8, never saved or hashed; it is empty after a reload until the next tick (like fungalFlow).
+- The E09 card for a species that already drinks broth (Y02) reads "Its kind already drinks broth; this ability does not change that." instead of "cannot consume broth".
+- The final stage 8 table (structures.ts header): mandatory transitions → natives by action ID (E_STARCH 0, E_OIL 1, E_PROTEIN 2, BIOFILM 3) → E01, E09, E10; the D-0045 two-producer test now exists (B04 with E01 + E09).
+Reason: SPEC §3.2 row 8, §9 (E09, E10); D-0045; determinism (g2 hashes unchanged).
+Affects: src/sim/{secretion,actions,structures,construction,matrixBuilder,moduleView}.ts, src/ui/strings/modules.ts, tests/sim/stage8-order.test.ts, tests/fixtures/module-e09-e10.test.ts.
+Owner review: no
+
+## D-0058 · 2026-10-10 · P3.7 · E12 Adhesion as built, and stricter module checks on import
+Context: wave 3 mod-adhesion (docs/reports/reviews/g3-wave-3/mod-adhesion-build.md) and the saves verifier's MINORs 2 and 3 (saves-verify-f02-links+food-objects+mod-adhesion.md).
+Decision:
+- "Free" for pairing means not FLAG.attached and not E04-anchored (anchorState 1): an anchored carrier may not pair. Links are not cut when an organism anchors later (a linked member does not move, so it cannot reach support on its own).
+- The 2 E link cost is ledgered as energy 'other'.
+- A member that already holds 2 links neither times nor is timed, so a third-link refusal happens only when two pairs sharing a member resolve on the same tick; the 8-member colony cap is checked at resolution, so a 9th member fails visibly (D04 §6).
+- Proposals are one-sided and deduplicated; every proposal is re-checked at resolution (both alive, not linked to each other, both E ≥ 20, then the caps); after a link or a refusal both ends' clocks restart.
+- The lockout counts down at the end of stage 5, after the pairing check, so a 10 s lockout blocks exactly 100 ticks for both ends (the convention D-0055 gives E04 too).
+- The import refuses E12 pairing state the simulation cannot produce (lead fix, docs/reports/reviews/g3-wave-3/lead-fixes.md): a lockout outside [0, lockoutSeconds]; a clock below 0 or above linkSeconds + maxLinks × dt (a ready pair whose re-check fails at resolution, e.g. because an earlier link in the same pass spent one end's energy, keeps its clock for another tick, so 5.0 s can become 5.1 s); a partner birthId that was never issued (≥ nextBirthId; a partner that has since died is legitimate and loads); and non-zero pairing state on a dead slot, in a dish without E12 or on an organism whose genome lacks E12 (every removal clears the slot, and division clears the retained daughter).
+- The import refuses a recorded module whose parameters are incomplete (moduleRules `missingModuleParams`), with "… Nothing was loaded.", instead of loading a world whose first tick would throw (lead fix; the pattern predates E12).
+Reason: SPEC §9 (E12), §14.3; D04 §6; saves are sacred (a failed import never touches the current world).
+Affects: src/sim/{adhesion,contacts,maintenance}.ts, src/persistence/saveFile.ts, tests/fixtures/module-e12.test.ts, tests/persistence/*.
+Owner review: yes — E12's "free" excludes anchored carriers; the link cost is ledgered as 'other'.

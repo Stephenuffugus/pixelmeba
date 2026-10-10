@@ -1,0 +1,66 @@
+export const meta = {
+  name: 'g3-module-flip',
+  description: 'The lead module flip after wave 3 (E04, E06–E10, E12 enabled; moduleRegistryVersion 2; fence update D-0059): one builder, one saves/determinism verifier, one fix round only for BLOCKER/MAJOR',
+  phases: [
+    { title: 'Flip', detail: 'one builder, effort high' },
+    { title: 'Verify', detail: 'saves + determinism lens, effort high' },
+    { title: 'Fix', detail: 'only for BLOCKER/MAJOR' },
+  ],
+}
+
+const R = 'docs/reports/reviews/g3-flip'
+const PRE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). main = Phase 3 waves 1-3 committed (decisions D-0043..D-0058 in docs/DECISIONS.md; read D-0035, D-0036, D-0042, D-0055..D-0058 in full). Nobody else edits the tree while you work. Do NOT run git add/commit/stash/checkout/reset/restore/rm (the lead commits). 2 CPUs: long commands with run_in_background and an until-loop wait on an exit marker (never a bare sleep); NEVER end your turn while a command you started still runs. Browser tests on the desktop project only with E2E_PORT=4271 E2E_OUTDIR=tmp/dist-flip, stopping the port before and after (lsof -t -i :4271 | xargs -r kill; never pkill). Never hard-code stateHash literals in tests.`
+
+const FLIP = `${PRE}
+
+ASSIGNMENT: the LEAD MODULE FLIP. Its checklist is the comment block "LEAD MODULE FLIP" in docs/agent/g3-wave-3.tasks.js.txt (git grep -n "LEAD MODULE FLIP" docs/agent/g3-wave-3.tasks.js.txt; read from there to the end of that comment, ~20 lines; the line numbers it gives for pinned tests are hints from before wave 3 — find each pin by symbol). Do every step 1-6 with these lead rulings:
+- The decision id is D-0059. Run "npx tsx tools/fence-update.ts --all --reason D-0059" only AFTER step 3 proved the cause (read tools/fence-update.ts first for its flags). Do not write DECISIONS.md: put the decision text you propose in your report ("PROPOSED D-0059: ...").
+- Step 3's proof is a one-off probe under tmp/flip/ (not committed): for every recipe whose currentDigest moved, realize it with registryWith({ enabledModules: <shipped minus the seven>, moduleRegistryVersion: 1 }) (see tests/helpers/registry.ts for the exact patch shape) and show its digest equals the OLD currentDigest (read the old values from git show HEAD:tests/fixtures/fence.json). Paste the table (recipe, old, reproduced, new) in your report. Any recipe that moved and is NOT explained this way is a defect: stop and report it instead of updating the fence.
+- Fixed Traits recipes and every g2Digest must be unchanged; g2-replay must pass unchanged.
+- Step 5: never rewrite tests/experiments/golden/wave-a-measurements.json. Record shipped-manifest gate and measurement changes in docs/reports/experiments-g2.md under a new heading "After the Phase 3 module flip (D-0059)".
+- Step 6 (fast track): run npm run check yourself (≈ 20-25 min; it must end green — fix every pinned test the flip moved, pinning Phase 2 subjects to registryWith(G2_LISTS) where the checklist says so, never weakening an assertion), then ONLY the e2e specs the flip can move on desktop: tests/e2e/new-dish.spec.ts and tests/e2e/lineage.spec.ts (plus any spec your check run or a git grep for the moved values points at). The lead runs the whole three-project suite at the G3 gate.
+- Also confirm the inspector, Add Life and the lineage panel name the new modules from content (no raw ids) by reading the code paths (src/sim/moduleView.ts, src/ui/strings/modules.ts); do not add UI.
+Final message (also written to ${R}/flip-build.md; create the folder): checklist steps 1-6 each DONE (evidence: command + summary line) or NOT DONE (why); the step 3 table; every test file changed and why; the PROPOSED D-0059 text; anything surprising.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+
+phase('Flip')
+const built = await agent(FLIP, { label: 'flip', phase: 'Flip', effort: 'high' })
+
+phase('Verify')
+const SAFE = `Do NOT edit any repository file except your report, and do NOT run git add/commit/stash/checkout/reset/restore. Scratch goes in tmp/verify-flip/. 2 CPUs: targeted vitest files only, run_in_background + an until-loop wait; never end your turn while a command runs. Browser tests only to prove a UI problem: E2E_PORT=4272 E2E_OUTDIR=tmp/dist-verify-flip, desktop only, stopping that port before and after.`
+const verdict = await agent(`You are the adversarial saves/determinism verifier for the Pixelmeba module flip (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE}
+The flip (uncommitted in the tree; git diff) enabled modules E04, E06, E07, E08, E09, E10 and E12 in content/manifest.json, bumped moduleRegistryVersion 1 -> 2, updated the fence (reason D-0059) and the tests that pin the shipped registry. Builder report:
+---
+${built ? String(built) : 'NO REPORT (the builder failed)'}
+---
+LENS: saves and determinism. Prove or refute, with probes under tmp/verify-flip/ (load-time, never editing tracked files):
+1. Old worlds never gain the new rules: a world realized under the pre-flip lists (registryWith({ enabledModules: [E01,E03,E05], moduleRegistryVersion: 1 })) and saved, then loaded by this build (buildSaveFile -> loadSaveFile), keeps its recorded module list and module registry version, and its mutation options draw only from them: its stateHash after 3,000 further ticks equals the same world run without the save/load; and it equals the old currentDigest where the builder claims so. g2 saves (tests/fixtures/g2-replay.test.ts) load and continue bit-identically.
+2. New worlds record the new registry: a new FIRST_DISH_V1 Standard world records moduleRegistryVersion 2 and the ten modules; run it (accelerated if a helper exists) until at least one module gain among E04/E06-E10/E12 fires (search seeds if needed; report which) and show identical stateHash at 1x, at 4x (four quarter runs), and across buildSaveFile -> loadSaveFile at a tick where a gained module's state is live (an anchored E04 carrier, an E12 link, an E10 request, an E08 detritus tick — whichever occurs).
+3. Import: a save whose content.modules omits a module its genomes carry, or whose recorded module params are incomplete, is refused with a message ending "Nothing was loaded." and leaves the current world untouched.
+4. The fence update is explained: only the recipes the builder listed moved; every g2Digest and every Fixed Traits recipe is unchanged (diff tests/fixtures/fence.json against HEAD); run the four trajectory-fence files and g2-replay yourself.
+5. No pinned test was weakened: read every changed test hunk (git diff tests/) and flag any assertion loosened rather than re-pinned.
+Prefix each problem with its grade exactly like "MAJOR [flip] <file:line> — <what> — <repro>" (or [lead] for a problem outside the flip). Add "VERIFIED OK — <item> — <evidence>" entries. ok=false if any BLOCKER or MAJOR. Write the same list to ${R}/flip-verify.md.`, { label: 'verify:flip', phase: 'Verify', schema: VERDICT, effort: 'high' })
+
+const problems = verdict && Array.isArray(verdict.problems) ? verdict.problems : []
+const blocking = problems.filter((p) => /^\s*(BLOCKER|MAJOR)/.test(p))
+let fix = null
+if (blocking.length) {
+  phase('Fix')
+  fix = await agent(`${PRE}
+
+You are the fixer for the Pixelmeba module flip (the work is uncommitted in the tree; do not start over). The flip's assignment was:
+---
+${FLIP}
+---
+The saves/determinism verifier found (full list ${R}/flip-verify.md):
+---
+${problems.join('\n')}
+---
+Fix every BLOCKER and MAJOR (and cheap MINORs inside the flip's files). For each behavioural problem add or tighten a test that fails on the old behaviour and passes now (prove it). If a problem is wrong, say why with quotes from the canonical docs. Re-run the touched tests, g2-replay and the four fence files. Final message (also written to ${R}/flip-fix1.md): per problem FIXED (how, which test) / NOT A PROBLEM (why) / NOT FIXED (why); files changed; commands + results.`, { label: 'fix:flip', phase: 'Fix', effort: 'high' })
+}
+return { built, verdict, fix }

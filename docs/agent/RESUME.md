@@ -3,6 +3,21 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑10 ≈ 04:40 UTC — RESUMED (owner: "pick back up … the next ten or so hours"). START HERE if this session died.**
+> - Wave 3 is still UNCOMMITTED in the tree (backup `wip/g3-wave-3` = `fd88c91`; tree == backup + RESUME.md). Open items (a)/(b)
+>   were already applied by the interrupted fixer; lead run: film, host-specificity, chemistry + g2-replay + four fence files +
+>   conservation-closed-lid → 9 files, 77/77 passed (341 s). Round-2 re-verify SKIPPED (test-only + observation-only fixes, lead runs green).
+> - Decisions D-0051…D-0058 written (uncommitted) in docs/DECISIONS.md.
+> - Running: `docs/agent/g3-wave-3-lead-fix.workflow.js.txt` (one fixer: stale FLAG.moving, E07 light test, E04/E12 lockout
+>   convention, E12 + module-param import refusals, NITs; report `docs/reports/reviews/g3-wave-3/lead-fixes.md`) and
+>   `docs/agent/g3-wave-4-tasks.workflow.js.txt` (writer → `docs/agent/g3-wave-4.tasks.js.txt`, stages 1/2).
+> - **05:40 UTC: WAVE 3 COMMITTED `a792e07`** (check 1352/1352; fence 77/77; desktop e2e 10/10); P3.5, P3.6 ticked. Next: the
+>   module flip (`docs/agent/g3-module-flip.workflow.js.txt`, D-0059) → commit → wave 4 stage 1
+>   (`docs/agent/g3-wave-4a.run.workflow.js.txt`) → integrate + commit → stage 2 (a11y, perf, g3-evidence) → G3 gate.
+> - (older) Next: review the fixer diff → `npm run check` → desktop e2e (reactions, food-objects, sample-transfer, experiments, cordweaver
+>   journeys) → commit wave 3 + push → module flip (one agent + a saves lens; D-0059) → commit → wave 4 (stage 1: field-guide,
+>   experiments-curated, g3-fixtures, audio; stage 2: a11y, perf, g3-evidence) → G3 gate.
+
 > **Update 2026‑10‑01 ≈ 23:15 UTC — PAUSED for a codespace restart near the end of wave 3. START HERE.**
 > - `main` = wave 2 + docs (`552d60e`), pushed. Tags g0 g1 g2. P3.1–P3.4 ticked, P3.7 `[~]`; decisions through D‑0050.
 > - Wave 3 (eight builders) is UNCOMMITTED in the working tree (107 paths) and backed up on branch `wip/g3-wave-3` =
