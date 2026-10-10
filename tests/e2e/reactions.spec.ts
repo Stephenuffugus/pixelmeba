@@ -111,10 +111,26 @@ function tappableCells(s: Seen): Tap[] {
   return out;
 }
 
-async function tapDish(page: Page, point: [number, number]): Promise<void> {
+/**
+ * Whole dish, then Zoom in (×1.6 about the viewport centre, which is the patch's centre (64, 64)) until a
+ * tap's pick radius — at least 12 screen px (DishRenderer.pick) — is at most one cell, so a tap more than
+ * 1.05 cells from every organism reads the cell on any screen. Returns screen px per cell.
+ */
+async function zoomToPatch(page: Page): Promise<number> {
+  await page.getByRole('button', { name: 'Whole dish' }).click();
   const box = await page.getByTestId('viewport').boundingBox();
   if (!box) throw new Error('no viewport');
-  const zoom = Math.min(box.width, box.height) / 124;
+  let zoom = Math.min(box.width, box.height) / 124;
+  while (12 / zoom > 1) {
+    await page.getByRole('button', { name: 'Zoom in' }).click();
+    zoom *= 1.6;
+  }
+  return zoom;
+}
+
+async function tapDish(page: Page, point: [number, number], zoom: number): Promise<void> {
+  const box = await page.getByTestId('viewport').boundingBox();
+  if (!box) throw new Error('no viewport');
   await page.mouse.click(box.x + box.width / 2 + (point[0] - 64) * zoom, box.y + box.height / 2 + (point[1] - 64) * zoom);
 }
 
@@ -154,8 +170,9 @@ test('reactions: Oil neighborhood → reaction ledger with honest provenance →
   let reads = 0;
   for (const t of taps) {
     if (checked.has(t.oilwickNear)) continue;
-    await page.getByRole('button', { name: 'Whole dish' }).click();
-    await tapDish(page, t.point);
+    // A phone's inspector sheet sits over the dish: close it before the next tap.
+    if (await insp.isVisible()) await insp.getByRole('button', { name: 'Close' }).click();
+    await tapDish(page, t.point, await zoomToPatch(page));
     await expect(insp).toBeVisible();
     await expect(insp.getByRole('heading', { level: 2 })).toHaveText(`Cell ${t.cell[0]}, ${t.cell[1]}`);
     const row = insp.getByTestId('reaction-oil');

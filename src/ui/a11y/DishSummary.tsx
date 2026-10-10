@@ -10,7 +10,7 @@
  */
 import { heldSample } from '../panels/SampleSession';
 import { dishInfo, meta } from '../state';
-import { dishSummaryText, recordCounts, summaryInputs, type CountTrack } from './describe';
+import { dishSummaryText, organismInputs, recordCounts, summaryInputs, type CountTrack } from './describe';
 
 let track: CountTrack | null = null;
 
@@ -19,7 +19,8 @@ export function DishSummary() {
   const m = meta.value;
   if (!info || !m) return null;
   track = recordCounts(track, info.dishId, m.tick, m.speciesCounts);
-  const text = dishSummaryText(summaryInputs(track, info.speciesNames, heldSample.value?.speciesHeld ?? []));
+  const inputs = summaryInputs(track, info.speciesNames, heldSample.value?.speciesHeld ?? []);
+  const text = dishSummaryText(organismInputs(inputs, info.speciesDiets));
   return (
     <section class="sr-only" aria-labelledby="dish-summary-title" data-testid="dish-summary">
       <h2 id="dish-summary-title">Dish summary</h2>

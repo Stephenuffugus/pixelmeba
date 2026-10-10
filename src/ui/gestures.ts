@@ -45,7 +45,9 @@ export function attachGestures(el: HTMLElement, r: DishRenderer, h: GestureHandl
     if (e.target !== r.canvas) return;
     el.setPointerCapture(e.pointerId);
     const [x, y] = local(e);
-    pointers[e.pointerId] = { x, y, sx: x, sy: y, t: performance.now(), button: e.button };
+    // Event time (when the browser received the press), so a busy main thread never turns a quick tap into a
+    // long press: a slow phone running a heavy dish must not drop taps (G3 e2e under load).
+    pointers[e.pointerId] = { x, y, sx: x, sy: y, t: e.timeStamp, button: e.button };
     moved = false;
     if (ids().length === 2) {
       if (stroke) h.onStrokeCancel?.();
@@ -107,7 +109,7 @@ export function attachGestures(el: HTMLElement, r: DishRenderer, h: GestureHandl
       return;
     }
     const [x, y] = local(e);
-    const quick = performance.now() - p.t < TAP_MS;
+    const quick = e.timeStamp - p.t < TAP_MS;
     if (stroke) {
       const s = stroke;
       stroke = null;

@@ -13,6 +13,8 @@ const SPRINTERS: readonly [number, number] = [48, 64];
 
 /** Screen point of a cell's centre at the whole-dish zoom (press "Whole dish" first). */
 async function cellPoint(page: Page, [x, y]: readonly [number, number]): Promise<[number, number]> {
+  // Re-fit first: on a phone the camera lifts a selected organism above the inspector sheet and stays there.
+  await page.getByRole('button', { name: 'Whole dish' }).click();
   const box = await page.getByTestId('viewport').boundingBox();
   if (!box) throw new Error('no viewport');
   const zoom = Math.min(box.width, box.height) / 124;
@@ -53,20 +55,45 @@ test('Lab: a Pinphage dose over Sprinters infects them; the inspector reads "Inf
   const insp = page.getByTestId('inspector');
   const list = page.getByRole('listbox', { name: 'Choose an organism' });
   const infection = insp.getByTestId('infection');
+  // A tap always opens something (the candidate list, an organism or the cell): wait for it, so a slow
+  // frame never leaves a late panel over the next tap.
+  const tapCell = async (cell: readonly [number, number]): Promise<void> => {
+    const [sx, sy] = await cellPoint(page, cell);
+    await page.mouse.click(sx, sy);
+    await expect(list.or(insp)).toBeVisible();
+  };
+  /** The inspector shows an infected Sprinter; otherwise it is closed again. */
+  const infectedSprinterShown = async (): Promise<boolean> => {
+    await expect(insp).toBeVisible();
+    const heading = await insp.getByRole('heading', { level: 2 }).innerText();
+    if (heading.includes('Sprinter') && (await infection.count()) > 0) return true;
+    await insp.getByRole('button', { name: 'Close' }).click();
+    await expect(insp).toHaveCount(0);
+    return false;
+  };
+  // On a phone one tap gathers several organisms into the candidate list: try each of them (the dish is
+  // paused, so tapping the same point again lists the same organisms).
   let found = false;
   for (let dy2 = -2; dy2 <= 2 && !found; dy2++) {
     for (let dx2 = -2; dx2 <= 2 && !found; dx2++) {
-      const [sx, sy] = await cellPoint(page, [SPRINTERS[0] + dx2, SPRINTERS[1] + dy2]);
-      await page.mouse.click(sx, sy);
-      await page.waitForTimeout(150);
-      if (await list.isVisible()) await list.getByRole('option').first().click();
-      if (!(await insp.isVisible())) continue;
-      const heading = await insp.getByRole('heading', { level: 2 }).innerText();
-      if (heading.includes('Sprinter') && (await infection.count()) > 0) {
-        found = true;
-        break;
+      const cell = [SPRINTERS[0] + dx2, SPRINTERS[1] + dy2] as const;
+      await tapCell(cell);
+      if (!(await list.isVisible())) {
+        found = await infectedSprinterShown();
+        continue;
       }
-      await insp.getByRole('button', { name: 'Close' }).click();
+      const n = await list.getByRole('option').count();
+      for (let i = 0; i < n && !found; i++) {
+        if (i > 0) {
+          await tapCell(cell);
+          if (!(await list.isVisible())) {
+            found = await infectedSprinterShown();
+            break;
+          }
+        }
+        await list.getByRole('option').nth(i).click();
+        found = await infectedSprinterShown();
+      }
     }
   }
   expect(found, 'an infected Sprinter near the dose').toBe(true);
