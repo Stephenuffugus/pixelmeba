@@ -45,11 +45,53 @@ Wave 4 stage 2 (BUILD_DIRECTIVE P3.12, "Performance pass 1"). Measured 2026-10-1
 
 | Criterion (P3.12 / SPEC §16) | Result on this machine | Status |
 |---|---|---|
-| 1× tick < 10 ms at 6,000 agents (2,000 fungal) | Tick-loop **CPU** per tick: p50 **18.8 ms**, p95 **23.9 ms**, p99 **42.6 ms** (wall: p50 20.0, p95 37.6, p99 58.0). Before this pass: CPU p50 38.5, p95 45.2, p99 62.5. | **Not met.** The pass halves the tick (2.05× at p50). Remaining gap at p95: about 14 ms of CPU. The limiting stage is sense/move (7.3 ms), then intake (4.8), environment/diffusion (2.7) and structures (2.7). See "Remaining gap". |
+| 1× tick < 10 ms at 6,000 agents (2,000 fungal) | **Quiet gate re-measure (below): CPU p50 12.0 ms, p95 20.8 ms, p99 39.8 ms.** Shared machine during the pass: tick-loop **CPU** per tick p50 **18.8 ms**, p95 **23.9 ms**, p99 **42.6 ms** (wall: p50 20.0, p95 37.6, p99 58.0). Before this pass: CPU p50 38.5, p95 45.2, p99 62.5. | **Not met.** The pass halves the tick (2.05× at p50, shared machine). Remaining gap on the quiet machine: about 2 ms of CPU at p50 and 11 ms at p95. The limiting stage is sense/move (quiet: 5.0 ms), then intake (3.1), environment/diffusion (1.9) and structures (1.8). See "Remaining gap". |
 | No unbounded memory growth: heap slope over minutes 5–15 < 1 %/min | With no save inside the window (41-minute run): **0.97 %/min** over minutes 5–15 and **0.27 %/min** after minute 31. In the 15-minute run that saves and reloads at tick 3,000: 1.73 %/min (one +1.27 MB step at minute 6, right after the save measurement). | **Met only without a save in the window.** The 5–15 growth comes mostly from the per-second history, which by design fills a 30-minute window (CT §12.10). After minute 31, what remains is the genome table (see "Memory"). |
 | Snapshot size and cost per part | Recorded below, per part, for 901 snapshots. | **Done.** |
 | Renderer budget with aggregation at 6,000 sprites incl. fungal tiles and links | Recorded below. SwiftShader software WebGL, so these are lower bounds. | **Recorded.** 60 fps is an owner item on a GPU device. |
 | Hash neutrality | The stress world's stateHash at ticks 0, 600, 1,500, 3,000 and 9,000 is identical before and after. The snapshot digests are identical too. The fence tests pass. | **Proven** (below). |
+
+### Gate re-measure on a quiet machine (lead, 2026-10-10, 16:42–16:58 UTC)
+
+W6-12: the same commands, at commit `35d12c3` (perf's edits committed in `d3a3027`), with no agent and no
+other job running. The 1-minute load counts the measured process itself and its helper threads.
+
+**Tick cost**, `node --expose-gc --import tsx tools/perf-stress.ts --ticks 9000` (load 1.04 before, 2.36
+after). It is the same world as above: the same end mix, the same first tick of every mechanism, and
+`capacityLimitedTicks` 8,827.
+
+| ms per tick | wall | CPU |
+|---|---|---|
+| mean | 14.31 | 14.13 |
+| p50 | 11.96 | **12.00** |
+| p95 | 24.27 | **20.83** |
+| p99 | 40.74 | **39.75** |
+| max | 259.2 | 339.3 |
+| loop total (s) | 133.3 | 132.1 (CPU share of wall 0.99) |
+
+- Per-stage wall ms per tick, mean: sense/move 5.03, intake 3.09, environment 1.90, structures 1.77,
+  maintenance 0.82, births 0.72, contacts 0.70, conversion 0.20, publish 0.08, commands 0.00.
+- **The < 10 ms criterion is still not met**, now by about 2 ms at p50 and 11 ms at p95. The shared-machine
+  numbers above (p50 18.8, p95 23.9) were inflated by the sibling SMT thread, as "Remaining gap" expected.
+  The ranking of stages is unchanged.
+- Snapshot, whole, every 10 ticks: mean 3.42 ms, p50 2.69, p95 5.52, p99 12.97 (901 snapshots).
+- Save at tick 3,000: `buildSaveFile` 258.7 ms, `loadSaveFile` 335.6 ms, 10,674,305 bytes; the reload hash matches.
+- Heap slope, minutes 5–15, with the save and reload at tick 3,000 inside the window: 0.44 MB/min = 1.82 %/min
+  (shared run: 1.73 %/min). The memory criterion stands as in the verdict.
+- Ledger at the end: relErr C 5.2e-16, N 5.1e-14, ok.
+
+**Renderer**, `E2E_PORT=4262 npx tsx tools/render-bench-run.ts` (load 1.55 before, 3.50 after; SwiftShader,
+so lower bounds):
+
+| Viewport | Neighborhood fps (frame p50 ms) | Whole dish fps | Aggregation at whole dish | rendererUpdate ms mean / p95 (neighborhood) | applySnapshot ms mean / p95 (neighborhood) |
+|---|---|---|---|---|---|
+| 1440×900 @1 | 3.15 (300) | 3.33 | no (sprites at scale 1, per D-0016) | 2.49 / 4.7 | 5.13 / 19.7 |
+| 360×800 @1 | 10.0 (100) | 15.95 | **yes**: 4,599 cells painted | 1.13 / 2.4 | 3.06 / 6.2 |
+| 360×800 @2 | 2.80 (350) | 4.47 | **yes**: 4,651 cells | 2.34 / 9.7 | 4.18 / 9.8 |
+
+Gates on all three viewports: `aggregationRule`, `wholeDishAggregates` and `reducedMotion` true;
+`fps60AtNeighborhood` false (an empty page reaches 60 fps; software rasterization is the limit). Raw JSON of
+both runs: tmp/lead/perf/ (not committed).
 
 ### Machine and load
 
