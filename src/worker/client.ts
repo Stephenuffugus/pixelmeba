@@ -407,6 +407,11 @@ export class SimClient {
     return msg.plan;
   }
 
+  /** P3.8: the relationships first seen in a played dish so far (read-only; never saved). */
+  async relationships(dishId: string): Promise<Extract<FromWorker, { type: 'relationships' }>> {
+    return this.request<Extract<FromWorker, { type: 'relationships' }>>((requestId) => ({ type: 'relationships', requestId, dishId }));
+  }
+
   /** Living relatives of an organism ("Where is its family?"); a read-only query. */
   async family(dishId: string, birthId: number): Promise<FamilyAnswer> {
     const msg = await this.request<Extract<FromWorker, { type: 'family' }>>((requestId) => ({ type: 'family', requestId, dishId, birthId }));

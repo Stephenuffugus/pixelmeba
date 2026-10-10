@@ -1,0 +1,27 @@
+{
+  "id": "L301_TWO_LUNCHES",
+  "revision": 1,
+  "name": "Two Lunches",
+  "habitatId": "WATER_GARDEN",
+  "seed": 301,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": false,
+  "baseLight": 0.8,
+  "mutationPreset": "standard",
+  "founderMode": "varied",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {"center": [40, 64], "radius": 8, "substrate": "water", "add": {"sugar": 0.5, "nutrient": 0.2}, "label": "West lunch (sugar 0.5 and nutrient 0.2 per cell)"},
+    {"center": [88, 64], "radius": 8, "substrate": "water", "add": {"sugar": 0.5, "nutrient": 0.2}, "label": "East lunch (sugar 0.5 and nutrient 0.2 per cell)"}
+  ],
+  "founders": [
+    {"species": "B01", "count": 30, "center": [40, 64], "radius": 8, "placement": "scatter", "label": "West neighborhood"},
+    {"species": "B01", "count": 30, "center": [88, 64], "radius": 8, "placement": "scatter", "label": "East neighborhood"}
+  ],
+  "labels": [],
+  "question": "Do separate neighborhoods stay different?",
+  "expectedObservationsText": "Two sugar patches, each with thirty Sprinters scattered across it. Every founder's traits vary a little around the usual values (Varied Traits), so the two groups start similar but not identical.",
+  "phase": 3
+}

@@ -134,6 +134,27 @@ export const StructureSchema = z.object({
 });
 export type StructureDef = z.infer<typeof StructureSchema>;
 
+/**
+ * A player tool's Field Guide and Lab tray text (P3.8; D-0039; content/tools/*.json): a Structure-style
+ * record plus what the tool changes, does not change and what to watch for. Tools are behaviour of the
+ * game, not of a world: a tool record is enabled when its phase ≤ the build phase (no manifest list),
+ * and no world records it, so saves never carry or re-validate it. `where` and `dose` are the Lab
+ * tray's "Where" and "Dose" lines for tools the tray offers; in `dose`, "{fraction}" is replaced with
+ * the chosen amount.
+ */
+export const ToolSchema = z.object({
+  id: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
+  name: z.string().min(1).max(40),
+  guide: GuideSchema,
+  changes: z.string().min(1),
+  doesNotChange: z.string().min(1),
+  watchFor: z.string().min(1),
+  where: z.string().min(1).optional(),
+  dose: z.string().min(1).optional(),
+  phase: PhaseSchema,
+});
+export type ToolDef = z.infer<typeof ToolSchema>;
+
 export const ModuleSchema = z.object({
   id: ModuleIdSchema,
   name: z.string().min(1),
@@ -211,6 +232,33 @@ export const FounderSchema = z.object({
   /** Explicit per-founder module assignment: 'all' | 'alternate-odd' | 'alternate-even'. */
   moduleAssignment: z.enum(['all', 'alternate-odd', 'alternate-even']).default('all'),
   label: z.string().optional(),
+  /**
+   * P3.9 (W5-12): how the group's cells are chosen among the eligible cells of its disk (inside the
+   * dish, occupiable, not taken by an earlier group). 'nearest' (absent = nearest; D-0005, D-0022): distance,
+   * then y, then x. 'scatter' (D04 §8 "scatter uniformly among valid patch cells using the recipe
+   * seed"): the first `count` of detPermutation(eligible, seed, 'founder.place', group index), eligible
+   * cells taken row-major. Never a repeated cell.
+   */
+  placement: z.enum(['nearest', 'scatter']).optional(),
+  /**
+   * P3.9: explicit cells, one per member in member order (length = count); each inside the dish and the
+   * group's disk, distinct, and occupiable by the species, else the recipe is refused. Overrides `placement`.
+   */
+  cells: z.array(z.tuple([int.min(0).max(127), int.min(0).max(127)])).optional(),
+  /**
+   * P3.9 (W5-13): a labelled setup ("labelled setup", never a test-only override): per member in member
+   * order (length = count), the founder's starting biomass B, bound nutrient N and energy E instead of
+   * the ordinary b0, 0.10 × b0 and 50. The B and N difference is logged as an external input
+   * ('recipe:<id>:initial'); energy is not a material and goes to the energy ledger.
+   */
+  initial: z
+    .array(z.object({ B: pos.optional(), N: nonneg.optional(), E: nonneg.optional() }).strict())
+    .optional(),
+  /**
+   * P3.9: 'chain' links each member to the next in member order with a transport link (SPEC §7.7), for a
+   * group of a TRANSPORT_LINKS species whose listed `cells` are four-neighbours in order.
+   */
+  links: z.literal('chain').optional(),
 });
 
 export const TestOverrideSchema = z.object({
@@ -240,6 +288,12 @@ export const RecipeSchema = z.object({
   mutationPreset: MutationPreset,
   founderMode: FounderMode,
   backgroundOverrides: FieldValues.default({}),
+  /**
+   * P3.9 (W5-11): geometry ops the recipe paints after its habitat's own ops, under the same rules
+   * (structure cells hold no inventory; one geometryVersion bump), before background overrides,
+   * patches and founders. recipeGrid() includes them, so previews and What if? see the same grid.
+   */
+  ops: z.array(GeometryOpSchema).default([]),
   fieldPatches: z.array(FieldPatchSchema).default([]),
   founders: z.array(FounderSchema).default([]),
   scheduledCommands: z.array(ScheduledCommandSchema).default([]),
@@ -296,7 +350,19 @@ export type ExperimentChange = z.infer<typeof ExperimentChangeSchema>;
 export const ExperimentCompletionSchema = z.object({
   journalStamp: z.string().min(1),
   /** The in-app half of the completion evidence (CT §10.1), checked by the card UI, not by fixtures. */
-  playerSteps: z.array(z.enum(['inspectFoodUse', 'openResourceHistory', 'viewComparison', 'viewPreyHistory'])).default([]),
+  playerSteps: z
+    .array(
+      z.enum([
+        'inspectFoodUse',
+        'openResourceHistory',
+        'viewComparison',
+        'viewPreyHistory',
+        // P3.9 (W5-14; CT §10.1): "both species inspected with different O2 limitations", "B01 infection observed".
+        'inspectOxygenLimits',
+        'observeInfection',
+      ]),
+    )
+    .default([]),
   worldKeepsRunning: z.literal(true).default(true),
 });
 

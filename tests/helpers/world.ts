@@ -124,3 +124,25 @@ export function placeObject(world: World, cell: number, kind: FoodObjectKind, po
   world.ledger.inputs.n += n;
   return res.object;
 }
+
+/**
+ * Place one organism carrying supplementary `modules` at an exact position (introduceOrganism's
+ * { modules, exactCenter }, as tests/fixtures/module-accounting.test.ts placeWith does); material
+ * overrides are logged as inputs/exports so ledgers stay exact. Returns its slot.
+ */
+export function placeWith(world: World, speciesId: string, x: number, y: number, modules: readonly string[], state: Partial<Record<'B' | 'N' | 'E' | 'H' | 'age', number>> = {}): number {
+  const slot = introduceOrganism(world, speciesIndex(world, speciesId), cellIndex(Math.floor(x), Math.floor(y)), 'test', { modules, exactCenter: true });
+  if (slot < 0) throw new Error('capacity');
+  const c = world.ents.cols;
+  c.x[slot] = x;
+  c.y[slot] = y;
+  for (const key of ['B', 'N', 'E', 'H', 'age'] as const) {
+    const v = state[key];
+    if (v === undefined) continue;
+    if (key === 'B') world.ledger.inputs.c += v - c.B[slot]!;
+    else if (key === 'N') world.ledger.inputs.n += v - c.N[slot]!;
+    c[key][slot] = v;
+  }
+  rebuildIndex(world);
+  return slot;
+}

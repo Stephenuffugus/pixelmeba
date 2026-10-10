@@ -3,6 +3,7 @@ import type { SlotSummary } from '@worker/protocol';
 import { IconClose, IconCopy, IconGuide, IconSave, IconUndo } from '../icons';
 import { IconCompare } from './CompareIcon';
 import { openWhatIf } from './WhatIfState';
+import { openGuideFromDish } from '../views/FieldGuideNav';
 import { WHATIF_TEXT } from '../strings/whatif';
 import { worldModesLine } from '../strings/modes';
 import { slotModesLine } from '../strings/modes';
@@ -111,7 +112,8 @@ export function MoreSheet() {
           <button class="btn" onClick={() => (route.value = { name: 'saves' })}>
             Saved dishes
           </button>
-          <button class="btn" onClick={() => (route.value = { name: 'guide' })}>
+          {/* P3.8 (UX §2): the guide is a blocking panel; its Back returns here at this speed. */}
+          <button class="btn" onClick={openGuideFromDish} data-testid="more-guide">
             <IconGuide /> Field Guide
           </button>
         </div>

@@ -1,0 +1,26 @@
+{
+  "id": "L303_PUBLIC_KITCHEN",
+  "revision": 1,
+  "name": "Public Kitchen",
+  "habitatId": "WATER_GARDEN",
+  "seed": 303,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": false,
+  "baseLight": 0.8,
+  "mutationPreset": "standard",
+  "founderMode": "diverse",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {"center": [64, 64], "radius": 8, "substrate": "water", "add": {"protein": 0.5, "proteinN": 0.05}, "set": {"nutrient": 0.1}, "label": "Protein 0.5 with 0.05 bound nutrient, free nutrient 0.1 per cell"}
+  ],
+  "founders": [
+    {"species": "Y02", "count": 20, "center": [64, 64], "radius": 8, "placement": "scatter"},
+    {"species": "B08", "count": 20, "center": [64, 64], "radius": 8, "placement": "scatter"}
+  ],
+  "labels": [],
+  "question": "Who benefits from accessible food?",
+  "expectedObservationsText": "Twenty Creambuds and twenty Brothmakers scattered on a protein patch. Neither can eat protein; Brothmakers release protein enzyme that turns it into broth, which both of them drink. Diverse Founders: a few founders may start with an extra ability, present at creation.",
+  "phase": 3
+}

@@ -6,8 +6,14 @@
  * ledger. The summary comes from the worker building the very dish the choices describe (and then
  * discarding it), so what it states is what Create makes. The dish opens paused, in the Lab with the
  * Life tray open.
+ *
+ * P3.9: the curated dishes (CT §9.3; content/recipes L3xx) are Basics starts too. Picking one sets the
+ * seed, evolution setting and founder mode to the recipe's own, so Create makes the authored recipe
+ * (the worker records no change: host isAuthoredRecipe); Randomize or another setting is recorded as
+ * the player's change. The summary shows the dish's question and labels its pre-seeded genomes.
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
+import type { Manifest, RecipeDef } from '@sim/content/schema';
 import type { DishInfo, NewDishPreview, Speed } from '@worker/protocol';
 import { DISH_TEX, paintDish } from '@render/layers';
 import { CELL_COUNT } from '@sim/constants';
@@ -33,8 +39,51 @@ import { plural } from '../strings/experiments';
 const RECIPE_ID = 'FIRST_DISH_V1';
 const MAX_SEED = 4294967295;
 
-/** 'Start with' choices (UX §2.3): the Garden, or an empty habitat preset (CT §8.1; P3.2). */
-type StartId = 'garden' | 'empty' | 'gel' | 'sediment';
+/** 'Start with' choices (UX §2.3): the Garden, an empty habitat preset (CT §8.1; P3.2), or a curated dish (P3.9). */
+type StartId = 'garden' | 'empty' | 'gel' | 'sediment' | `curated:${string}`;
+
+/** A curated dish as New Dish offers it (CT §9.3): the bundled recipe record's own values. */
+interface CuratedDish {
+  readonly id: string;
+  readonly name: string;
+  readonly seed: number;
+  readonly question: string;
+  readonly labels: readonly string[];
+  readonly mutationPreset: PresetId;
+  readonly founderMode: FounderModeId;
+}
+
+/**
+ * The curated dishes this build ships (recipe ids L3xx_…, phase ≤ the manifest's build phase), in id
+ * order, read from the same content records the worker validates (as the Lab tray reads its tools).
+ * The worker builds the dish from its own validated copy; these values only choose what to ask for.
+ */
+const CURATED: readonly CuratedDish[] = (() => {
+  const manifest = Object.values(import.meta.glob<Manifest>('../../../content/manifest.json', { eager: true, import: 'default' }))[0];
+  const glob = import.meta.glob<RecipeDef>('../../../content/recipes/L*.json', { eager: true, import: 'default' });
+  return Object.keys(glob)
+    .sort()
+    .map((path) => glob[path]!)
+    .filter((r) => /^L\d{3}_/.test(r.id) && manifest !== undefined && r.phase <= manifest.buildPhase)
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      seed: r.seed,
+      question: r.question ?? '',
+      labels: r.labels ?? [],
+      mutationPreset: r.mutationPreset,
+      founderMode: r.founderMode,
+    }));
+})();
+
+function curatedOf(start: StartId): CuratedDish | null {
+  return start.startsWith('curated:') ? (CURATED.find((c) => `curated:${c.id}` === start) ?? null) : null;
+}
+
+/** Starts with nothing living (an empty preset). */
+function isEmptyStart(start: StartId): boolean {
+  return start === 'empty' || start === 'gel' || start === 'sediment';
+}
 
 /** Habitat-only starts on another preset than the recipe's: the habitat the dish is built on. */
 const START_HABITAT: Readonly<Partial<Record<StartId, string>>> = {
@@ -93,14 +142,39 @@ function HabitatMap({ p }: { readonly p: NewDishPreview }) {
   );
 }
 
+/**
+ * P3.9: a curated dish's question, its labels, and whether these choices make the dish as authored
+ * (the recipe's own seed and settings) or the player's own version of it (recorded as changes).
+ */
+function CuratedLines({ dish, p }: { readonly dish: CuratedDish; readonly p: NewDishPreview }) {
+  const changes: string[] = [];
+  if (p.seed !== dish.seed) changes.push(`seed ${p.seed} instead of ${dish.seed}`);
+  if (p.mutationPreset !== dish.mutationPreset) changes.push('another evolution setting');
+  if (p.founderMode !== dish.founderMode) changes.push('another founder setting');
+  return (
+    <>
+      <p data-testid="new-dish-question">
+        <strong>{dish.name}</strong> asks: {dish.question}
+      </p>
+      {dish.labels.length > 0 ? <p data-testid="new-dish-labels">{dish.labels.join(' · ')}</p> : null}
+      <p data-testid="new-dish-authored">
+        {changes.length === 0
+          ? `This is ${dish.name} as written, with its own seed ${dish.seed}.`
+          : `Your own version of ${dish.name}: ${listText(changes)}. The dish records what you changed.`}
+      </p>
+    </>
+  );
+}
+
 /** Exactly what the preview world holds, in words (founders, patches, seeded abilities, initial ledger). */
-function Summary({ p, habitatStart }: { readonly p: NewDishPreview; readonly habitatStart: boolean }) {
+function Summary({ p, habitatStart, curated }: { readonly p: NewDishPreview; readonly habitatStart: boolean; readonly curated: CuratedDish | null }) {
   const founders = p.founders.map((f) => countOf(f.count, f.name));
   const seeded = p.founders.filter((f) => f.withModule > 0);
   const eligible = p.founders.reduce((a, f) => a + f.eligible, 0);
   const withModule = p.founders.reduce((a, f) => a + f.withModule, 0);
   return (
     <div data-testid="new-dish-summary">
+      {curated ? <CuratedLines dish={curated} p={p} /> : null}
       <HabitatMap p={p} />
       {habitatStart ? (
         // A habitat start is the preset exactly as CT §8.1 defines it: its rules text says what every
@@ -126,6 +200,19 @@ function Summary({ p, habitatStart }: { readonly p: NewDishPreview; readonly hab
                     `${countOf(f.withModule, f.name)} (${f.modules.map((m) => `${m.count} with ${m.name}`).join(', ')})`,
                 )
                 .join('; ')}.`}
+        </p>
+      ) : null}
+      {p.founderMode !== 'diverse' && !p.empty && withModule > 0 ? (
+        // P3.9 (CT §9.3 "pre-seeded genomes labelled"): abilities the recipe gives some founders.
+        <p data-testid="new-dish-preseeded">
+          Pre-seeded genomes, present at creation (set by the dish, not evolved here):{' '}
+          {seeded
+            .map(
+              (f) =>
+                `${f.modules.map((m) => `${m.count} of the ${countOf(f.count, f.name)} start with ${m.name}`).join(', ')}${f.count > f.withModule ? `; ${f.count - f.withModule} start without` : ''}`,
+            )
+            .join('; ')}
+          .
         </p>
       ) : null}
       <p data-testid="new-dish-ledger">{startLedgerText(p.ledger)}</p>
@@ -169,15 +256,32 @@ export function NewDish() {
   const [problem, setProblem] = useState<string | null>(null);
   const request = useRef(0);
 
+  const curated = curatedOf(start);
+  const recipeId = curated?.id ?? RECIPE_ID;
+  const empty = isEmptyStart(start);
+
+  /** Choosing a curated dish takes its own seed and settings (the authored recipe); other starts keep the choices. */
+  const chooseStart = (next: StartId) => {
+    const dish = curatedOf(next);
+    if (dish) {
+      setSeed(dish.seed);
+      setPreset(dish.mutationPreset);
+      setFounders(dish.founderMode);
+      // The default name follows the dish, unless the player typed their own.
+      if (name === 'My dish' || CURATED.some((c) => c.name === name)) setName(dish.name);
+    } else if (CURATED.some((c) => c.name === name)) setName('My dish');
+    setStart(next);
+  };
+
   // The summary always describes the current choices: a newer request makes an older answer stale.
   useEffect(() => {
     const id = ++request.current;
     const t = setTimeout(() => {
       const habitatId = START_HABITAT[start];
-      newDishPreview(RECIPE_ID, seed, {
+      newDishPreview(curatedOf(start)?.id ?? RECIPE_ID, seed, {
         mutationPreset: preset,
         founderMode: founders,
-        empty: start !== 'garden',
+        empty: isEmptyStart(start),
         ...(habitatId !== undefined ? { habitatId } : {}),
       })
         .then((p) => {
@@ -198,7 +302,8 @@ export function NewDish() {
     preview.p.seed === seed &&
     preview.p.mutationPreset === preset &&
     preview.p.founderMode === founders &&
-    preview.p.empty === (start !== 'garden')
+    preview.p.empty === empty &&
+    preview.p.recipeId === recipeId
       ? preview.p
       : null;
   // The registry is this build's manifest whatever the choices, so an older answer still describes it.
@@ -226,12 +331,12 @@ export function NewDish() {
     try {
       const outcome = await startCustom(
         {
-          recipeId: RECIPE_ID,
+          recipeId,
           name,
           seed,
           mutationPreset: preset,
           founderMode: founders,
-          empty: start !== 'garden',
+          empty,
           ...(START_HABITAT[start] !== undefined ? { habitatId: START_HABITAT[start] } : {}),
         },
         started,
@@ -275,7 +380,7 @@ export function NewDish() {
             label="Start with"
             testId="new-dish-start-with"
             value={start}
-            onChange={setStart}
+            onChange={chooseStart}
             choices={[
               {
                 id: 'garden',
@@ -297,6 +402,8 @@ export function NewDish() {
                 label: 'Empty Sediment Edge',
                 note: 'Water above, sediment with debris below and one stone, with nothing living.',
               },
+              // P3.9: curated dishes (CT §9.3), each with its question.
+              ...CURATED.map((c) => ({ id: `curated:${c.id}` as StartId, label: c.name, note: c.question })),
             ]}
           />
           <label class="field">
@@ -416,7 +523,7 @@ export function NewDish() {
             {worldModesLine(preset, founders, registry)}
           </p>
           {current ? (
-            <Summary p={current} habitatStart={START_HABITAT[start] !== undefined} />
+            <Summary p={current} habitatStart={START_HABITAT[start] !== undefined} curated={curated} />
           ) : (
             <p>Working out exactly what this dish starts with…</p>
           )}

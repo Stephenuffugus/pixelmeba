@@ -26,6 +26,8 @@ import type { DishSource, KeepFrom, SlotSummary, WhatIfKeep, WhatIfPlan } from '
 import { duplicatedText, KEEP_TEXT, keptLine, withKeptLine, type KeepVerb } from './strings/keep';
 import type { KeepStep } from './panels/KeepChoice';
 import { mountKeepHost } from './panels/KeepSheet';
+import { divisionAudible, eventCues, placementCue, playCue, setAudioPrefs } from '@audio/cues';
+import { audioPrefsOf } from '@audio/mix';
 
 export type Route =
   | { readonly name: 'home' }
@@ -70,6 +72,17 @@ export interface Settings {
   readonly pauseOnDiscoveries?: boolean;
   /** Automatic checkpoint ring (UX §2 Settings "checkpoint ring"; SPEC §10.7; P2.8). Off unless chosen. */
   readonly checkpointRing?: boolean;
+  /**
+   * Sound (UX §2 Settings "sound/music/voice · haptics"; P3.10). Optional so settings stored by older
+   * builds still load; missing ones take src/audio/mix.ts AUDIO_DEFAULTS (effects 0.7, music 0.4,
+   * voice 0.8, not muted, quiet audio off, haptics off; W5-21).
+   */
+  readonly effectsVolume?: number;
+  readonly musicVolume?: number;
+  readonly voiceVolume?: number;
+  readonly muted?: boolean;
+  readonly quietAudio?: boolean;
+  readonly haptics?: boolean;
 }
 
 /** Text sizes offered in Settings (UX §4.1 acceptance runs at 100 % and 200 %). */
@@ -138,6 +151,7 @@ function loadSettings(): Settings {
 function applyDisplaySettings(): void {
   const s = settings.value;
   renderer?.setOptions({ reducedMotion: s.reducedMotion, overlayOpacity: s.overlayOpacity });
+  setAudioPrefs(audioPrefsOf(s));
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
   root.style.fontSize = s.textScale === 1 ? '' : `${Math.round(s.textScale * 100)}%`;
@@ -244,6 +258,7 @@ function onSnapshot(s: SnapshotMsg): void {
   lastSnapshot = s;
   renderer?.applySnapshot(s);
   if (dishInfo.value) pushFeed(s.events, dishInfo.value.speciesNames, moduleNamesOf(dishInfo.value));
+  if (dishInfo.value) eventCues(s.events, divisionAudible(dishInfo.value.speciesCategories)); // P3.10: non-bacterial births → division (≤ 1 per 5 s), wakes → wake
   if (s.evolution) {
     evolution.value = s.evolution;
     syncEvolutionFeed(s.evolution);
@@ -380,6 +395,7 @@ export async function saveToSlot(slotId: string, name: string): Promise<boolean>
     // page right after "Saved" must not lose Continue.
     const continueUpdated = await autosave();
     showToast(savedToastText(s.name, continueUpdated), continueUpdated ? 2600 : 4000);
+    playCue('save');
     return true;
   } catch (e) {
     showToast(`Couldn't save; your previous save is intact. (${(e as Error).message})`, 4000);
@@ -835,7 +851,10 @@ export function select(sel: Selection | null): void {
     inspector.value = null;
     familyView.value = null;
     if (sheet.value === 'inspect') sheet.value = 'none';
-  } else sheet.value = 'inspect';
+  } else {
+    sheet.value = 'inspect';
+    playCue('select'); // every non-null select() is a player's tap or choice
+  }
   renderer?.select(sel?.kind === 'entity' ? sel.birthId : null, sel?.kind === 'cell' ? sel.cell : null);
   if (info) syncView();
 }
@@ -943,6 +962,7 @@ export async function sendCommand(payload: CommandPayload, undoable = true): Pro
 /** The player-facing outcome of a placement command (toast + placement ring on the dish it went to). */
 function reportCommand(info: DishInfo, payload: CommandPayload, res: CommandResult | null, ring: DishRenderer | null): void {
   if (!res) return;
+  if (payload.kind === 'inoculate' || payload.kind === 'deposit') placementCue(res.accepted); // P3.10: drop / placement_error (+ haptics)
   if (payload.kind === 'inoculate') {
     const name = info.speciesNames[info.speciesIds.indexOf(payload.speciesId)] ?? payload.speciesId;
     // A phage dose: accepted counts the cells dosed, each with `count` units (SPEC §10.2; W2-14).

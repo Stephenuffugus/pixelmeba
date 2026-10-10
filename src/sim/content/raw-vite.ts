@@ -33,6 +33,7 @@ export function loadRawPacksVite(): RawPacks {
     modules: files(import.meta.glob('../../../content/modules/*.json', { eager: true })),
     habitats: files(import.meta.glob('../../../content/habitats/*.json', { eager: true })),
     structures: files(import.meta.glob('../../../content/structures/*.json', { eager: true })),
+    tools: files(import.meta.glob('../../../content/tools/*.json', { eager: true })),
     recipes: files(import.meta.glob('../../../content/recipes/*.json', { eager: true })),
     experiments: files(import.meta.glob('../../../content/experiments/*.json', { eager: true })),
     variants: files(import.meta.glob('../../../content/variants/*.json', { eager: true })),

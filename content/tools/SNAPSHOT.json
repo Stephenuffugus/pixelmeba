@@ -1,0 +1,14 @@
+{
+  "id": "SNAPSHOT",
+  "name": "Snapshot",
+  "guide": {
+    "summary": "Save the whole dish exactly as it is, to come back to later.",
+    "biology": "A game tool with no lab analogue: a real culture cannot be stopped and started again exactly where it was.",
+    "rules": "A snapshot stores the complete state of the dish in a save slot on this device: every organism, every amount and the record of your commands. Loading it continues the dish from that moment, and it goes on exactly as it would have. Nothing is uploaded.",
+    "example": "Save before a big change, so you can load the dish and try something else from the same moment."
+  },
+  "changes": "Nothing in the dish: a copy of it is written to a save slot on this device.",
+  "doesNotChange": "The dish itself. Saving never changes what happens in it.",
+  "watchFor": "The saved dish in Saved dishes, with the moment it was saved.",
+  "phase": 1
+}

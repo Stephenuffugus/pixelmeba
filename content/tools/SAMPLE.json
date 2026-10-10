@@ -1,0 +1,16 @@
+{
+  "id": "SAMPLE",
+  "name": "Sample",
+  "guide": {
+    "summary": "Lift part of the dish into a holding slot, then move it somewhere else, put it back, or remove it.",
+    "biology": "Microbiologists move a little of a culture with a loop or a pipette to look at it or to start a new culture somewhere else.",
+    "rules": "Choose what to lift (Life, Dissolved, Deposits or All) and a circle of radius 1, 3 or 6. Taking a sample pauses the dish until you transfer, cancel or discard it. Cancel puts everything back exactly as it was. Discard removes the held organisms and material from the dish and logs them as removed; Undo brings the sample back. Partners are never split. No material is made or lost while it is held.",
+    "example": "Lift a few Sprinters from a crowded patch and move them beside fresh sugar."
+  },
+  "where": "Anywhere in the dish.",
+  "dose": "Choose what to lift (Life, Dissolved, Deposits or All) and a circle of radius 1, 3 or 6.",
+  "changes": "While a sample is held, the dish stays paused. The held material still counts in the dish’s totals.",
+  "doesNotChange": "Stones, walls and beads. Partners are never split: a host and its rider, linked threads and a hunter with its claimed prey go together or not at all.",
+  "watchFor": "What happens to the place you emptied, and to the place you move it to.",
+  "phase": 3
+}

@@ -8,6 +8,7 @@
  * preview disappears and its release commits nothing), so Explore ⇄ Lab never changes the dish.
  */
 import { batch, signal } from '@preact/signals';
+import { placementCue } from '@audio/cues';
 import type { CommandPayload, CommandResult } from '@sim/commands';
 import {
   brushCells,
@@ -275,6 +276,7 @@ export async function sendLabCommand(payload: CommandPayload): Promise<CommandRe
   const info = dishInfo.value;
   if (!info) return null;
   const res = await getClient().command(info.dishId, `lab-${++commandCounter}`, payload, true);
+  if (res && dishInfo.value?.dishId === info.dishId) placementCue(res.accepted); // P3.10: drop / placement_error (+ haptics)
   if (res && dishInfo.value?.dishId === info.dishId && payload.kind === 'cleanWater') {
     showToast(
       res.accepted > 0

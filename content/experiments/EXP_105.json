@@ -1,0 +1,36 @@
+{
+  "id": "EXP_105",
+  "seed": 105,
+  "title": "One compatible host",
+  "question": "Does a virus infect everyone it touches?",
+  "recipeId": "ONE_HOST_V1",
+  "intervention": "Turn on the Infection overlay (Lab → Observe) and watch both patches. Tap a Sprinter that is marked as infected: the inspector shows the infection and when it will burst.",
+  "predictedTradeoff": "Pinphage can multiply only inside Sprinters, so the Sprinters' patch may lose members to it while the Crossfeeders, sitting in the same dose, are never infected.",
+  "measurements": [
+    "infections.B01",
+    "infections.B05",
+    "wholeUnitCells.B01",
+    "wholeUnitCells.B05",
+    "deaths.B01.DEATH_LYSIS",
+    "alive.B01",
+    "alive.B05",
+    "births.B01",
+    "births.B05",
+    "field.v01"
+  ],
+  "stoppingSeconds": 180,
+  "confounds": "Pinphage spreads and decays, so how many whole units sit beside each group changes over time; the count of cells holding at least one whole unit beside a Crossfeeder shows the virus really reached them. The two groups eat different food on different patches. One run with one seed.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "infections.B01", "arm": "A", "op": "gte", "value": 1, "label": "At least one Sprinter was infected"},
+        {"measure": "infections.B05", "arm": "A", "op": "eq", "value": 0, "label": "No Crossfeeder was infected"},
+        {"measure": "wholeUnitCells.B05", "arm": "A", "op": "gte", "value": 1, "label": "A whole Pinphage unit sat beside a living Crossfeeder"}
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {"journalStamp": "Saw Pinphage infect Sprinters, and no Crossfeeder infected beside the same dose", "playerSteps": ["observeInfection"]},
+  "phase": 3
+}

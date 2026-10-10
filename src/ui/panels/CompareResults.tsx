@@ -3,6 +3,8 @@
  * B − A, always labelled "this paired run"; the prediction note beside it; a conclusion label picked
  * by the player; Save result card. Every number is a measured value from the worker.
  */
+import { useEffect } from 'preact/hooks';
+import { playCueFor } from '@audio/cues';
 import type { ArmMeasures, ComparisonResults } from '@worker/comparison';
 import type { DishInfo } from '@worker/protocol';
 import {
@@ -21,6 +23,10 @@ export function CompareResults() {
   const c = compareState.value;
   const info = dishInfo.value;
   const r = c?.results;
+  const shown = c && info && r ? r : null;
+  useEffect(() => {
+    if (shown) playCueFor('compare_result', shown); // P3.10: once per results (not on remount); the results table appearing is its visible equivalent
+  }, [shown]);
   if (!c || !info || !r) return null;
   const change = describeChanges(info, r.interventions);
   const main = r.rows.filter((row) => row.key !== 'speciesCount' && row.key !== 'speciesBiomass');

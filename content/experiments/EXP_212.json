@@ -1,0 +1,23 @@
+{
+  "id": "EXP_212",
+  "seed": 212,
+  "title": "Fungal supply line",
+  "question": "How does food travel along a fungal line?",
+  "recipeId": "FUNGAL_SUPPLY_LINE_V1",
+  "intervention": "Tap each Cordweaver segment in turn and read what it sent and received along its links in the last 10 seconds.",
+  "predictedTradeoff": "The full segment gives carbon away to its neighbour, which passes it on only once it holds enough more than the next one, so food creeps along the line one link at a time and the far end gets the least.",
+  "measurements": ["transfer.fungal", "biomass.F02", "biomassStart.F02", "alive.F02"],
+  "stoppingSeconds": 10,
+  "confounds": "There is no food in the dish, so every change in a segment's body comes from the links; energy is never shared, so each segment pays its own upkeep. The first segment's larger body is a labelled setup, not something that grew here.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "transfer.fungal", "arm": "A", "op": "gt", "value": 0, "label": "Carbon moved along the links"}
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {"journalStamp": "Measured carbon passing along a Cordweaver line", "playerSteps": []},
+  "phase": 3
+}

@@ -134,6 +134,9 @@ function describe(ev: VisualEvent, name: string, n: number, moduleName: ModuleNa
     case 'objectEmptied':
       // Protocol 2 (wave 2 art-features): the event type exists; wave 3 food objects passes it through.
       return n === 1 ? 'A food object ran out.' : `${n} food objects ran out.`;
+    case 'wake':
+      // P3.10: the wake cue's event; pushFeed skips it (the resting mark leaving is its visible equivalent).
+      return n === 1 ? `A ${name} woke.` : `${n} ${name}s woke.`;
   }
 }
 
@@ -152,6 +155,7 @@ export function pushFeed(events: readonly VisualEvent[], speciesNames: readonly 
   if (events.length === 0) return;
   const lines = [...feed.value];
   for (const ev of events) {
+    if (ev.type === 'wake') continue; // P3.10: a sound cue only, no feed line
     const name = speciesNames[ev.species] ?? 'organism';
     const key = keyOf(ev);
     const last = lines.find((l) => l.key === key && ev.tick - l.tick < WINDOW);

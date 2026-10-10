@@ -10,6 +10,8 @@ import { CompareScreen } from '../views/CompareScreen';
 import { Notebook } from '../views/Notebook';
 import { ExperimentCard } from '../views/ExperimentCard';
 import { ExperimentRun } from '../views/ExperimentRun';
+import { FieldGuide } from '../views/FieldGuide';
+import { RelationshipSync } from '../views/FieldGuideNav';
 
 /** Screens that show toasts themselves (over the dish or the paired run). */
 const OWN_TOAST_ROUTES: readonly string[] = ['dish', 'compare', 'experimentRun'];
@@ -32,6 +34,8 @@ export function App() {
     <>
       <RoutedPage />
       <PageToast />
+      {/* P3.8 (D-0039): what the open dish has shown joins the device's "seen in your dishes" record. */}
+      <RelationshipSync />
     </>
   );
 }
@@ -46,7 +50,7 @@ function RoutedPage() {
     case 'dish':
       return <DishScreen />;
     case 'guide':
-      return <SimplePage title="Field Guide" body="Every organism, material and tool will be listed here." />;
+      return <FieldGuide />;
     case 'settings':
       return <SimplePage title="Settings" body="Sound, motion, text size and overlay options." settings />;
     case 'saves':

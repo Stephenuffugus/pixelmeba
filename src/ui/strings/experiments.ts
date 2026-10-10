@@ -23,6 +23,8 @@ const FIELD_NAMES: Readonly<Record<string, string>> = {
   protein: 'Protein',
   broth: 'Broth',
   film: 'Film',
+  // P3.9 (EXP_105): Pinphage units, measured as their carbon (0.01 C each).
+  v01: 'Pinphage',
 };
 
 const fieldName = (id: string) => FIELD_NAMES[id] ?? id;
@@ -115,12 +117,35 @@ export function measureLabel(card: ExperimentCardView, id: string): string {
       const p = card.patches[Number(a)];
       return `Carbon in the recipe's ${p?.label ? `“${p.label}”` : `patch ${a}`} patch`;
     }
+    // P3.9 tracked measures (src/sim/pairedRun.ts).
+    case 'infections':
+      return `${sps(card, a)} newly infected`;
+    case 'limitSeconds': {
+      const code = REASONS.indexOf(b as (typeof REASONS)[number]);
+      return `Time ${sps(card, a)} spent ${code >= 0 ? limitWords(b) : b} (organism-seconds)`;
+    }
+    case 'transfer':
+      return `Carbon passed along ${sp(card, 'F02')} links`;
+    case 'wholeUnitCells':
+      return `Most cells at once holding a whole Pinphage unit and a living ${sp(card, a)}`;
   }
   return id;
 }
 
-const COUNT_HEADS = new Set(['aliveTotal', 'speciesAlive', 'interventionAccepted', 'interventionRejected', 'alive', 'births', 'deaths', 'captures', 'founders', 'descendants']);
-const CARBON_HEADS = new Set(['inputCarbon', 'intake', 'capturedCarbon', 'field', 'consumed', 'converted', 'patchInput', 'biomass', 'biomassStart', 'biomassTotal', 'preyBiomass']);
+/** A limit reason as a limitSeconds label reads it ("held back by too little oxygen"). */
+function limitWords(reason: string): string {
+  switch (reason) {
+    case 'OXYGEN_LIMITED':
+      return 'held back by too little oxygen';
+    case 'SUIT_OXYGEN_HIGH':
+      return 'held back by too much oxygen';
+    default:
+      return `with the reading ${reason}`;
+  }
+}
+
+const COUNT_HEADS = new Set(['aliveTotal', 'speciesAlive', 'interventionAccepted', 'interventionRejected', 'alive', 'births', 'deaths', 'captures', 'founders', 'descendants', 'infections', 'wholeUnitCells']);
+const CARBON_HEADS = new Set(['inputCarbon', 'intake', 'capturedCarbon', 'field', 'consumed', 'converted', 'patchInput', 'biomass', 'biomassStart', 'biomassTotal', 'preyBiomass', 'transfer']);
 
 const ENERGY_HEADS = new Set(['meanEnergy', 'groupEnergy', 'groupEnergyMedian', 'groupEnergyMin', 'groupEnergyMax', 'reserveHeld', 'reservePeak']);
 
@@ -145,6 +170,7 @@ export function formatMeasure(id: string, value: number, rec?: Readonly<Record<s
   const head = id.split('.')[0]!;
   if (head === 'extinctAt' || head === 'groupExtinctAt') return value < 0 ? 'not died out' : `${value} s`;
   if (head === 'seconds' || head === 'runSeconds') return `${value} s`;
+  if (head === 'limitSeconds') return `${num(value, 1)} s`;
   if (COUNT_HEADS.has(head)) return String(Math.round(value));
   if (head === 'biomassRatio') return `× ${value.toFixed(2)}`;
   if (head === 'oxygenMean') return value.toFixed(3);
@@ -317,6 +343,15 @@ export function playerStepText(card: ExperimentCardView, step: PlayerStep): stri
       return 'Read the results of both copies when the run ends.';
     case 'viewPreyHistory':
       return 'Open the population history of both copies on the results.';
+    case 'inspectOxygenLimits': {
+      // P3.9 (EXP_104): each followed species tapped while the inspector shows an oxygen reading. Conditional
+      // wording: the shipped dish may never show one (docs/reports/experiments-g3.md, EXP_104 gate not reached).
+      const names = card.stepSpecies.map((id) => sp(card, id));
+      const list = names.length <= 1 ? names.join('') : `${names.slice(0, -1).map((n) => `a ${n}`).join(', ')} and a ${names[names.length - 1]}`;
+      return `Tap ${names.length <= 1 ? `a ${list}` : list} and read what holds each back. Look for one held back by too little oxygen and the other by too much; if none is, note what holds them back instead.`;
+    }
+    case 'observeInfection':
+      return `Tap an infected ${card.stepSpecies.length >= 1 ? sp(card, card.stepSpecies[0]!) : 'organism'}: the inspector shows its infection and when it bursts.`;
   }
 }
 

@@ -398,7 +398,8 @@ export function visualEvents(
       ev.type !== 'mutation' &&
       ev.type !== 'branchEstablished' &&
       ev.type !== 'branchExtinct' &&
-      ev.type !== 'objectEmptied'
+      ev.type !== 'objectEmptied' &&
+      ev.type !== 'wake'
     )
       continue;
     out.push({

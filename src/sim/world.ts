@@ -22,6 +22,7 @@ import { createBranchBook, type BranchBook } from './branches';
 import type { FoodObject } from './objects';
 import type { FungalFlowObs } from './fungalTransport';
 import { createReactionCells, type ReactionCells } from './reactions';
+import { createIntakeSeen, type IntakeSeen } from './intake';
 import type { SampleSlot } from './sampleSlot';
 
 /**
@@ -141,6 +142,11 @@ export interface World {
    * cleared when its segment dies, divides or the slot is reused.
    */
   fungalFlow: FungalFlowObs | null;
+  /**
+   * P3.8: which pools each species took food from in the last stage 6 (src/sim/intake.ts IntakeSeen).
+   * Observation only: never read by the simulation, never hashed or saved; cleared every stage 6.
+   */
+  readonly intakeSeen: IntakeSeen;
   /** Finite food objects (SPEC §5.1; schema 4), ordered by id; at most 128 (src/sim/objects.ts). */
   readonly objects: FoodObject[];
   /** The single held sample (SPEC §10.5; schema 4), or null (src/sim/sampleSlot.ts). */
@@ -205,6 +211,7 @@ export function createEmptyWorld(opts: {
     conversionTotals: { starch: 0, oil: 0, protein: 0 },
     reactionCells: createReactionCells(),
     fungalFlow: null,
+    intakeSeen: createIntakeSeen(),
     objects: [],
     sample: null,
   };

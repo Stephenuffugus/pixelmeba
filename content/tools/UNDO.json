@@ -1,0 +1,14 @@
+{
+  "id": "UNDO",
+  "name": "Undo",
+  "guide": {
+    "summary": "Go back to just before your last change.",
+    "biology": "A game tool with no lab analogue: real time cannot be rewound.",
+    "rules": "Undo restores the dish to the moment just before your most recent completed change, including the time that has passed since: Undo rewinds time. One level is kept per dish. Taking a sample is not an undo point (Cancel puts it back instead).",
+    "example": "Paint a wall by mistake, then Undo: the wall is gone and the clock is back where it was."
+  },
+  "changes": "Everything in the dish returns to how it was just before your last change, time included.",
+  "doesNotChange": "Your saves and your other dishes.",
+  "watchFor": "The clock going back to the moment before your change.",
+  "phase": 1
+}

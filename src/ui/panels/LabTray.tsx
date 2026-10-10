@@ -15,7 +15,6 @@ import {
   BRUSH_COPY,
   CHEMISTRY_MATERIALS,
   COUNTS,
-  ERASE_STRUCTURE,
   FALLBACK_MATERIAL_COPY,
   FOOD_MATERIALS,
   FOOD_OBJECTS,
@@ -85,6 +84,7 @@ import {
   shadeFactorOf,
   structureRecord,
   structureTools,
+  toolItemCopy,
 } from './LabTrayContent';
 
 interface TrayItem {
@@ -321,16 +321,12 @@ export function itemCopy(id: LabToolId): ItemCopy | null {
       watch: rec.example,
     };
   }
-  if (id === 'erase') return structureTools(info).includes('erase') ? ERASE_STRUCTURE : null;
+  // P3.8 (D-0039): tool texts are content records, shared with the Field Guide.
+  if (id === 'erase') return structureTools(info).includes('erase') ? toolItemCopy('ERASE_STRUCTURE') : null;
   // P3.5: player tools offered on every world (D-0037).
-  if (id === 'sample' || id === 'transfer') {
-    const c = TOOLS_COPY.sample;
-    return { name: id === 'sample' ? TOOLS_COPY.sampleName : TOOLS_COPY.transferName, purpose: c.purpose, habitats: c.habitats, dose: id === 'sample' ? c.dose : TOOLS_COPY.transferHint, changes: c.changes, unchanged: c.unchanged, watch: c.watch };
-  }
-  if (id === 'cleanWater') {
-    const c = TOOLS_COPY.cleanWater;
-    return { name: TOOLS_COPY.cleanWaterName, purpose: c.purpose, habitats: c.habitats, dose: c.dose(CLEAN_WATER_LABELS[String(cleanFraction.value)] ?? ''), changes: c.changes, unchanged: c.unchanged, watch: c.watch };
-  }
+  if (id === 'sample') return toolItemCopy('SAMPLE');
+  if (id === 'transfer') return toolItemCopy('TRANSFER');
+  if (id === 'cleanWater') return toolItemCopy('CLEAN_WATER', CLEAN_WATER_LABELS[String(cleanFraction.value)] ?? '');
   if (id.startsWith('object:')) {
     // P3.6: a food object, named and summarised by the dish's recorded content.
     const mid = id.slice('object:'.length);

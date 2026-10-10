@@ -8,6 +8,7 @@
  * tap moves the held sample there) and 'cleanWater' (a stroke replaces water under the brush).
  */
 import { signal } from '@preact/signals';
+import { placementCue } from '@audio/cues';
 import { brushCells } from '@sim/grid';
 import type { SampleHeldSummary } from '@sim/sample';
 import type { SampleMode } from '@sim/sampleSlot';
@@ -162,6 +163,9 @@ export async function transferTap(x: number, y: number): Promise<void> {
   const dy = Math.floor(y) - h.origin[1];
   const res = await getClient().command(info.dishId, `sample-${++counter}`, { kind: 'sampleTransfer', dx, dy }, true);
   if (!res) return;
+  // P3.10: a player placement → drop / placement_error (+ haptics when accepted); only while that dish is
+  // still open (as LabView sendLabCommand): a late reply after leaving the dish makes no sound.
+  if (dishInfo.value?.dishId === info.dishId) placementCue(res.accepted);
   if (res.accepted > 0) {
     endSession();
     showToast(TOOLS_COPY.transferred, 4000);

@@ -4,6 +4,7 @@
  * fictional game units.
  */
 import type { SampleMode } from '@sim/sampleSlot';
+import { toolRecord } from '../panels/LabTrayContent';
 
 export const SAMPLE_MODE_LABELS: Readonly<Record<SampleMode, string>> = {
   life: 'Life',
@@ -29,25 +30,11 @@ export function units(v: number): string {
 }
 
 export const TOOLS_COPY = {
-  sampleName: 'Sample',
-  transferName: 'Transfer',
-  cleanWaterName: 'Clean water',
-  sample: {
-    purpose: 'Lift part of the dish into a holding slot, then move it somewhere else, put it back, or remove it.',
-    habitats: 'Anywhere in the dish.',
-    dose: 'Choose what to lift (Life, Dissolved, Deposits or All) and a circle of radius 1, 3 or 6.',
-    changes: 'While a sample is held, the dish stays paused. The held material still counts in the dish’s totals.',
-    unchanged: 'Stones, walls and beads. Partners are never split: a host and its rider, linked threads and a hunter with its claimed prey go together or not at all.',
-    watch: 'What happens to the place you emptied, and to the place you move it to.',
-  },
-  cleanWater: {
-    purpose: 'Replace part of the water under the brush with clean water.',
-    habitats: 'Open cells and beads; stones and walls are skipped.',
-    dose: (pct: string) => `Removes ${pct} of every dissolved food, nutrient, chemical, enzyme and phage unit there.`,
-    changes: 'Oxygen and carbon dioxide there return to this habitat’s starting level. Removed material leaves the dish and is logged.',
-    unchanged: 'Organisms, deposits (starch, oil, protein, debris, film) and food objects.',
-    watch: 'Whether the life there recovers, or loses its food.',
-  },
+  // P3.8 (D-0039): names, purpose and the changes / does not change / watch for lines of these tools
+  // are content (content/tools/{SAMPLE,TRANSFER,CLEAN_WATER}.json), shared with the Field Guide.
+  sampleName: toolRecord('SAMPLE').name,
+  transferName: toolRecord('TRANSFER').name,
+  cleanWaterName: toolRecord('CLEAN_WATER').name,
   modeLabel: 'Take',
   fractionLabel: 'Replace',
   begin: 'Start sampling',

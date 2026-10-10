@@ -4,6 +4,7 @@
  * completion behavior. Start makes a new paused dish from the card's recorded recipe and seed.
  */
 import { useEffect } from 'preact/hooks';
+import { playCue } from '@audio/cues';
 import { IconBack, IconPlay } from '../icons';
 import { journal } from '../journal';
 import { busy, experimentCard, experimentCards, experimentCardsError, loadExperimentCards, route, startExperiment } from '../state';
@@ -17,6 +18,10 @@ export function ExperimentCard() {
     void loadExperimentCards();
   }, []);
   const card = experimentCards.value ? experimentCard(cardId) : null;
+  const shown = card !== null;
+  useEffect(() => {
+    if (shown) playCue('card_open'); // P3.10: the card page opening is its visible equivalent
+  }, [cardId, shown]);
   const back = () => (route.value = { name: 'notebook', tab: 'experiments' });
 
   if (!card) {

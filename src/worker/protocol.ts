@@ -102,6 +102,8 @@ export type ToWorker =
   | { readonly type: 'exportSave'; readonly requestId: number; readonly slotId: string }
   /** Read-only family query for the inspector's "Where is its family?" shortcut (SPEC §12.1, UX §5.3). */
   | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly birthId: number }
+  /** P3.8 (D-0039): the relationships first seen in this played dish so far (worker state, read-only). */
+  | { readonly type: 'relationships'; readonly requestId: number; readonly dishId: string }
   /** Read-only lineage panel query (SPEC §8.5, UX §5.5): branches, variation, specimens, and detail for one branch or one organism's branch. */
   | { readonly type: 'lineage'; readonly requestId: number; readonly dishId: string; readonly branch: number | null; readonly birthId: number | null }
   /** Trait overlay and lineage highlight for this dish's snapshots (render-only; never touches the world). */
@@ -336,8 +338,12 @@ export interface GeometryMsg {
 }
 
 export interface VisualEvent {
-  /** 'objectEmptied' (protocol 2): a food object ran out in `cell` (a cosmetic fading stain; wave 3 passes it through). */
-  readonly type: 'birth' | 'death' | 'introduce' | 'capture' | 'conversion' | 'mutation' | 'branchEstablished' | 'branchExtinct' | 'objectEmptied';
+  /**
+   * 'objectEmptied' (protocol 2): a food object ran out in `cell` (a cosmetic fading stain; wave 3 passes it through).
+   * 'wake' (P3.10, additive, no protocol bump): a resting organism became active (src/sim/dormancy.ts); the UI's
+   * wake cue only; the renderer and the feed ignore it.
+   */
+  readonly type: 'birth' | 'death' | 'introduce' | 'capture' | 'conversion' | 'mutation' | 'branchEstablished' | 'branchExtinct' | 'objectEmptied' | 'wake';
   readonly tick: number;
   readonly species: number;
   readonly cell: number;
@@ -398,6 +404,8 @@ export interface DishInfo {
    * whether it digests film (only when this world's manifest enables the film system).
    */
   readonly speciesDiets?: readonly SpeciesDiet[];
+  /** P3.10 audio: each species' recorded category ("bacterium", "alga", …), in speciesIds order; bacterial births make no division cue (UX §8.1). */
+  readonly speciesCategories?: readonly string[];
   /** Lab trays (P2.7): each enabled material's one-line summary, in materials order. */
   readonly materialSummaries?: readonly string[];
   /** Fields allocated in this world (the overlays the Lab Observe tray can offer), canonical order. */
@@ -668,6 +676,20 @@ export interface DormancyInspect {
   readonly reason: { readonly code: number; readonly value: number; readonly restHeld: boolean };
 }
 
+/**
+ * P3.8 (D-0039; src/worker/relationships.ts): one relationship first seen in a played dish, from recorded
+ * state only. `relationshipId` is `<kind>:<actor species id>:<target>`: kinds eats (target a pool),
+ * catches, infects, attaches, bursts, drains (target a species id) and converts (target an enzyme:
+ * starch, oil or protein).
+ */
+export interface RelationshipSeen {
+  readonly relationshipId: string;
+  /** Simulated second of the tick it was first seen in (floor(tick / 10)). */
+  readonly second: number;
+  /** The event that showed it, when an event did (capture, lysis or drain death). */
+  readonly eventId?: number;
+}
+
 /** How a living family member is related to the organism asked about. */
 export type FamilyRelation = 'parent' | 'ancestor' | 'child' | 'descendant' | 'sibling' | 'relative';
 
@@ -850,6 +872,15 @@ export type FromWorker =
     }
   | { readonly type: 'exported'; readonly requestId: number; readonly text: string; readonly filename: string }
   | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly family: FamilyAnswer }
+  /** P3.8: every relationship the dish's watcher has seen since the dish was opened in this session. */
+  | {
+      readonly type: 'relationships';
+      readonly requestId: number;
+      readonly dishId: string;
+      readonly worldId: string;
+      readonly dishName: string;
+      readonly entries: readonly RelationshipSeen[];
+    }
   | { readonly type: 'lineage'; readonly requestId: number; readonly dishId: string; readonly lineage: LineageAnswer }
   | { readonly type: 'done'; readonly requestId: number }
   /** Comparison status; unsolicited (no requestId) while running and when it completes. */

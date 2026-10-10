@@ -17,7 +17,7 @@ import type { FieldId } from './fields';
 import { inDisk, type Grid } from './grid';
 import { canonicalJson, sha256Hex } from './hash';
 import { checkLedger } from './ledger';
-import { habitatGrid, realizeRecipe, RecipeError, SUB_CODE, validPatchCells } from './recipes';
+import { realizeRecipe, RecipeError, recipeGrid as recipeLayout, SUB_CODE, validPatchCells } from './recipes';
 import { stateHash } from './serialize';
 import type { World, WorldContent } from './world';
 
@@ -116,9 +116,9 @@ function fullDiskCellCount(cx: number, cy: number, r: number): number {
   return n;
 }
 
-/** The recipe's substrate/structure layout (no world is built). */
+/** The recipe's substrate/structure layout (no world is built; its own ops included, P3.9). */
 function recipeGrid(habitat: HabitatDef, recipe: RecipeDef): Grid {
-  return habitatGrid(habitat, { removeStones: recipe.removeStones });
+  return recipeLayout(habitat, recipe);
 }
 
 /** The cells a patch fills when centered at `center` (the same clipping realization uses). */

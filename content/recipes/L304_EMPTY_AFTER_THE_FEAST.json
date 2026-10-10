@@ -1,0 +1,25 @@
+{
+  "id": "L304_EMPTY_AFTER_THE_FEAST",
+  "revision": 1,
+  "name": "Empty After the Feast",
+  "habitatId": "WATER_GARDEN",
+  "seed": 304,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": false,
+  "baseLight": 0.8,
+  "mutationPreset": "standard",
+  "founderMode": "diverse",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {"center": [64, 64], "radius": 10, "substrate": "water", "add": {"sugar": 0.8, "nutrient": 0.2}, "label": "The feast (sugar 0.8 and nutrient 0.2 per cell)"}
+  ],
+  "founders": [
+    {"species": "B01", "count": 60, "center": [64, 64], "radius": 10, "placement": "scatter"}
+  ],
+  "labels": [],
+  "question": "What happens when success consumes its opportunity?",
+  "expectedObservationsText": "Sixty Sprinters scattered on one rich sugar patch. Nothing is added later: when the feast is eaten, it is gone. Diverse Founders: a few founders may start with an extra ability, present at creation.",
+  "phase": 3
+}

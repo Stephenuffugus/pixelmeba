@@ -1,0 +1,14 @@
+{
+  "id": "OVERLAYS",
+  "name": "Overlays",
+  "guide": {
+    "summary": "Colour the dish by one amount at a time, such as sugar, oxygen or light.",
+    "biology": "Scientists map chemicals and light with stains, probes and sensors. Here the game shows its own numbers directly.",
+    "rules": "One overlay at a time, drawn over the dish with a legend from low to high. An overlay is offered only when the dish has that amount. Overlays only show what the dish records; they never change it. All numbers are fictional game units.",
+    "example": "Turn on the Oxygen overlay over a crowded patch of Sprinters and look for where oxygen runs low."
+  },
+  "changes": "Only what you see.",
+  "doesNotChange": "Anything in the dish: looking never changes it.",
+  "watchFor": "Where food runs low around a group, or where oxygen drops.",
+  "phase": 1
+}

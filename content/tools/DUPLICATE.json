@@ -1,0 +1,14 @@
+{
+  "id": "DUPLICATE",
+  "name": "Duplicate dish",
+  "guide": {
+    "summary": "Make an independent copy of the dish with its own name.",
+    "biology": "A game tool with no lab analogue: no two real cultures are ever exactly alike, but a duplicate starts as an exact copy.",
+    "rules": "The copy starts with exactly the same organisms, amounts and seed. From then on the two dishes are separate: a change in one never reaches the other. Once they differ, chance events in them can differ too.",
+    "example": "Duplicate a dish, add Amoebas to the copy only, and see how the Sprinters do in each."
+  },
+  "changes": "A new, separately named dish is made from this moment.",
+  "doesNotChange": "The original dish and its saves.",
+  "watchFor": "Whether the two dishes go different ways after you change one of them.",
+  "phase": 2
+}

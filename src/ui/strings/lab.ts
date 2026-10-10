@@ -162,17 +162,6 @@ export const SHADE_ERASE: ItemCopy = {
   watch: 'Light-feeding organisms making food there again.',
 };
 
-/** Erasing structures (a tool, not a content item). */
-export const ERASE_STRUCTURE: ItemCopy = {
-  name: 'Erase structure',
-  purpose: 'Remove stones, walls and porous beads.',
-  habitats: 'Cells with a stone, wall or porous bead (other cells are left alone; the rim is never erased).',
-  dose: 'Removes the structure from each covered cell.',
-  changes: 'Only the structures: the water, gel or sediment underneath is exactly as it was before.',
-  unchanged: 'Nothing is added. A freed stone or wall cell starts empty and fills by ordinary spreading.',
-  watch: 'Organisms and food moving through the opening.',
-};
-
 export interface MaterialCopy {
   readonly habitats: string;
   readonly changes: string;

@@ -1,0 +1,16 @@
+{
+  "id": "CLEAN_WATER",
+  "name": "Clean water",
+  "guide": {
+    "summary": "Replace part of the water under the brush with clean water.",
+    "biology": "Changing some of the water dilutes whatever is dissolved in it, as a water change does in an aquarium.",
+    "rules": "Choose 25 %, 50 % or 100 % and a brush radius of 1, 3 or 6. In each covered open cell or bead, that share of every dissolved food, nutrient, chemical, enzyme and phage unit leaves the dish and is logged as removed; oxygen and carbon dioxide there return to this habitat’s starting level. Organisms, deposits and food objects stay. Clean water is an ordinary undo point.",
+    "example": "Clean the water over a patch where Pinphage units are spreading, then watch the Pinphage overlay."
+  },
+  "where": "Open cells and beads; stones and walls are skipped.",
+  "dose": "Removes {fraction} of every dissolved food, nutrient, chemical, enzyme and phage unit there.",
+  "changes": "Oxygen and carbon dioxide there return to this habitat’s starting level. Removed material leaves the dish and is logged.",
+  "doesNotChange": "Organisms, deposits (starch, oil, protein, debris, film) and food objects.",
+  "watchFor": "Whether the life there recovers, or loses its food.",
+  "phase": 3
+}

@@ -36,6 +36,7 @@ export function loadRawPacksFs(root: string = CONTENT_DIR): RawPacks {
     modules: dir(root, 'modules'),
     habitats: dir(root, 'habitats'),
     structures: dir(root, 'structures'),
+    tools: dir(root, 'tools'),
     recipes: dir(root, 'recipes'),
     experiments: dir(root, 'experiments'),
     variants: dir(root, 'variants'),

@@ -163,6 +163,29 @@ describe('completion copy says what completing each kind of card does (SPEC §13
     expect(playerStepText(card('EXP_103'), 'openResourceHistory')).toMatch(/More → History/);
     expect(playerStepText(card('EXP_106'), 'viewPreyHistory')).toMatch(/population history/);
     expect(completionText(card('EXP_103'))).toContain('and you have taken the steps above');
+    // P3.9 (CT §10.1): EXP_104 follows both species; EXP_105 asks for an infected Sprinter.
+    expect(card('EXP_104').playerSteps).toEqual(['inspectOxygenLimits']);
+    expect(card('EXP_104').stepSpecies).toEqual(['B01', 'B03']);
+    expect(playerStepText(card('EXP_104'), 'inspectOxygenLimits')).toBe(
+      'Tap a Sprinter and a Dusk and read what holds each back. Look for one held back by too little oxygen and the other by too much; if none is, note what holds them back instead.',
+    );
+    expect(card('EXP_105').playerSteps).toEqual(['observeInfection']);
+    expect(playerStepText(card('EXP_105'), 'observeInfection')).toBe('Tap an infected Sprinter: the inspector shows its infection and when it bursts.');
+    expect(card('EXP_212').playerSteps).toEqual([]);
+  });
+
+  it('P3.9 tracked measures read in words with their units', () => {
+    const reg = registry();
+    const card = (id: string) => experimentCardView(reg, reg.experiments[id]!);
+    expect(measureLabel(card('EXP_104'), 'limitSeconds.B01.OXYGEN_LIMITED')).toBe('Time Sprinters spent held back by too little oxygen (organism-seconds)');
+    expect(measureLabel(card('EXP_104'), 'limitSeconds.B03.SUIT_OXYGEN_HIGH')).toBe('Time Dusks spent held back by too much oxygen (organism-seconds)');
+    expect(formatMeasure('limitSeconds.B03.SUIT_OXYGEN_HIGH', 998)).toBe('998.0 s');
+    expect(measureLabel(card('EXP_105'), 'infections.B05')).toBe('Crossfeeders newly infected');
+    expect(formatMeasure('infections.B01', 30)).toBe('30');
+    expect(measureLabel(card('EXP_105'), 'wholeUnitCells.B05')).toBe('Most cells at once holding a whole Pinphage unit and a living Crossfeeder');
+    expect(measureLabel(card('EXP_105'), 'field.v01')).toBe('Pinphage left in the dish');
+    expect(measureLabel(card('EXP_212'), 'transfer.fungal')).toBe('Carbon passed along Cordweaver links');
+    expect(formatMeasure('transfer.fungal', 0.358)).toBe('0.36 C');
   });
 });
 

@@ -1,0 +1,16 @@
+{
+  "id": "ERASE_STRUCTURE",
+  "name": "Erase structure",
+  "guide": {
+    "summary": "Remove stones, walls and porous beads.",
+    "biology": "Opening a barrier lets microbes and dissolved food that were kept apart mix again.",
+    "rules": "Each covered cell with a stone, wall or porous bead gets back the water, gel or sediment it had before the structure was placed. A bead keeps what it held; a stone or wall cell held nothing and starts empty. The rim is never erased. Erasing is an ordinary undo point. No material is made or lost.",
+    "example": "Erase one stone from a line between two groups and watch them meet."
+  },
+  "where": "Cells with a stone, wall or porous bead (other cells are left alone; the rim is never erased).",
+  "dose": "Removes the structure from each covered cell.",
+  "changes": "Only the structures: the water, gel or sediment underneath is exactly as it was before.",
+  "doesNotChange": "Nothing is added. A freed stone or wall cell starts empty and fills by ordinary spreading.",
+  "watchFor": "Organisms and food moving through the opening.",
+  "phase": 2
+}

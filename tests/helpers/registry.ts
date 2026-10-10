@@ -25,7 +25,7 @@
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { ContentError, contentHashInput, validateContent, type ContentRegistry, type RawPacks } from '../../src/sim/content/registry';
+import { ContentError, contentHashInput, validateContent, type ContentRegistry, type RawFile, type RawPacks } from '../../src/sim/content/registry';
 import { ManifestSchema, type Manifest } from '../../src/sim/content/schema';
 import type { SystemFlag } from '../../src/sim/fields';
 import { canonicalJson } from '../../src/sim/hash';
@@ -65,6 +65,11 @@ export const PATCHABLE_MANIFEST_KEYS = [
 
 export interface RegistryWithOptions {
   readonly allowUnimplemented?: boolean;
+  /**
+   * Ids of recipe, experiment, variant or objective records to leave out before validation: a reduced
+   * test dish (e.g. without the film system) cannot carry shipped records that need what it removed.
+   */
+  readonly omit?: readonly string[];
 }
 
 /** Every patchable field of a manifest (the lists a world records, its build phase and rule versions). */
@@ -123,10 +128,23 @@ export function patchedRawPacks(patch: ManifestPatch): RawPacks {
  * the process: treat it as read-only. Throws a ContentError naming every problem.
  */
 export function registryWith(patch: ManifestPatch, opts: RegistryWithOptions = {}): ContentRegistry {
-  const key = canonicalJson({ patch, allowUnimplemented: opts.allowUnimplemented === true });
+  const omit = [...(opts.omit ?? [])].sort();
+  const key = canonicalJson({ patch, allowUnimplemented: opts.allowUnimplemented === true, omit });
   const hit = built[key];
   if (hit) return hit;
-  const res = validateContent(patchedRawPacks(patch), { allowUnimplemented: opts.allowUnimplemented === true });
+  const raw = patchedRawPacks(patch);
+  const packs: RawPacks =
+    omit.length === 0
+      ? raw
+      : (() => {
+          const keep = (files: readonly RawFile[]) => files.filter((f) => !omit.includes((f.data as { id?: string }).id ?? ''));
+          const left = { ...raw, recipes: keep(raw.recipes), experiments: keep(raw.experiments), variants: keep(raw.variants), objectives: keep(raw.objectives) };
+          const missing = omit.filter((id) => ![raw.recipes, raw.experiments, raw.variants, raw.objectives].some((fs) => fs.some((f) => (f.data as { id?: string }).id === id)));
+          if (missing.length > 0) throw new Error(`registryWith: omit names no record: ${missing.join(', ')}`);
+          (left.manifest.data as Record<string, unknown>).contentHash = contentHashOf(left);
+          return left;
+        })();
+  const res = validateContent(packs, { allowUnimplemented: opts.allowUnimplemented === true });
   if (res.registry === null) throw new ContentError(res.issues);
   built[key] = res.registry;
   return res.registry;

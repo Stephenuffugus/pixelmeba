@@ -1,0 +1,36 @@
+{
+  "id": "EXP_104",
+  "seed": 104,
+  "title": "A hidden neighborhood",
+  "question": "Who lives where the oxygen runs out?",
+  "recipeId": "HIDDEN_NEIGHBORHOOD_V1",
+  "intervention": "Watch the Oxygen overlay (Lab → Observe) while the lid stays closed. Tap a Sprinter and a Dusk and read what holds each one back. Look for one held back by too little oxygen and the other by too much; if the inspector names something else, note what holds them back instead.",
+  "predictedTradeoff": "Sprinters burn oxygen to eat, so a busy patch under a closed lid can run short of it for them. Dusks are held back where oxygen is high; if the Sprinters use up enough oxygen, that may leave room for Dusks.",
+  "measurements": [
+    "limitSeconds.B01.OXYGEN_LIMITED",
+    "limitSeconds.B03.SUIT_OXYGEN_HIGH",
+    "oxygenMean",
+    "intake.B01",
+    "intake.B03",
+    "alive.B01",
+    "alive.B03",
+    "births.B01",
+    "births.B03",
+    "deaths.B01",
+    "deaths.B03"
+  ],
+  "stoppingSeconds": 180,
+  "confounds": "Both species eat the same sugar, so they compete for food as well as being sorted by oxygen. The time limited by oxygen counts every organism each tenth of a second, so a bigger group adds up faster. One run with one seed.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "limitSeconds.B01.OXYGEN_LIMITED", "arm": "A", "op": "gt", "value": 0, "label": "Sprinters were held back by too little oxygen"},
+        {"measure": "limitSeconds.B03.SUIT_OXYGEN_HIGH", "arm": "A", "op": "gt", "value": 0, "label": "Dusks were held back by too much oxygen"}
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {"journalStamp": "Measured Sprinters short of oxygen and Dusks held back by it", "playerSteps": ["inspectOxygenLimits"]},
+  "phase": 3
+}

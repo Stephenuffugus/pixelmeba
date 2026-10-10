@@ -296,6 +296,9 @@ describe('P3.3 film decay, transport and exposure', () => {
   });
 });
 
+/** Shipped records a dish without film and fungi cannot carry: they name F02 or E10 (wave 4 P3.9). */
+const NEEDS_FUNGI_OR_E10 = ['EXP_212', 'FUNGAL_SUPPLY_LINE_V1', 'L306_BORROWED_SHELTER'];
+
 describe('P3.3 film as detritus food (D-0038)', () => {
   /**
    * One tick with film as the only food placed in each eater's cell (decay adds a trace of detritus,
@@ -386,7 +389,7 @@ describe('P3.3 film as detritus food (D-0038)', () => {
     // E10 builds film (MODULE_SYSTEM_NEEDS), so a dish without film cannot enable it (shipped since D-0059).
     const modules = shipped.manifest.enabledModules.filter((m) => m !== 'E10');
     const w = gel(
-      registryWith({ enabledSystems: systems, enabledSpecies: species, enabledModules: modules }, { allowUnimplemented: true }),
+      registryWith({ enabledSystems: systems, enabledSpecies: species, enabledModules: modules }, { allowUnimplemented: true, omit: NEEDS_FUNGI_OR_E10 }),
     );
     expect(w.fields.film).toBeUndefined();
     fillField(w, 'sugar', 0);
@@ -407,7 +410,7 @@ describe('P3.3 film as detritus food (D-0038)', () => {
         // do not depend on the module options.
         enabledModules: shipped.manifest.enabledModules.filter((m) => m !== 'E10'),
       },
-      { allowUnimplemented: true },
+      { allowUnimplemented: true, omit: NEEDS_FUNGI_OR_E10 },
     );
     const draws = (reg: ContentRegistry): string[] => {
       const w = gel(reg, 'accelerated');

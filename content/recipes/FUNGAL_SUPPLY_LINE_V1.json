@@ -1,0 +1,34 @@
+{
+  "id": "FUNGAL_SUPPLY_LINE_V1",
+  "revision": 1,
+  "name": "Fungal supply line",
+  "habitatId": "WATER_GARDEN",
+  "seed": 212,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {"sugar": 0},
+  "ops": [
+    {"op": "rect", "x0": 56, "x1": 67, "y0": 60, "y1": 68, "substrate": "gel"}
+  ],
+  "fieldPatches": [],
+  "founders": [
+    {
+      "species": "F02",
+      "count": 4,
+      "center": [61, 64],
+      "radius": 2,
+      "cells": [[60, 64], [61, 64], [62, 64], [63, 64]],
+      "links": "chain",
+      "initial": [{"B": 4, "N": 0.4}, {}, {}, {}],
+      "label": "Four linked Cordweaver segments; the first starts with 4 carbon and 0.4 nutrient (labelled setup)"
+    }
+  ],
+  "labels": ["Labelled setup: the first segment starts with twice the ordinary body"],
+  "question": "How does food travel along a fungal line?",
+  "expectedObservationsText": "Four Cordweaver segments in a row on a small gel bed, joined by transport links, with no food anywhere. The first starts with 4 carbon and 0.4 nutrient (a labelled setup); the others start with the ordinary 2 carbon and 0.2 nutrient. Carbon and its nutrient pass along the links from the full segment toward the others; energy never does.",
+  "phase": 3
+}

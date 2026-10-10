@@ -21,6 +21,8 @@ export const STREAMS = {
   placement: 'placement',
   jitter: 'jitter',
   inoculate: 'inoculate',
+  /** P3.9: a recipe founder group's 'scatter' placement (key: founder group index). */
+  founderPlace: 'founder.place',
 } as const;
 export type StreamId = (typeof STREAMS)[keyof typeof STREAMS];
 

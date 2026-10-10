@@ -1,0 +1,28 @@
+{
+  "id": "ONE_HOST_V1",
+  "revision": 1,
+  "name": "One compatible host",
+  "habitatId": "WATER_GARDEN",
+  "seed": 105,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": false,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {"center": [35, 64], "radius": 6, "substrate": "water", "add": {"sugar": 0.5, "nutrient": 0.2}, "label": "Sugar and nutrient patch (Sprinters)"},
+    {"center": [90, 64], "radius": 6, "substrate": "water", "add": {"metabolite": 0.5, "nutrient": 0.2}, "label": "Metabolite and nutrient patch (Crossfeeders)"},
+    {"center": [35, 64], "radius": 6, "substrate": "water", "add": {"v01": 5}, "label": "Pinphage, 5 units per cell (Sprinters' patch)"},
+    {"center": [90, 64], "radius": 6, "substrate": "water", "add": {"v01": 5}, "label": "Pinphage, 5 units per cell (Crossfeeders' patch)"}
+  ],
+  "founders": [
+    {"species": "B01", "count": 30, "center": [35, 64], "radius": 6},
+    {"species": "B05", "count": 30, "center": [90, 64], "radius": 6}
+  ],
+  "labels": [],
+  "question": "Does a virus infect everyone it touches?",
+  "expectedObservationsText": "Thirty Sprinters on a sugar patch and thirty Crossfeeders on a metabolite patch, with the same Pinphage dose (5 units per cell) on both. Pinphage infects only Sprinters. The Infection overlay and the inspector show who is infected.",
+  "phase": 3
+}

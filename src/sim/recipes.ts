@@ -1,10 +1,19 @@
 /**
  * Recipe realization (SPEC §13.1, CT §9). Builds a fresh, paused world at tick 0:
- * habitat geometry → background overrides → ledger baseline → field patches (logged inputs) →
- * founders in distinct cells ordered by distance, then y, then x (logged inputs) → scheduled commands.
+ * habitat geometry (the habitat's ops, then the recipe's own `ops`) → background overrides → ledger
+ * baseline → field patches (logged inputs) → founders in distinct cells (logged inputs) → scheduled
+ * commands.
+ *
+ * Founder groups (P3.9; all options default to the Phase 2 behaviour, so every earlier recipe realizes
+ * bit-identically): the eligible cells of a group's disk are taken row-major (inside the dish,
+ * occupiable by the species, not taken by an earlier group); 'nearest' sorts them by distance, then y,
+ * then x; 'scatter' takes the first `count` of detPermutation(eligible, seed, 'founder.place', group
+ * index); explicit `cells` name them. `initial` sets a member's starting B, N and E as a labelled setup
+ * (the B and N difference is logged as 'recipe:<id>:initial'); `links: 'chain'` joins listed F02
+ * members with transport links (SPEC §7.7).
  */
 import type { ContentRegistry } from './content/registry';
-import type { GeometryOp, HabitatDef, RecipeDef } from './content/schema';
+import type { GeometryOp, HabitatDef, RecipeDef, Species } from './content/schema';
 import { FIELD_DEFS, FIELD_IDS, isFieldId, type FieldId } from './fields';
 import {
   cellIndex,
@@ -23,12 +32,14 @@ import {
   type Grid,
 } from './grid';
 import { initializeLedger, recordInput } from './ledger';
+import { addFungalLink, LINK_TRANSPORT } from './links';
 import { canOccupy } from './movement';
+import { detPermutation, STREAMS } from './rng';
 import { introduceOrganism, queueCommand, type CommandPayload } from './commands';
 import { rebuildIndex } from './spatial';
 import { updateDerived } from './transport';
 import { createEmptyWorld, speciesIndex, type World, type WorldContent } from './world';
-import { TICKS_PER_SECOND } from './constants';
+import { INITIAL_ENERGY, TICKS_PER_SECOND } from './constants';
 
 export class RecipeError extends Error {}
 
@@ -77,9 +88,10 @@ function applyOpGeometry(g: Grid, op: GeometryOp, i: number, removeStones: boole
 
 /**
  * The habitat's substrate and structure layout alone (no fields, light or world): exactly the geometry
- * applyHabitat() paints. Pure; used to validate and preview patch placement without building a world.
+ * applyHabitat() paints, including any extra `ops` a recipe paints after the habitat's own (P3.9).
+ * Pure; used to validate and preview patch placement without building a world.
  */
-export function habitatGrid(h: HabitatDef, opts: { removeStones?: boolean } = {}): Grid {
+export function habitatGrid(h: HabitatDef, opts: { removeStones?: boolean; ops?: readonly GeometryOp[] } = {}): Grid {
   const g = createGrid();
   const baseSub = SUB_CODE[h.baseSubstrate];
   const cells = maskCells();
@@ -88,7 +100,7 @@ export function habitatGrid(h: HabitatDef, opts: { removeStones?: boolean } = {}
     g.substrate[i] = baseSub;
     g.structure[i] = ST_NONE;
   }
-  for (const op of h.ops) {
+  for (const op of [...h.ops, ...(opts.ops ?? [])]) {
     for (const i of opCells(op)) {
       if (!inMask(i % 128, Math.floor(i / 128))) continue;
       applyOpGeometry(g, op, i, opts.removeStones === true);
@@ -97,7 +109,15 @@ export function habitatGrid(h: HabitatDef, opts: { removeStones?: boolean } = {}
   return g;
 }
 
-export function applyHabitat(world: World, h: HabitatDef, opts: { removeStones?: boolean; baseLight?: number } = {}): void {
+/**
+ * A recipe's substrate and structure layout (its habitat, stone removal and its own ops; P3.9): the
+ * grid realizeRecipe() builds. Pure: What if? validation, previews and registry checks share it.
+ */
+export function recipeGrid(habitat: HabitatDef, recipe: Pick<RecipeDef, 'removeStones' | 'ops'>): Grid {
+  return habitatGrid(habitat, { removeStones: recipe.removeStones, ops: recipe.ops });
+}
+
+export function applyHabitat(world: World, h: HabitatDef, opts: { removeStones?: boolean; baseLight?: number; /** P3.9: a recipe's own ops, painted after the habitat's. */ ops?: readonly GeometryOp[] } = {}): void {
   const g = world.grid;
   const cells = maskCells();
   const baseSub = SUB_CODE[h.baseSubstrate];
@@ -108,7 +128,7 @@ export function applyHabitat(world: World, h: HabitatDef, opts: { removeStones?:
     g.lightBase[i] = opts.baseLight ?? h.baseLight;
     setFields(world, i, h.baseFields);
   }
-  for (const op of h.ops) {
+  for (const op of opts.ops && opts.ops.length > 0 ? [...h.ops, ...opts.ops] : h.ops) {
     for (const i of opCells(op)) {
       if (!inMask(i % 128, Math.floor(i / 128))) continue;
       applyOpGeometry(g, op, i, opts.removeStones === true);
@@ -203,6 +223,110 @@ export interface RealizeOptions {
   readonly provenance?: WorldContent['provenance'];
 }
 
+type FounderDef = RecipeDef['founders'][number];
+
+/** A content problem in one recipe file (registry.ts reports it against that file). */
+export interface RecipeShapeProblem {
+  readonly path: string;
+  readonly message: string;
+}
+
+/**
+ * P3.9 content checks for a recipe's own ops and its founder placement options (the registry runs them
+ * beside its founder checks): rect bounds as for habitats; listed `cells` one per member, distinct,
+ * inside the dish and the group's disk, open cells of a substrate the species lives in on the recipe's
+ * grid (realization also applies the species' full occupancy rule); `initial` one entry per member;
+ * `links: 'chain'` only for a TRANSPORT_LINKS species with listed four-neighbour cells.
+ */
+export function recipeShapeProblems(recipe: RecipeDef, habitat: HabitatDef | undefined, species: Readonly<Record<string, Species>>): RecipeShapeProblem[] {
+  const out: RecipeShapeProblem[] = [];
+  recipe.ops.forEach((op, i) => {
+    if (op.op === 'rect' && (op.x0 > op.x1 || op.y0 > op.y1)) out.push({ path: `ops.${i}`, message: 'rect must have x0 ≤ x1 and y0 ≤ y1' });
+  });
+  const grid = habitat ? recipeGrid(habitat, recipe) : null;
+  recipe.founders.forEach((f, i) => {
+    const at = (field: string) => `founders.${i}.${field}`;
+    const sp = species[f.species];
+    if (f.cells !== undefined) {
+      if (f.placement === 'scatter') out.push({ path: at('placement'), message: 'listed cells and scatter placement exclude each other' });
+      if (f.cells.length !== f.count) out.push({ path: at('cells'), message: `lists ${f.cells.length} cells for ${f.count} founders` });
+      const seen: number[] = [];
+      f.cells.forEach(([x, y], k) => {
+        const where = `(${x},${y})`;
+        const idx = cellIndex(x, y);
+        if (seen.includes(idx)) out.push({ path: at(`cells.${k}`), message: `${where} is listed twice` });
+        seen.push(idx);
+        if (!inMask(x, y)) out.push({ path: at(`cells.${k}`), message: `${where} is outside the dish` });
+        else if ((x - f.center[0]) ** 2 + (y - f.center[1]) ** 2 > f.radius * f.radius)
+          out.push({ path: at(`cells.${k}`), message: `${where} is outside r ${f.radius} of (${f.center[0]},${f.center[1]})` });
+        else if (grid && sp) {
+          const sub = grid.substrate[idx]!;
+          const name = sub === SUB_WATER ? 'water' : sub === SUB_GEL ? 'gel' : sub === SUB_SEDIMENT ? 'sediment' : '';
+          if (grid.structure[idx] !== ST_NONE) out.push({ path: at(`cells.${k}`), message: `${where} holds a structure` });
+          else if (!sp.habitats.includes(name as Species['habitats'][number])) out.push({ path: at(`cells.${k}`), message: `${f.species} cannot live on ${name || 'this substrate'} at ${where}` });
+        }
+      });
+    }
+    if (f.initial !== undefined && f.initial.length !== f.count) out.push({ path: at('initial'), message: `has ${f.initial.length} entries for ${f.count} founders (one per founder, in founder order)` });
+    if (f.links === 'chain') {
+      if (sp && !sp.nativeAbilities.includes('TRANSPORT_LINKS')) out.push({ path: at('links'), message: `${f.species} does not form transport links` });
+      if (f.cells === undefined) out.push({ path: at('links'), message: "a 'chain' needs the members' listed cells" });
+      else
+        for (let k = 1; k < f.cells.length; k++) {
+          const [ax, ay] = f.cells[k - 1]!;
+          const [bx, by] = f.cells[k]!;
+          if (Math.abs(ax - bx) + Math.abs(ay - by) !== 1) out.push({ path: at(`cells.${k}`), message: `(${bx},${by}) is not a four-neighbour of (${ax},${ay}), so the chain cannot link them` });
+        }
+    }
+  });
+  return out;
+}
+
+/**
+ * The cells of founder group `groupIndex`, one per member in member order (P3.9). Eligible cells are its
+ * disk's cells row-major, inside the dish, occupiable by the species and not used by an earlier group.
+ * Listed `cells` must each be eligible; otherwise 'nearest' (distance, then y, then x — the Phase 2
+ * order) or 'scatter' (the first `count` of a permutation drawn from the recipe seed). Throws
+ * RecipeError when the group cannot be placed; never widens the disk or repeats a cell.
+ */
+export function founderCells(world: World, recipe: Pick<RecipeDef, 'id'>, f: FounderDef, groupIndex: number, used: Uint8Array): number[] {
+  const sp = world.species[speciesIndex(world, f.species)]!;
+  const [cx, cy] = f.center;
+  if (f.cells !== undefined) {
+    if (f.cells.length !== f.count) throw new RecipeError(`recipe ${recipe.id}: founder group ${groupIndex} lists ${f.cells.length} cells for ${f.count} ${f.species}`);
+    const out: number[] = [];
+    for (const [x, y] of f.cells) {
+      const i = cellIndex(x, y);
+      if (!inMask(x, y)) throw new RecipeError(`recipe ${recipe.id}: founder cell (${x},${y}) is outside the dish`);
+      if ((x - cx) ** 2 + (y - cy) ** 2 > f.radius * f.radius) throw new RecipeError(`recipe ${recipe.id}: founder cell (${x},${y}) is outside r ${f.radius} of (${cx},${cy})`);
+      if (used[i] !== 0 || out.includes(i)) throw new RecipeError(`recipe ${recipe.id}: founder cell (${x},${y}) is already taken`);
+      if (!canOccupy(world, sp, i)) throw new RecipeError(`recipe ${recipe.id}: ${f.species} cannot live in founder cell (${x},${y})`);
+      out.push(i);
+    }
+    return out;
+  }
+  const eligible = diskCells(cx, cy, f.radius).filter(
+    (i) => inMask(i % 128, Math.floor(i / 128)) && canOccupy(world, sp, i) && used[i] === 0,
+  );
+  if (eligible.length < f.count) {
+    throw new RecipeError(`recipe ${recipe.id}: only ${eligible.length} valid cells for ${f.count} ${f.species} within r ${f.radius} of (${cx},${cy})`);
+  }
+  if (f.placement === 'scatter') {
+    const perm = detPermutation(eligible.length, world.seed, STREAMS.founderPlace, groupIndex);
+    return perm.slice(0, f.count).map((k) => eligible[k]!);
+  }
+  eligible.sort((a, b) => {
+    const ax = a % 128;
+    const ay = Math.floor(a / 128);
+    const bx = b % 128;
+    const by = Math.floor(b / 128);
+    const da = (ax - cx) ** 2 + (ay - cy) ** 2;
+    const db = (bx - cx) ** 2 + (by - cy) ** 2;
+    return da - db || ay - by || ax - bx;
+  });
+  return eligible.slice(0, f.count);
+}
+
 export function realizeRecipe(registry: ContentRegistry, recipeOrId: string | RecipeDef, opts: RealizeOptions = {}): World {
   const base = typeof recipeOrId === 'string' ? registry.recipes[recipeOrId] : recipeOrId;
   if (!base) throw new RecipeError(`unknown recipe ${typeof recipeOrId === 'string' ? recipeOrId : recipeOrId.id}`);
@@ -235,6 +359,7 @@ export function realizeRecipe(registry: ContentRegistry, recipeOrId: string | Re
   applyHabitat(world, habitat, {
     removeStones: recipe.removeStones,
     ...(recipe.baseLight !== undefined ? { baseLight: recipe.baseLight } : {}),
+    ...(recipe.ops.length > 0 ? { ops: recipe.ops } : {}),
   });
   const cells = maskCells();
   for (let k = 0; k < cells.length; k++) {
@@ -281,29 +406,16 @@ export function realizeRecipe(registry: ContentRegistry, recipeOrId: string | Re
     recordInput(world, `recipe:patch${n}${patch.label ? `:${patch.label}` : ''}`, c, nn, mm);
   });
 
-  // Founders: distinct cells nearest the requested center (distance, then y, then x).
+  // Founders: distinct cells, group by group (nearest-first, scattered, or listed).
   const used = new Uint8Array(128 * 128);
-  for (const f of recipe.founders) {
+  recipe.founders.forEach((f, groupIndex) => {
     const spIdx = speciesIndex(world, f.species);
-    const sp = world.species[spIdx]!;
-    const [cx, cy] = f.center;
-    const eligible = diskCells(cx, cy, f.radius).filter(
-      (i) => inMask(i % 128, Math.floor(i / 128)) && canOccupy(world, sp, i) && used[i] === 0,
-    );
-    eligible.sort((a, b) => {
-      const ax = a % 128;
-      const ay = Math.floor(a / 128);
-      const bx = b % 128;
-      const by = Math.floor(b / 128);
-      const da = (ax - cx) ** 2 + (ay - cy) ** 2;
-      const db = (bx - cx) ** 2 + (by - cy) ** 2;
-      return da - db || ay - by || ax - bx;
-    });
-    if (eligible.length < f.count) {
-      throw new RecipeError(`recipe ${recipe.id}: only ${eligible.length} valid cells for ${f.count} ${f.species} within r ${f.radius} of (${cx},${cy})`);
-    }
+    const cells = founderCells(world, recipe, f, groupIndex, used);
+    const slots: number[] = [];
+    let dB = 0;
+    let dN = 0;
     for (let k = 0; k < f.count; k++) {
-      const cell = eligible[k]!;
+      const cell = cells[k]!;
       used[cell] = 1;
       const ordinal = k + 1;
       const give =
@@ -316,8 +428,36 @@ export function realizeRecipe(registry: ContentRegistry, recipeOrId: string | Re
         origin: give && f.modules.length > 0 ? 2 : 1,
       });
       if (slot < 0) throw new RecipeError(`recipe ${recipe.id}: agent capacity exceeded`);
+      slots.push(slot);
+      // A labelled setup (never a test-only override): this member's own B, N and E.
+      const init = f.initial?.[k];
+      if (init) {
+        const c = world.ents.cols;
+        if (init.B !== undefined) {
+          dB += init.B - c.B[slot]!;
+          c.B[slot] = init.B;
+        }
+        if (init.N !== undefined) {
+          dN += init.N - c.N[slot]!;
+          c.N[slot] = init.N;
+        }
+        if (init.E !== undefined && init.E !== INITIAL_ENERGY) {
+          // Energy is an abstract budget, not a material: the difference is recorded, never as an input.
+          const dE = init.E - c.E[slot]!;
+          if (dE > 0) world.ledger.energy.earned += dE;
+          else world.ledger.energy.other += -dE;
+          c.E[slot] = init.E;
+        }
+      }
     }
-  }
+    if (dB !== 0 || dN !== 0) recordInput(world, `recipe:${recipe.id}:initial`, dB, dN);
+    if (f.links === 'chain') {
+      for (let k = 1; k < slots.length; k++) {
+        if (!addFungalLink(world, slots[k - 1]!, slots[k]!, LINK_TRANSPORT))
+          throw new RecipeError(`recipe ${recipe.id}: founder group ${groupIndex} members ${k} and ${k + 1} cannot be linked`);
+      }
+    }
+  });
 
   for (const sc of recipe.scheduledCommands) {
     queueCommand(world, `schedule:${sc.label}`, sc.payload as unknown as CommandPayload, Math.round(sc.atSecond * TICKS_PER_SECOND));

@@ -9,7 +9,7 @@
 import { applyNow, type CommandPayload } from '@sim/commands';
 import type { ContentRegistry } from '@sim/content/registry';
 import type { RecipeDef } from '@sim/content/schema';
-import { habitatGrid, realizeRecipe, recipeOverridesOf, withHabitatOverride, type RecipeOverridesRecord, type RecipeWorldProvenance } from '@sim/recipes';
+import { realizeRecipe, recipeGrid, recipeOverridesOf, withHabitatOverride, type RecipeOverridesRecord, type RecipeWorldProvenance } from '@sim/recipes';
 import { deserializeWorld, serializeWorld, stateHash, type WorldState } from '@sim/serialize';
 import { canonicalJson } from '@sim/hash';
 import { step } from '@sim/tick';
@@ -23,7 +23,7 @@ import { stamp, type DishInfo, type DishSource, type Envelope, type FromWorker, 
 import type { ExperimentStampMsg } from './protocol';
 import { captureBaseline, PairedRun, realizeArm, type CompareSpeed, type CompareStatus, type ComparisonResults, type ComparisonState, type Intervention } from './comparison';
 import type { ComparisonExperiment } from './comparison';
-import { experimentCardView, experimentCatalog, experimentOf, GateWatch, inspectShowsFoodUse, PlayerSteps, realizeExperimentArms, stepSpecies, type PlayerStep } from '@sim/experiments';
+import { experimentCardView, experimentCatalog, experimentOf, GateWatch, inspectedOxygenReading, inspectShowsFoodUse, inspectShowsInfection, PlayerSteps, realizeExperimentArms, stepSpecies, type PlayerStep } from '@sim/experiments';
 import { PAIRED_RUN_LABEL, SINGLE_RUN_LABEL, stepObserved, type ArmObserver } from '@sim/pairedRun';
 import { TICKS_PER_SECOND } from '@sim/constants';
 import { isIntervention } from '@sim/specimens';
@@ -56,6 +56,7 @@ import {
 } from '@sim/variants';
 import type { WhatIfAnswer, WhatIfChoice, WhatIfKeep, WhatIfKept, WhatIfPlan, WhatIfRefusalCode } from './protocol';
 import type { KeepFrom, KeepRefusalCode } from './protocol';
+import { RelationshipWatcher } from './relationships';
 
 export interface HostClock {
   now(): number;
@@ -199,6 +200,8 @@ interface Dish {
   experiment?: SingleArmExperiment | null;
   /** P3.5 (D-0037): the stateHash Sample Begin recorded (worker state; null after a reload or Cancel). */
   sampleBeginHash?: string | null;
+  /** P3.8 (D-0039): relationships first seen while this dish is played (worker state; never saved). */
+  relationships?: RelationshipWatcher | null;
   /**
    * D-0033 fix round 1: the dish Continue holds, loaded only so a replacing action can keep it while no
    * dish is open. Never registered, never run. The autosave is written for it only to bind it to the
@@ -733,6 +736,13 @@ export class DishHost {
       case 'checkpointRing':
         this.ringEnabled = msg.enabled === true;
         return;
+      case 'relationships': {
+        // P3.8 (D-0039): read-only; the watcher's first-seen table for this dish (empty until it ran).
+        const d = this.need(msg.dishId);
+        const entries = d.relationships?.entries.slice() ?? [];
+        this.post({ type: 'relationships', requestId: msg.requestId, dishId: d.id, worldId: d.world.worldId, dishName: d.name, entries });
+        return;
+      }
       case 'family': {
         // Read-only: answers from lineage records and entity columns, never touches the world.
         const d = this.need(msg.dishId);
@@ -1034,6 +1044,12 @@ export class DishHost {
     // The UI sends a selection only while the inspector shows it (src/ui/state.ts inspectedSelection).
     const sel = d.selection;
     if (x.steps.needs('inspectFoodUse') && sel?.kind === 'entity' && inspectShowsFoodUse(d.world, sel.birthId, x.species)) x.steps.note('inspectFoodUse');
+    // P3.9 (CT §10.1): EXP_104's oxygen readings per species, EXP_105's infected Sprinter (reads only).
+    if (x.steps.needs('inspectOxygenLimits') && sel?.kind === 'entity') {
+      const seen = inspectedOxygenReading(d.world, sel.birthId, x.species);
+      if (seen) x.steps.noteOxygenLimit(seen.species, seen.reason, x.species);
+    }
+    if (x.steps.needs('observeInfection') && sel?.kind === 'entity' && inspectShowsInfection(d.world, sel.birthId, x.species)) x.steps.note('observeInfection');
     if (!x.pending) return;
     if (x.steps.complete) {
       x.posted = true;
@@ -1075,15 +1091,26 @@ export class DishHost {
    */
   private stepDish(d: Dish): void {
     const x = d.experiment;
-    if (!x || x.ended || x.watch.reached) step(d.world);
-    else {
-      stepObserved(d.world, x.obs);
+    // P3.8: the relationship watcher rides along on a played dish (never a comparison copy; read-only).
+    const rw = d.arm ? null : (d.relationships ??= new RelationshipWatcher(d.world));
+    if (rw && !rw.watches(d.world)) rw.rebind(d.world); // undo, rollback or a reload replaced the world
+    if (!x || x.ended || x.watch.reached) {
+      if (rw) step(d.world, { afterStage: rw.hook });
+      else step(d.world);
+    } else {
+      if (rw) {
+        // stepObserved with both read-only stage hooks (src/sim/pairedRun.ts).
+        const obs = x.obs;
+        step(d.world, { afterStage: (stage, w) => (obs.hook(stage, w), rw.hook(stage, w)) });
+        obs.afterTick(d.world);
+      } else stepObserved(d.world, x.obs);
       const stamp = x.watch.afterTick({ world: d.world, obs: x.obs }, null);
       if (stamp) {
         const measured = x.watch.measured({ world: d.world, obs: x.obs }, null);
         x.pending = { stamp, title: x.watch.def.title, label: SINGLE_RUN_LABEL, labels: x.labels, measured };
       }
     }
+    rw?.afterTick(d.world);
     if (x && !x.ended && !x.posted) this.experimentSteps(d);
     this.maybeCheckpoint(d);
   }
@@ -1994,6 +2021,7 @@ export class DishHost {
       speciesHabitats: w.species.map((s) => [...s.def.habitats]),
       speciesAttachment: w.species.map((s) => (s.def.attachment ? [...s.def.attachment.surfaces] : null)),
       speciesSummaries: w.species.map((s) => s.def.guide.summary),
+      speciesCategories: w.species.map((s) => s.def.category), // P3.10: no division cue for bacterial births
       // Diets for Add Life and the Life tray (W2-13): the world's own records; film only with its system.
       speciesDiets: w.species.map((s) => ({
         metabolism: s.def.metabolism,
@@ -2047,7 +2075,8 @@ export class DishHost {
     for (const d of w.content.modules) names[d.id] = d.name;
     const total = computeTotals(w);
     const L = w.ledger;
-    const layout = habitatGrid(w.content.habitat, { removeStones: recipe.removeStones });
+    // The grid realizeRecipe() paints: habitat, stone removal and the recipe's own ops (P3.9; Borrowed Shelter's gel disk).
+    const layout = recipeGrid(w.content.habitat, recipe);
     return {
       recipeId: recipe.id,
       recipeName: recipe.name,
@@ -2055,7 +2084,7 @@ export class DishHost {
         name: w.content.habitat.name,
         summary: w.content.habitat.guide.summary,
         rules: w.content.habitat.guide.rules,
-        // P3.2: the layout the dish starts with (recipe stone removal included), for the preview map.
+        // P3.2: the layout the dish starts with (recipe stone removal and ops included), for the preview map.
         grid: { substrate: layout.substrate, structure: layout.structure },
       },
       seed: w.seed,

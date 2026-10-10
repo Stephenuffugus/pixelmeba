@@ -41,6 +41,7 @@ import { divisionBlocker } from './births';
 import {
   ArmObserver,
   groupModules,
+  isTrackedRef,
   measureArm,
   median,
   oxygenMean,
@@ -55,9 +56,11 @@ import {
   type Intervention,
 } from './pairedRun';
 import { realizeRecipe } from './recipes';
+import { entitySuitabilityAt } from './crossing';
+import { entityCell } from './spatial';
 import { LIFE_ACTIVE } from './entities';
 import { profileOf } from './profiles';
-import { reasonName } from './reasons';
+import { R, reasonName } from './reasons';
 import { deserializeWorld, serializeWorld, stateHash } from './serialize';
 import { step } from './tick';
 import { updateDerived } from './transport';
@@ -257,6 +260,9 @@ export function experimentProblems(def: ExperimentDef, recipe: RecipeDef | undef
   def.completion.playerSteps.forEach((st, i) => {
     if (PAIRED_STEPS.includes(st) !== def.paired) bad(`completion.playerSteps.${i}`, `"${st}" ${def.paired ? 'needs a card with one dish' : 'needs a paired card'}`);
   });
+  // P3.9: "both species inspected with different O2 limitations" follows two or more species.
+  if (def.completion.playerSteps.includes('inspectOxygenLimits') && GateParamsSchema.safeParse(def.gate.params).success && def.gate.type === 'custom' && stepSpecies(def).length < 2)
+    bad('completion.playerSteps', '"inspectOxygenLimits" needs a gate (or measurements) naming at least two species');
 
   // Gate: a custom predicate over measured state.
   if (def.gate.type !== 'custom') bad('gate.type', `gate type "${def.gate.type}" is not supported for experiments (use "custom" with measurement clauses)`);
@@ -478,6 +484,15 @@ function trackedPools(def: ExperimentDef): ConsumablePool[] {
   return out;
 }
 
+/** P3.9: the tracked measures (infections, limit seconds, fungal transfer, whole-unit cells) this card reads. */
+function trackedMeasures(def: ExperimentDef): string[] {
+  const ids = [...def.measurements, ...gateClauses(def).map((c) => c.measure)];
+  return ids.filter((id, i) => {
+    const ref = parseMeasure(id);
+    return ids.indexOf(id) === i && typeof ref !== 'string' && isTrackedRef(ref);
+  });
+}
+
 /** The two (or one) worlds of a card at the moment its arms start, before any observed step. */
 export interface ExperimentArms {
   readonly def: ExperimentDef;
@@ -526,10 +541,11 @@ export function realizeExperimentArms(registry: ContentRegistry, idOrDef: string
       ...(transform ? { transform } : {}),
     });
   const pools = trackedPools(def);
+  const observe = trackedMeasures(def);
   const ch: ExperimentChange = def.change;
   if (ch.kind === 'none') {
     const A = realize(ids.A ?? `${def.id}-single`);
-    return { def, recipe, A, B: null, obsA: new ArmObserver(A, { pools }), obsB: null, startTick: 0, baselineHash: null, interventions: [] };
+    return { def, recipe, A, B: null, obsA: new ArmObserver(A, { pools, observe }), obsB: null, startTick: 0, baselineHash: null, interventions: [] };
   }
   if (ch.kind === 'omitPatch' || ch.kind === 'omitScheduled' || ch.kind === 'shade' || ch.kind === 'omitFounders') {
     const A = realize(ids.A ?? `${def.id}-A`);
@@ -543,7 +559,7 @@ export function realizeExperimentArms(registry: ContentRegistry, idOrDef: string
             : realize(ids.B ?? `${def.id}-B`);
     if (ch.kind === 'shade') applyWholeDishShade(B, ch.factor);
     const omittedPatch = ch.kind === 'omitPatch' ? ch.patchIndex : null;
-    return { def, recipe, A, B, obsA: new ArmObserver(A, { pools }), obsB: new ArmObserver(B, { pools, omittedPatch }), startTick: 0, baselineHash: null, interventions: [] };
+    return { def, recipe, A, B, obsA: new ArmObserver(A, { pools, observe }), obsB: new ArmObserver(B, { pools, omittedPatch, observe }), startTick: 0, baselineHash: null, interventions: [] };
   }
   // Timed commands: run the recipe to the change, duplicate, then change B through the command path.
   const shared = realize(ids.shared ?? def.id);
@@ -553,8 +569,8 @@ export function realizeExperimentArms(registry: ContentRegistry, idOrDef: string
   const baselineHash = stateHash(shared);
   const A = deserializeWorld({ ...baseline, worldId: ids.A ?? `${def.id}-A` });
   const B = deserializeWorld({ ...baseline, worldId: ids.B ?? `${def.id}-B` });
-  const obsA = new ArmObserver(A, { pools });
-  const obsB = new ArmObserver(B, { pools });
+  const obsA = new ArmObserver(A, { pools, observe });
+  const obsB = new ArmObserver(B, { pools, observe });
   const interventions: InterventionRecord[] = ch.commands.map((cmd, k) => {
     const applied = applyNow(B, `experiment:${def.id}:${k + 1}`, toPayload(cmd));
     obsB.watchIntervention(applied);
@@ -670,6 +686,8 @@ export class GateWatch {
 export class PlayerSteps {
   readonly required: readonly PlayerStep[];
   private readonly done: PlayerStep[] = [];
+  /** P3.9 'inspectOxygenLimits': the oxygen reading the inspector showed for each species so far (first seen). */
+  private readonly oxygenSeen: { readonly species: string; readonly reason: OxygenReading }[] = [];
 
   constructor(def: ExperimentDef) {
     this.required = def.completion.playerSteps.filter((st, i, all) => all.indexOf(st) === i);
@@ -685,6 +703,20 @@ export class PlayerSteps {
     if (!this.needs(step)) return false;
     this.done.push(step);
     return true;
+  }
+
+  /**
+   * P3.9 (CT §10.1 EXP_104 "both species inspected with different O2 limitations"): note the oxygen
+   * reading the inspector showed for an organism of `species`. The step is taken once every one of
+   * `following` (the card's step species) was seen with an oxygen reading and the readings differ.
+   * Returns true when that completed the step.
+   */
+  noteOxygenLimit(species: string, reason: OxygenReading, following: readonly string[]): boolean {
+    if (!this.needs('inspectOxygenLimits')) return false;
+    if (!this.oxygenSeen.some((o) => o.species === species)) this.oxygenSeen.push({ species, reason });
+    const seen = following.map((sp) => this.oxygenSeen.find((o) => o.species === sp)?.reason ?? null);
+    if (following.length < 2 || seen.some((r) => r === null) || seen.every((r) => r === seen[0])) return false;
+    return this.note('inspectOxygenLimits');
   }
 
   get complete(): boolean {
@@ -728,6 +760,44 @@ export function inspectShowsFoodUse(world: World, birthId: number, species: read
     return (species.length === 0 || species.includes(sp)) && c.intakeLastSecond[i]! > 0;
   }
   return false;
+}
+
+/** P3.9: the two oxygen readings the inspector can show — too little for intake, or too much to be comfortable. */
+export type OxygenReading = 'OXYGEN_LIMITED' | 'SUIT_OXYGEN_HIGH';
+
+function livingSlot(world: World, birthId: number): number {
+  const c = world.ents.cols;
+  for (let i = 0; i < world.ents.highWater; i++) if (c.alive[i] === 1 && c.birthId[i] === birthId) return i;
+  return -1;
+}
+
+/**
+ * P3.9 (EXP_104): the oxygen reading the inspector shows for the organism `birthId` now, when it belongs
+ * to one of `species` (any when empty): 'OXYGEN_LIMITED' when oxygen is its leading intake limit (the
+ * inspector's limit line), else 'SUIT_OXYGEN_HIGH' when too much oxygen is what lowers its suitability
+ * (the inspector's suitability reason, entitySuitabilityAt). Null otherwise. Reads only.
+ */
+export function inspectedOxygenReading(world: World, birthId: number, species: readonly string[]): { readonly species: string; readonly reason: OxygenReading } | null {
+  const i = livingSlot(world, birthId);
+  if (i < 0) return null;
+  const c = world.ents.cols;
+  const sp = world.species[c.species[i]!]!;
+  if (species.length > 0 && !species.includes(sp.id)) return null;
+  if (c.limitCode[i] === R.OXYGEN_LIMITED) return { species: sp.id, reason: 'OXYGEN_LIMITED' };
+  const suit = entitySuitabilityAt(world, i, sp, profileOf(world, i), entityCell(c.x[i]!, c.y[i]!));
+  return suit.reason === R.SUIT_OXYGEN_HIGH ? { species: sp.id, reason: 'SUIT_OXYGEN_HIGH' } : null;
+}
+
+/**
+ * P3.9 (CT §10.1 EXP_105 "B01 infection observed"): the organism the inspector shows is alive, belongs to
+ * one of `species` (any when empty) and is infected — the inspector then shows its infection and the
+ * seconds until it bursts. Reads only.
+ */
+export function inspectShowsInfection(world: World, birthId: number, species: readonly string[]): boolean {
+  const i = livingSlot(world, birthId);
+  if (i < 0) return false;
+  const c = world.ents.cols;
+  return (species.length === 0 || species.includes(world.species[c.species[i]!]!.id)) && c.infectedBy[i] !== 0;
 }
 
 /** The experiment card a world was made from (its recorded provenance), or null for any other dish. */

@@ -1,5 +1,6 @@
 import { IconBack } from '../icons';
 import { PauseOnDiscoveriesToggle } from '../panels/DiscoverySetting';
+import { SoundSettings } from '../panels/SoundSettings';
 import { reducedMotionFollowsDevice, route, settings, TEXT_SCALES, updateSettings } from '../state';
 import { checkpointSettingText, lastCheckpoint } from '../state';
 import { aboutLines } from '../strings/about';
@@ -51,6 +52,7 @@ export function SimplePage({ title, body, settings: showSettings, about }: { tit
                 Show gentle prompts
               </label>
               <PauseOnDiscoveriesToggle />
+              <SoundSettings />
               {/* P2.8 (UX §2 Settings "checkpoint ring"; SPEC §10.7): off unless the player turns it on. */}
               <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', minHeight: '48px' }}>
                 <input type="checkbox" checked={s.checkpointRing === true} onChange={(e) => updateSettings({ checkpointRing: e.currentTarget.checked })} aria-describedby="checkpoint-ring-note" data-testid="setting-checkpoint-ring" />

@@ -118,6 +118,37 @@ function addRequest(i: number, fieldIdx: number, amount: number, cell: number): 
   touched.push(fieldIdx * CELL_COUNT + cell);
 }
 
+/**
+ * P3.8 observation (the Field Guide's "seen in your dishes", D-0039): which pools each species took
+ * food from in the last stage 6. One byte per (species, field): 1 where at least one organism of that
+ * species took more than 0 from that pool (sugar, starch, oil, protein, broth, detritus, metabolite,
+ * film, carbon dioxide …) this tick. Cleared at the start of every stage 6. Observation only, like
+ * `world.reactionCells`: the simulation never reads it, it is not hashed and not saved; the bytes are
+ * allocated on the first intake, so a world in which nothing eats never pays for them.
+ */
+export interface IntakeSeen {
+  /** species × FIELD_IDS.length, or null before the first intake. */
+  bits: Uint8Array | null;
+  /** The tick these bits describe (−1 before any stage 6). */
+  tick: number;
+}
+
+export function createIntakeSeen(): IntakeSeen {
+  return { bits: null, tick: -1 };
+}
+
+/** Whether an organism of species index `species` took food from `field` in the last stage 6. Pure read. */
+export function tookFromPool(world: World, species: number, field: FieldId): boolean {
+  const b = world.intakeSeen.bits;
+  return b !== null && b[species * FIELD_IDS.length + FIELD_INDEX[field]]! === 1;
+}
+
+function markIntake(world: World, species: number, fieldIdx: number): void {
+  const seen = world.intakeSeen;
+  seen.bits ??= new Uint8Array(world.species.length * FIELD_IDS.length);
+  seen.bits[species * FIELD_IDS.length + fieldIdx] = 1;
+}
+
 export function isIntakeEligible(world: World, slot: number): boolean {
   const c = world.ents.cols;
   return c.lifeState[slot] === 0; // Active (other life states arrive with dormancy/life stages)
@@ -137,6 +168,10 @@ function intakeBody(world: World): void {
   const load = world.derived.cellLoad;
   const light = world.derived.light;
   touched.length = 0;
+  // P3.8 observation: this tick's record starts empty (never read by the simulation).
+  const seen = world.intakeSeen;
+  if (seen.bits !== null) seen.bits.fill(0);
+  seen.tick = world.tick;
   // Host drains are reserved before any ordinary request (SPEC §3.2 row 6, §6.5; parasites.ts).
   reserveHostDrains(world);
 
@@ -336,6 +371,7 @@ function intakeBody(world: World): void {
       const o = i * K + k;
       const id = FIELD_IDS[reqField[o]!]!;
       const take = reqAlloc[o]! * L;
+      if (take > 0) markIntake(world, c.species[i]!, reqField[o]!);
       subtractPool(world, world.fields[id]!, cell, take, FIELD_DEFS[id].material === 'carbon' ? 'c' : 'n');
       const comp = FIELD_DEFS[id].companion;
       if (comp) subtractPool(world, world.fields[comp]!, cell, take * reqRatio[o]!, 'n');

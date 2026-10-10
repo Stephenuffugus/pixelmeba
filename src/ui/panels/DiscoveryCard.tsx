@@ -5,6 +5,7 @@
  * recorded branch. Also mounts the lineage watcher for the open dish.
  */
 import { useEffect } from 'preact/hooks';
+import { playCueFor } from '@audio/cues';
 import { IconClose, IconFollow } from '../icons';
 import { discoveryLines, LINEAGE_TEXT as T } from '../strings/lineage';
 import { discovery, dismissDiscovery, followLineage, openLineage, watchLineage } from './LineageState';
@@ -12,6 +13,10 @@ import { discovery, dismissDiscovery, followLineage, openLineage, watchLineage }
 export function DiscoveryCard() {
   useEffect(() => watchLineage(), []);
   const d = discovery.value;
+  const firstId = d ? d.rows[0]!.id : null;
+  useEffect(() => {
+    if (d) playCueFor('discovery', d); // P3.10: a world cue (rate-limited), once per card (not on remount); the card is its visible equivalent
+  }, [firstId]);
   // The live region announces one line (UX §9); the card itself is ordinary content.
   return (
     <div class="discovery-live">

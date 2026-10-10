@@ -1,0 +1,14 @@
+{
+  "id": "COMPARE",
+  "name": "Compare",
+  "guide": {
+    "summary": "Copy the dish, change one thing in the copy, and run both for the same time.",
+    "biology": "A game tool with no lab analogue: a paired run of two exact copies. Real experiments need many repeats before anyone can say a change caused a difference.",
+    "rules": "Both copies start from one paused moment. Your change is applied to copy B only; then both run for exactly the same simulated time (60, 180 or 600 seconds, or until you stop). The results show final biomass, surviving species, oxygen and deaths for each copy and the differences. It is one paired run, not proof: once the copies differ, chance events can differ too.",
+    "example": "Compare a dish with and without extra mineral nutrients and look at the biomass in each copy."
+  },
+  "changes": "Nothing in your dish: the two copies are separate from it.",
+  "doesNotChange": "Your dish and its saves.",
+  "watchFor": "Differences that appear only in the changed copy.",
+  "phase": 2
+}

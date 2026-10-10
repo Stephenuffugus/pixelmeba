@@ -13,7 +13,7 @@
  *   from content/ (the simulation's own copies are validated by the same schemas).
  * The strings file keeps only UI chrome: what each kind of brush does to the cells it covers.
  */
-import type { MaterialDef, StructureDef } from '@sim/content/schema';
+import type { MaterialDef, StructureDef, ToolDef } from '@sim/content/schema';
 import {
   habitatMaskOf,
   PLACEABLE_STRUCTURES,
@@ -24,7 +24,7 @@ import {
   type SubstrateName,
 } from '@sim/grid';
 import type { DishInfo, SpeciesDiet } from '@worker/protocol';
-import { LIFE_COPY } from '../strings/lab';
+import { LIFE_COPY, type ItemCopy } from '../strings/lab';
 import type { LabToolId } from '../views/LabView';
 
 type Glob<T> = Record<string, T>;
@@ -44,6 +44,38 @@ const STRUCTURE_RECORDS = byId(
 const MATERIAL_RECORDS = byId(
   import.meta.glob<MaterialDef>('../../../content/materials/*.json', { eager: true, import: 'default' }),
 );
+/**
+ * P3.8 (D-0039): player tool texts are content (content/tools). The Lab tray and the Field Guide read
+ * these same records, so the two never disagree.
+ */
+const TOOL_RECORDS = byId(import.meta.glob<ToolDef>('../../../content/tools/*.json', { eager: true, import: 'default' }));
+
+/** Tool records the Lab tray describes: Sample, Transfer, Clean water and Erase structure. */
+export type TrayToolRecordId = 'SAMPLE' | 'TRANSFER' | 'CLEAN_WATER' | 'ERASE_STRUCTURE';
+
+/** A bundled tool record (content/tools/<id>.json); throws when the record is missing, which the content tests rule out. */
+export function toolRecord(id: string): ToolDef {
+  const rec = TOOL_RECORDS[id];
+  if (!rec) throw new Error(`content/tools/${id}.json is missing`);
+  return rec;
+}
+
+/**
+ * The Lab tray's detail lines of a tool, from its record: purpose = guide summary, where, dose (with
+ * "{fraction}" replaced by `fraction`), changes, does not change, watch for.
+ */
+export function toolItemCopy(id: TrayToolRecordId, fraction = ''): ItemCopy {
+  const rec = toolRecord(id);
+  return {
+    name: rec.name,
+    purpose: rec.guide.summary,
+    habitats: rec.where ?? '',
+    dose: (rec.dose ?? '').replace('{fraction}', fraction),
+    changes: rec.changes,
+    unchanged: rec.doesNotChange,
+    watch: rec.watchFor,
+  };
+}
 
 /** Name and guide text of one tray item, from its content record. */
 export interface LabRecord {

@@ -166,6 +166,69 @@
       "g2Digest": null,
       "currentDigest": "0143728607d74854",
       "changedBy": []
+    },
+    {
+      "id": "HIDDEN_NEIGHBORHOOD_V1",
+      "kind": "recipe",
+      "recipe": "HIDDEN_NEIGHBORHOOD_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "e0e762d7fe0629c7",
+      "changedBy": []
+    },
+    {
+      "id": "ONE_HOST_V1",
+      "kind": "recipe",
+      "recipe": "ONE_HOST_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "647bc90bd72d28f7",
+      "changedBy": []
+    },
+    {
+      "id": "FUNGAL_SUPPLY_LINE_V1",
+      "kind": "recipe",
+      "recipe": "FUNGAL_SUPPLY_LINE_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "5c5d13af175a1fe9",
+      "changedBy": []
+    },
+    {
+      "id": "L301_TWO_LUNCHES",
+      "kind": "recipe",
+      "recipe": "L301_TWO_LUNCHES",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "d00b59fd0f140963",
+      "changedBy": []
+    },
+    {
+      "id": "L303_PUBLIC_KITCHEN",
+      "kind": "recipe",
+      "recipe": "L303_PUBLIC_KITCHEN",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "acd60b6d2fb0790a",
+      "changedBy": []
+    },
+    {
+      "id": "L304_EMPTY_AFTER_THE_FEAST",
+      "kind": "recipe",
+      "recipe": "L304_EMPTY_AFTER_THE_FEAST",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "5d57285882e64af0",
+      "changedBy": []
+    },
+    {
+      "id": "L306_BORROWED_SHELTER",
+      "kind": "recipe",
+      "recipe": "L306_BORROWED_SHELTER",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "60f4989ca92b567f",
+      "changedBy": []
     }
   ]
 }

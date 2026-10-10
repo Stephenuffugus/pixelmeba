@@ -2757,3 +2757,153 @@ html[data-text-scale='2'] .tab-context {
   gap: 8px;
   margin-top: 0.5rem;
 }
+
+/* ------------------------------------------------------------------ Field Guide (P3.8; UX §5.7) */
+/* Body text 1rem everywhere (≥ 16 px at 100 %); wraps at 200 % text; 48 px targets. */
+.guide-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.guide-head h1 {
+  font-size: var(--fs-h1);
+  margin: 0;
+}
+.guide-page .card p,
+.guide-page .card li,
+.guide-page .card dd,
+.guide-page .card dt {
+  font-size: var(--fs-body);
+  overflow-wrap: anywhere;
+}
+.guide-page .card p {
+  color: var(--text);
+}
+.guide-search {
+  display: grid;
+  gap: 0.25rem;
+  font-size: var(--fs-body);
+}
+.guide-search input {
+  min-height: var(--target);
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--text-muted);
+  background: #fff;
+  font-size: var(--fs-body);
+}
+.guide-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.guide-tabs .btn {
+  flex: 1 1 auto;
+}
+.guide-panel {
+  display: grid;
+  gap: 16px;
+}
+.guide-entry-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.guide-entry h2 {
+  margin: 0;
+  font-size: var(--fs-h2);
+}
+.guide-page .card p.guide-kind {
+  margin: 0;
+  color: var(--text-muted);
+}
+.guide-thumb {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  image-rendering: pixelated;
+  background: var(--surface-2);
+  border-radius: var(--radius-s);
+}
+.guide-facts {
+  display: grid;
+  gap: 4px;
+}
+.guide-fact h3,
+.guide-section h3 {
+  margin: 0.5rem 0 0;
+  font-size: var(--fs-body);
+}
+.guide-fact p,
+.guide-section p {
+  margin: 0.125rem 0 0.25rem;
+}
+.guide-section ul,
+.guide-badges {
+  margin: 0.25rem 0;
+  padding-left: 1.25rem;
+}
+.guide-badges {
+  list-style: none;
+  padding-left: 0;
+  display: grid;
+  gap: 8px;
+}
+.guide-badge {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: var(--fs-body);
+}
+.guide-term {
+  margin: 0 0 0.5rem;
+}
+.guide-term dt {
+  font-weight: 700;
+}
+.guide-term dd {
+  margin: 0;
+}
+/* ---------------------------------------------------------------- P3.10 sound settings (audio owner) */
+.sound-settings {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.sound-settings legend {
+  padding: 0;
+  margin-bottom: 0.35rem;
+  font-weight: 700;
+  font-size: var(--fs-body);
+}
+.sound-check {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  min-height: 48px;
+  font-size: var(--fs-body);
+}
+.sound-check input[type='checkbox'] {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+.sound-volume {
+  display: grid;
+  gap: 0.25rem;
+  font-size: var(--fs-body);
+}
+.sound-volume input[type='range'] {
+  width: 100%;
+  max-width: 28rem;
+  min-height: 48px;
+  margin: 0;
+}
+.setting-note.sound-note {
+  margin: 0;
+  font-size: var(--fs-body);
+}

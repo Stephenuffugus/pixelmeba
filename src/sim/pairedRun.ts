@@ -38,14 +38,29 @@
  *   their energy: median, lowest and highest over living members, 0 when none — CT §9.2 "record energy
  *   distributions"; a card that shows any group energy also lists descendants.SP.GROUP, so an empty
  *   group always reads "none alive", never as a real zero)
+ * Tracked measures (P3.9; recorded only when the observer is asked for them — `observe` — because the
+ * comparison engine shares this observer; measuring one that is not tracked is a MeasureError):
+ *   infections.SP (organisms of SP newly infected by a virus during the run: infectedBy set with the
+ *   infection timer at 0 after stage 5, the tick it happened)
+ *   limitSeconds.SP.REASON (organism-seconds of living SP whose reading was REASON at the end of a tick:
+ *   the leading intake limit (limitCode) for intake reasons, and for suitability reasons (SUIT_*,
+ *   INHIBITOR_EXPOSURE) the suitability reason the inspector shows (entitySuitabilityAt); 0.1 s per
+ *   organism per tick)
+ *   transfer.fungal (carbon moved along F02 transport links during the run; fungalTransport's edges,
+ *   as the history sums them)
+ *   wholeUnitCells.SP (the most cells at the end of any tick holding at least one whole Pinphage unit
+ *   (v01 ≥ 1) and a living SP: the precondition of an infection there)
  */
 import type { CommandPayload, CommandResult } from './commands';
-import { ENERGY_CAP_BASE, TICKS_PER_SECOND } from './constants';
+import { CELL_COUNT, ENERGY_CAP_BASE, TICKS_PER_SECOND } from './constants';
 import { FIELD_DEFS, FIELD_IDS, isFieldId, type FieldId } from './fields';
+import { entitySuitabilityAt } from './crossing';
 import { maskCells } from './grid';
 import { field as lineageField } from './lineage';
 import { activeLoci } from './phenotype';
+import { profileOf } from './profiles';
 import { REASONS } from './reasons';
+import { entityCell } from './spatial';
 import { stateHash } from './serialize';
 import { step } from './tick';
 import type { World } from './world';
@@ -108,7 +123,16 @@ export type MeasureRef =
   | { readonly kind: 'field'; readonly field: FieldId }
   | { readonly kind: 'consumed'; readonly field: ConsumablePool }
   | { readonly kind: 'converted'; readonly enzyme: Enzyme }
-  | { readonly kind: 'patchInput'; readonly index: number };
+  | { readonly kind: 'patchInput'; readonly index: number }
+  | { readonly kind: 'infections'; readonly species: string }
+  | { readonly kind: 'limitSeconds'; readonly species: string; readonly reason: number }
+  | { readonly kind: 'transfer'; readonly route: 'fungal' }
+  | { readonly kind: 'wholeUnitCells'; readonly species: string };
+
+/** P3.9: reasons a limitSeconds measure reads from the suitability (the inspector's), not the intake limit. */
+export function isSuitabilityReason(name: string): boolean {
+  return name.startsWith('SUIT_') || name === 'INHIBITOR_EXPOSURE';
+}
 
 const SPECIES_RE = /^[BYFAPXV][0-9]{2}$/;
 const GROUP_RE = /^(none|E[0-9]{2}(\+E[0-9]{2})*)$/;
@@ -119,6 +143,13 @@ export function parseMeasure(id: string): MeasureRef | string {
   const parts = id.split('.');
   const [head, a, b] = parts;
   if (parts.length === 1) return includes(SCALAR_MEASURES, head!) ? { kind: 'scalar', name: head } : `unknown measurement "${id}"`;
+  if (head === 'limitSeconds') {
+    if (parts.length !== 3) return `"${id}" needs a species and a reason, e.g. limitSeconds.B01.OXYGEN_LIMITED`;
+    if (!SPECIES_RE.test(a!)) return `"${a}" is not a species id`;
+    const reason = REASONS.indexOf(b as (typeof REASONS)[number]);
+    if (reason <= 0) return `"${b}" is not a reason code`;
+    return { kind: 'limitSeconds', species: a!, reason };
+  }
   if (head === 'deaths' && parts.length === 3) {
     if (!SPECIES_RE.test(a!)) return `"${a}" is not a species id`;
     const cause = REASONS.indexOf(b as (typeof REASONS)[number]);
@@ -140,11 +171,28 @@ export function parseMeasure(id: string): MeasureRef | string {
   if (head === 'consumed') return includes(CONSUMABLE_POOLS, a!) ? { kind: 'consumed', field: a } : `"${a}" is not a pool feeding removes from`;
   if (head === 'converted') return includes(ENZYMES, a!) ? { kind: 'converted', enzyme: a } : `unknown enzyme "${a}"`;
   if (head === 'patchInput') return /^(0|[1-9][0-9]?)$/.test(a!) ? { kind: 'patchInput', index: Number(a) } : `"${a}" is not a patch index`;
+  if (head === 'infections' || head === 'wholeUnitCells') {
+    if (!SPECIES_RE.test(a!)) return `"${a}" is not a species id`;
+    return { kind: head, species: a! };
+  }
+  if (head === 'transfer') return a === 'fungal' ? { kind: 'transfer', route: 'fungal' } : `"${a}" is not a transfer route (fungal)`;
   return `unknown measurement "${id}"`;
 }
 
 export function speciesOfRef(ref: MeasureRef): string | null {
-  return ref.kind === 'species' || ref.kind === 'deathCause' || ref.kind === 'group' ? ref.species : null;
+  return ref.kind === 'species' ||
+    ref.kind === 'deathCause' ||
+    ref.kind === 'group' ||
+    ref.kind === 'infections' ||
+    ref.kind === 'limitSeconds' ||
+    ref.kind === 'wholeUnitCells'
+    ? ref.species
+    : null;
+}
+
+/** P3.9: whether a measurement is a tracked one (recorded only when the observer is asked for it). */
+export function isTrackedRef(ref: MeasureRef): boolean {
+  return ref.kind === 'infections' || ref.kind === 'limitSeconds' || ref.kind === 'transfer' || ref.kind === 'wholeUnitCells';
 }
 
 /** The module ids a founder-group name lists (`none` → []). */
@@ -213,6 +261,24 @@ export interface ArmObserverOptions {
   readonly pools?: readonly ConsumablePool[];
   /** The source recipe's patch index this arm was realized without (an omitPatch setup change). */
   readonly omittedPatch?: number | null;
+  /**
+   * P3.9: measurement ids to track (infections.SP, limitSeconds.SP.REASON, transfer.fungal,
+   * wholeUnitCells.SP; other ids are ignored). Only these are recorded, so an observer asked for none
+   * (the comparison engine's) does no extra work.
+   */
+  readonly observe?: readonly string[];
+}
+
+/** Scratch cell marks for wholeUnitCells (always all 0 between uses). */
+const cellMark = new Uint8Array(CELL_COUNT);
+
+/** One tracked measure's running value (P3.9). */
+interface Tracked {
+  readonly id: string;
+  readonly ref: MeasureRef;
+  /** Species index in this world (−1: not in this world, so it stays 0). */
+  readonly species: number;
+  value: number;
 }
 
 /**
@@ -265,6 +331,9 @@ export class ArmObserver {
   private pendingBirths: number[];
   private pendingDeaths: number[];
   private lastCapacityTicks: number;
+  /** P3.9 tracked measures, by id (insertion = first-requested order). */
+  private readonly trackedMeasures: Tracked[] = [];
+  private pendingTransfer: number;
   /** Stage hook for step(); reads only. */
   readonly hook: (stage: number, world: World) => void;
 
@@ -316,7 +385,16 @@ export class ArmObserver {
     this.pendingBirths = world.history.pendingBirths.slice();
     this.pendingDeaths = world.history.pendingDeaths.slice();
     this.lastCapacityTicks = world.capacityLimitedTicks;
+    this.pendingTransfer = world.history.pendingFungalTransfer ?? 0;
+    for (const id of opts.observe ?? []) {
+      const ref = parseMeasure(id);
+      if (typeof ref === 'string' || !isTrackedRef(ref) || this.trackedMeasures.some((t) => t.id === id)) continue;
+      const sp = speciesOfRef(ref);
+      this.trackedMeasures.push({ id, ref, species: sp === null ? -1 : this.speciesIds.indexOf(sp), value: 0 });
+    }
+    const infections = this.trackedMeasures.filter((t) => t.ref.kind === 'infections' && t.species >= 0);
     this.hook = (stage, w) => {
+      if (stage === 5 && infections.length > 0) this.countInfections(w, infections);
       if (stage === 5) {
         this.sumIntake(w, this.pre6Intake);
         for (let k = 0; k < this.tracked.length; k++) this.pre6Pool[k] = poolTotal(w, this.tracked[k]!);
@@ -330,6 +408,66 @@ export class ArmObserver {
         }
       }
     };
+  }
+
+  /** After stage 5: organisms infected this tick hold infectedBy ≠ 0 with the timer still at 0 (viruses.ts). */
+  private countInfections(world: World, list: readonly Tracked[]): void {
+    const c = world.ents.cols;
+    for (let i = 0; i < world.ents.highWater; i++) {
+      if (c.alive[i] !== 1 || c.infectedBy[i] === 0 || c.infectionTimer[i] !== 0) continue;
+      for (const t of list) if (t.species === c.species[i]) t.value++;
+    }
+  }
+
+  /** The P3.9 tracked measures after a tick (limit seconds, fungal transfer, whole-unit cells). */
+  private afterTickTracked(world: World, pushed: { readonly fungalTransfer?: number } | null): void {
+    const h = world.history;
+    const pending = h.pendingFungalTransfer ?? 0;
+    const moved = (pushed?.fungalTransfer ?? 0) + pending - this.pendingTransfer;
+    this.pendingTransfer = pending;
+    const c = world.ents.cols;
+    for (const t of this.trackedMeasures) {
+      const ref = t.ref;
+      if (ref.kind === 'transfer') {
+        t.value += moved;
+        continue;
+      }
+      if (t.species < 0) continue;
+      if (ref.kind === 'limitSeconds') {
+        const suit = isSuitabilityReason(REASONS[ref.reason]!);
+        let n = 0;
+        for (let i = 0; i < world.ents.highWater; i++) {
+          if (c.alive[i] !== 1 || c.species[i] !== t.species) continue;
+          const code = suit ? entitySuitabilityAt(world, i, world.species[t.species]!, profileOf(world, i), entityCell(c.x[i]!, c.y[i]!)).reason : c.limitCode[i]!;
+          if (code === ref.reason) n++;
+        }
+        t.value += n / TICKS_PER_SECOND;
+      } else if (ref.kind === 'wholeUnitCells') {
+        const units = world.fields.v01;
+        if (!units) continue;
+        const seen: number[] = [];
+        for (let i = 0; i < world.ents.highWater; i++) {
+          if (c.alive[i] !== 1 || c.species[i] !== t.species) continue;
+          const cell = entityCell(c.x[i]!, c.y[i]!);
+          if (units[cell]! >= 1 && cellMark[cell] === 0) {
+            cellMark[cell] = 1;
+            seen.push(cell);
+          }
+        }
+        for (const cell of seen) cellMark[cell] = 0;
+        if (seen.length > t.value) t.value = seen.length;
+      }
+    }
+  }
+
+  /** A tracked measure's value, or undefined when this observer does not track it. */
+  trackedValue(id: string): number | undefined {
+    return this.trackedMeasures.find((t) => t.id === id)?.value;
+  }
+
+  /** The ids this observer tracks (P3.9), in the order requested. */
+  trackedIds(): string[] {
+    return this.trackedMeasures.map((t) => t.id);
   }
 
   private sumIntake(world: World, out: Float64Array): void {
@@ -370,6 +508,7 @@ export class ArmObserver {
     }
     this.pendingBirths = h.pendingBirths.slice();
     this.pendingDeaths = h.pendingDeaths.slice();
+    if (this.trackedMeasures.length > 0) this.afterTickTracked(world, pushed);
     // Causes and captures come from the detailed event records emitted since the previous tick.
     const ring = world.events.ring;
     let k = ring.length;
@@ -525,7 +664,7 @@ export function measureArm(world: World, obs: ArmObserver, ids: readonly string[
     if (i < 0) throw new MeasureError(`species ${id} is not enabled in world ${world.worldId}`);
     return i;
   };
-  const value = (ref: MeasureRef): number => {
+  const value = (ref: MeasureRef, id: string): number => {
     switch (ref.kind) {
       case 'scalar':
         switch (ref.name) {
@@ -627,6 +766,15 @@ export function measureArm(world: World, obs: ArmObserver, ids: readonly string[
         return obs.converted(world, ref.enzyme);
       case 'patchInput':
         return obs.patchInputs[ref.index] ?? 0;
+      case 'infections':
+      case 'limitSeconds':
+      case 'transfer':
+      case 'wholeUnitCells': {
+        if (ref.kind !== 'transfer') spIdx(ref.species);
+        const v = obs.trackedValue(id);
+        if (v === undefined) throw new MeasureError(`${id} is not tracked in world ${world.worldId}`);
+        return v;
+      }
     }
     throw new MeasureError('unreachable measurement');
   };
@@ -635,7 +783,7 @@ export function measureArm(world: World, obs: ArmObserver, ids: readonly string[
   for (const id of list) {
     const ref = parseMeasure(id);
     if (typeof ref === 'string') throw new MeasureError(ref);
-    out[id] = value(ref);
+    out[id] = value(ref, id);
   }
   return out;
 }
@@ -653,6 +801,8 @@ export function catalogIds(world: World, obs: ArmObserver): string[] {
   for (const f of CONSUMABLE_POOLS) if (obs.consumed[f] !== undefined) ids.push(`consumed.${f}`);
   for (const e of ENZYMES) ids.push(`converted.${e}`);
   obs.patchInputs.forEach((_, i) => ids.push(`patchInput.${i}`));
+  // P3.9 tracked measures exist only where the observer was asked for them (in the order asked).
+  ids.push(...obs.trackedIds());
   return ids;
 }
 

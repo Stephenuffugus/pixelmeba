@@ -1,0 +1,14 @@
+{
+  "id": "INSPECT",
+  "name": "Inspect",
+  "guide": {
+    "summary": "Tap an organism or a cell to see what is happening there.",
+    "biology": "Looking closely at single cells under a microscope shows what they are doing. Here every value comes from the game’s own records.",
+    "rules": "The inspector shows an organism’s health, energy, body, age, what it is doing, what it can eat there and up to three measured limits, or a cell’s ground, amounts, pH, salinity, oxygen and light. Every line comes from a recorded value or reason. Inspecting never changes the dish.",
+    "example": "Tap a Sprinter that has stopped growing and read what limits it."
+  },
+  "changes": "Nothing: it only reads.",
+  "doesNotChange": "Anything in the dish.",
+  "watchFor": "The limit line: it names what is holding an organism back right now.",
+  "phase": 1
+}

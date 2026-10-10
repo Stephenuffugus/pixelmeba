@@ -16,6 +16,7 @@ import {
   RecipeSchema,
   SpeciesSchema,
   StructureSchema,
+  ToolSchema,
   VariantSchema,
   type ExperimentDef,
   type HabitatDef,
@@ -26,14 +27,17 @@ import {
   type RecipeDef,
   type Species,
   type StructureDef,
+  type ToolDef,
   type VariantDef,
 } from './schema';
 import { IMPLEMENTED_MODULES, IMPLEMENTED_NATIVE_ABILITIES } from './implemented';
 import { MODULE_NATIVE_ABILITY, missingModuleParams, moduleSetProblem } from './moduleRules';
 import { MAX_WHAT_IF_CHOICES, variantPatchProblems } from '../variants';
+import { recipeShapeProblems } from '../recipes';
 import { experimentProblems } from '../experiments';
 import { PAINT_TARGETS, STRUCTURE_RECORD_IDS } from '../grid';
 import { FIELD_DEFS, isFieldId, type SystemFlag } from '../fields';
+import { guideProblems } from './guideRules';
 
 export interface RawFile {
   readonly file: string;
@@ -52,6 +56,11 @@ export interface RawPacks {
   readonly experiments: readonly RawFile[];
   readonly variants: readonly RawFile[];
   readonly objectives: readonly RawFile[];
+  /**
+   * P3.8 (D-0039): player tool texts (content/tools). Optional so that packs assembled before tools
+   * were content (and every test that builds a RawPacks by hand) still type-check; absent means none.
+   */
+  readonly tools?: readonly RawFile[];
 }
 
 export interface ContentIssue {
@@ -90,6 +99,9 @@ export interface ContentRegistry {
   readonly variantIds: readonly string[];
   readonly objectives: Readonly<Record<string, ObjectiveDef>>;
   readonly objectiveIds: readonly string[];
+  /** P3.8: player tool texts (content/tools); a tool is enabled when its phase ≤ the build phase. */
+  readonly tools: Readonly<Record<string, ToolDef>>;
+  readonly toolIds: readonly string[];
 }
 
 export class ContentError extends Error {
@@ -171,6 +183,8 @@ export function contentHashInput(raw: RawPacks): string {
     experiments: col(raw.experiments),
     variants: col(raw.variants),
     objectives: col(raw.objectives),
+    // P3.8: only when tools exist, so packs without them hash exactly as before.
+    ...(raw.tools !== undefined && raw.tools.length > 0 ? { tools: col(raw.tools) } : {}),
   });
 }
 
@@ -215,6 +229,7 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
   const experiments = parseCollection(raw.experiments, ExperimentSchema, issues);
   const variants = parseCollection(raw.variants, VariantSchema, issues);
   const objectives = parseCollection(raw.objectives, ObjectiveSchema, issues);
+  const tools = parseCollection(raw.tools ?? [], ToolSchema, issues);
 
   if (lociRes.success) {
     lociRes.data.loci.forEach((l, i) => {
@@ -286,6 +301,8 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
         if (problem) err(file, `founders.${i}.modules`, problem);
       }
     });
+    // P3.9: the recipe's own ops and founder placement, cells, initial values and links.
+    for (const p of recipeShapeProblems(r, habitats.map[r.habitatId], species.map)) err(file, p.path, p.message);
   }
   for (const id of experiments.ids) {
     const e = experiments.map[id]!;
@@ -441,6 +458,18 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
       const sys = MODULE_SYSTEM_NEEDS[id];
       if (sys !== undefined && !hasSystem(sys)) err(mf, `enabledModules.${i}`, `enabled module "${id}" needs the "${sys}" system (not in enabledSystems)`);
     });
+    // P3.8 (UX §5.7; src/sim/content/guideRules.ts): the Field Guide text of everything this manifest enables.
+    issues.push(
+      ...guideProblems({
+        manifest: m,
+        species,
+        materials,
+        modules,
+        habitats,
+        structures,
+        tools,
+      }),
+    );
     if (m.contentHash === '') warn(mf, 'contentHash', 'content hash not written yet (run npm run content:validate -- --write)');
   }
 
@@ -468,6 +497,8 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
     variantIds: variants.ids,
     objectives: objectives.map,
     objectiveIds: objectives.ids,
+    tools: tools.map,
+    toolIds: tools.ids,
   };
   return { registry, issues };
 }

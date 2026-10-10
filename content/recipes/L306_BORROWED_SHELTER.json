@@ -1,0 +1,28 @@
+{
+  "id": "L306_BORROWED_SHELTER",
+  "revision": 1,
+  "name": "Borrowed Shelter",
+  "habitatId": "WATER_GARDEN",
+  "seed": 306,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": false,
+  "baseLight": 0.8,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "ops": [
+    {"op": "disk", "center": [64, 64], "radius": 8, "substrate": "gel"}
+  ],
+  "fieldPatches": [
+    {"center": [64, 64], "radius": 8, "substrate": "gel", "add": {"sugar": 0.6, "nutrient": 0.2}, "label": "Gel bed (sugar 0.6 and nutrient 0.2 per cell)"}
+  ],
+  "founders": [
+    {"species": "B06", "count": 40, "center": [64, 64], "radius": 8, "placement": "scatter", "modules": ["E10"], "moduleAssignment": "alternate-odd", "label": "Every other founder seeded with Matrix builder"}
+  ],
+  "labels": ["Pre-seeded genomes"],
+  "question": "Who pays for the film, who benefits?",
+  "expectedObservationsText": "Forty Crumbsmiths scattered on a round gel bed with sugar. Twenty start with Matrix builder, which spends their energy on film; twenty start without it. Those abilities were given by the recipe and are present at creation: they did not evolve here.",
+  "phase": 3
+}

@@ -204,7 +204,7 @@ export const POST_G2_STORE_CANON: Readonly<Record<string, (world: World, value: 
   sample: (world: World, value: unknown) => canonSample(world, value as SampleSlot),
 });
 /** Post-g2 world properties that are derived caches (rebuilt from state, never saved): never hashed. */
-export const POST_G2_DERIVED_KEYS: readonly string[] = Object.freeze(['reactionCells', 'fungalFlow']);
+export const POST_G2_DERIVED_KEYS: readonly string[] = Object.freeze(['reactionCells', 'fungalFlow', 'intakeSeen']);
 /** The value a post-g2 WorldSettings key has in a world that never set it (absent counts as default too). */
 export const POST_G2_SETTINGS_DEFAULTS: Readonly<Record<string, unknown>> = Object.freeze({});
 

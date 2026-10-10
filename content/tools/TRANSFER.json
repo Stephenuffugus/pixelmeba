@@ -1,0 +1,16 @@
+{
+  "id": "TRANSFER",
+  "name": "Transfer",
+  "guide": {
+    "summary": "Put a held sample down somewhere else in the dish.",
+    "biology": "Moving a small part of a culture onto fresh ground is how microbiologists start a new culture.",
+    "rules": "The held sample is placed with its centre where you tap, keeping its shape. It is placed whole or not at all: held dissolved material needs open water or porous beads under it, each organism needs a substrate it can live on (a rider follows its host), and no cell may go over its crowding limit. If it does not fit, nothing changes and the sample stays held. A transfer is an ordinary undo point. No material is made or lost.",
+    "example": "Move a sample of Recyclers onto a patch of debris and watch the Debris overlay."
+  },
+  "where": "Anywhere in the dish.",
+  "dose": "Tap the dish where the sample’s centre should go.",
+  "changes": "The held organisms, material and food objects arrive at the new place, exactly as they were lifted.",
+  "doesNotChange": "Stones, walls and beads stay where they are. Nothing is added or removed: the dish’s totals stay the same.",
+  "watchFor": "How the moved organisms do in their new place, and whether they find food there.",
+  "phase": 3
+}
