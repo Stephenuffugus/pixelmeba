@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   cellDescriptionText,
   dishSummaryText,
+  organismInputs,
   recordCounts,
   seriesTrend,
   speciesLine,
@@ -80,6 +81,19 @@ describe('species lines and the dish summary', () => {
     ]);
     expect(s.absent).toBeNull();
     expect(s.lines.join(' ')).not.toMatch(/extinct/);
+  });
+  it('a phage (measured in units, not counted) is never said to be absent or extinct', () => {
+    const inputs = [
+      { ...base, name: 'Sprinter', count: 20 },
+      { ...base, name: 'Pinphage', count: 0, seen: false },
+      { ...base, name: 'Hitcher', count: 0, seen: false },
+    ];
+    const diets = [{ metabolism: 'aerobic' }, { metabolism: 'viral' }, { metabolism: 'hostDrain' }];
+    const s = dishSummaryText(organismInputs(inputs, diets));
+    expect(s.absent).toBe('None in the dish now: Hitcher.');
+    expect([...s.lines, s.heading].join(' ')).not.toMatch(/Pinphage/);
+    // No diets sent: nothing is dropped.
+    expect(organismInputs(inputs, undefined)).toHaveLength(3);
   });
   it('an empty dish says nothing is alive, and names no extinction it never saw', () => {
     const s = dishSummaryText([{ ...base, name: 'Sprinter', count: 0, seen: false }]);

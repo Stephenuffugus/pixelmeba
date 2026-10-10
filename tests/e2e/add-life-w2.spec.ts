@@ -14,9 +14,10 @@ const NEW_TILES: Readonly<Record<string, RegExp>> = {
   B03: /^Eats sugar without oxygen\.$/,
   B05: /^Eats metabolite\.$/,
   Y01: /^Eats sugar without oxygen\.$/,
-  P02: /^Hunts .*Sprinter.*\(Crumbsmith only free-swimming\)/,
-  P03: /^Hunts Sunbead and Bubble, and \d+ kinds? not in this dish\.$/,
-  P04: /^Hunts .*Crossfeeder \(Crumbsmith only in sediment\)/,
+  // Since wave 3 the Oilwick, Brothmaker and Creambud are in every dish's records, so they are named too.
+  P02: /^Hunts .*Sprinter.*\(Crumbsmith, Oilwick and Brothmaker only free-swimming\), and \d+ kinds? not in this dish\.$/,
+  P03: /^Hunts Sunbead, Bubble and Creambud, and \d+ kinds? not in this dish\.$/,
+  P04: /^Hunts .*Crossfeeder \(Crumbsmith, Oilwick and Brothmaker only in sediment\), and \d+ kinds? not in this dish\.$/,
   V01: /^Infects Sprinter\.$/,
 };
 
@@ -66,7 +67,7 @@ test('Add Life shows the wave 2 organisms with diet lines; the Siltworm preview 
   await page.getByRole('button', { name: 'Whole dish' }).click();
   await page.getByTestId('lab-cat-life').click();
   await page.getByTestId('lab-item-life:P04').click();
-  await expect(page.getByTestId('lab-diet')).toContainText('Crumbsmith only in sediment');
+  await expect(page.getByTestId('lab-diet')).toContainText('Crumbsmith, Oilwick and Brothmaker only in sediment');
   await page.getByTestId('lab-use').click();
   const [wx, wy] = await at(page, 90, 64); // open water in the Garden
   await page.mouse.move(wx, wy);

@@ -18,6 +18,29 @@ export async function startGarden(page: Page, settings: Record<string, unknown> 
   await expect(page.getByTestId('sim-time')).toContainText('56 alive');
 }
 
+/** The speed control this layout shows while the dish runs: one cycling button at ≤ 480 px, else a 1×/2×/4× group. */
+function speedCycle(page: Page) {
+  return page.getByRole('button', { name: /^Speed \d×, tap to change$/ });
+}
+
+/** The running dish shows `speed`, read from whichever speed control this layout shows. */
+export async function expectSpeed(page: Page, speed: 1 | 2 | 4): Promise<void> {
+  const cycle = speedCycle(page);
+  if (await cycle.isVisible()) await expect(cycle).toHaveAccessibleName(`Speed ${speed}×, tap to change`);
+  else await expect(page.getByRole('group', { name: 'Speed' }).getByRole('button', { name: `${speed}×` })).toHaveAttribute('aria-pressed', 'true');
+}
+
+/** Choose `speed` on the running dish with whichever speed control this layout shows. */
+export async function chooseSpeed(page: Page, speed: 1 | 2 | 4): Promise<void> {
+  const cycle = speedCycle(page);
+  if (await cycle.isVisible()) {
+    for (let i = 0; i < 3 && (await cycle.getAttribute('aria-label')) !== `Speed ${speed}×, tap to change`; i++) await cycle.click();
+  } else {
+    await page.getByRole('group', { name: 'Speed' }).getByRole('button', { name: `${speed}×` }).click();
+  }
+  await expectSpeed(page, speed);
+}
+
 export async function simSeconds(page: Page): Promise<number> {
   const t = await page.getByTestId('sim-time').innerText();
   const m = /^(?:(\d+):)?(\d+):(\d+)/.exec(t.trim());

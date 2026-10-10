@@ -12,7 +12,7 @@
  */
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { PROTOCOL_VERSION } from '../../src/worker/protocol';
-import { expectNoHorizontalOverflow, expectNoSeriousA11yViolations, expectReachable, seedSettings, startGarden } from './helpers';
+import { chooseSpeed, expectNoHorizontalOverflow, expectNoSeriousA11yViolations, expectReachable, expectSpeed, seedSettings, startGarden } from './helpers';
 
 const SLOW = 300_000;
 
@@ -178,8 +178,7 @@ test('More → Field Guide pauses the running dish and Back restores 4×; a debr
   // Run, then 4× (the speed buttons show while the dish runs).
   await page.getByTestId('run-toggle').click();
   await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Pause');
-  await page.getByRole('group', { name: 'Speed' }).getByRole('button', { name: '4×' }).click();
-  await expect(page.getByRole('group', { name: 'Speed' }).getByRole('button', { name: '4×' })).toHaveAttribute('aria-pressed', 'true');
+  await chooseSpeed(page, 4);
   await expect.poll(() => workerTick(page), { timeout: 60_000 }).toBeGreaterThan(200);
 
   // More → Field Guide: the dish pauses (setSpeed 0 sent; its clock stops).
@@ -205,7 +204,7 @@ test('More → Field Guide pauses the running dish and Back restores 4×; a debr
   await expect(page.getByTestId('dish-screen')).toBeVisible();
   await expect.poll(() => lastSpeedSent(page)).toBe(4);
   await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Pause');
-  await expect(page.getByRole('group', { name: 'Speed' }).getByRole('button', { name: '4×' })).toHaveAttribute('aria-pressed', 'true');
+  await expectSpeed(page, 4);
   const t1 = await workerTick(page);
   await expect.poll(() => workerTick(page), { timeout: 20_000 }).toBeGreaterThan(t1);
 

@@ -146,7 +146,9 @@ test('Lab Food → Leaf wafer: one tap places one object; at 4× its fill steps 
 
   // The cell inspector lists the wafer and exactly what it still holds (remaining C = fill × 10).
   await page.getByTestId('lab-cat-inspect').click();
-  await page.mouse.click(sx, sy);
+  // Aim at the cell again: on a phone the dish viewport's height follows the Lab bar, so the screen point moves.
+  const [ix, iy] = await cellPoint(page, CELL);
+  await page.mouse.click(ix, iy);
   const insp = page.getByTestId('inspector');
   await expect(insp.getByRole('heading', { level: 2 })).toHaveText(`Cell ${CELL[0]}, ${CELL[1]}`);
   const line = insp.getByTestId('cell-object');

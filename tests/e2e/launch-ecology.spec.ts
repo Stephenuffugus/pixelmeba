@@ -14,7 +14,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { E_SPECIES, E_X, E_Y, ENT_STRIDE, PROTOCOL_VERSION } from '../../src/worker/protocol';
-import { expectNoSeriousA11yViolations, expectReachable, seedSettings, simSeconds } from './helpers';
+import { expectNoSeriousA11yViolations, expectReachable, expectSpeed, seedSettings, simSeconds } from './helpers';
 
 // Software-rendered WebGL on a shared 2-CPU machine: the whole journey took about 15 min at load 7.
 const SLOW = 1_800_000;
@@ -175,6 +175,24 @@ async function inspectAt(page: Page, x: number, y: number, chooseFirst = true) {
   return insp;
 }
 
+/**
+ * Whole dish, then wheel-zoom about dish point (x, y) — the camera keeps the point under the cursor
+ * (gestures.ts: zoomAt(cursor, exp(-deltaY * 0.0015))), each -462 px step doubling the zoom — until a
+ * tap's pick radius (≥ 12 screen px, DishRenderer.pick) is at most one cell. Returns screen px per cell
+ * and the screen point of any nearby dish position.
+ */
+async function zoomAbout(page: Page, x: number, y: number): Promise<{ zoom: number; at: (px: number, py: number) => [number, number] }> {
+  const [sx, sy] = await dishPoint(page, x, y);
+  const box = await page.getByTestId('viewport').boundingBox();
+  let zoom = Math.min(box!.width, box!.height) / 124;
+  await page.mouse.move(sx, sy);
+  while (12 / zoom > 1) {
+    await page.mouse.wheel(0, -462);
+    zoom *= Math.exp(462 * 0.0015);
+  }
+  return { zoom, at: (px, py) => [sx + (px - x) * zoom, sy + (py - y) * zoom] };
+}
+
 async function closeInspector(page: Page): Promise<void> {
   await page.getByTestId('inspector').getByRole('button', { name: 'Close' }).click();
   await expect(page.getByTestId('inspector')).toHaveCount(0);
@@ -284,7 +302,7 @@ test('Launch ecology: Gel Colony with film, fungi, a producer, food, salt, Sampl
   // Run at 4× for about 30 dish seconds, then pause.
   await page.getByTestId('run-toggle').click();
   await page.keyboard.press('4');
-  await expect(page.getByRole('group', { name: 'Speed' }).getByRole('button', { name: '4×' })).toHaveAttribute('aria-pressed', 'true');
+  await expectSpeed(page, 4);
   await expect.poll(() => simSeconds(page), { timeout: 600_000, intervals: [1000] }).toBeGreaterThanOrEqual(t0 + 30);
   await page.getByTestId('run-toggle').click();
   await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
@@ -312,9 +330,13 @@ test('Launch ecology: Gel Colony with film, fungi, a producer, food, salt, Sampl
   await closeInspector(page);
 
   // A cell on the protein dose, away from every organism: its reaction ledger names the protein enzyme.
-  // A tap selects any organism within the renderer's pick radius (≥ 24 px across, renderer.ts pick).
-  const box = await page.getByTestId('viewport').boundingBox();
-  const pickCells = Math.max(0.9, 12 / (Math.min(box!.width, box!.height) / 124)) + 0.25;
+  // A tap selects any organism within the renderer's pick radius (≥ 24 px across, renderer.ts pick), so
+  // zoom in about the dose first (on a phone the whole-dish radius spans about four cells).
+  const inspectCat = page.getByTestId('lab-cat-inspect');
+  await inspectCat.scrollIntoViewIfNeeded();
+  await inspectCat.click();
+  const zoomed = await zoomAbout(page, BROTHMAKER[0] + 0.5, BROTHMAKER[1] + 0.5);
+  const pickCells = Math.max(0.9, 12 / zoomed.zoom) + 0.25;
   const near = (x: number, y: number) => Math.min(...ents.map((o) => Math.hypot(o.x - x, o.y - y)));
   let spot: [number, number] | null = null;
   let best = pickCells;
@@ -333,7 +355,10 @@ test('Launch ecology: Gel Colony with film, fungi, a producer, food, salt, Sampl
     }
   }
   expect(spot, 'a cell on the protein dose with no organism close').not.toBeNull();
-  insp = await inspectAt(page, spot![0], spot![1], false);
+  const [tx, ty] = zoomed.at(spot![0], spot![1]);
+  await page.mouse.click(tx, ty);
+  insp = page.getByTestId('inspector');
+  await expect(insp).toBeVisible();
   await expect(insp.getByRole('heading', { level: 2 })).toHaveText(/^Cell \d+, \d+$/);
   const ledger = insp.getByTestId('reaction-ledger');
   await expect(ledger).toBeVisible();

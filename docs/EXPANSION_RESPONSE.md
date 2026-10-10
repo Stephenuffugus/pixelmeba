@@ -23,12 +23,11 @@ evidence is kept below as §4b–§4d.
   - World `SCHEMA_VERSION` **4** (src/sim/world.ts:36; D‑0035, D‑0043). Its stateHash is unchanged for old saves.
   - `PROTOCOL_VERSION` **2** (src/worker/protocol.ts:23; ENT_STRIDE 14; D‑0050).
   - Atlas manifest version 1, with 856 frames on a 1024×1024 sheet.
-- `contentHash` 8a004f512270aed1ce13985d193a6814069cc0c70ec58dc30f78878153a8b6cb (content/manifest.json;
-  written by `content-validate --write` in the wave 4 lead fixes). `<lead>`: re-run `npm run content:validate`
-  at the gate. If the EXP_104 revision changes content, paste the new hash here and regenerate
-  docs/reports/relationships-g3.md (D‑0063).
-- Measurement machine for all numbers below: the Codespace above (not a phone), shared with the other
-  stage 2 agents while this draft's numbers were taken (1-minute load 1.8–7.4).
+- `contentHash` f276b113906cc8db696f162ce43496df826b3a05cc5867b918d0b8515678dc24 (content/manifest.json; written by
+  `content-validate --write` for the EXP_104 revision, D‑0068; `npm run content:validate` → ok at the gate).
+  docs/reports/relationships-g3.md was regenerated under it (711 of 711 rows; only the header hash changed).
+- Measurement machine for all numbers below: the Codespace above (not a phone). The §7 perf numbers are the lead's
+  quiet re-measure; most §4 batches were taken while the other stage 2 agents ran (1-minute load 1.8–7.4).
 
 ## 2. Implemented scope
 | Phase | Status | Species enabled | Modules enabled | Systems enabled | Missing / known limitations |
@@ -82,10 +81,10 @@ Phase 3 in the browser, on top of Phase 2:
 - **Audio (P3.10):** synthesized SoundKit, rate-limited world cues, ambient loop, settings and optional web haptics (D‑0064).
 - **Accessibility pass 1 (P3.11):** keyboard map and dish reticle, visible focus, live region, canvas summary,
   simplified overlay palette, 200 % reflow, and the contrast audit (docs/reports/contrast.md;
-  docs/reports/reviews/g3-wave-4b/a11y-build.md). `<lead>`: decision number when committed.
-- **Performance pass 1 (P3.12):** hash-neutral hot-path edits halve the 6,000-agent tick (CPU p50 38.5 → 18.8 ms). The < 10 ms gate is not met on
-  this machine (§7). A stress tool (`tools/perf-stress.ts`), a render bench for the Phase 3 scene and docs/reports/perf-g3.md were added.
-  `<lead>`: decision number and integration.
+  docs/reports/reviews/g3-wave-4b/a11y-build.md). D‑0065; its three open MINORs were fixed before the gate (`35d12c3`).
+- **Performance pass 1 (P3.12):** hash-neutral hot-path edits halve the 6,000-agent tick (CPU p50 38.5 → 18.8 ms on the shared
+  machine; 12.0 ms in the quiet gate re-measure). The < 10 ms gate is not met on this machine (§7). A stress tool
+  (`tools/perf-stress.ts`), a render bench for the Phase 3 scene and docs/reports/perf-g3.md were added. D‑0066; committed in `d3a3027`.
 
 Content catalog (all phases, validated):
 
@@ -120,7 +119,8 @@ Content catalog (all phases, validated):
   - D‑0059 the module flip (moduleRegistryVersion 2); D‑0060 roundoff-negative field cells load;
   - D‑0061 Field Guide, tools pack, relationships seen and badges; D‑0062 EXP_104/105/212 and curated dishes;
   - D‑0063 gate fixtures; D‑0064 audio;
-  - `<lead>`: the a11y, perf and G3-evidence decisions of wave 4 stage 2, and the EXP_104 revision.
+  - D‑0065 accessibility pass 1; D‑0066 performance pass 1 (criteria open); D‑0067 gate evidence choices;
+  - D‑0068 EXP_104 on HIDDEN_NEIGHBORHOOD_V1 revision 2 (starting oxygen 0.03).
 - Remaining conflicts: none open in CONFLICT_REGISTER. Owner questions: §8.
 
 ## 4. Correctness evidence (G3)
@@ -134,8 +134,8 @@ agents: the 1-minute load was 2.5–7.4 throughout. The lead runs `npm run check
 ```
 npm run check            → <lead>
 npx playwright test      → <lead> (all three projects; incl. launch-ecology, lab-tools, keyboard, a11y-screens)
-npm run content:validate → <lead> (contentHash, atlas complete)
-npm run art:build --check → <lead>
+npm run content:validate → ok · contentHash f276b113… · atlas complete for 19 species, 10 module marks, 4 world tiles (856 frames)
+npm run art:build --check → atlas up to date · 856 frames (80 feature-mark, 13 world-tile) · 1024×1024 · 99ab54adef36
 ```
 
 **Appendix A gate message, draft** (the lead replaces each `<lead>` with the gate-time result):
@@ -143,11 +143,11 @@ npm run art:build --check → <lead>
 gate: g3
 check: npm run check → <lead>
 e2e: npm run test:e2e → <lead> (this draft: launch-ecology desktop 1 passed)
-content: npm run content:validate → <lead> (contentHash 8a004f512270… at draft time)
-tune: npm run sim:tune -- --recipes <all 18> --seconds 600 --extend 1200 --presets standard → docs/reports/tune-g3.md
-perf: tick CPU p50 18.8 / p95 23.9 ms @ 6,000 agents (2,000 fungal) on AMD EPYC 7763 2 vCPU, shared (provisional; <lead> quiet re-measure)
-determinism: d76ceab90c3cf733 (1x) == d76ceab90c3cf733 (4x) == d76ceab90c3cf733 (reload)   [determinism-g3, this draft's tree]
-conservation: C err 6.1e-13 %, N err 7.1e-12 % (all pools, 10,000 ticks); closed lid C 5.2e-13 %, N 1.1e-11 %
+content: npm run content:validate → ok (contentHash f276b113906cc8db696f162ce43496df826b3a05cc5867b918d0b8515678dc24; atlas complete, 856 frames; 47 guide warnings, §8 item 19)
+tune: npm run sim:tune -- --recipes <all 18> --seconds 600 --extend 1200 --presets standard → docs/reports/tune-g3.md (regenerated at 35d12c3; FIRST_DISH_V1 kept, D-0067; EXP_104 rev 2, D-0068)
+perf: tick CPU p50 12.0 / p95 20.8 / p99 39.8 ms @ 6,000 agents (2,000 fungal) on AMD EPYC 7763 2 vCPU, quiet (perf-stress 9,000 ticks); < 10 ms not met (D-0066)
+determinism: 6148ff0d080999c4 (1x) == 6148ff0d080999c4 (4x) == 6148ff0d080999c4 (reload, sample held at tick 402) == headless 1-tick and 4-tick chunks   [determinism-g3 at the gate tree]
+conservation: C err 6.1e-13 %, N err 7.1e-12 %, M 0 (all pools, 10,000 ticks); closed lid C 5.2e-13 %, N 1.1e-11 %
 open owner decisions: <lead> (27 items in §8 at draft time) (see EXPANSION_RESPONSE §8)
 ```
 
@@ -190,7 +190,7 @@ npx tsc -p tsconfig.json --noEmit → exit 0 (16.7 s), after fixing one error in
 | host-specificity | tests/fixtures/host-specificity.test.ts | **pass**, 3 tests, 12.9 s (b2). Tests: a dense dish of every enabled species with 5 Pinphage units per cell infects only Sprinters over 600 ticks. A Hitcher touching every other species attaches only to a Sunbead. With no host, units only decay (1 %/s into detritus) and the ledger closes. |
 | transport-obstacles | tests/fixtures/transport-obstacles.test.ts | **pass**, 9 tests, 42.5 s (b2). Tests: sugar pulse: the sum stays constant to 1e‑12, the maximum never rises, and nothing goes negative. Wall and stone rings isolate the dissolved, activity and viral fields and every organism for 1,000 ticks (1,599 moves, 32 births, 6 infections inside). A porous bead ring passes the fields but no swimmer. The film flux out of a film cell and into it is exactly half. Sampling reconciliation: take and transfer are internal moves; discard exports exactly the held totals. Clean water at 25, 50 and 100 % exports exactly the removed C and N. |
 | conservation-all-pools | tests/fixtures/conservation-all-pools.test.ts | **pass**, 1 test, 111.5 s (b2). Closed lid, 10,000 ticks. Worst relative error C 6.13e‑15, N 7.05e‑14, M 0. Worst absolute residual C 3.6e‑11, N 8.1e‑11. Film, fungal transfer, phage lysis, Hitcher drain, captures, adhesion links, all three enzymes and both food objects acted (details below this table). |
-| relationship matrix (every catalog relationship) | tests/fixtures/relationship-matrix.test.ts; tools/relationship-matrix.ts | **pass**, 15 tests (b2). **711 of 711 rows** in 33.1 s, with 232 positive relationships (table below). Regenerated in this session under contentHash 8a004f51… into tmp/ev/relationships-g3.md: rows identical to docs/reports/relationships-g3.md except its header hash (`<lead>`: regenerate the committed file, D‑0063). |
+| relationship matrix (every catalog relationship) | tests/fixtures/relationship-matrix.test.ts; tools/relationship-matrix.ts | **pass**, 15 tests (b2). **711 of 711 rows** in 33.1 s, with 232 positive relationships (table below). Regenerated in this session under contentHash 8a004f51… into tmp/ev/relationships-g3.md: rows identical to docs/reports/relationships-g3.md except its header hash. At the gate the lead regenerated the committed file under f276b113…: 711 of 711 pass in 6.6 s, rows unchanged. |
 | module fixtures | module-accounting, shared-budget, module-e04, module-e06, module-e07, module-e08, module-e09-e10, module-e12 (tests/fixtures), tests/sim/stage8-order.test.ts | **pass**, 9 files, 113 tests, 141 s (b3). Per file: accounting 7, shared-budget 8 (C08: two actions never spend the same energy), E04 15, E06 5, E07 11, E08 8, E09/E10 23, E12 24, stage 8 order 12. |
 | experiments | tests/experiments/*.test.ts (17 files incl. e201-e204, hidden-neighborhood, hidden-neighborhood-host, one-host, fungal-supply-line), tests/recipes/curated.test.ts | **pass**, 18 files, 124 tests, 772 s (b4). Write-ups: docs/reports/experiments-g2.md and experiments-g3.md. EXP_212 gate at 1 s with the exact transfer ledger. EXP_105 gate at 1 s. EXP_104 gate at 1 s on revision 2 (D‑0068; re-pinned 2026-10-10, tests/experiments 17 files 115 tests pass). |
 | P3.1 chemistry | tests/sim/chemistry.test.ts | **pass**, 14 tests (b5) |
@@ -395,51 +395,53 @@ Headless runner: `npm run sim:run -- --recipe FIRST_DISH_V1 --seed 104729 --tick
 - **Opening loop on the G3 build** (W6‑15): docs/reports/opening-loop-g3.md, with 11 desktop screenshots in docs/reports/img/g3/.
   It is the G1 Garden loop run with a copy of the script at port 4263 (the committed G1 images are untouched). Every step completed;
   save → reload → Continue kept 1:12 · 114 alive. One MINOR copy finding: "Sugar here can come from … Cordweavers’ enzyme" appears in a Garden with no
-  Cordweaver (§8 item 27). Phone layouts: `<lead>` if wanted.
+  Cordweaver (§8 item 27). Phone layouts were not re-shot at G3; the full three-project e2e run covers the phone projects.
 - Comprehension self-review (G2, kept): docs/reports/comprehension-g2.md. The five tasks took 5/5 within ten minutes;
   the five-tester session remains an owner item.
 
 ## 6. Design handoff
 - Art is code (`art/src/`), compiled by `npm run art:build` to `public/atlas/organisms.png` +
   `manifest.json`: 856 frames on 1024×1024. It covers the 19 enabled species (all 14 Phase 3 species since wave 1, D‑0046) and the ten
-  module marks (D‑0032). It is deterministic (`--check`): `<lead>` paste at the gate.
+  module marks (D‑0032). It is deterministic: `npm run art:build -- --check` → "atlas up to date · 856 frames (80 feature-mark
+  frames, 13 world-tile frames) · 1024×1024 · 99ab54adef36" at the gate.
 - Contrast audit: docs/reports/contrast.md has 246 pairs, of which 208 are required. 129 pass and 79 fail, each with a printed justification; none is unexplained.
   Fixes in art/src and the render colours are proposals for the art owner (a11y build report).
 - Sound: synthesized patches (src/audio/patches.ts). Owner manual listen: §8.
 - Not yet: launcher icon, splash, store art (Phase 4).
 
 ## 7. Performance and saves
-**Provisional: the lead re-measures on a quiet machine after perf is integrated** (W6‑12). The numbers below are
-from docs/reports/perf-g3.md "Phase 3 measurements" as the perf builder wrote it on 2026‑10‑10, 13:45–14:50 UTC,
-before integration. The machine is an AMD EPYC 7763 with 2 vCPUs (one core, two SMT threads) and Node 24.21.0. The
-1-minute load was 2.8–6.2, and the other stage 2 agents ran on the sibling thread, so CPU time is inflated too.
+**Quiet-machine gate re-measure by the lead** (W6‑12; docs/reports/perf-g3.md "Gate re-measure on a quiet machine"),
+2026‑10‑10 16:42–16:58 UTC at commit `35d12c3`, with no agent or other job running. The machine is an AMD EPYC 7763 with
+2 vCPUs (one core, two SMT threads) and Node 24.21.0. Not a phone.
 - **Tick cost, SPEC §16 / P3.12**: `node --expose-gc --import tsx tools/perf-stress.ts --ticks 9000`. The dish holds 6,000
   agents, 2,000 of them fungal segments, with every Phase 3 mechanism acting by tick 300, at 1× headless.
 
   | Build | CPU per tick p50 | CPU p95 | CPU p99 |
   |---|---|---|---|
-  | Committed sim (HEAD `cbdddf3`) | 38.5 ms | 45.2 ms | 62.5 ms |
-  | Perf's hot-path edits | **18.8 ms** | **23.9 ms** | **42.6 ms** |
+  | Committed sim before the pass (HEAD `cbdddf3`; shared machine) | 38.5 ms | 45.2 ms | 62.5 ms |
+  | Perf's edits, shared machine (perf builder, 13:45–14:50 UTC) | 18.8 ms | 23.9 ms | 42.6 ms |
+  | **Gate, quiet machine (`35d12c3`)** | **12.0 ms** | **20.8 ms** | **39.8 ms** |
 
-  - The pass is 2.05× faster at p50. **The < 10 ms gate is not met on this machine.** The p95 gap is about 14 ms
-    of CPU, led by sense/move (7.3 ms), intake (4.8), environment (2.7) and structures (2.7).
+  - **The < 10 ms gate is not met on this machine**: about 2 ms over at p50 and 11 ms at p95. Stage means (wall ms per
+    tick): sense/move 5.0, intake 3.1, environment 1.9, structures 1.8, everything else 3.1.
   - perf-g3.md "Remaining gap" says each remaining large gain changes results, so it would need an owner rules decision (§8).
-  - `<lead>`: a quiet-machine re-measure, and the nominated device.
+  - Whether < 10 ms is judged on this codespace or on a phone-class target device is an owner item (D‑0066, §8).
 - **Hash neutrality of perf's edits**: the stress world's stateHash is identical before and after at ticks
   0, 600, 1,500, 3,000 and 9,000, and so are the snapshot digests. The fence passes (perf-g3.md). In this session it also
   passed with those edits in the tree: b1, b6 and b7 in §4, and the tune's FIRST_DISH_V1 hashes equal an independent run.
 - **Memory**:
   - Heap slope over minutes 5–15 is 0.97 %/min with no save in the window (41-minute run), and 0.27 %/min after minute 31.
-  - With a save and reload at tick 3,000 it is 1.73 %/min, from a one-off +1.27 MB step.
+  - With a save and reload at tick 3,000 it is 1.73 %/min, from a one-off +1.27 MB step (quiet re-measure: 1.82 %/min).
   - Remaining growth is the genome table, which is never compacted (perf-g3.md proposal 1).
 - **Snapshot**:
-  - Whole snapshot at 6,000 agents with every view on: mean 4.59 ms (p95 9.30). Before the pass it was 11.80 ms (p95 22.9).
+  - Whole snapshot at 6,000 agents with every view on: mean 3.42 ms (p95 5.52) quiet; 4.59 ms (p95 9.30) on the shared
+    machine. Before the pass it was 11.80 ms (p95 22.9).
   - About 0.5 MB per snapshot (ents + ids + deposits), sent as pooled ArrayBuffers.
-- **Save at 6,000 agents**: `buildSaveFile` 427 ms, `loadSaveFile` 590 ms. The file is 10.2 MiB, inside the 25 MB import limit,
-  and the reload hash is equal.
-- **Renderer** (SwiftShader software WebGL, so lower bounds; `E2E_PORT=4262 npx tsx tools/render-bench-run.ts`):
-  - At 6,000 organisms, 1440×900 runs at 1.6 fps zoomed to a neighbourhood and 1.8 fps for the whole dish.
-  - At 360×800, aggregation engages at whole-dish zoom (7.6 fps).
+- **Save at 6,000 agents**: `buildSaveFile` 259 ms, `loadSaveFile` 336 ms quiet (427 / 590 ms shared). The file is 10.2 MiB,
+  inside the 25 MB import limit, and the reload hash is equal.
+- **Renderer** (SwiftShader software WebGL, so lower bounds; `E2E_PORT=4262 npx tsx tools/render-bench-run.ts`, quiet):
+  - At 6,000 organisms, 1440×900 runs at 3.2 fps zoomed to a neighbourhood and 3.3 fps for the whole dish.
+  - At 360×800, 10.0 fps at neighbourhood zoom; aggregation engages at whole-dish zoom (16.0 fps, 4,599 cells painted).
   - Aggregation and reduced-motion gates pass. 60 fps at neighbourhood zoom is false, as at G1, because software
     rasterization is the limit. 60 fps on a GPU device is an owner item (§8).
 - Headless effective speed from the seed report (not a performance measurement; load 1.8–7.4): 19.6–137× real
@@ -462,14 +464,14 @@ before integration. The machine is an AMD EPYC 7763 with 2 vCPUs (one core, two 
   - no GPU, so frame rates are software-rendered lower bounds;
   - no Android device or emulator, so install and launch are unverified;
   - a shared 2-CPU machine, so wall times are inflated.
-- **Owner decisions required** (none block current work). Items 1–6 and 11 are carried from G2. Items 7–10 are G2 owner questions; their status is `<lead>`.
+- **Owner decisions required** (none block current work). Items 1–6 and 11 are carried from G2. Items 7–10 are G2 owner questions: at G3 no owner ruling is recorded for any of them, so each stays open and the behaviour as built stands.
   1. Play Store: price ($0.99 assumed), countries, Families program opt‑in, content rating answers.
   2. Privacy policy hosting URL.
   3. Signing keystore creation and Play App Signing enrollment (owner‑held).
-  4. Minimum Android device for measured performance gates. Device items from perf-g3.md (provisional):
-     - The SPEC §16 1× tick < 10 ms at 6,000 agents is **not met** on this 2-vCPU container: p95 23.9 ms CPU after perf's pass.
-       Measure it on the nominated device.
-     - 60 fps at neighbourhood zoom needs a GPU device; software WebGL here gives 1.6–4.9 fps at 6,000 organisms.
+  4. Minimum Android device for measured performance gates. Device items from perf-g3.md (quiet gate re-measure):
+     - The SPEC §16 1× tick < 10 ms at 6,000 agents is **not met** on this 2-vCPU container: CPU p50 12.0 ms, p95 20.8 ms
+       after perf's pass. Measure it on the nominated device, and rule whether the criterion is judged there or here (D‑0066).
+     - 60 fps at neighbourhood zoom needs a GPU device; software WebGL here gives 2.8–10 fps at 6,000 organisms.
      - Owner rules decisions that would close the **tick** gap. Each one changes results, so each needs a recorded ruleset
        bump: a diffusion cutoff or half-rate enzyme and inhibitor diffusion; entity-order locality for intake and decide.
      - Owner rules decision for the **memory** criterion: genome-table compaction (D-0066). The table and the derived
@@ -496,7 +498,9 @@ before integration. The machine is an AMD EPYC 7763 with 2 vCPUs (one core, two 
   17. **D‑0060** should a future ruleset bump also clamp the capture split in the simulation?
   18. **D‑0061 (1)** the not-enabled-name rule: an error only for later-phase species (field-guide PROPOSED DECISION 1).
   19. **D‑0061 (2)** 47 guide warnings: biology and rules text names species not in v1.0. Reword for launch, or keep as written per CT?
-  20. **D‑0062** EXP_104 needs a recipe revision (lower starting oxygen; probe: 0.03–0.05 reaches the gate), or it stays out of v1.0.
+  20. **D‑0068** EXP_104 now ships on HIDDEN_NEIGHBORHOOD_V1 revision 2 (starting oxygen 0.03; gate at 1 s). Sprinters are
+      oxygen-limited only from tick 8 to tick 126, so the card says to pause in the first seconds. Keep it, or keep EXP_104
+      out of the v1.0 card list?
   21. **D‑0064 (1) audio manual listen:** `npm run dev`, then open `/tools/audio-preview.html` and listen to every cue
       (drop, placement_error, select, save, discovery, compare_result, division, card_open, wake) and the ambient loop.
   22. **D‑0064 (2)** should reduced motion also quiet audio? Built: no. Quiet audio is the separate comfort setting (audio PROPOSED DECISION 4).
@@ -511,9 +515,20 @@ before integration. The machine is an AMD EPYC 7763 with 2 vCPUs (one core, two 
       - wave-verify-2 item 6: accept conservation-all-pools reporting its wall time (≈ 80–120 s) instead of asserting ≤ 60 s.
         D‑0063 records this as decided; it is listed here for the owner's visibility only.
       - All the others in that folder (audio 1–3, experiments-curated, field-guide 2–6, g3-fixtures) are recorded in D‑0061…D‑0064.
-  26. Wave 4 stage 2 proposals (a11y, perf, g3-evidence build reports in docs/reports/reviews/g3-wave-4b/): `<lead>`.
+  26. Wave 4 stage 2 proposals (a11y, perf, g3-evidence build reports in docs/reports/reviews/g3-wave-4b/) are folded into
+      D‑0065 (a11y), D‑0066 (perf) and D‑0067 (evidence). Their owner questions:
+      - **D‑0065 (1)** UX §6.1's danger colour moves from #B3473F to #AD4239 (4.5:1 on --surface-2).
+      - **D‑0065 (2)** the dish summary's trend is the living count, not biomass, unless a read-only History request
+        flag is added (a protocol change).
+      - **D‑0066** the < 10 ms criterion here or on a phone-class device; genome-table compaction under a ruleset entry
+        (item 4); the two rule-changing tick options (item 4).
+      - **D‑0067** curated dishes that empty (item 24).
   27. (Lead, copy; MINOR) The inspector's "Sugar here can come from …" line names every species of the world's recorded list.
       It is built by `sugarSourcesOf`, src/worker/snapshot.ts:611. So every Phase 3 dish names Cordweavers' enzyme even with no Cordweaver present, and
       it never names an E01 carrier. Choose between naming only living kinds, or wording it as "in this kind of dish"
       (docs/reports/opening-loop-g3.md).
+  28. (Lead, MINOR, carried to P4.13) On a phone in portrait, tapping an organism lifts the dish to the camera's limit
+      (62 cells) while the inspector sheet is open, and the dish stays lifted after Close until the player taps
+      Whole dish (seen in the G3 phage e2e trace; cosmetic camera state only, no outcome changes). Decide whether
+      Close should restore the camera, then fix in P4.13.
 - **Next gate:** Phase 4, Wonder, Replay, Android → `v1.0.0-rc1` (docs/agent Phase 4 runner edition).

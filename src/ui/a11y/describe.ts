@@ -198,6 +198,18 @@ export function recordCounts(
   return { dishId, seen, samples: [...kept, { second, counts: counts.slice() }] };
 }
 
+/**
+ * The summary speaks of organisms (snapshot counts). A phage is measured in units per cell, not counted, so
+ * the summary never says one is absent or extinct: viral species are left out (their units show in the
+ * cell inspector and the Infection overlay).
+ */
+export function organismInputs(
+  inputs: readonly SpeciesSummaryInput[],
+  diets: readonly ({ readonly metabolism: string } | null | undefined)[] | undefined,
+): SpeciesSummaryInput[] {
+  return inputs.filter((_, i) => diets?.[i]?.metabolism !== 'viral');
+}
+
 /** The species' summary inputs from a track and the dish's species names (count trend over the track). */
 export function summaryInputs(
   track: CountTrack,
