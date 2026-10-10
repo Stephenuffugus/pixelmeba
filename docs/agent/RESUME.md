@@ -10,6 +10,7 @@
 > three + perf's own saves verifier; reports `docs/reports/reviews/g3-wave-4b/`. If this session dies mid-run: back up
 > the tree onto `wip/g3-wave-4b` again (temp-index commit, parent = the branch), read the new reports, and rerun only
 > what is unfinished (edit RESUME_TASKS in that file: a finished builder becomes `prebuilt` with a pointer to its report).
+> 13:57 backup of the in-flight tree: `wip/g3-wave-4b` = `76b85e0` (local + origin; restore the same way as 930bb9a).
 > Also running (planning only): the wave 5 task writer `docs/agent/g4-wave-5-tasks.workflow.js.txt` (run `wf_8b5d09bc-b0f`; first try `wf_4df67f51-cf1` derailed the same way)
 > → `docs/agent/g4-wave-5.tasks.js.txt`; patch its STATE's D-numbers and g3 facts after the gate; wave 5 launches after tag g3.
 > 13:50: the writer FINISHED (committed): favorites 4271 s1 critical, garden-home 4273 s1, stories 4272 s2, objectives 4274 s2

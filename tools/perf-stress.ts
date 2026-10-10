@@ -893,6 +893,21 @@ async function main(): Promise<void> {
       slopeMinutes5to15MBPerMin: heapSlope === null ? null : r3(heapSlope),
       slopePctPerMin:
         heapSlope === null || tail.length === 0 ? null : r3((100 * heapSlope) / tail[0]!.heapUsedMB),
+      // The per-second history keeps the last 30 simulated minutes (CT §12.10; history.ts HISTORY_SECONDS)
+      // and 10-second trait samples likewise, so it grows until minute 30 by design. A run past minute 31
+      // also reports the slope after that window filled, which is what remains for a long session.
+      ...(() => {
+        const late = heapSeries.filter((h) => h.minute >= 31);
+        if (late.length < 3) return {};
+        const s = slope(
+          late.map((h) => h.minute),
+          late.map((h) => h.heapUsedMB),
+        );
+        return {
+          slopeAfterMinute31MBPerMin: r3(s),
+          slopeAfterMinute31PctPerMin: r3((100 * s) / late[0]!.heapUsedMB),
+        };
+      })(),
     },
     save,
     snapshot: { every: args.snapshotEvery, perSnapshotMs: dist(perSnapshotMs), parts: snapshot },

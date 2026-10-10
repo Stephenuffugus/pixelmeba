@@ -418,7 +418,7 @@ describe('G3 determinism — mid-run save and reload with a held sample', () => 
     expect(next).toBe(take + 1);
     expect(w.sample).not.toBeNull();
     const heldHash = stateHash(w);
-    const built = await buildSaveFile(w, { name: 'held sample', savedAt: '2026-01-01T00:00:00.000Z' });
+    const built = await buildSaveFile(w, { name: 'held sample', savedAt: '2026-01-01T00:00:00.000Z', recipeId: null });
     const { world: reloaded } = await loadSaveFile(built.text);
     expect(reloaded.tick).toBe(s.log[take]!.tick);
     expect(reloaded.sample).not.toBeNull();

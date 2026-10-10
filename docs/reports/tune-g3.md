@@ -3699,10 +3699,10 @@ not re-run for this text. The D-0015 re-measurement at the end was run in memory
   independent `tuneSeed` run of the same build (the "V1 as is" control below, 12:59–13:16 UTC). In this
   stage, the determinism fence (tests/fixtures/trajectory-fence*.test.ts, g2-replay) passed on the same
   tree (EXPANSION_RESPONSE §4). This run did not use `--plain-check`, so it does not re-prove that
-  the tuner only observes. G2 proved that on 12/12 runs (tune-g2.md), and the observer code has not
-  changed since.
+  the tuner only observes. G2 proved that on 12/12 runs (tune-g2.md). Since g2 the tool changed by one read-only line: the secreting
+  count reads the producer bit set (`!== 0`, D-0057).
 - **Integrity.** 108 seed runs (18 recipes × 6 seeds). The ledger is ok in all 108: relErr C ≤ 3.8e-13
-  and N ≤ 1.1e-13 at 600 s, and both are exactly 0 for FUNGAL_SUPPLY_LINE_V1, which has no inputs. Every run
+  and N ≤ 1.1e-13 at 600 s, and the table prints 0 / 0 for FUNGAL_SUPPLY_LINE_V1. Every run
   re-drafted every committed daughter from its parent's recorded genome with 0 mismatches. Deaths by
   cause cover 100 % of deaths (no lineage compaction).
 - **Wall time is not performance.** Total 2,326 s. The 1-minute load average rose from 1.83 to 7.41 as
