@@ -3,6 +3,42 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑10 13:20 UTC — PAUSED BY THE OWNER FOR A CODESPACE REFRESH. START HERE.**
+> - `main` = `072478e` + this note, pushed. P3.1–P3.10 are ticked; decisions run through D-0064; stage 1 is committed
+>   (`8c8a65f`).
+> - Wave 4 STAGE 2 was STOPPED by the lead at 13:20 (workflow stopped, orphaned e2e killed). Its uncommitted work is
+>   in the tree and on `wip/g3-wave-4b` = `930bb9a` (local + origin). If `git status` is clean after the restart,
+>   restore it with `git merge --squash wip/g3-wave-4b && git reset -q`.
+> - State of each task at the stop:
+>   - **a11y: BUILT, not verified.** Report: `docs/reports/reviews/g3-wave-4b/a11y-build.md` (52 screens axe-clean,
+>     keyboard journey, contrast.md). Files:
+>     - src/ui/a11y/*, tools/contrast-audit.ts, docs/reports/contrast.md;
+>     - tests/ui/a11y-{describe,contrast}.test.ts, tests/e2e/{keyboard,a11y-screens}.spec.ts;
+>     - src/ui/styles.css, src/ui/state.ts, src/ui/panels/OverlayLegend.tsx;
+>     - src/ui/app/App.tsx and src/ui/views/{DishScreen,CompareScreen,ExperimentRun,SimplePage}.tsx;
+>     - src/render/{layers,renderer}.ts.
+>   - **perf: MID-BUILD, no report.** Files:
+>     - src/sim/{entities,fields,founders,fungi,intake,movement,transport}.ts and src/worker/snapshot.ts;
+>     - tools/render-bench{,-run}.ts, tools/perf-stress.ts, tests/perf/stress-shape.test.ts.
+>     
+>     Hash neutrality is NOT proven. Never commit these src/sim edits until the fence (g2-replay + the four
+>     trajectory-fence files) and determinism pass and perf's own saves/determinism verifier has looked.
+>   - **g3-evidence: MID-BUILD, no report.**
+>     - Files: tests/fixtures/determinism-g3.test.ts, docs/reports/tune-g3.md (sim:tune wrote it at 13:18; check its
+>       tail is complete), tests/e2e/launch-ecology.spec.ts (its desktop run was interrupted).
+>     - The EXPANSION_RESPONSE G3 draft is NOT started.
+> - Next:
+>   1. Rerun stage 2 from `docs/agent/g3-wave-4b.run.workflow.js.txt`.
+>      - Give perf and g3-evidence a `finish` note each: "your partial work is in the tree (files above); re-read it
+>        with git diff, continue, do not restart".
+>      - With `A.only`, the verifier sees only the listed tasks. Either keep a11y in with a finish note ("built:
+>        rerun your BEFORE FINISHING checks only, keep your report"), or verify a11y yourself (review its diff, run its
+>        unit tests + keyboard and a11y-screens on desktop).
+>   2. Integrate as in the 12:52 entry.
+>   3. Apply the EXP_104 revision 2 (13:00 entry).
+>   4. Run the G3 gate.
+>   5. Start Phase 4 (`docs/agent/g4-plan.md`).
+
 > **Update 2026‑10‑10 ≈ 04:40 UTC — RESUMED (owner: "pick back up … the next ten or so hours"). START HERE if this session died.**
 > - Wave 3 is still UNCOMMITTED in the tree (backup `wip/g3-wave-3` = `fd88c91`; tree == backup + RESUME.md). Open items (a)/(b)
 >   were already applied by the interrupted fixer; lead run: film, host-specificity, chemistry + g2-replay + four fence files +
