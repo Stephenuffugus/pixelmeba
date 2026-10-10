@@ -54,9 +54,9 @@ with the next task).
 - [x] (a792e07) P3.5 Tools: Sample (paused transaction), Transfer, Clean water, Erase structure, phage doses
 - [x] (a792e07) P3.6 Wave E1 living chemistry: B07, B08, Y02, F02 + links; E_OIL/E_PROTEIN/broth/breaker; M01, M03–M05, M09, M10, M11; food objects; reaction ledger; food‑access overlay
 - [x] (08768df, a792e07, 50c7c32) P3.7 Modules E04, E06, E07, E08, E09, E10, E12 + stage 8 reservation order
-- [ ] P3.8 Field Guide, journal, badges
-- [ ] P3.9 Experiments (A hidden neighborhood, One compatible host, E201–E204, E212) + curated L301, L303, L304, L306
-- [ ] P3.10 Audio SoundKit + settings
+- [x] (8c8a65f) P3.8 Field Guide, journal, badges
+- [x] (8c8a65f; EXP_104 needs a recipe revision before v1.0, D-0062) P3.9 Experiments (A hidden neighborhood, One compatible host, E201–E204, E212) + curated L301, L303, L304, L306
+- [x] (8c8a65f) P3.10 Audio SoundKit + settings
 - [ ] P3.11 Accessibility pass 1 (keyboard, ARIA, species list, reduced motion, 200 %, contrast report)
 - [ ] P3.12 Performance pass 1 (docs/reports/perf-g3.md)
 - [ ] G3 gate: host‑specificity · transport‑obstacles · conservation‑all‑pools · relationship matrix · module fixtures · experiments · e2e incl. keyboard · axe clean → tag `g3`

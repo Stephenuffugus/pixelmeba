@@ -11,6 +11,12 @@
 > - Running: `docs/agent/g3-wave-3-lead-fix.workflow.js.txt` (one fixer: stale FLAG.moving, E07 light test, E04/E12 lockout
 >   convention, E12 + module-param import refusals, NITs; report `docs/reports/reviews/g3-wave-3/lead-fixes.md`) and
 >   `docs/agent/g3-wave-4-tasks.workflow.js.txt` (writer → `docs/agent/g3-wave-4.tasks.js.txt`, stages 1/2).
+> - **12:05 UTC: WAVE 4 STAGE 1 COMMITTED `8c8a65f`** (D-0061…D-0064; P3.8-P3.10 ticked; check 148/149 files + film fixed 15/15;
+>   desktop e2e 17/17). STAGE 2 RUNNING from `docs/agent/g3-wave-4b.run.workflow.js.txt` (a11y 4261, perf 4262 [own saves
+>   verifier], g3-evidence 4263; reports `docs/reports/reviews/g3-wave-4b/`; no content edits). After it: integrate (MINORs,
+>   D-0065+, check, new journeys), commit, tick P3.11/P3.12; EXP_104 recipe revision (or keep it out of the shipped cards,
+>   D-0062); then the G3 gate ritual (wave 4 tasks header "LEAD AFTER WAVE 4"): quiet-machine perf table, full three-project
+>   e2e, content:validate, sim:tune, relationships-g3.md regenerated, EXPANSION_RESPONSE §1-§8, tag g3.
 > - **08:10 UTC: MODULE FLIP COMMITTED `50c7c32` (+ docs `3d545dd`; D-0059, D-0060), P3.7 ticked; WAVE 4 STAGE 1 RUNNING** from
 >   `docs/agent/g3-wave-4a.run.workflow.js.txt` (field-guide 4251, g3-fixtures 4253, experiments-curated 4252, audio 4254; verifiers
 >   [field-guide+audio], [experiments-curated+g3-fixtures]; reports `docs/reports/reviews/g3-wave-4/`). Builders edit the tree and

@@ -618,3 +618,51 @@ Decision: the import (world fields in `parseSaveFile`, held-sample cells in `sav
 Reason: saves are sacred (the game must load what it saves); old saves keep their recorded ruleset.
 Affects: src/sim/fieldValue.ts, src/persistence/saveFile.ts, src/sim/sampleSlot.ts, tests/sim/capture-roundoff.test.ts.
 Owner review: yes — whether a future ruleset bump should also clamp the capture split in the simulation.
+
+## D-0061 · 2026-10-10 · P3.8 · Field Guide, tools pack, relationships seen and badges as built
+Context: wave 4 stage 1 field-guide (docs/reports/reviews/g3-wave-4/field-guide-{build,fix1}.md); D-0039.
+Decision:
+- Tool records (`content/tools/*.json`, ToolSchema) carry summary, biology, rules, example, changes / doesNotChange / watchFor and optional `where` and `dose` (the tray's lines, "{fraction}" filled with the chosen amount). A tool is enabled by `phase ≤ buildPhase` (no manifest list), is never recorded in a world or save, and contentHash includes the tools collection only when it is non-empty. Phases: SNAPSHOT, UNDO, OVERLAYS, INSPECT 1; ERASE_STRUCTURE, DUPLICATE, COMPARE 2; SAMPLE, TRANSFER, CLEAN_WATER 3. The Lab tray reads the same records, so guide and tray never disagree; Transfer has its own lines.
+- Guide validation: every enabled species, material, module, habitat, structure and tool needs complete guide text (file → field errors). A material's rules say "No additional modeled reaction." unless guideRules lists its reaction. Naming a species that is not enabled is an error in summary, example or a tool line only when that species belongs to a later phase than the build; a test manifest that merely leaves a shipped species out gets a warning, and biology or rules text always gets a warning (47 such warnings in shipped content today).
+- Modules appear in each species entry as "Abilities it can gain" (enabled eligible modules) and as their own entries in the Species tab; habitats appear in Structures & tools. The guide shows this build's enabled content (it is the game's reference), not the open dish's recorded manifest; the registry is built lazily when the guide opens.
+- CT §3.2 "within N cell(s)" is the hunter's capture reach, carried in content as sensingRadius, not a requirement on the prey.
+- Relationship ids are `<kind>:<actor>:<target>` with kinds eats, catches, infects, attaches, bursts, drains and converts. "eats" covers the pools sugar, starch, oil, protein, broth, detritus, metabolite, film and co2 (co2 reads "took up carbon dioxide in light"); digesting a held meal and a host drain are not "eats"; a lysis or drain death is credited only to the virus or parasite the watcher saw on that host; conversions are credited through D-0051's producer rule. The watcher reads only recorded state (an observation-only per-tick species × pool intake record, POST_G2_DERIVED_KEYS) and runs in DishHost.stepDish, never on comparison copies or rollback replays (stateHash and the full trajectory digest are identical with and without it). Each id keeps its first sighting per device, across dishes (D-0039 device store `pixelmeba.relationships`).
+- Badges: seven cosmetic badges, one per relationship kind, no counts, timers or streaks, outside saves.
+- Opening the guide from a dish pauses it; Back returns to that dish at its prior speed (or Home).
+Reason: UX §2, §5.7; SPEC §12.3, §12.9, §18; D01 (cosmetic badges); content is data; honest labels.
+Affects: content/tools/*, src/sim/content/{schema,registry,guideRules}.ts, src/ui/views/FieldGuide*.tsx, src/ui/{badges.ts,strings/guide.ts}, src/worker/{relationships,host,protocol,client}.ts, src/sim/intake.ts (observation record), tests/content/guide.test.ts, tests/ui/badges.test.ts, tests/worker/relationships.test.ts, tests/e2e/field-guide.spec.ts.
+Owner review: yes — (1) the not-enabled-name rule (error only for later-phase species); (2) 47 guide warnings: biology/rules text names species not in v1.0 (e.g. P02's text names Lantern, Sleeper and Needlejaw) — reword for launch or keep as written per CT.
+
+## D-0062 · 2026-10-10 · P3.9 · Experiments EXP_104, EXP_105, EXP_212 and curated dishes L301, L303, L304, L306 as built
+Context: wave 4 stage 1 experiments-curated (docs/reports/reviews/g3-wave-4/experiments-curated-build.md; docs/reports/experiments-g3.md).
+Decision:
+- Recipes gain `ops` (habitat edits applied at realization; the New Dish preview draws the same grid) and founders gain `placement` ('nearest' default | 'scatter'), an explicit `cells` list, a labelled `initial` override (a per-member array aligned with `cells`, logged as 'recipe:<id>:initial'; energy differences go to the energy ledger) and `links: 'chain'`. Defaults keep every earlier recipe bit-identical (fence unchanged). Scatter draws use the new stream `founder.place` keyed by founder group index.
+- Tracked measures `infections.SP`, `limitSeconds.SP.REASON` (organism-seconds; suitability reasons read as the inspector reads them), `transfer.fungal` and `wholeUnitCells.SP`, recorded only when an observer asks. Player steps `inspectOxygenLimits` and `observeInfection`; EXP_212 has none (its evidence is the exact transfer ledger).
+- EXP_104 and EXP_105 stop at 180 s; EXP_105's phage is two labelled 5-unit patches.
+- Curated dishes: Standard evolution, scatter placement, seed = recipe number; ids keep the plan's file names (L301_TWO_LUNCHES, L303_PUBLIC_KITCHEN, L304_EMPTY_AFTER_THE_FEAST, L306_BORROWED_SHELTER); L306 has Identical founders with E10 on alternate members (labelled "present at creation"); L303's "free nutrient 0.1" is nutrient set to 0.1 in the patch. New Dish lists curated dishes as Start-with choices from the bundled recipe records; choosing one takes its authored seed and settings, and any change is recorded as the player's.
+- EXP_104 (A hidden neighborhood) does not reach its gate on CT's recipe: no Sprinter is ever OXYGEN_LIMITED (O2 stays above 0.7 in every Sprinter's cell; the Dusks die of high oxygen, D-0048). Per SPEC §13.2 it is not release-ready until a new recipe revision reaches the gate; its player texts were made conditional so they promise nothing the dish does not show. Before v1.0 the lead either ships a tuned HIDDEN_NEIGHBORHOOD revision whose fixture reaches the gate, or keeps EXP_104 out of the shipped card list.
+Reason: SPEC §13.1–§13.2; CT §9.3, §10.1, §10.3; D04 §8; determinism (one new stream, defaults bit-identical).
+Affects: src/sim/{recipes,experiments,pairedRun,variants,rng}.ts, src/sim/content/schema.ts, src/ui/views/NewDish.tsx, src/worker/host.ts, content/recipes/*, content/experiments/EXP_104/105/212, tests/experiments/{hidden-neighborhood,one-host,fungal-supply-line}.test.ts, tests/recipes/curated.test.ts, tests/fixtures/fence.json (entries added).
+Owner review: yes — EXP_104 needs a recipe revision (e.g. a lower starting oxygen) or stays out of v1.0.
+
+## D-0063 · 2026-10-10 · G3 · Gate fixtures: relationship matrix, conservation of all pools, transport and obstacles
+Context: wave 4 stage 1 g3-fixtures (docs/reports/reviews/g3-wave-4/g3-fixtures-build.md, wave-verify-2.md).
+Decision:
+- The G3 relationship evidence is `tools/relationship-matrix.ts` run under the shipped manifest; its expectations come only from the docs (CT §1.1, §3.1–§3.5, §5, §7.1; SPEC §5.3) through `tests/helpers/tables.ts`, never from content JSON. A failing row is never weakened: it would go to KNOWN_BUGS with it.fails and a bug id (none today: 711/711 rows pass). docs/reports/relationships-g3.md is regenerated at the gate whenever contentHash changed.
+- Fixtures that run whole-dish horizons report their wall time instead of asserting it (the shared 2-CPU machine varies threefold with load); the relationship matrix keeps its ≤ 90 s check. conservation-all-pools takes ≈ 80–120 s.
+- Conservation fixtures keep SPEC §3.4's relative gate (< 1e-5) and add an absolute per-element residual bound measured against real roundoff (lead fix), because in CO2-dominated dishes the relative gate alone misses a one-off 0.01 C leak.
+Reason: BUILD_DIRECTIVE G3 evidence; SPEC §3.4, §17; conservation.
+Affects: tests/fixtures/{relationship-matrix,conservation-all-pools,transport-obstacles}.test.ts, tests/helpers/tables.ts, tools/relationship-matrix.ts, docs/reports/relationships-g3.md.
+Owner review: no
+
+## D-0064 · 2026-10-10 · P3.10 · Audio as built
+Context: wave 4 stage 1 audio (docs/reports/reviews/g3-wave-4/audio-{build,fix1}.md).
+Decision:
+- Stable cue ids: drop, placement_error, select, save, discovery, compare_result, division, card_open, wake (ARCH's placement_ok is `drop`; gate_click waits for a gate control). World cues (division, wake, discovery) share a 4-per-second budget; UI cues are unlimited, one per player action. Coalescing per cue: division 5 s (CT §12.10), wake 1 s, discovery 250 ms; a request over budget joins its cue's latest play or is dropped and counted. Division sounds only for non-bacterial, non-viral births (by the world's recorded species category), so a bacteria-only dish makes no division sound; its visible equivalents remain. Every cue has a visible equivalent (listed in src/audio/cues.ts).
+- Settings: quiet audio = effects −12 dB and the ambient loop off; defaults effects 0.7, music 0.4, voice 0.8, muted off, quiet off, haptics off (optional Settings fields, so older prefs load). The ambient loop plays at −24 dB on the music bus while audio is active, not muted or quiet, and music > 0. No sound before the first gesture; audio suspends with the page.
+- Haptics: web only, feature-detected `navigator.vibrate`, only for accepted placements, off by default. The Android build has no haptics until P4.10 adds the VIBRATE permission (PLAY_STORE_CHECKLIST).
+- Reduced motion has no audio effect: it governs visual motion; quiet audio is the separate audio comfort setting (UX §9 lists both).
+- src/audio imports nothing from src/sim (tested); no cue consumes simulation randomness.
+Reason: ARCH §10.3; UX §8.1–§8.2, §9; CT §12.10; R25.
+Affects: src/audio/**, src/ui/panels/SoundSettings.tsx, src/ui/{state.ts,main.tsx,views/SimplePage.tsx}, cue call sites, tests/audio/**, tools/audio-preview.html.
+Owner review: yes — (1) manual listen of every cue (`npm run dev`, open /tools/audio-preview.html); (2) whether reduced motion should also quiet audio.
