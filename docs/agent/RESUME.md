@@ -11,7 +11,28 @@
 > - Running: `docs/agent/g3-wave-3-lead-fix.workflow.js.txt` (one fixer: stale FLAG.moving, E07 light test, E04/E12 lockout
 >   convention, E12 + module-param import refusals, NITs; report `docs/reports/reviews/g3-wave-3/lead-fixes.md`) and
 >   `docs/agent/g3-wave-4-tasks.workflow.js.txt` (writer → `docs/agent/g3-wave-4.tasks.js.txt`, stages 1/2).
-> - **12:05 UTC: WAVE 4 STAGE 1 COMMITTED `8c8a65f`** (D-0061…D-0064; P3.8-P3.10 ticked; check 148/149 files + film fixed 15/15;
+> - **13:00 UTC: lead prep done while stage 2 runs (all committed + pushed).**
+>   - `docs/reports/exp104-revision-probe.md`: a starting O2 of 0.03–0.05 reaches EXP_104's gate. The candidate is
+>     revision 2 with `backgroundOverrides.oxygen` 0.03 and texts that say when to look (the first ~10–20 s). Apply it
+>     after stage 2: content edit, re-pin hidden-neighborhood.test.ts, content-validate --write, fence-update, D-number.
+>     The other option is to keep the card out of v1.0; either way it is an owner item.
+>   - Phase 4 is ready to launch after tag `g3`:
+>     - `docs/agent/g4-plan.md` (three waves, six lead calls; record calls 1, 2 and 6 as D-numbers);
+>     - `docs/agent/g4-runner-ft.workflow.js.txt` (the Phase 4 preamble);
+>     - `docs/agent/g4-wave-5-tasks.workflow.js.txt` (one writer → `docs/agent/g4-wave-5.tasks.js.txt`). Run it
+>       during the G3 gate's long runs, then build the wave 5 run file the same way as stage 2's.
+> - **12:52 UTC: SAFE POINT — stage 2 still RUNNING** (launched 11:12 from `docs/agent/g3-wave-4b.run.workflow.js.txt`).
+>   At 12:52: a11y built (`docs/reports/reviews/g3-wave-4b/a11y-build.md`); perf and g3-evidence still building; no
+>   verify yet. Tree snapshot: `wip/g3-wave-4b` = `42dd462` (local + origin; backup only, NOT verified, do not merge
+>   as is). IF THIS SESSION DIED: `git status` — if the stage 2 files are still in the tree, keep them (re-snapshot onto
+>   `wip/g3-wave-4b` with a temp-index commit); if the tree is clean, restore with
+>   `git merge --squash wip/g3-wave-4b && git reset -q`. Read every report in `docs/reports/reviews/g3-wave-4b/`
+>   (the run journal dies with the session). Rerun ONLY what is unfinished: in the run file set `A.only` (line ~344)
+>   to the unfinished keys and give each a `finish` note (what is already in the tree, "continue, do not restart").
+>   A task whose build report exists but has no verify: run the verify only (or, lean, lead-review its diff + run its
+>   tests). Then integrate as below (MINORs, D-0065+, check, desktop e2e of keyboard + a11y-screens + any journey the
+>   diff touches, commit, tick P3.11/P3.12, push).
+> - **11:12 UTC: WAVE 4 STAGE 1 COMMITTED `8c8a65f`** (D-0061…D-0064; P3.8-P3.10 ticked; check 148/149 files + film fixed 15/15;
 >   desktop e2e 17/17). STAGE 2 RUNNING from `docs/agent/g3-wave-4b.run.workflow.js.txt` (a11y 4261, perf 4262 [own saves
 >   verifier], g3-evidence 4263; reports `docs/reports/reviews/g3-wave-4b/`; no content edits). After it: integrate (MINORs,
 >   D-0065+, check, new journeys), commit, tick P3.11/P3.12; EXP_104 recipe revision (or keep it out of the shipped cards,

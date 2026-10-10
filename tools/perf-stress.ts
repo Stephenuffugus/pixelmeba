@@ -40,7 +40,8 @@ import { creationFounders } from '../src/sim/founders';
 import { checkLedger, initializeLedger } from '../src/sim/ledger';
 import { packLineageMarks } from '../src/sim/lineage';
 import { addFungalLink, LINK_TRANSPORT, LINK_VISUAL } from '../src/sim/links';
-import { evolutionState } from '../src/sim/mutation';
+import { evolutionState, isMutationPreset } from '../src/sim/mutation';
+import type { MutationPreset } from '../src/sim/world';
 import { realizeRecipe } from '../src/sim/recipes';
 import { heldSummary } from '../src/sim/sample';
 import { stateHash } from '../src/sim/serialize';
@@ -304,9 +305,12 @@ export function buildStressWorld(
   reg: ContentRegistry = loadRegistryFs(),
   seed = STRESS_SEED,
   omit: readonly StressPart[] = [],
+  /** Diagnostic only (--mutation): another preset than the stress dish's 'standard'. */
+  mutationPreset?: MutationPreset,
 ): StressBuild {
   const t0 = performance.now();
-  const w = realizeRecipe(reg, stressRecipe(reg), { seed, worldId: 'perf-stress' });
+  const recipe = stressRecipe(reg);
+  const w = realizeRecipe(reg, mutationPreset ? { ...recipe, mutationPreset } : recipe, { seed, worldId: 'perf-stress' });
   const visual = omit.includes('links') ? 0 : linkPads(w, 'F01', LINK_VISUAL);
   const transport = omit.includes('links') ? 0 : linkPads(w, 'F02', LINK_TRANSPORT);
   const L = STRESS_LAYOUT;
@@ -597,6 +601,39 @@ function measureSnapshot(
   void count;
 }
 
+/**
+ * Save build and load, timed (buildSaveFile / loadSaveFile, as the host's save and import do). In its own
+ * async function so the loaded copy is released on return: an async function keeps every local that lived
+ * across an await reachable until it returns (a first version held the reloaded 6,000-agent world for the
+ * rest of the run, a ~15 MB step in the heap series).
+ */
+async function measureSave(
+  w: World,
+): Promise<{
+  tick: number;
+  buildSaveFileMs: number;
+  loadSaveFileMs: number;
+  textBytes: number;
+  reloadHashMatches: boolean;
+}> {
+  const s0 = performance.now();
+  const built = await buildSaveFile(w, {
+    name: 'Perf stress',
+    savedAt: '2026-10-10T00:00:00.000Z',
+    recipeId: 'FIRST_DISH_V1',
+  });
+  const s1 = performance.now();
+  const loaded = await loadSaveFile(built.text);
+  const s2 = performance.now();
+  return {
+    tick: w.tick,
+    buildSaveFileMs: r3(s1 - s0),
+    loadSaveFileMs: r3(s2 - s1),
+    textBytes: built.text.length,
+    reloadHashMatches: stateHash(loaded.world) === stateHash(w),
+  };
+}
+
 interface Args {
   ticks: number;
   seed: number;
@@ -605,6 +642,7 @@ interface Args {
   stages: boolean;
   out?: string;
   saveAt: number;
+  mutation?: MutationPreset;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -621,6 +659,7 @@ function parseArgs(argv: string[]): Args {
     stages: !argv.includes('--no-stages'),
     saveAt: Number(get('save-at') ?? String(Math.min(ticks, 3000))),
     ...(get('out') !== undefined ? { out: get('out')! } : {}),
+    ...(isMutationPreset(get('mutation') ?? '') ? { mutation: get('mutation') as MutationPreset } : {}),
   };
 }
 
@@ -669,7 +708,7 @@ async function main(): Promise<void> {
   };
   const loadBefore = loadavg().map((v) => Math.round(v * 100) / 100);
   const reg = loadRegistryFs();
-  const build = buildStressWorld(reg, args.seed);
+  const build = buildStressWorld(reg, args.seed, [], args.mutation);
   const w = build.world;
   const start = census(w);
   process.stderr.write(
@@ -769,25 +808,7 @@ async function main(): Promise<void> {
         `[perf-stress] minute ${h.minute}: ${h.agents} agents (${h.fungal} fungal), heap ${h.heapUsedMB} MB, load ${loadavg()[0]!.toFixed(2)}\n`,
       );
     }
-    if (w.tick === args.saveAt) {
-      const s0 = performance.now();
-      const built = await buildSaveFile(w, {
-        name: 'Perf stress',
-        savedAt: '2026-10-10T00:00:00.000Z',
-        recipeId: 'FIRST_DISH_V1',
-      });
-      const s1 = performance.now();
-      const loaded = await loadSaveFile(built.text);
-      const s2 = performance.now();
-      const same = stateHash(loaded.world) === stateHash(w);
-      save = {
-        tick: w.tick,
-        buildSaveFileMs: r3(s1 - s0),
-        loadSaveFileMs: r3(s2 - s1),
-        textBytes: built.text.length,
-        reloadHashMatches: same,
-      };
-    }
+    if (w.tick === args.saveAt) save = await measureSave(w);
   }
   const wallMs = performance.now() - wall0;
   const cpuLoop = process.cpuUsage(cpuLoop0);
@@ -913,11 +934,43 @@ async function hashes(): Promise<void> {
   }
   const w = buildStressWorld().world;
   const marks: Record<number, string> = { 0: stateHash(w) };
+  // The snapshot parts too (worker-side, never hashed by stateHash): a digest of what the host would send.
+  const snaps: Record<number, string> = {};
+  const { createHash } = await import('node:crypto');
+  const digestSnapshot = (): string => {
+    const h = createHash('sha256');
+    const add = (v: ArrayBufferView | string): void =>
+      void h.update(typeof v === 'string' ? v : new Uint8Array(v.buffer, v.byteOffset, v.byteLength));
+    const p = packEntities(w, null, null);
+    add(p.ents.subarray(0, p.count * 14));
+    add(p.ids.subarray(0, p.count * 2));
+    add(JSON.stringify(p.speciesCounts));
+    add(packDeposits(w, null));
+    add(packLinks(w));
+    add(JSON.stringify(packObjects(w)));
+    add(packOverlay(w, 'sugar', null, null)?.data ?? '');
+    add(packOverlay(w, 'foodAccess', null, null)?.data ?? '');
+    add(packLineageMarks(w, 0, null).marks);
+    const c = w.ents.cols;
+    for (let i = 0; i < w.ents.highWater; i++)
+      if (c.alive[i] === 1 && w.species[c.species[i]!]!.fungal) {
+        add(JSON.stringify(buildInspector(w, { kind: 'entity', birthId: c.birthId[i]! })));
+        break;
+      }
+    add(JSON.stringify(buildInspector(w, { kind: 'cell', cell: 112 * GRID_W + 64 })));
+    add(JSON.stringify({ ...evolutionState(w), creation: creationFounders(w) }));
+    return h.digest('hex').slice(0, 16);
+  };
+  snaps[0] = digestSnapshot();
   while (w.tick < 3000) {
     step(w);
-    if (w.tick === 600 || w.tick === 1500 || w.tick === 3000) marks[w.tick] = stateHash(w);
+    if (w.tick === 600 || w.tick === 1500 || w.tick === 3000) {
+      marks[w.tick] = stateHash(w);
+      snaps[w.tick] = digestSnapshot();
+    }
   }
   out.stress = marks;
+  out.snapshotDigests = snaps;
   console.log(JSON.stringify(out, null, 1));
 }
 

@@ -98,6 +98,8 @@ export function packEntities(world: World, ents: Float32Array | null, ids: Uint3
   const outE = ents && ents.length >= n * ENT_STRIDE ? ents : new Float32Array(Math.max(64, n) * ENT_STRIDE);
   const outI = ids && ids.length >= n * ID_STRIDE ? ids : new Uint32Array(Math.max(64, n) * ID_STRIDE);
   const speciesCounts = new Array<number>(world.species.length).fill(0);
+  // P3.12: the fungal link columns resolved once per pack instead of by name for every organism.
+  const fl = fungalLinkCols(world);
   let k = 0;
   for (let i = 0; i < e.highWater; i++) {
     if (c.alive[i] !== 1) continue;
@@ -133,7 +135,7 @@ export function packEntities(world: World, ents: Float32Array | null, ids: Uint3
     outE[o + E_CUE] = cue;
     // Protocol 2: every slot is written for every entity (pooled buffers), 0 when nothing applies.
     outE[o + E_CUE2] = cue2Of(world, i, mods, flags);
-    outE[o + E_LINKMASK] = linkMaskOf(world, i);
+    outE[o + E_LINKMASK] = linkMaskOf(world, i, fl);
     outI[k * ID_STRIDE] = c.birthId[i]!;
     outI[k * ID_STRIDE + 1] = c.entityId[i]!;
     speciesCounts[c.species[i]!]!++;
@@ -191,12 +193,24 @@ const FUNGAL_LINK_COLUMNS = [
  * Bit 4 (LINKMASK_TRANSFER): the segment sent or received carbon along a transport link during the
  * last dish second (P3.6, src/sim/fungalTransport.ts; observation only).
  */
-function linkMaskOf(world: World, i: number): number {
+interface FungalLinkCols {
+  readonly slot: readonly Int32Array[];
+  readonly birth: readonly Uint32Array[];
+}
+
+function fungalLinkCols(world: World): FungalLinkCols {
   const c = world.ents.cols;
+  return { slot: FUNGAL_LINK_COLUMNS.map(([s]) => c[s]), birth: FUNGAL_LINK_COLUMNS.map(([, b]) => c[b]) };
+}
+
+function linkMaskOf(world: World, i: number, fl: FungalLinkCols): number {
+  const c = world.ents.cols;
+  // P3.12: most organisms hold no fungal link at all (every position −1): nothing to read.
+  if (fl.slot[0]![i]! < 0 && fl.slot[1]![i]! < 0 && fl.slot[2]![i]! < 0 && fl.slot[3]![i]! < 0) return 0;
   let mask = 0;
-  for (const [slotCol, birthCol] of FUNGAL_LINK_COLUMNS) {
-    const j = c[slotCol][i]!;
-    if (j < 0 || !world.ents.refValid(j, c[birthCol][i]!)) continue;
+  for (let p = 0; p < 4; p++) {
+    const j = fl.slot[p]![i]!;
+    if (j < 0 || !world.ents.refValid(j, fl.birth[p]![i]!)) continue;
     const dx = Math.floor(c.x[j]!) - Math.floor(c.x[i]!);
     const dy = Math.floor(c.y[j]!) - Math.floor(c.y[i]!);
     if (dx === 0 && dy === 0) continue;
@@ -215,11 +229,16 @@ export function packLinks(world: World): Float32Array {
   const c = world.ents.cols;
   const e = world.ents;
   const out: number[] = [];
+  // P3.12: the two adhesion positions' columns, resolved once (no per-organism array literals).
+  const a0 = c.aLink0;
+  const a1 = c.aLink1;
+  const b0 = c.aLinkB0;
+  const b1 = c.aLinkB1;
   for (let i = 0; i < e.highWater; i++) {
     if (c.alive[i] !== 1) continue;
-    for (const [slotCol, birthCol] of [['aLink0', 'aLinkB0'], ['aLink1', 'aLinkB1']] as const) {
-      const j = c[slotCol][i]!;
-      if (j <= i || !e.refValid(j, c[birthCol][i]!)) continue;
+    for (let p = 0; p < 2; p++) {
+      const j = p === 0 ? a0[i]! : a1[i]!;
+      if (j <= i || !e.refValid(j, p === 0 ? b0[i]! : b1[i]!)) continue;
       out.push(c.x[i]!, c.y[i]!, c.x[j]!, c.y[j]!, LINK_KIND_ADHESION);
     }
   }

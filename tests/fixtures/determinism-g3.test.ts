@@ -64,6 +64,8 @@ function build(): World {
   const w = clearWater({ mutationPreset: 'accelerated', lid: 'open' });
   cmd(w, { kind: 'paintSubstrate', substrate: 'gel', points: [[30, 50], [30, 70]], radius: 6 });
   cmd(w, { kind: 'placeStructure', structure: 'stone', points: [[64, 30]], radius: 1 });
+  // Shade over the E07 Sunbeads so brighter cells exist beside them (light seeking needs a gradient).
+  cmd(w, { kind: 'paintShade', erase: false, points: [[50, 75], [54, 75]], radius: 3 });
   cmd(w, { kind: 'placeStructure', structure: 'wall', points: [[74, 95], [86, 95]], radius: 1 });
   cmd(w, { kind: 'placeStructure', structure: 'bead', points: [[48, 88], [58, 88]], radius: 1 });
   patch(w, 'sugar', 60, 45, 5, 0.2);
