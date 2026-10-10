@@ -57,8 +57,8 @@ with the next task).
 - [x] (8c8a65f) P3.8 Field Guide, journal, badges
 - [x] (8c8a65f; EXP_104 needs a recipe revision before v1.0, D-0062) P3.9 Experiments (A hidden neighborhood, One compatible host, E201–E204, E212) + curated L301, L303, L304, L306
 - [x] (8c8a65f) P3.10 Audio SoundKit + settings
-- [ ] P3.11 Accessibility pass 1 (keyboard, ARIA, species list, reduced motion, 200 %, contrast report)
-- [ ] P3.12 Performance pass 1 (docs/reports/perf-g3.md)
+- [x] (d3a3027) P3.11 Accessibility pass 1 (keyboard, ARIA, species list, reduced motion, 200 %, contrast report)
+- [x] (d3a3027; tick < 10 ms and the memory criterion NOT met on the loaded 2-vCPU codespace — quiet re-measure at the gate, then P4.13; D-0066) P3.12 Performance pass 1 (docs/reports/perf-g3.md)
 - [ ] G3 gate: host‑specificity · transport‑obstacles · conservation‑all‑pools · relationship matrix · module fixtures · experiments · e2e incl. keyboard · axe clean → tag `g3`
 
 ## Phase 4 — Wonder, Replay, Android → v1.0.0-rc1

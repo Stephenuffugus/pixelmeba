@@ -3,6 +3,43 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑10 15:35 UTC — WAVE 4 STAGE 2 COMMITTED (`d3a3027`); PAUSED FOR THE OWNER'S CODESPACE RESTART. START HERE.**
+> - `main` is clean and pushed. P3.1–P3.12 are ticked; P3.12 has two criteria open (D-0066). Decisions run through
+>   D-0067. No workflow is running. `wip/g3-wave-4b` is obsolete (its content is committed).
+> - Evidence: check 153/153 files, 1536/1536 tests; desktop e2e compare + inspector + keyboard 8/8; a11y-screens and
+>   launch-ecology from the builders' runs. Reviews: `docs/reports/reviews/g3-wave-4b/`.
+> - Next, in order:
+>   1. **EXP_104 revision 2** (`docs/reports/exp104-revision-probe.md`):
+>      - HIDDEN_NEIGHBORHOOD_V1 revision 2 with `backgroundOverrides.oxygen` 0.03;
+>      - texts that say the dish starts low in oxygen and when to look (the first ~10–20 s);
+>      - re-pin tests/experiments/hidden-neighborhood.test.ts to the measured revision-2 outcome;
+>      - `npx tsx tools/content-validate.ts --write`, then `npx tsx tools/fence-update.ts` for its entries with
+>        reason D-0068;
+>      - the experiments-g3.md section; D-0068 (owner review).
+>   2. **Cheap open MINORs before the gate** (lists in wave-verify.md, saves-verify-perf.md, D-0065, D-0066):
+>      - DishSummary says "extinct" for a species held only in a Sample: count held organisms;
+>      - keyboard.spec's second test: assert the pan and the cell description;
+>      - restoreFocus can let Enter place at a hidden centre;
+>      - commit the D-0015 re-measure script (tmp/evidence/d0015-remeasure.ts) under tools/, or paste its patch list
+>        into tune-g3.md.
+>   3. **G3 gate ritual** (header "LEAD AFTER WAVE 4" of `docs/agent/g3-wave-4.tasks.js.txt`):
+>      - a quiet-machine perf table: `node --expose-gc --import tsx tools/perf-stress.ts` with NO agents running,
+>        plus render:bench;
+>      - the full three-project `npm run test:e2e` (≈ 1.5 h). Scope any toast-text check the live region collides
+>        with to `.toast` (D-0065);
+>      - content:validate;
+>      - sim:tune for changed recipes only (EXP_104's);
+>      - regenerate relationships-g3.md (stale contentHash header);
+>      - determinism and conservation numbers into EXPANSION_RESPONSE; fill every `<lead>` gap in §1–§8;
+>      - commit "gate: g3", tag `g3`, `git push --tags`.
+>   4. **Phase 4 wave 5** (`docs/agent/g4-wave-5.tasks.js.txt`):
+>      - read its LEAD PRE-LAUNCH header and its 13 PROPOSED DECISIONs;
+>      - record g4-plan calls 1, 2 and 6 plus the accepted proposals as D-numbers;
+>      - bump buildPhase to 4;
+>      - build run files 5a/5b with `docs/agent/g4-runner-ft.workflow.js.txt`.
+>      If the owner's latest message holds anything besides the build, prefix every agent prompt with an
+>      OWNER_CONTEXT note (memory: feedback-cross-project-messages).
+
 > **Update 2026‑10‑10 13:26 UTC — RESUMED (owner: "lets get started"; the machine was not restarted, the tree ==
 > `wip/g3-wave-4b` + RESUME.md).** Stage 2 RESUME RUNNING from `docs/agent/g3-wave-4b-resume.run.workflow.js.txt`
 > (run `wf_be769e01-75e`; the first try `wf_225c5a01-0c8` did nothing: every agent saw the owner's Reddit request and wrote a
