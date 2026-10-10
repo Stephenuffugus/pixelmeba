@@ -3686,9 +3686,187 @@ Sampled at the end of the listed ticks. `limit` = leading intake constraint (lim
 <!-- analysis:start -->
 ## Observations
 
-_Not written yet._
+Written by hand from the tables above (G3 evidence builder, wave 4 stage 2, 2026-10-10). The tune was
+not re-run for this text. The D-0015 re-measurement at the end was run in memory in this stage with
+`tuneSeed`. Where the record holds no mechanism, a relationship is written as "coincides with", never
+"because".
+
+### How far these numbers can be trusted
+
+- **Build.** The header names git `af2a10e` plus five uncommitted src/sim files
+  (entities, fields, intake, movement, transport). Those are the perf builder's in-flight hot-path
+  edits, meant to be hash-neutral. The six FIRST_DISH_V1 hashes at 600 s equal those of an
+  independent `tuneSeed` run of the same build (the "V1 as is" control below, 12:59–13:16 UTC). In this
+  stage, the determinism fence (tests/fixtures/trajectory-fence*.test.ts, g2-replay) passed on the same
+  tree (EXPANSION_RESPONSE §4). This run did not use `--plain-check`, so it does not re-prove that
+  the tuner only observes. G2 proved that on 12/12 runs (tune-g2.md), and the observer code has not
+  changed since.
+- **Integrity.** 108 seed runs (18 recipes × 6 seeds). The ledger is ok in all 108: relErr C ≤ 3.8e-13
+  and N ≤ 1.1e-13 at 600 s, and both are exactly 0 for FUNGAL_SUPPLY_LINE_V1, which has no inputs. Every run
+  re-drafted every committed daughter from its parent's recorded genome with 0 mismatches. Deaths by
+  cause cover 100 % of deaths (no lineage compaction).
+- **Wall time is not performance.** Total 2,326 s. The 1-minute load average rose from 1.83 to 7.41 as
+  stage 2 agents started. Effective speeds of 19.6–137× real time are headless, single-thread and under
+  load. The lead re-measures after perf lands (perf-g3.md).
+- **BROKEN_CATALYST_V1 = SHARED_LUNCH_V1.** The two recipe bodies are identical except id, name, seed
+  and texts. The tuner uses the six development seeds, not the recipe seed, and the state hash does not
+  include the recipe id. So all six hashes (600 s and 1,200 s) are identical between the two sections. This
+  is expected: EXP_204's breaker is added by the experiment card to copy B only.
+
+### FIRST_DISH_V1, the opening dish
+
+- **D06 targets met on 6/6 seeds.** First intake at tick 0. First division at 29.3 s (a Sunbead) on every seed.
+  Sprinters divide first at 33.1–36.9 s.
+- **Same ecology as G2.** At 600 s, births, deaths, living counts, peaks, food totals and starch
+  converted equal tune-g2.md's Standard tables exactly on 5 of 6 seeds. Seed 262147 differs after its
+  first module gain at 221.3 s (1,134 births instead of 1,146; 471 Sunbeads instead of 478). That
+  matches D-0059: the flip changes a trajectory only through which module a gain draw picks.
+- **Module gains now include the Phase 3 modules.** There are 9 gains over the six seeds, the same count as at G2:
+  - Light seeker (E07) ×4, Reserve chamber (E05) ×3, Shade collector (E06) ×1 and Starch release (E01) ×1.
+    At G2 they were 8 E05 and 1 E01.
+  - Each count lies inside its preset's 95 % range. Example: E07 had 4 gains where 3.5 were expected
+    (range 0–8).
+  - The one confirmed branch is on 155921. It has the same root and times as G2's branch (variation at 252.9 s,
+    confirmed at 433.2 s). It is now "Sunbead · Light seeker · 7A7" instead of "Sunbead · Reserve chamber · 792".
+- **The G1 opening problems are unchanged.**
+  - The Crumbsmiths stall: 9.78–12.99 C of 48.6 starch converted by 600 s.
+  - Recyclers go extinct on 3 of 6 seeds (130363 at 565 s, 155921 at 585 s, 314159 at 542 s).
+  - Sunbeads boom to 471–500 and turn over by starvation.
+  - FIRST_DISH_V1 holds no Phase 3 species, so the launch ecology reaches it only through module draws.
+
+### LIGHT_AND_LIFE_V1
+
+- Sunbeads grow from 30 to 821–866 by 540 s and 850–895 at 600 s.
+- There are 4,891 Sunbead deaths (pooled), all starvation.
+- Every seed has a module gain. The first gain falls at 173.0–493.7 s. Gains: E05 ×6, E06 ×7, E07 ×7.
+- Three branches were confirmed by 600 s:
+  - two "Sunbead · Reserve chamber" (262147 at 340.7 s, 130363 at 582.5 s);
+  - one quantitative branch, "Sunbead · Warmward" (314159 at 465.6 s).
+- Light-seeker carriers alive at 600 s average E 85.6, against 42.3 for Sunbeads with no module.
+  These are 9 carriers on 4 seeds. The higher energy coincides with carrying E07. This batch does not trace a mechanism.
+
+### Every other recipe ends empty by 600–1,200 s
+
+These are the experiment recipes, measured under the D06 protocol for 600 s. The cards themselves stop at
+120–180 s (docs/reports/experiments-g3.md), so most of what follows happens after a card's own window. The
+four curated dishes are open-ended Start-with choices in New Dish, so their long horizon is what a player
+sees when they leave one running. Extinction is a valid outcome. These lines record where and when it
+happens; they are not a defect claim.
+
+| Recipe | Who is left | When the last ones die (living counts every 60 s) | Recorded cause |
+|---|---|---|---|
+| FOOD_TRAIL_V1 | none | 0–1 Sprinters at 540 s on every seed, 0 at 600 s | starvation (344) |
+| RESERVE_COMPARE_V1 | none | 50–61 at 120–180 s, 0 by 540 s | starvation |
+| PREDATOR_BALANCE_V1 (no predator in the base recipe) | none | 100 at 120 s, 55–62 at 180 s, 0 by 540 s | starvation |
+| CLEANING_CREW_V1 | 1–3 Recyclers at 540 s; 0 by 1,200 s on the 4 extended seeds | starvation |
+| STARCH_UNLOCK_V1 (EXP_A) | none | 12 at 120 s, 0 at 180 s | starvation; B06 energy 2.8 at 120 s, 100 % `SECRETION_ENERGY_LOW` from 60 s (D-0022) |
+| SHARED_LUNCH_V1 / BROKEN_CATALYST_V1 | none | 20 + 20 at 180 s, 0–2 Sprinters at 540 s | starvation |
+| OIL_NEIGHBORHOOD_V1 (EXP_202) | none | 20 + 20 at 120 s, 0 at 180 s | starvation (D-0051 owner item 1) |
+| PROTEIN_CHAIN_V1 (EXP_203) | none | Brothmakers 0 at 180 s; Creambuds 8 at 180 s, 0 by 540 s | starvation (D-0051 owner item 1) |
+| FUNGAL_SUPPLY_LINE_V1 (EXP_212) | none | 4 Cordweavers at 120 s, 0 at 180 s (no food in the dish by design) | starvation |
+| HIDDEN_NEIGHBORHOOD_V1 (EXP_104) | none | Dusks 0 by 120 s; Sprinters 0 by 540 s | Dusks `DEATH_STRESS` 120/120 (high oxygen; D-0048, D-0062); Sprinters starvation |
+| ONE_HOST_V1 (EXP_105) | none | Sprinters 0 by 120 s; Crossfeeders 0 by 540 s | Sprinters `DEATH_LYSIS` 181/181; Crossfeeders starvation |
+| L301_TWO_LUNCHES (curated) | none | 120 at 120 s, 85–92 at 180 s, 0 by 540 s | starvation |
+| L303_PUBLIC_KITCHEN (curated) | 1 Creambud resting on 1 seed at 900 s; 0 at 1,200 s | Brothmakers 0 at 180 s on every seed | starvation; Brothmaker E 0.1 at 120 s |
+| L304_EMPTY_AFTER_THE_FEAST (curated) | none | 131–135 at 120 s, 75–80 at 180 s, 0 by 540 s | starvation (the dish's stated theme) |
+| L306_BORROWED_SHELTER (curated) | none | 56–60 at 180 s, 0–5 at 540 s, 0 at 600 s on every seed | starvation |
+
+- **Producers starve in every enzyme dish within 120–180 s.** This holds for Crumbsmiths (STARCH_UNLOCK),
+  Oilwicks (OIL_NEIGHBORHOOD), Brothmakers (PROTEIN_CHAIN and the curated L303), and Crumbsmiths again in
+  SHARED_LUNCH by 540 s. Their recorded reasons are `FOOD_ACCESS_LOW` and, for B06, `SECRETION_ENERGY_LOW`.
+  This is the energy trap that D-0022 (EXP_A) and D-0051 owner item (1) already describe: enzyme cost
+  plus upkeep exceeds what the enzyme returns to the producer under CT's numbers. It is already an owner
+  question and is not repeated in §8 as a new one. **New at G3: the curated L303 "Public Kitchen" shows the same
+  trap.** Its expected text says Brothmakers release enzyme that both species drink. On all six seeds the
+  Brothmakers are dead by 180 s, and the last Creambud rests and is gone by 1,200 s.
+- **Sugar-only Sprinter dishes peak and then starve.** Examples: L301 with 120 Sprinters at 120 s, L304 with 131–135, FOOD_TRAIL with 54–56.
+  The sugar is eaten within about 60 s (`FOOD_ACCESS_LOW` mean value 0.04–0.06 by 60 s), and nothing
+  replaces it. For L304 that is the stated theme. L301 asks "Do separate neighborhoods stay
+  different?", and both neighborhoods are empty by 540 s on all six seeds.
+- **Most of the food is still there when the last organism dies.** In the producer dishes the extended runs
+  end with no division at all on any seed and 259 C (SHARED_LUNCH / BROKEN_CATALYST) or 285 C (L303) of food
+  left in the dish, most of it the unconverted starch or protein.
+- **Inherited variation needs survivors.** Eight recipes reach 600 s with no mutation event on any seed
+  (BROKEN_CATALYST, SHARED_LUNCH, STARCH_UNLOCK, OIL_NEIGHBORHOOD, PROTEIN_CHAIN, L303, FUNGAL_SUPPLY_LINE,
+  PREDATOR_BALANCE; CLEANING_CREW on 4 seeds, ONE_HOST on 1), and the 1,200 s extension adds none.
+  Every recipe except FIRST_DISH_V1 and LIGHT_AND_LIFE_V1 has no module gain by 600 s.
+
+### D-0015 re-measured (FIRST_DISH_V1 proposals, G3 build)
+
+D-0015 asked for its three G1 proposals (tune-g1.md "Proposed recipe revisions") to be re-measured
+"at P3 tuning when the launch ecology is enabled". Method:
+
+- Each candidate is a deep copy of the shipped content packs, built with tests/helpers/registry.ts `patchedRawPacks({})`.
+  One FIRST_DISH_V1 setting is edited (revision 2). The What if? variants that pin revision 1 are dropped from the copy.
+  The content hash is rewritten and the copy is validated like shipped content.
+- Each candidate runs through `tuneSeed` (tools/sim-tune.ts) on the six development seeds for 600 s, Standard, with the G3
+  shipped manifest (19 species, ten modules).
+- `content/` was never changed. Script: tmp/evidence/d0015-remeasure.ts (scratch, not committed).
+- The control ("V1 as is", the shipped registry) reproduces this report's six FIRST_DISH_V1 hashes at 600 s.
+- Proposal 2 was listed at G1 but not measured there; it is measured here for the first time.
+
+| Candidate | contentHash | D06 targets | First division | Starch converted by 600 s (C) | B06 births | B06 alive | B04 births | B04 alive | B04 peak | Seeds with B04 extinct | A01 alive | B01 alive | Module gains (6 seeds) | Ledger ok |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| V1 as is | `8a004f512270…` | 6/6 | 29.3 s | 9.78–12.99 | 2–7 | 9–13 | 1–8 | 0–5 | 8–10 | 3/6 | 471–500 | 208–215 | 9 | 6/6 |
+| 1: starch-patch sugar 0.10 | `5cf915e65c3f…` | 6/6 | 29.3 s | 22.10–26.03 | 1–8 | 8–14 | 0–28 | 0–28 | 8–28 | 3/6 | 478–504 | 205–219 | 8 | 6/6 |
+| 2: debris 0.50 C (N 0.05) | `3d3071f85077…` | 6/6 | 25.6–29.3 s | 9.78–13.43 | 3–17 | 8–21 | 7–16 | 0–5 | 14–16 | 2/6 | 484–510 | 200–221 | 9 | 6/6 |
+| 3: debris patch + B04 to (58,48) | `1c21ec829c48…` | 6/6 | 29.3 s | 9.78–26.62 | 5–18 | 10–25 | 3–73 | 0–72 | 8–72 | 2/6 | 468–546 | 203–235 | 8 | 6/6 |
+| 1 + 3 | `ff5b01b05442…` | 6/6 | 29.3 s | 22.11–23.22 | 2–9 | 1–15 | 2–253 | 0–252 | 8–252 | 2/6 | 486–738 | 206–277 | 14 | 6/6 |
+
+Recyclers alive at 600 s by seed (104729, 130363, 155921, 196613, 262147, 314159):
+
+| Candidate | Recyclers alive |
+|---|---|
+| V1 as is | 5, 0, 0, 1, 2, 0 |
+| 1 | 0, 0, 7, 1, 0, 28 |
+| 2 | 0, 2, 2, 3, 5, 0 |
+| 3 | 0, 1, 2, 1, 72, 0 |
+| 1 + 3 | 241, 0, 252, 0, 6, 8 |
+
+- **The G1 picture holds.**
+  - Candidates 1, 3 and 1 + 3 give the same ranges as G1's lead table (tune-g1.md "Candidate measurements").
+    Differences are within a few organisms, where a module draw now picks a Phase 3 module.
+  - Candidate 1 more than doubles starch conversion (22.1–26.0 C, against 9.8–13.0 C), but Crumbsmiths do not persist better
+    (8–14 alive, against 9–13).
+  - Candidate 3 swings Recyclers from extinction to a bloom of 72.
+  - 1 + 3 swings them from extinction to booms of 241 and 252. On those two seeds the Sunbead boom also grows (724 and 738 alive, against 471–500).
+- **Proposal 2 (new) is the most even candidate, but it does not keep the Recyclers.**
+  - Doubling the debris raises the Recycler peak to 14–16 on every seed (8–10 for V1), with 7–16 births.
+  - At 600 s 0–5 are alive, and they are extinct on 2 of 6 seeds (3 of 6 for V1). As tune-g1 predicted, it buys time,
+    not a bridge to the Sunbead detritus.
+  - The dish's first division moves to 25.6 s (130363) and 28.0 s (104729). These coincide with the larger debris patch;
+    which organism divided first is not recorded in this table.
+  - Crumbsmith births (3–17) and survivors (8–21) range wider than V1's. That coincides with the changed trajectory;
+    no mechanism links debris to Crumbsmiths.
+- **Reading.** No candidate makes the guide text's promised food web ("Recyclers eat the debris patch") hold on most seeds
+  without adding seed-to-seed swings. The D06 targets are met by V1 on 6/6. The launch ecology does not enter
+  FIRST_DISH_V1. So D-0015 stands: keep FIRST_DISH_V1 (proposed decision below).
 
 ## Proposed recipe revisions
 
-_Not written yet._
+**Proposals only. No recipe was changed. Nobody edits content/ in wave 4 stage 2.** Following CT §11,
+each proposal changes one recipe setting, lives in its own new revision, and is re-run on all six seeds
+before a choice is made. No mechanics change is proposed.
+
+1. **FIRST_DISH_V1: none.** Keep revision 1 (D-0015 re-measured above). If the owner wants Recyclers
+   to persist on more seeds, proposal 2 (debris 0.50 C, N 0.05) is the candidate to take further. It is the
+   smallest single setting and has the narrowest spread. Re-measure it at 1,200 s (D-0034's
+   supplementary horizon) before choosing, because its effect is to delay extinction.
+2. **HIDDEN_NEIGHBORHOOD_V1 (EXP_104).** The lead is revising it after stage 2 (D-0062;
+   docs/reports/exp104-revision-probe.md). Nothing to add from this batch: Dusks die of high oxygen by
+   120 s on all six seeds, as D-0062 measured.
+3. **Producer energy trap (EXP_A, EXP_202, EXP_203, L303).** This is an owner question already open (D-0022, D-0051 item 1).
+   - The G1 measurement of a sugar bootstrap (proposal 1 above) shows that a bootstrap raises conversion
+     but does not keep producers alive.
+   - A recipe-only fix may not exist under CT's producer numbers. Per CT §11, record that before
+     proposing a mechanics change, and do not propose one here.
+   - For L303 the smallest honest step is presentation. Make its expected text conditional, as D-0062 did for
+     EXP_104 ("Brothmakers may…"), until the owner rules on the trap.
+4. **Curated dishes that end empty (L301, L303, L306; L304 by theme).** A presentation question for the
+   lead. A curated dish is a long-running Start-with choice, and its question ("Do separate neighborhoods stay
+   different?", "Who pays for the film, who benefits?") can be answered only while organisms live: L301 holds 33
+   Sprinters pooled over six dishes at 300 s and none at 540 s; L306 is empty at 600 s on every seed. Options:
+   - (a) say in the dish's text that the food is finite and the dish is expected to empty;
+   - (b) a new revision with one added renewable source, re-measured on six seeds.
+   This batch does not choose.
 <!-- analysis:end -->
