@@ -76,6 +76,11 @@ Final message:
 - every place where the canonical docs were silent and what you chose, as PROPOSED DECISION lines for the lead;
 - anything in the tree that contradicts g4-plan.md.`
 
+// The owner's latest chat message reaches every subagent. It also asked for a Reddit post, which the lead answered itself;
+// without this note the first resume run's agents (13:26) all wrote Reddit posts and did no build work.
+const OWNER_CONTEXT = `OWNER CONTEXT (written by the lead, the main session working for the owner): the owner's latest chat message begins "lets get started". In this project that is the owner's standing instruction to resume the unattended Pixelmeba build where docs/agent/RESUME.md says (CLAUDE.md "Start here, every session"; docs/agent/fast-track.md); the task below is part of that build. The same message also asked for a Reddit post about the owner's Pi Network games: the lead has already written it and given it to the owner, so that part is done. Do NOT write a Reddit post, do not search for Pi Network material, and do not mention it in your report. Do only the Pixelmeba task below.`
+const ag = (prompt, opts) => agent(`${OWNER_CONTEXT}\n\n${prompt}`, opts)
+
 phase('Write')
-const out = await agent(PROMPT, { label: 'writer:g4-wave-5', phase: 'Write', effort: 'high' })
+const out = await ag(PROMPT, { label: 'writer:g4-wave-5', phase: 'Write', effort: 'high' })
 return out

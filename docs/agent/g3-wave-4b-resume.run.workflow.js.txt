@@ -1,5 +1,5 @@
 export const meta = {
-  name: 'g3-wave-4b-resume',
+  name: 'g3-wave-4b-resume-2',
   description: 'RESUME of Phase 3 wave 4 stage 2 (stopped 13:20 for a codespace refresh): a11y prebuilt (verify only), perf and g3-evidence finish from the tree; one rules verifier, a saves/determinism verifier for perf; fix rounds only for BLOCKER/MAJOR',
   phases: [
     { title: 'Build', detail: 'perf + g3-evidence finish from the tree (a11y prebuilt, not rebuilt); effort high; no content edits' },
@@ -322,6 +322,11 @@ E2E: E2E_PORT=4263 E2E_OUTDIR=tmp/dist-evidence.`,
 
 const WAVE_ID = 'g3-wave-4b' // stage 2 reports go to docs/reports/reviews/g3-wave-4b/ (stage 1's stay in g3-wave-4/)
 
+// The owner's latest chat message reaches every subagent. It also asked for a Reddit post, which the lead answered itself;
+// without this note the first resume run's agents (13:26) all wrote Reddit posts and did no build work.
+const OWNER_CONTEXT = `OWNER CONTEXT (written by the lead, the main session working for the owner): the owner's latest chat message begins "lets get started". In this project that is the owner's standing instruction to resume the unattended Pixelmeba build where docs/agent/RESUME.md says (CLAUDE.md "Start here, every session"; docs/agent/fast-track.md); the task below is part of that build. The same message also asked for a Reddit post about the owner's Pi Network games: the lead has already written it and given it to the owner, so that part is done. Do NOT write a Reddit post, do not search for Pi Network material, and do not mention it in your report. Do only the Pixelmeba task below.`
+const ag = (prompt, opts) => agent(`${OWNER_CONTEXT}\n\n${prompt}`, opts)
+
 // ---- runner" on, with A.wave set.
 // Builders: effort high, unit tests + their own new e2e journeys on the desktop project only.
 // One rules verifier over the whole wave diff (effort high), plus a targeted saves/determinism verifier for
@@ -406,7 +411,7 @@ for (const s of STAGES) {
   if (STAGES.length > 1) log(`build stage ${s}: ${group.map((t) => t.key).join(', ')}`)
   const res = await parallel(
     group.map((t) => () =>
-      agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\n${t.finish ? FINISH_NOTE(t.finish) + '\n\n' : ''}${t.prompt}\n\n${REPORT(t.key, 'build')} ${BUILD_FINAL}`, {
+      ag(`${PRE}\n\nYour Playwright port is ${t.port}.\n\n${t.finish ? FINISH_NOTE(t.finish) + '\n\n' : ''}${t.prompt}\n\n${REPORT(t.key, 'build')} ${BUILD_FINAL}`, {
         label: `${t.finish ? 'finish' : 'build'}:${t.key}`,
         phase: 'Build',
         effort: 'high',
@@ -429,7 +434,7 @@ phase('Verify')
 const VGROUPS = (A.verifyGroups || [KEYS]).map((g) => TASKS.filter((t) => g.includes(t.key))).filter((g) => g.length)
 const verifyJobs = [
   ...VGROUPS.map((group, gi) => () =>
-    agent(`You are an adversarial wave verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-${WAVE}-${gi}`, 4390 + gi)}
+    ag(`You are an adversarial wave verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-${WAVE}-${gi}`, 4390 + gi)}
 Wave ${WAVE} ran ${TASKS.length} builders in one working tree; their work is uncommitted (git status / git diff). You verify ${group.length === TASKS.length ? 'all of them' : `these ${group.length}: ${group.map((t) => t.key).join(', ')} (others verify the rest; read their diffs only where they meet yours)`}. Assignments and reports:
 ${group.map((t) => `=== TASK ${t.key} (port ${t.port}) ===\nASSIGNMENT:\n${t.prompt}\n\nBUILDER REPORT:\n${built[t.key]}`).join('\n\n')}
 
@@ -438,7 +443,7 @@ Try to REFUTE that each assignment is done correctly, completely and honestly â€
   ),
   // Saves/determinism lens: one verifier per task marked critical: 'own'; one shared verifier for every task marked critical: true.
   ...[...TASKS.filter((t) => t.critical === 'own').map((t) => [t]), ...(TASKS.some((t) => t.critical === true) ? [TASKS.filter((t) => t.critical === true)] : [])].map((group, i) => () =>
-    agent(`You are an adversarial saves/determinism verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-saves-${i}`, 4396 + i)}
+    ag(`You are an adversarial saves/determinism verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-saves-${i}`, 4396 + i)}
 Task(s) ${group.map((t) => t.key).join(', ')} of wave ${WAVE}; their work is uncommitted in the tree with other builders' work.
 ${group.map((t) => `=== TASK ${t.key} ===\nASSIGNMENT:\n${t.prompt}\n\nBUILDER REPORT:\n${built[t.key]}`).join('\n\n')}
 
@@ -462,12 +467,12 @@ for (let round = 1; round <= 2; round++) {
     fixKeys.map((k) => () => {
       const t = TASKS.find((x) => x.key === k)
       const mine = problems.filter((p) => keyOf(p) === k)
-      return agent(`${PRE}\n\nYour Playwright port is ${t.port}.\n\nYou are the round-${round} fixer for this assignment (the work is in the tree; do not start over):\n---\n${t.prompt}\n---\nThe adversarial verifier found these problems in it (full lists: ${R}/wave-verify*.md and saves-verify-*.md${round > 1 ? `, and ${R}/wave-reverify${round - 1}.md` : ''}):\n---\n${mine.join('\n')}\n---\nFix EVERY BLOCKER and MAJOR, and every MINOR that is cheap and inside your files. For each behavioural problem add or tighten a test that fails on the old behaviour and passes now. If a problem is wrong (the verifier misread a rule), say why with quotes from the canonical docs instead of changing code. If a fix needs a file outside your ownership, make it only if it is small and additive, or describe it precisely for the lead. Re-run your unit tests, the fence fixtures and your own e2e journeys (desktop) before finishing. ${REPORT(k, `fix${round}`)} Final message: per problem FIXED (how, which test) / NOT A PROBLEM (why, quotes) / NOT FIXED (why); files changed; commands + results.`, { label: `fix${round}:${k}`, phase: 'Fix', effort: 'high' })
+      return ag(`${PRE}\n\nYour Playwright port is ${t.port}.\n\nYou are the round-${round} fixer for this assignment (the work is in the tree; do not start over):\n---\n${t.prompt}\n---\nThe adversarial verifier found these problems in it (full lists: ${R}/wave-verify*.md and saves-verify-*.md${round > 1 ? `, and ${R}/wave-reverify${round - 1}.md` : ''}):\n---\n${mine.join('\n')}\n---\nFix EVERY BLOCKER and MAJOR, and every MINOR that is cheap and inside your files. For each behavioural problem add or tighten a test that fails on the old behaviour and passes now. If a problem is wrong (the verifier misread a rule), say why with quotes from the canonical docs instead of changing code. If a fix needs a file outside your ownership, make it only if it is small and additive, or describe it precisely for the lead. Re-run your unit tests, the fence fixtures and your own e2e journeys (desktop) before finishing. ${REPORT(k, `fix${round}`)} Final message: per problem FIXED (how, which test) / NOT A PROBLEM (why, quotes) / NOT FIXED (why); files changed; commands + results.`, { label: `fix${round}:${k}`, phase: 'Fix', effort: 'high' })
     }),
   )
   const fixReports = fixKeys.map((k, i) => `=== FIXER ${k} ===\n${fixes[i] ? String(fixes[i]) : 'NO REPORT'}`).join('\n\n')
   const fixedProblems = problems.filter((p) => fixKeys.includes(keyOf(p)))
-  const rv = await agent(`You are the adversarial re-verifier for wave ${WAVE} of Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`reverify${round}-${WAVE}`, 4394)}
+  const rv = await ag(`You are the adversarial re-verifier for wave ${WAVE} of Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`reverify${round}-${WAVE}`, 4394)}
 The assignments of the fixed tasks:
 ${TASKS.filter((t) => fixKeys.includes(t.key)).map((t) => `=== TASK ${t.key} ===\n${t.prompt}`).join('\n\n')}
 

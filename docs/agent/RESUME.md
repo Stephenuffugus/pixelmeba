@@ -5,11 +5,12 @@
 >
 > **Update 2026‑10‑10 13:26 UTC — RESUMED (owner: "lets get started"; the machine was not restarted, the tree ==
 > `wip/g3-wave-4b` + RESUME.md).** Stage 2 RESUME RUNNING from `docs/agent/g3-wave-4b-resume.run.workflow.js.txt`
-> (run `wf_225c5a01-0c8`): a11y PREBUILT (verify only), perf + g3-evidence finish from the tree; rules verifier over all
+> (run `wf_be769e01-75e`; the first try `wf_225c5a01-0c8` did nothing: every agent saw the owner's Reddit request and wrote a
+> post instead, so every prompt now starts with OWNER_CONTEXT): a11y PREBUILT (verify only), perf + g3-evidence finish from the tree; rules verifier over all
 > three + perf's own saves verifier; reports `docs/reports/reviews/g3-wave-4b/`. If this session dies mid-run: back up
 > the tree onto `wip/g3-wave-4b` again (temp-index commit, parent = the branch), read the new reports, and rerun only
 > what is unfinished (edit RESUME_TASKS in that file: a finished builder becomes `prebuilt` with a pointer to its report).
-> Also running (planning only): the wave 5 task writer `docs/agent/g4-wave-5-tasks.workflow.js.txt` (run `wf_4df67f51-cf1`)
+> Also running (planning only): the wave 5 task writer `docs/agent/g4-wave-5-tasks.workflow.js.txt` (run `wf_8b5d09bc-b0f`; first try `wf_4df67f51-cf1` derailed the same way)
 > → `docs/agent/g4-wave-5.tasks.js.txt`; patch its STATE's D-numbers and g3 facts after the gate; wave 5 launches after tag g3.
 
 > **Update 2026‑10‑10 13:20 UTC — PAUSED BY THE OWNER FOR A CODESPACE REFRESH. START HERE.**
