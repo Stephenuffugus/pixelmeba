@@ -59,7 +59,7 @@ with the next task).
 - [x] (8c8a65f) P3.10 Audio SoundKit + settings
 - [x] (d3a3027) P3.11 Accessibility pass 1 (keyboard, ARIA, species list, reduced motion, 200 %, contrast report)
 - [x] (d3a3027; tick < 10 ms and the memory criterion NOT met on the loaded 2-vCPU codespace — quiet re-measure at the gate, then P4.13; D-0066) P3.12 Performance pass 1 (docs/reports/perf-g3.md)
-- [ ] G3 gate: host‑specificity · transport‑obstacles · conservation‑all‑pools · relationship matrix · module fixtures · experiments · e2e incl. keyboard · axe clean → tag `g3`
+- [x] (7eca504, 35d12c3, 0527977, 1eb3025, gate commit; tag `g3`; e2e 258/258 at 1eb3025; D-0068, D-0069) G3 gate: host‑specificity · transport‑obstacles · conservation‑all‑pools · relationship matrix · module fixtures · experiments · e2e incl. keyboard · axe clean → tag `g3`
 
 ## Phase 4 — Wonder, Replay, Android → v1.0.0-rc1
 - [ ] P4.1 Favorite families

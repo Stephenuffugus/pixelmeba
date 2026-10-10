@@ -4,16 +4,16 @@ Update at every gate (`g0` … `v1.3.0`). Replace placeholders with real, pasted
 **implemented**, **tested**, and **proposed/deferred**. Never claim a pass that did not run in
 this session. Keep older gate evidence in `docs/reports/` and link it.
 
-Last updated: 2026‑10‑10 · Gate: **G3 (Launch Ecology)** · Commit: `<lead>` (tag `g3`) · **DRAFT** by the
-wave 4 stage 2 g3-evidence builder. Items marked `<lead>` are for the lead to fill in at the gate. G2, G1 and G0
-evidence is kept below as §4b–§4d.
+Last updated: 2026‑10‑10 · Gate: **G3 (Launch Ecology), passed** · Commit: the gate commit tagged `g3` (code as at
+`1eb3025`; the gate commit adds only this file and WORKLOG). Drafted by the wave 4 stage 2 g3-evidence builder,
+completed by the lead at the gate. G2, G1 and G0 evidence is kept below as §4b–§4d.
 
 ---
 
 ## 1. Build identity
-- Repository: `github.com/Stephenuffugus/pixelmeba`, branch `main`. Commit to be tagged `g3`: `<lead>`.
-  This draft was written against HEAD `cbdddf3` with wave 4 stage 2 uncommitted in the tree: a11y,
-  perf (hash-neutral src/sim hot-path edits in flight), and this evidence.
+- Repository: `github.com/Stephenuffugus/pixelmeba`, branch `main`. Tagged `g3`: the gate commit on top of `1eb3025`.
+  The builder's draft was written against `cbdddf3` with wave 4 stage 2 uncommitted; the lead's gate evidence (§4
+  gate-wide commands, Appendix A, §7) was taken at `35d12c3`–`1eb3025` with a clean tree.
 - Runtime: Node 24.21.0 (`.nvmrc` 24), npm 12.1.0, linux x64 (Codespace, 2 vCPU, 7 GB).
 - Dependencies: unchanged since G2 (`git diff g2 HEAD -- package.json` is empty; exact pins, `package-lock.json`
   committed). See the §1 list of the G2 edition (git history of this file).
@@ -35,7 +35,7 @@ evidence is kept below as §4b–§4d.
 | 0 | **Implemented, gate passed** (`g0`) | B01 B04 B06 A01 P01 (data); all 38 species authored and validated | none | core, enzymes | — |
 | 1 | **Implemented, gate passed** (`g1`) | B01 B04 B06 A01 P01 | none | core, enzymes | 60 fps not measurable here (software WebGL). Android install on a device not verified (no device). |
 | 2 | **Implemented, gate passed** (`g2`) | B01 B04 B06 A01 P01 | E01, E03, E05 | core, enzymes | Five-tester comprehension session is an owner item. |
-| 3 | **Implemented; gate evidence assembled (this draft); tag `g3` pending** `<lead>` | 19: A01 Sunbead, B01 Sprinter, B02 Velvet, B03 Dusk, B04 Recycler, B05 Crossfeeder, B06 Crumbsmith, B07 Oilwick, B08 Brothmaker, F01 Threadlace, F02 Cordweaver, P01 Amoeba, P02 Ciliate, P03 Rotifer, P04 Siltworm, V01 Pinphage, X01 Hitcher, Y01 Bubble, Y02 Creambud | 10: E01 Starch release, E03 Resting stage, E04 Surface anchor, E05 Reserve chamber, E06 Shade collector, E07 Light seeker, E08 Debris feeder, E09 Protein release, E10 Matrix builder, E12 Colony adhesion | chemistry, core, enzymes, film, foodObjects, fungi, parasites, viruses | See the limitations list below this table. |
+| 3 | **Implemented, gate passed** (`g3`) | 19: A01 Sunbead, B01 Sprinter, B02 Velvet, B03 Dusk, B04 Recycler, B05 Crossfeeder, B06 Crumbsmith, B07 Oilwick, B08 Brothmaker, F01 Threadlace, F02 Cordweaver, P01 Amoeba, P02 Ciliate, P03 Rotifer, P04 Siltworm, V01 Pinphage, X01 Hitcher, Y01 Bubble, Y02 Creambud | 10: E01 Starch release, E03 Resting stage, E04 Surface anchor, E05 Reserve chamber, E06 Shade collector, E07 Light seeker, E08 Debris feeder, E09 Protein release, E10 Matrix builder, E12 Colony adhesion | chemistry, core, enzymes, film, foodObjects, fungi, parasites, viruses | See the limitations list below this table. |
 | 4–7 | Not started (Phase 4 runner edition prepared: docs/agent) | | | | |
 
 Phase 3 limitations (the last column of the Phase 3 row):
@@ -130,28 +130,35 @@ desktop Playwright journey) on the shared 2-CPU machine. Wall times are inflated
 agents: the 1-minute load was 2.5–7.4 throughout. The lead runs `npm run check`, all three e2e projects and
 `content:validate` at the gate.
 
-`<lead>`, gate-wide commands:
+Gate-wide commands (lead, 2026‑10‑10):
 ```
-npm run check            → <lead>
-npx playwright test      → <lead> (all three projects; incl. launch-ecology, lab-tools, keyboard, a11y-screens)
+npm run check            → typecheck ok · lint ok · 154 files, 1542 tests passed (1818 s; tree of 0527977 = code of 1eb3025)
+npx playwright test      → 258 passed (3.0 h) at 1eb3025, alone on the machine: phone-portrait 86, phone-landscape 86,
+                           desktop 86; 0 failed, 0 flaky (incl. launch-ecology, lab-tools, keyboard, a11y-screens)
 npm run content:validate → ok · contentHash f276b113… · atlas complete for 19 species, 10 module marks, 4 world tiles (856 frames)
 npm run art:build --check → atlas up to date · 856 frames (80 feature-mark, 13 world-tile) · 1024×1024 · 99ab54adef36
 ```
 
-**Appendix A gate message, draft** (the lead replaces each `<lead>` with the gate-time result):
+The first full run (16:51 UTC, at 35d12c3) ran pre-fix test code and was stopped at 125 of 258: 115 passed, 9 failed,
+1 interrupted. Every spec added since g2 had run on desktop only. All nine failures were phone layouts or desktop-only test
+assumptions; D‑0069 records the five product fixes (Field Guide reflow at 200 %, the sample panel on phones in portrait and
+landscape, tap timing by event timestamps, viral species out of the dish summary) and the six spec fixes. Each fixed spec
+re-ran green on phone-portrait before the clean run above.
+
+**Appendix A gate message** (as committed with tag `g3`):
 ```
 gate: g3
-check: npm run check → <lead>
-e2e: npm run test:e2e → <lead> (this draft: launch-ecology desktop 1 passed)
+check: npm run check → typecheck ok · lint ok · 154 test files, 1542/1542 passed (1818 s)
+e2e: npx playwright test → 258 passed (3.0 h; phone 360×800, phone 800×360, desktop 1440×900; 86 each) at 1eb3025
 content: npm run content:validate → ok (contentHash f276b113906cc8db696f162ce43496df826b3a05cc5867b918d0b8515678dc24; atlas complete, 856 frames; 47 guide warnings, §8 item 19)
 tune: npm run sim:tune -- --recipes <all 18> --seconds 600 --extend 1200 --presets standard → docs/reports/tune-g3.md (regenerated at 35d12c3; FIRST_DISH_V1 kept, D-0067; EXP_104 rev 2, D-0068)
 perf: tick CPU p50 12.0 / p95 20.8 / p99 39.8 ms @ 6,000 agents (2,000 fungal) on AMD EPYC 7763 2 vCPU, quiet (perf-stress 9,000 ticks); < 10 ms not met (D-0066)
 determinism: 6148ff0d080999c4 (1x) == 6148ff0d080999c4 (4x) == 6148ff0d080999c4 (reload, sample held at tick 402) == headless 1-tick and 4-tick chunks   [determinism-g3 at the gate tree]
 conservation: C err 6.1e-13 %, N err 7.1e-12 %, M 0 (all pools, 10,000 ticks); closed lid C 5.2e-13 %, N 1.1e-11 %
-open owner decisions: <lead> (27 items in §8 at draft time) (see EXPANSION_RESPONSE §8)
+open owner decisions: 28 (see EXPANSION_RESPONSE §8)
 ```
 
-**Batches run for this draft** (each line is the vitest summary for the files named in the table below):
+**Batches run by the g3-evidence builder for the draft** (each line is the vitest summary for the files named in the table below):
 ```
 # b1 determinism, fence, saves (13 files)
 npx vitest run tests/fixtures/determinism.test.ts tests/fixtures/deterministic-state.test.ts tests/fixtures/g2-replay.test.ts \
@@ -201,12 +208,12 @@ npx tsc -p tsconfig.json --noEmit → exit 0 (16.7 s), after fixing one error in
 | P3.6 living chemistry | tests/fixtures/fungal-transport, food-objects, producers; e201-e204 (row "experiments") | **pass**, 14 + 22 + 18 tests (b5; food-objects 276 s) |
 | P3.8 Field Guide, badges, relationships seen | tests/content/guide.test.ts, tests/ui/badges.test.ts, tests/worker/relationships.test.ts | **pass**, 41 + 6 + 9 tests (b5) |
 | P3.10 audio | tests/audio/*.test.ts (6 files) | **pass**, 33 tests, incl. the rate limiter's 12 (b5). The manual listen is an owner item (§8). |
-| P3.11 accessibility | docs/reports/contrast.md; tests/ui/a11y-*.test.ts and the e2e a11y-screens and keyboard specs | Contrast audit: 246 pairs, 208 required, 129 pass, 79 fail with a justification, 0 unexplained. The a11y specs: `<lead>` (full e2e run; a11y builder report docs/reports/reviews/g3-wave-4b/a11y-build.md). |
+| P3.11 accessibility | docs/reports/contrast.md; tests/ui/a11y-*.test.ts and the e2e a11y-screens and keyboard specs | Contrast audit: 246 pairs, 208 required, 129 pass, 79 fail with a justification, 0 unexplained. The a11y specs: a11y-screens (6 tests) and keyboard (2 tests) **pass on all three projects** in the gate's full run (258 passed); a11y builder report docs/reports/reviews/g3-wave-4b/a11y-build.md. |
 | P3.12 performance | docs/reports/perf-g3.md, tests/perf/stress-shape.test.ts | stress-shape **pass**, 1 test, 8.9 s (b5; perf's in-flight test). perf-g3.md: 6,000 agents with 2,000 fungal, CPU per tick p50 18.8 / p95 23.9 ms. **< 10 ms not met**; provisional (§7). Hash neutrality is proven in perf-g3.md and holds in b1/b6/b7 here. |
 | determinism | tests/fixtures/determinism.test.ts (G0 headless), deterministic-state.test.ts (G1 host + save), **determinism-g3.test.ts (new)**, g2-replay.test.ts, trajectory-fence.test.ts, trajectory-fence-arms, trajectory-fence-current, trajectory-fence-current-arms | **pass**. determinism-g3: 9 tests, 102 s (standalone run), then again in b6. The rest are in b1 (13 files with the saves rows, 98 tests, 959 s). The fence moved no digest. |
 | saves | tests/persistence/migration.test.ts, tests/sim/history-debris.test.ts, g2-replay, tests/sim/world-stores.test.ts, tests/persistence/adhesion-import.test.ts, tests/persistence/stale-prey.test.ts | **pass** (b1, together with the determinism files). |
-| e2e Launch ecology (W6‑17) | tests/e2e/launch-ecology.spec.ts (new) | **pass**, desktop: `1 passed (12.2m)` on port 4263, build tmp/dist-evidence. Phone projects: `<lead>`. |
-| e2e Lab tools, keyboard, a11y screens | tests/e2e/lab-tools.spec.ts, keyboard.spec.ts, a11y-screens.spec.ts | `<lead>`: the full three-project run at the gate. Not run by this builder (assignment: own journeys only). |
+| e2e Launch ecology (W6‑17) | tests/e2e/launch-ecology.spec.ts (new) | **pass**, desktop: `1 passed (12.2m)` on port 4263, build tmp/dist-evidence. Phone projects: **pass** in the gate's full run (phone-portrait and phone-landscape, after the D‑0069 fixes). |
+| e2e Lab tools, keyboard, a11y screens | tests/e2e/lab-tools.spec.ts, keyboard.spec.ts, a11y-screens.spec.ts | **pass** on all three projects in the gate's full run (258 passed, 3.0 h, at 1eb3025). |
 
 **Determinism (Appendix A line):**
 - `determinism-g3` builds a Phase‑3‑heavy dish by hand. It contains:
@@ -382,7 +389,7 @@ Headless runner: `npm run sim:run -- --recipe FIRST_DISH_V1 --seed 104729 --tick
 
   Axe has no serious or critical findings at the 8 checkpoints. Touch targets are checked with `expectReachable` (≥ 48 px).
   The worker is reached only through the Worker wrapper (watchWorker / workerHash, read-only 'hash' requests).
-  `<lead>`: the phone projects at the gate.
+  Phone projects: pass in the gate's full run (after the D‑0069 fixes).
 - **Seed report** (docs/reports/tune-g3.md, Standard, 18 recipes × 6 seeds, `--seconds 600 --extend 1200`):
   - FIRST_DISH_V1 meets the D06 targets on 6/6 seeds (first intake at tick 0, first division 29.3 s).
   - Its 600 s ecology equals G2's on 5/6 seeds. The flip shows only through module draws: 9 gains, now E07 ×4, E05 ×3, E06 ×1
@@ -506,7 +513,7 @@ Headless runner: `npm run sim:run -- --recipe FIRST_DISH_V1 --seed 104729 --tick
   22. **D‑0064 (2)** should reduced motion also quiet audio? Built: no. Quiet audio is the separate comfort setting (audio PROPOSED DECISION 4).
   23. **No Android haptics until P4.10** adds `android.permission.VIBRATE` (PLAY_STORE_CHECKLIST; audio PROPOSED DECISION 3).
       Web haptics are feature-detected, off by default, and fire only on accepted placements.
-  24. **Curated dishes that end empty** (tune-g3.md, this draft). L301 Two Lunches asks "Do separate neighborhoods stay
+  24. **Curated dishes that end empty** (tune-g3.md). L301 Two Lunches asks "Do separate neighborhoods stay
       different?", but both neighborhoods are empty by 540 s on 6/6 seeds. L306 is empty at 600 s. L303 is item 12.
       Choose between making the dish text say the food is finite, or a new revision with one renewable source.
   25. Open PROPOSED DECISIONs in docs/reports/reviews/g3-wave-4/ not yet folded into a D‑entry:

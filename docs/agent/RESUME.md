@@ -3,21 +3,20 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
-> **Update 2026‑10‑10 19:00 UTC — G3 GATE RITUAL IN PROGRESS (resumed 15:45 after the restart). START HERE.**
-> - Pushed: `7eca504` EXP_104 revision 2 (D‑0068) and `35d12c3` the cheap MINORs.
-> - The first full e2e run (16:51, 258 tests) was STOPPED at 18:20 on purpose: it ran pre-fix test code; result 115 passed,
->   9 failed (all fixed since), 1 interrupted, 133 not run (log tmp/lead/e2e-g3.log). Every builder spec since g2 had run on
->   desktop only; the phone failures led to D‑0069 (five product fixes: Field Guide reflow at 200 %, the sample panel on phones
->   in portrait and landscape, tap timing by event timestamps in src/ui/gestures.ts, viral species left out of the dish
->   summary; plus test fixes in six specs and helpers chooseSpeed/expectSpeed). All seven phone-portrait failures re-ran green
->   on port 4290 (logs tmp/lead/e2e-fix-pp*.log).
-> - In the tree, UNCOMMITTED until `npm run check` passes (running, log tmp/lead/check-2.log): the D‑0069 code/tests, and the gate
->   docs (perf-g3 quiet re-measure, tune-g3 regenerated at 35d12c3, relationships-g3, EXPANSION_RESPONSE filled except e2e/check,
->   §8 items 20/26/28). Backup: branch `wip/g3-gate` (local + origin).
-> - Next: commit (fixes, then docs) → ONE clean full three-project `npx playwright test` on that commit, alone (≈ 3 h) → fill the
->   e2e/check lines of EXPANSION_RESPONSE + Appendix A → commit "gate: g3", tag g3, push --tags → Phase 4 wave 5.
-> - Gate numbers already measured: determinism 6148ff0d080999c4 (1×/4×/reload/headless); conservation all pools C 6.1e-13 %,
->   N 7.1e-12 %; closed lid C 5.2e-13 %, N 1.1e-11 %; perf quiet CPU p50 12.0 / p95 20.8 ms; content f276b113…; atlas 99ab54adef36.
+> **Update 2026‑10‑10 22:15 UTC — G3 GATE PASSED, TAG `g3`. START HERE.**
+> - `main` = the gate commit (tag `g3`) on top of `1eb3025`; clean and pushed. WORKLOG: P3.1–P3.12 and the G3 gate ticked.
+>   Decisions through D‑0069. Evidence: check 154 files / 1542 tests; e2e 258/258 (3.0 h, all three projects) at 1eb3025;
+>   determinism 6148ff0d080999c4; conservation all pools C 6.1e-13 %, N 7.1e-12 %; quiet perf CPU p50 12.0 / p95 20.8 ms.
+> - `wip/g3-gate` and `wip/g3-wave-4b` are obsolete (content committed).
+> - Next: **Phase 4 wave 5** — follow the "LEAD PRE-LAUNCH" header of `docs/agent/g4-wave-5.tasks.js.txt`:
+>   1. replace every `<lead: …>` in its STATE (wave 4 stage 2 = D‑0065…D‑0067, EXP_104 = D‑0068 revision 2 shipped, gate
+>      fixes = D‑0069);
+>   2. record g4-plan.md calls 1, 2 and 6 as D‑0070, D‑0071, D‑0072 and bump content/manifest.json buildPhase 3 → 4 in the
+>      same commit (`content-validate --write`, `npm run check`, the fence must not move);
+>   3. free ports 4271–4274; build run files 5a (favorites, garden-home) and 5b (stories, objectives) with
+>      `docs/agent/g4-runner-ft.workflow.js.txt`; every agent prompt starts with OWNER_CONTEXT;
+>   4. **new rule from the G3 gate:** builders who add or change e2e journeys run them on phone-portrait as well as desktop
+>      (the waves 2–4 desktop-only runs hid nine phone failures until the gate).
 
 > **Update 2026‑10‑10 15:35 UTC — WAVE 4 STAGE 2 COMMITTED (`d3a3027`); PAUSED FOR THE OWNER'S CODESPACE RESTART. START HERE.**
 > - `main` is clean and pushed. P3.1–P3.12 are ticked; P3.12 has two criteria open (D-0066). Decisions run through
