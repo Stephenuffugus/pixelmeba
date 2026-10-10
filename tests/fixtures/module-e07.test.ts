@@ -18,7 +18,7 @@
  *
  * Light is set per cell through grid.lightBase (geometryVersion bumped, updateDerived), since shade
  * paint only gives ×0.1 steps. Worlds: clear water (FIRST_DISH_V1 without stones, background sugar 0)
- * under the shipped manifest plus E04 and E07 (registryWith; the lead enables them after the wave).
+ * under the shipped manifest (which enables E04 and E07 since the P3.7 module flip, D-0059).
  */
 import { describe, expect, it } from 'vitest';
 import { qualifies, sharedActiveLoci } from '../../src/sim/branches';
@@ -40,11 +40,9 @@ import { updateDerived } from '../../src/sim/transport';
 import { speciesIndex, type World } from '../../src/sim/world';
 import { actionLabel } from '../../src/ui/strings/modules';
 import { ruleLines } from '../../src/ui/strings/lineage';
-import { registryWith } from '../helpers/registry';
 import { registry, setField } from '../helpers/world';
 
-const SHIPPED_MODULES = registry().manifest.enabledModules;
-const REG = registryWith({ enabledModules: [...SHIPPED_MODULES, 'E04', 'E07'].sort() });
+const REG = registry();
 
 const Y = 64;
 

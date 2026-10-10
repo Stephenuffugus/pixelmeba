@@ -32,6 +32,8 @@ import type { DishInfo, FromWorker } from '../../src/worker/protocol';
 import { clearWater, place, registry } from '../helpers/world';
 
 const SAVED_AT = '2026-09-28T00:00:00Z';
+/** The modules the shipped manifest enables (moduleRegistryVersion 2, D-0059). */
+const SHIPPED_MODULES = ['E01', 'E03', 'E04', 'E05', 'E06', 'E07', 'E08', 'E09', 'E10', 'E12'];
 
 /** The parts of a saved state these tests edit, as plain mutable JSON. */
 interface Editable {
@@ -150,10 +152,12 @@ describe('P2.2 fixture: registry imports', () => {
     const f1 = JSON.parse(text) as SaveFile;
     const s1 = f1.state as unknown as Editable;
     const b01 = s1.genomes.findIndex((g) => g.ancestor === 'B01');
-    s1.genomes[b01] = { ...s1.genomes[b01]!, modules: ['E09'] };
+    // E13 (Phase 5) is in the catalog but not in this save's recorded registry (E09 was the example
+    // until the Phase 3 module flip enabled it, D-0059).
+    s1.genomes[b01] = { ...s1.genomes[b01]!, modules: ['E13'] };
     await expect(loadSaveFile(await restamp(f1))).rejects.toMatchObject({
       kind: 'integrity',
-      message: 'A genome refers to unknown module E09.',
+      message: 'A genome refers to unknown module E13.',
     });
 
     const f2 = JSON.parse(text) as SaveFile;
@@ -194,7 +198,7 @@ describe('P2.2 fixture: registry imports', () => {
       manifest: {
         ...reg.manifest,
         enabledModules: ['E01', 'E05'],
-        moduleRegistryVersion: 2,
+        moduleRegistryVersion: 3,
         contentHash: 'changed-for-test',
       },
       modules: {
@@ -207,7 +211,7 @@ describe('P2.2 fixture: registry imports', () => {
     const fresh = realizeRecipe(changed, 'FIRST_DISH_V1', { worldId: 'fresh' });
     expect(fresh.content.modules.map((m) => m.id)).toEqual(['E01', 'E05']);
     expect(fresh.content.modules.find((m) => m.id === 'E05')!.params.capacityBonus).toBe(60);
-    expect(fresh.content.manifest.moduleRegistryVersion).toBe(2);
+    expect(fresh.content.manifest.moduleRegistryVersion).toBe(3);
 
     // The old save opened by the changed build.
     const { host, out } = makeHost(changed);
@@ -223,12 +227,12 @@ describe('P2.2 fixture: registry imports', () => {
     expect(again.genomes).toEqual(recorded.state.genomes);
     expect(again.branches).toEqual(recorded.state.branches);
     expect(loaded.content.modules.find((m) => m.id === 'E05')!.params.capacityBonus).toBe(40);
-    // Eligibility follows the recorded registry: a Sprinter can still gain E01 and E03 in this dish.
-    expect(eligibleGains(loaded, { ancestor: 'B01', modules: [] })).toEqual(['E01', 'E03', 'E05']);
-    // The dish describes its own registry, not the build's.
+    // Eligibility follows the recorded registry: a Sprinter can still gain E01, E03, E04, E10 and E12 in this dish.
+    expect(eligibleGains(loaded, { ancestor: 'B01', modules: [] })).toEqual(['E01', 'E03', 'E04', 'E05', 'E10', 'E12']);
+    // The dish describes its own registry (version 2, D-0059), not the build's.
     expect(info.registry).toMatchObject({
-      moduleRegistryVersion: 1,
-      modules: [{ id: 'E01' }, { id: 'E03' }, { id: 'E05' }],
+      moduleRegistryVersion: 2,
+      modules: SHIPPED_MODULES.map((id) => ({ id })),
       partial: true,
     });
 
@@ -243,9 +247,9 @@ describe('P2.2 fixture: registry imports', () => {
     expect(exp.type).toBe('exported');
     const reExported = JSON.parse((exp as { text: string }).text) as SaveFile;
     expect(reExported.meta.registry).toEqual({
-      moduleRegistryVersion: 1,
+      moduleRegistryVersion: 2,
       evolutionRulesVersion: 1,
-      enabledModules: ['E01', 'E03', 'E05'],
+      enabledModules: SHIPPED_MODULES,
     });
     expect(reExported.state.content.modules).toEqual(serializeWorld(loaded).content.modules);
   }, 120_000);
@@ -264,9 +268,9 @@ describe('P2.2 fixture: registry imports', () => {
       evolution: { mutationPreset: 'fixed', founderMode: 'identical' },
     });
     expect(file.meta.registry).toEqual({
-      moduleRegistryVersion: 1,
+      moduleRegistryVersion: 2,
       evolutionRulesVersion: 1,
-      enabledModules: ['E01', 'E03', 'E05'],
+      enabledModules: SHIPPED_MODULES,
     });
     expect(file.meta.evolution).toEqual({ mutationPreset: 'accelerated', founderMode: 'diverse' });
     expect(saveMetaRegistry(JSON.parse(text).meta)).toEqual(file.meta.registry);

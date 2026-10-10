@@ -516,7 +516,9 @@ describe('P2.3 a real Accelerated dish', () => {
     const w = make();
     run(w, 1000);
     const mid = serializeWorld(w);
-    run(w, 800);
+    // The first branch is established at tick 1927 under the shipped registry (version 2, D-0059;
+    // tick 1415 before the Phase 3 module flip).
+    run(w, 1100);
     expect(w.branches.established).toBeGreaterThanOrEqual(1);
     const c = w.ents.cols;
     for (const br of w.branches.branches) {
@@ -545,12 +547,12 @@ describe('P2.3 a real Accelerated dish', () => {
     for (const cd of Object.values(w.branches.candidates)) expect(cd.pending).toBeUndefined();
     // Reloading mid-run gives the same branches and the same endpoint.
     const r = deserializeWorld(JSON.parse(JSON.stringify(mid)));
-    run(r, 800);
+    run(r, 1100);
     expect(r.branches).toEqual(w.branches);
     expect(stateHash(r)).toBe(stateHash(w));
     // A fresh run takes the same course.
     const f = make();
-    run(f, 1800);
+    run(f, 2100);
     expect(stateHash(f)).toBe(stateHash(w));
   });
 });

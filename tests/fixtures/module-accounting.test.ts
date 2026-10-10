@@ -8,8 +8,8 @@
  *  - E03 pays its full entry (10 E), rest (0.01 E/s replacing all upkeep) and wake (5 E) costs.
  *  - A module loss frees no material; energy above a daughter's new cap dissipates, ledgered.
  *  - The 0.02 E/s surcharge per carried module is charged exactly once per tick (and not at all
- *    while Resting, where the rest rule replaces it); P3.7: the same for E09 and E10 (registryWith the
- *    shipped manifest plus E09/E10 until the lead enables them).
+ *    while Resting, where the rest rule replaces it); P3.7: the same for E09 and E10 (the shipped
+ *    manifest, which enables E09/E10 since the P3.7 module flip, D-0059).
  * Test-only state (energy or biomass set directly) is labelled where used; material overrides are
  * logged as ledger inputs so conservation checks stay exact.
  */
@@ -32,7 +32,6 @@ import { rebuildIndex } from '../../src/sim/spatial';
 import { speciesIndex, type World } from '../../src/sim/world';
 import { loadRawPacksFs } from '../../tools/lib/content-fs';
 import { aliveOf, clearWater, registry, setField } from '../helpers/world';
-import { registryWith } from '../helpers/registry';
 import { realizeRecipe } from '../../src/sim/recipes';
 
 type Energy = World['ledger']['energy'];
@@ -127,10 +126,11 @@ describe('P2.1 module accounting', () => {
 
   it('E01 cannot duplicate a native ability: Crumbsmith (native E_STARCH) is refused everywhere', () => {
     const w = clearWater({ mutationPreset: 'accelerated' });
-    // Eligible lists for the Phase 2 roster (D06: B01/B04 may gain E01; B06 never).
-    expect(eligibleGains(w, { ancestor: 'B01', modules: [] })).toEqual(['E01', 'E03', 'E05']);
-    expect(eligibleGains(w, { ancestor: 'B04', modules: [] })).toEqual(['E01', 'E03', 'E05']);
-    expect(eligibleGains(w, { ancestor: 'B06', modules: [] })).toEqual(['E03', 'E05']);
+    // Eligible lists for the Phase 2 roster under the shipped registry (D06: B01/B04 may gain E01; B06
+    // never; registry version 2 adds E04, E09, E10 and E12 where CT §7.1 allows them, D-0059).
+    expect(eligibleGains(w, { ancestor: 'B01', modules: [] })).toEqual(['E01', 'E03', 'E04', 'E05', 'E10', 'E12']);
+    expect(eligibleGains(w, { ancestor: 'B04', modules: [] })).toEqual(['E01', 'E03', 'E04', 'E05', 'E09', 'E10', 'E12']);
+    expect(eligibleGains(w, { ancestor: 'B06', modules: [] })).toEqual(['E03', 'E04', 'E05', 'E10', 'E12']);
     expect(validateModuleSet(w, 'B06', ['E01'])).toMatch(/natively/);
     // An introduction with the duplicate is refused before anything is allocated or logged.
     const before = { count: w.ents.count, next: w.counters.nextBirthId, inputs: { ...w.ledger.inputs } };
@@ -342,7 +342,7 @@ describe('P2.1 module accounting', () => {
   });
 
   it('P3.7: E09 and E10 each add their 0.02 E/s surcharge exactly once per tick (no protein, no body to build: neither acts)', () => {
-    const reg = registryWith({ enabledModules: [...registry().manifest.enabledModules, 'E09', 'E10'].sort() });
+    const reg = registry();
     const make = (mods: readonly string[]) => {
       const base = reg.recipes.FIRST_DISH_V1!;
       const w = realizeRecipe(

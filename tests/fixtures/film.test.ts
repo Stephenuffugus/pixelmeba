@@ -383,8 +383,10 @@ describe('P3.3 film as detritus food (D-0038)', () => {
       (s) => s !== 'film' && s !== 'fungi',
     ) as SystemFlag[];
     const species = shipped.manifest.enabledSpecies.filter((s) => s !== 'B02' && s !== 'F01' && s !== 'F02');
+    // E10 builds film (MODULE_SYSTEM_NEEDS), so a dish without film cannot enable it (shipped since D-0059).
+    const modules = shipped.manifest.enabledModules.filter((m) => m !== 'E10');
     const w = gel(
-      registryWith({ enabledSystems: systems, enabledSpecies: species }, { allowUnimplemented: true }),
+      registryWith({ enabledSystems: systems, enabledSpecies: species, enabledModules: modules }, { allowUnimplemented: true }),
     );
     expect(w.fields.film).toBeUndefined();
     fillField(w, 'sugar', 0);
@@ -400,6 +402,10 @@ describe('P3.3 film as detritus food (D-0038)', () => {
       {
         enabledSystems: shipped.manifest.enabledSystems.filter((s) => s !== 'film' && s !== 'fungi'),
         enabledSpecies: shipped.manifest.enabledSpecies.filter((s) => s !== 'B02' && s !== 'F01' && s !== 'F02'),
+        // E10 builds film (MODULE_SYSTEM_NEEDS), so it leaves with the film system (shipped since D-0059).
+        // Module draws use their own stream after the preference draw, so the B04 draws compared here
+        // do not depend on the module options.
+        enabledModules: shipped.manifest.enabledModules.filter((m) => m !== 'E10'),
       },
       { allowUnimplemented: true },
     );

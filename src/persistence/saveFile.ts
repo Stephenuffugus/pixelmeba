@@ -4,12 +4,14 @@
  *
  * parseSaveFile() validates everything before a world is built: size, format, versions, embedded
  * content (the same Zod schemas as the packs), array dimensions and dtypes, finite and nonnegative
- * pools, entity limits and reference integrity, then the checksum. A failure never produces a world.
+ * pools (a field cell may sit within float roundoff below zero, src/sim/fieldValue.ts), entity limits
+ * and reference integrity, then the checksum. A failure never produces a world.
  */
 import { AGENT_CAP, CELL_COUNT, DT } from '@sim/constants';
 import { HabitatSchema, ManifestSchema, MaterialSchema, ModuleSchema, SpeciesSchema } from '@sim/content/schema';
 import { ENTITY_COLUMNS } from '@sim/entities';
 import { FIELD_DEFS, isFieldId } from '@sim/fields';
+import { isStorableFieldValue } from '@sim/fieldValue';
 import { canonicalJson, sha256Hex, base64ToBytes } from '@sim/hash';
 import { missingModuleParams, moduleSetProblem } from '@sim/content/moduleRules';
 import { deserializeWorld, migrateWorldState, serializeWorld, type EncodedArray, type WorldState } from '@sim/serialize';
@@ -313,7 +315,8 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
     const arr = decodeF64(checkArray(`fields.${key}`, s.fields[key], 'f64', CELL_COUNT));
     for (let i = 0; i < arr.length; i++) {
       const v = arr[i]!;
-      if (!Number.isFinite(v) || v < 0) fail('integrity', `Field ${key} has an invalid value at cell ${i}.`);
+      // A cell may sit a few ulps below zero by float roundoff; the game saves that itself (fieldValue.ts).
+      if (!isStorableFieldValue(v)) fail('integrity', `Field ${key} has an invalid value at cell ${i}.`);
     }
   }
 

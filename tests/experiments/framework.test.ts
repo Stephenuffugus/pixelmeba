@@ -80,7 +80,8 @@ describe('experiment validation names the file and field', () => {
 
   it('rejects founder-group measurements with a bad group, an unknown species or a module this build does not enable', () => {
     const n = registry().experiments.EXP_C!.measurements.length;
-    const errs = errorsOf(mutate(raw, 'experiments', 'EXP_C.json', (d) => (d.measurements as string[]).push('descendants.B01.reserve', 'descendants.B99.none', 'founders.B01.E09', 'descendants.B01')));
+    // E13 (Phase 5) is not enabled (E09 was the example until the Phase 3 module flip enabled it, D-0059).
+    const errs = errorsOf(mutate(raw, 'experiments', 'EXP_C.json', (d) => (d.measurements as string[]).push('descendants.B01.reserve', 'descendants.B99.none', 'founders.B01.E13', 'descendants.B01')));
     for (let k = 0; k < 4; k++) has(errs, 'experiments/EXP_C.json', `measurements.${n + k}`);
   });
 

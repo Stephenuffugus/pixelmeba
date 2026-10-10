@@ -90,8 +90,10 @@ test('New Dish → Varied + Accelerated → labels → rates → change during p
 
   // Content: the recorded registry, read-only.
   await page.getByTestId('new-dish-content').click();
-  await expect(page.getByTestId('new-dish-registry')).toContainText('Module registry version 1');
+  await expect(page.getByTestId('new-dish-registry')).toContainText('Module registry version 2');
   await expect(page.getByTestId('new-dish-registry')).toContainText('(E05)');
+  // D-0059: the Phase 3 modules are named from content, never by raw id alone.
+  await expect(page.getByTestId('new-dish-registry')).toContainText('Colony adhesion (E12)');
 
   for (const id of [
     'new-dish-founders-diverse',
@@ -131,7 +133,7 @@ test('New Dish → Varied + Accelerated → labels → rates → change during p
   );
   await expect(page.getByTestId('evolution-changes-none')).toBeVisible();
   await expect(page.getByTestId('evolution-founders')).toContainText('Varied founders');
-  await expect(page.getByTestId('evolution-registry')).toContainText('3 of 17 abilities');
+  await expect(page.getByTestId('evolution-registry')).toContainText('10 of 17 abilities');
   await expectReachable(page.getByTestId('evolution-preset-standard'));
   await expectNoSeriousA11yViolations(page);
   await expectTextAtLeast16px(page, '[data-testid="evolution-sheet"]');

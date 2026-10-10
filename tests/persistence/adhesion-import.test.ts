@@ -28,11 +28,10 @@ import { run, step } from '../../src/sim/tick';
 import { speciesIndex, type World } from '../../src/sim/world';
 import { DishHost } from '../../src/worker/host';
 import type { FromWorker } from '../../src/worker/protocol';
-import { registryWith } from '../helpers/registry';
+import { G2_LISTS, registryWith } from '../helpers/registry';
 import { clearWater, place, registry, setField } from '../helpers/world';
 
-const SHIPPED_MODULES = registry().manifest.enabledModules;
-const REG = registryWith({ enabledModules: [...SHIPPED_MODULES, 'E12'].sort() });
+const REG = registry();
 const meta = { name: 'colony', savedAt: '2026-10-10T00:00:00Z', recipeId: null };
 
 type Pos = readonly [number, number];
@@ -186,10 +185,11 @@ describe('E12 pairing state on import (D-0058)', () => {
     await expectRefused(await tamper(text, 'adhSeconds', plain, 0.1), 'An organism has colony pairing state but cannot link into colonies.');
     await expectRefused(await tamper(text, 'adhPartner', plain, 1), 'An organism has colony pairing state but cannot link into colonies.');
 
-    const shipped = clearWater();
-    expect(shipped.modules.E12).toBeUndefined();
-    const s = place(shipped, 'B01', 40.5, 64.5);
-    const t2 = (await buildSaveFile(shipped, meta)).text;
+    // A dish whose rules have no E12: a Phase 2 dish (the shipped manifest enables E12 since D-0059).
+    const noE12 = clearWater({}, registryWith(G2_LISTS));
+    expect(noE12.modules.E12).toBeUndefined();
+    const s = place(noE12, 'B01', 40.5, 64.5);
+    const t2 = (await buildSaveFile(noE12, meta)).text;
     await expect(loadSaveFile(t2)).resolves.toBeDefined();
     await expectRefused(await tamper(t2, 'adhLockout', s, 1), "An organism has colony pairing state, but this dish's rules have no colony adhesion.");
   });

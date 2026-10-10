@@ -14,6 +14,7 @@
 import { AGENT_CAP } from './constants';
 import { ENTITY_COLUMNS, type ColumnName } from './entities';
 import { FIELD_DEFS, isFieldId, type FieldId } from './fields';
+import { isStorableFieldValue } from './fieldValue';
 import { base64ToBytes, canonicalJson, typedToBase64 } from './hash';
 import { cellIndex, inBounds, inMask, isLabRadius, ST_BEAD, ST_NONE } from './grid';
 import { foodObjectProblem, foodObjectsProblem, objectTotals, type FoodObject } from './objects';
@@ -431,7 +432,7 @@ export function savedSampleProblem(raw: unknown, ctx: SampleCheckContext): strin
   for (const c of held.cells) {
     for (const id of Object.keys(c.fields)) {
       const v = c.fields[id as FieldId]!;
-      if (!Number.isFinite(v) || v < 0) return `a sample cell has an invalid ${id}`;
+      if (!isStorableFieldValue(v)) return `a sample cell has an invalid ${id}`; // roundoff allowed, as for world fields
     }
   }
   for (const o of held.objects) {

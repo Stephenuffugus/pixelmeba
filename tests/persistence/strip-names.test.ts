@@ -14,8 +14,10 @@ import { registry } from '../helpers/world';
 
 describe('stripped export', () => {
   it('carries no player branch name and the dish runs on identically', async () => {
+    // Seed 101 at Accelerated establishes its first branch at tick 1927 under the shipped registry
+    // (version 2, D-0059; tick 1415 before the Phase 3 module flip).
     const w = realizeRecipe(registry(), 'FIRST_DISH_V1', { seed: 101, worldId: 'strip', transform: (r) => ({ ...r, mutationPreset: 'accelerated' }) });
-    run(w, 1500);
+    run(w, 2100);
     expect(w.branches.established).toBeGreaterThanOrEqual(1);
     applyNow(w, 'rename', { kind: 'lineage', op: 'rename', branch: 0, name: 'Quiet savers' });
     applyNow(w, 'keep', { kind: 'lineage', op: 'saveSpecimen', from: 'branch', id: 0 });

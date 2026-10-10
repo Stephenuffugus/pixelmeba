@@ -60,6 +60,7 @@ import {
   type SeedRun,
 } from '../../tools/sim-tune';
 import { clearWater, setField } from '../helpers/world';
+import { G2_LISTS, registryWith } from '../helpers/registry';
 
 describe('sim-tune', () => {
   const registry = loadRegistryFs();
@@ -295,7 +296,10 @@ describe('sim-tune', () => {
 });
 
 describe('sim-tune: module draws are counted exactly as the simulation drafts them', () => {
-  const registry = loadRegistryFs();
+  // The Phase 2 registry (E01, E03, E05), whose option lists give every case below: all gains legal,
+  // no legal gain (three slots, or the Sunbead's only gain carried) and a native duplicate. The shipped
+  // registry (version 2, D-0059) gives the Sunbead E06 and E07 too.
+  const registry = registryWith(G2_LISTS);
   const worldAt = (preset: 'standard' | 'accelerated'): World =>
     realizeRecipe(registry, 'FIRST_DISH_V1', { seed: 104729, transform: (r) => ({ ...r, mutationPreset: preset }) });
   const founderGenome = (w: World, id: string): Genome => {
@@ -397,7 +401,10 @@ describe('sim-tune: module draws are counted exactly as the simulation drafts th
 });
 
 describe('sim-tune: an Accelerated run with module gains and a confirmed branch', () => {
-  const registry = loadRegistryFs();
+  // The Phase 2 content set, as measured in docs/reports/tune-g2.md: under it a Sunbead's only legal gain
+  // is Reserve chamber, so a carrier's daughters are no longer gain-eligible (checked below). The shipped
+  // registry (version 2, D-0059) also offers it E06 and E07.
+  const registry = registryWith(G2_LISTS);
   // Seed 130363 at Accelerated gains a Reserve chamber at 30.2 s and confirms a Sunbead branch at 122.8 s
   // (docs/reports/tune-g2.md), so 150 s covers gains, carriers and a confirmation.
   const SECONDS = 150;

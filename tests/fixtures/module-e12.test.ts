@@ -21,7 +21,7 @@
  *  - The energy ledger balances with the link cost included; the worlds without E12 never run any of it.
  *
  * Worlds: clear water (FIRST_DISH_V1 without stones, background sugar 0) under the shipped manifest
- * plus E12 (registryWith; the lead enables it after the wave). "Held" positions are a labelled test
+ * (which enables E12 since the P3.7 module flip, D-0059). "Held" positions are a labelled test
  * device: after stage 4 (movement) the test puts the named organisms back at fixed points and rebuilds
  * the spatial index, so the pairing rule sees exactly the distances the test intends. Other test-only
  * state (energy, biomass, age, life state) is set directly and labelled; material overrides are logged
@@ -51,8 +51,7 @@ import { speciesIndex, type World } from '../../src/sim/world';
 import { registryWith } from '../helpers/registry';
 import { linkAdhesion, registry, setField } from '../helpers/world';
 
-const SHIPPED_MODULES = registry().manifest.enabledModules;
-const REG = registryWith({ enabledModules: [...SHIPPED_MODULES, 'E12'].sort() });
+const REG = registry();
 
 type State = Partial<Record<'B' | 'N' | 'E' | 'H' | 'age', number>>;
 type Pos = readonly [number, number];
@@ -190,9 +189,11 @@ describe('P3.7 E12 colony adhesion: registration and gating', () => {
       severDistance: 0.75,
       lockoutSeconds: 10,
     });
-    // The shipped manifest (no E12 yet): no rules, and two plain B01 side by side never touch the columns.
-    const base = registry().recipes.FIRST_DISH_V1!;
-    const plain = realizeRecipe(registry(), { ...base, id: 'TEST_PLAIN', removeStones: true, fieldPatches: [], founders: [], scheduledCommands: [], backgroundOverrides: { sugar: 0 }, mutationPreset: 'fixed' }, { worldId: 'plain' });
+    // The shipped manifest without E12 (the shipped one enables it since D-0059): no rules, and two plain
+    // B01 side by side never touch the columns.
+    const noE12 = registryWith({ enabledModules: registry().manifest.enabledModules.filter((m) => m !== 'E12') });
+    const base = noE12.recipes.FIRST_DISH_V1!;
+    const plain = realizeRecipe(noE12, { ...base, id: 'TEST_PLAIN', removeStones: true, fieldPatches: [], founders: [], scheduledCommands: [], backgroundOverrides: { sugar: 0 }, mutationPreset: 'fixed' }, { worldId: 'plain' });
     expect(adhesionRules(plain)).toBeNull();
     const p = placeWith(plain, 'B01', A, []);
     const q = placeWith(plain, 'B01', B, []);

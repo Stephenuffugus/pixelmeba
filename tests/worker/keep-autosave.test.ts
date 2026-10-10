@@ -134,10 +134,10 @@ async function runThenPause(ms: number): Promise<void> {
   await flush();
 }
 
-/** A Garden that has a named branch (seed 101, Accelerated, 1,500 ticks: tests/sim/lineage-host.test.ts). */
+/** A Garden that has a named branch (seed 101, Accelerated, 2,100 ticks: tests/sim/lineage-host.test.ts; D-0059). */
 async function branchedGardenFile(): Promise<string> {
   const w = realizeRecipe(REG, 'FIRST_DISH_V1', { seed: 101, worldId: 'keep-autosave-branch', transform: (r) => ({ ...r, mutationPreset: 'accelerated' }) });
-  run(w, 1500);
+  run(w, 2100);
   expect(w.branches.established).toBeGreaterThanOrEqual(1);
   return (await buildSaveFile(w, { name: 'Branched garden', savedAt: '2026-10-01T11:00:00.000Z', recipeId: 'FIRST_DISH_V1' })).text;
 }

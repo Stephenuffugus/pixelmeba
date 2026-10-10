@@ -17,8 +17,8 @@
  *  - FLAG.detritusIntake is set exactly on ticks whose stage 6 ate detritus (and drives "active now").
  *  - The ledger closes and Σ energy earned = 30 × Σ detritus eaten.
  *
- * Worlds: clear water (FIRST_DISH_V1 without stones, background sugar 0) under the shipped manifest plus
- * E06 and E08 (registryWith; the lead enables them after the wave).
+ * Worlds: clear water (FIRST_DISH_V1 without stones, background sugar 0) under the shipped manifest
+ * (which enables E06 and E08 since the P3.7 module flip, D-0059).
  */
 import { describe, expect, it } from 'vitest';
 import { introduceOrganism } from '../../src/sim/commands';
@@ -35,11 +35,9 @@ import { realizeRecipe } from '../../src/sim/recipes';
 import { rebuildIndex } from '../../src/sim/spatial';
 import { run, step } from '../../src/sim/tick';
 import { speciesIndex, type World } from '../../src/sim/world';
-import { registryWith } from '../helpers/registry';
 import { fillField, registry, setField } from '../helpers/world';
 
-const SHIPPED_MODULES = registry().manifest.enabledModules;
-const REG = registryWith({ enabledModules: [...SHIPPED_MODULES, 'E06', 'E08'].sort() });
+const REG = registry();
 
 const X = 60.5;
 const Y = 64.5;

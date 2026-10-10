@@ -1,10 +1,10 @@
 {
   "simulationVersion": 3,
   "evolutionRulesVersion": 1,
-  "moduleRegistryVersion": 1,
+  "moduleRegistryVersion": 2,
   "phenotypeMappingVersion": 1,
   "contentVersion": 2,
-  "contentHash": "d26e5d2391a3a1d2e13d1578b75561b0754954d6057b50abbc28592c8b2363ba",
+  "contentHash": "81f8dbdeaef987303cc4bac62103ec02a89be170548828efb6e4528a6cf0eaed",
   "buildPhase": 3,
   "enabledSpecies": [
     "A01",
@@ -30,7 +30,14 @@
   "enabledModules": [
     "E01",
     "E03",
-    "E05"
+    "E04",
+    "E05",
+    "E06",
+    "E07",
+    "E08",
+    "E09",
+    "E10",
+    "E12"
   ],
   "enabledSystems": [
     "chemistry",

@@ -9,8 +9,8 @@
  * The same holds with a real action (native starch secretion, 0.40 E/s × 0.1 s) ahead of a test
  * module action.
  *
- * W4-17 with real modules (registryWith the shipped manifest plus E09 and E10; the lead enables them
- * after the wave): a B04 carrying E01 + E09 + E10 with starch and protein beside it, a body 0.003 C
+ * W4-17 with real modules (the shipped manifest, which enables E09 and E10 since the P3.7 module flip,
+ * D-0059): a B04 carrying E01 + E09 + E10 with starch and protein beside it, a body 0.003 C
  * above 1.2 B0' and its cell's film at 0.498. Energy entering stage 8 is set to 35.042 with step's
  * afterStage hook at stage 7 (labelled test state). In the shipped order E01, E09, E10: E01 releases
  * (35.002 left), E09 releases (34.962), E10 is refused with its energy reason (ENERGY_LOW) and builds
@@ -35,7 +35,6 @@ import { rebuildIndex } from '../../src/sim/spatial';
 import { stageStructures } from '../../src/sim/structures';
 import { step } from '../../src/sim/tick';
 import { speciesIndex, type World } from '../../src/sim/world';
-import { registryWith } from '../helpers/registry';
 import { clearWater, registry, setField } from '../helpers/world';
 
 type Energy = World['ledger']['energy'];
@@ -145,7 +144,7 @@ describe('C08 shared budget (D04 §2): one energy budget, reserved in order', ()
 
 // ---- W4-17: the shared budget with real modules (E01, E09, E10) ---------------------------------
 
-const REG_E09_E10 = registryWith({ enabledModules: [...registry().manifest.enabledModules, 'E09', 'E10'].sort() });
+const REG_E09_E10 = registry();
 const E_AT_STAGE_8 = 35.042;
 const X = 64;
 const Y = 64;

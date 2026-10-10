@@ -15,8 +15,10 @@ import { registry } from '../helpers/world';
 
 function setup() {
   const reg = registry();
+  // Seed 101 at Accelerated establishes its first branch at tick 1927 under the shipped registry
+  // (version 2, D-0059; tick 1415 before the Phase 3 module flip).
   const w = realizeRecipe(reg, 'FIRST_DISH_V1', { seed: 101, worldId: 'lineage-host', transform: (r) => ({ ...r, mutationPreset: 'accelerated' }) });
-  run(w, 1500);
+  run(w, 2100);
   expect(w.branches.established).toBeGreaterThanOrEqual(1);
   const out: FromWorker[] = [];
   const host = new DishHost(reg, (m) => out.push(m), { now: () => 0 });

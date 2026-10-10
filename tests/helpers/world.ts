@@ -18,9 +18,11 @@ export function registry(): ContentRegistry {
   return loadRegistryFs();
 }
 
-/** A clear-water dish (Water Garden without stones), background sugar 0, no organisms. */
-export function clearWater(overrides: Partial<RecipeDef> = {}): World {
-  const reg = registry();
+/**
+ * A clear-water dish (Water Garden without stones), background sugar 0, no organisms. `reg` defaults
+ * to the shipped registry; a test whose subject is Phase 2 passes registryWith(G2_LISTS).
+ */
+export function clearWater(overrides: Partial<RecipeDef> = {}, reg: ContentRegistry = registry()): World {
   const base = reg.recipes.FIRST_DISH_V1!;
   const recipe: RecipeDef = {
     ...base,

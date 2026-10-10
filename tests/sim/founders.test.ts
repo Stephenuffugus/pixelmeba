@@ -32,6 +32,7 @@ import { run } from '../../src/sim/tick';
 import { speciesIndex, type World } from '../../src/sim/world';
 import { buildInspector } from '../../src/worker/snapshot';
 import { aliveOf, clearWater, registry } from '../helpers/world';
+import { G2_LISTS, registryWith } from '../helpers/registry';
 
 const reg = registry();
 
@@ -161,7 +162,9 @@ describe('P2.2 founder modes', () => {
   });
 
   it('Diverse: about 10 % of 3,000 eligible founders get one module, uniform over the legal choices', () => {
-    const w = clearWater({ founderMode: 'diverse', seed: 11 });
+    // The Phase 2 registry (E01, E03, E05), where B01 and B04 share one option list; the shipped
+    // registry's per-species lists are checked in the next test (D-0059).
+    const w = clearWater({ founderMode: 'diverse', seed: 11 }, registryWith(G2_LISTS));
     const slots = [...populate(w, 'B01', 1500), ...populate(w, 'B04', 1500)];
     const byModule: Record<string, number> = {};
     let withModule = 0;
@@ -191,6 +194,35 @@ describe('P2.2 founder modes', () => {
     const sdEach = Math.sqrt(withModule * (1 / 3) * (2 / 3));
     for (const c of Object.values(byModule)) expect(Math.abs(c - each)).toBeLessThan(5 * sdEach);
     expect(e03Dormancy).toBeGreaterThan(0);
+  });
+
+  it('Diverse under the shipped registry: each species draws uniformly over its own legal gains (D-0059)', () => {
+    const w = clearWater({ founderMode: 'diverse', seed: 11 });
+    const expected: Record<string, string[]> = {
+      B01: ['E01', 'E03', 'E04', 'E05', 'E10', 'E12'],
+      B04: ['E01', 'E03', 'E04', 'E05', 'E09', 'E10', 'E12'],
+    };
+    for (const id of ['B01', 'B04']) {
+      const options = eligibleGains(w, { ancestor: id, modules: [] });
+      expect(options, id).toEqual(expected[id]);
+      const slots = populate(w, id, 1500);
+      const byModule: Record<string, number> = {};
+      let withModule = 0;
+      for (const s of slots) {
+        const g = w.genomes.get(w.ents.cols.genome[s]!);
+        expect(g.modules.length).toBeLessThanOrEqual(1);
+        if (g.modules.length === 0) continue;
+        withModule++;
+        byModule[g.modules[0]!] = (byModule[g.modules[0]!] ?? 0) + 1;
+        expect(g.modules[0]).toBe(expectedDiverseModule(w, id, w.ents.cols.birthId[s]!));
+      }
+      const n = slots.length;
+      expect(Math.abs(withModule - 0.1 * n), id).toBeLessThan(5 * Math.sqrt(n * 0.1 * 0.9));
+      expect(Object.keys(byModule).sort(), id).toEqual(options);
+      const k = options.length;
+      const sdEach = Math.sqrt(withModule * (1 / k) * (1 - 1 / k));
+      for (const m of options) expect(Math.abs(byModule[m]! - withModule / k), `${id} ${m}`).toBeLessThan(5 * sdEach);
+    }
   });
 
   it('Diverse: founders with no legal gain never receive one (full slots; a registry without modules)', () => {

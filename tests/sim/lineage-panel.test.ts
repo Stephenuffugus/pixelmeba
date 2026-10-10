@@ -16,8 +16,10 @@ import { bandLabel, discoveryLines } from '../../src/ui/strings/lineage';
 import { registry } from '../helpers/world';
 
 function accelerated() {
+  // Seed 101 at Accelerated establishes its first branch at tick 1927 under the shipped registry
+  // (version 2, D-0059; tick 1415 before the Phase 3 module flip).
   const w = realizeRecipe(registry(), 'FIRST_DISH_V1', { seed: 101, worldId: 'lineage-panel', transform: (r) => ({ ...r, mutationPreset: 'accelerated' }) });
-  run(w, 1600);
+  run(w, 2100);
   return w;
 }
 
@@ -100,14 +102,31 @@ describe('P2.3 lineage panel data', () => {
     // Off: nothing marked.
     const off = packLineageMarks(w, null, null);
     expect(Array.from(off.marks.subarray(0, packed.count)).every((v) => v === BAND_NONE)).toBe(true);
-    // Motility is not active for Sunbeads (A01): they get no band and are counted as inactive.
+    // Motility is not active for Sunbeads (A01) unless they carry Light seeker (E07 makes a Sunbead
+    // self-propelled, D-0055; shipped since D-0059): they get no band and are counted as inactive.
     const mot = packLineageMarks(w, 0, null);
     const a01 = w.species.findIndex((sp) => sp.id === 'A01');
     let sunbeads = 0;
-    for (let i = 0; i < w.ents.highWater; i++) if (c.alive[i] === 1 && c.species[i] === a01) sunbeads++;
+    let stillSunbeads = 0;
+    let seekers = 0;
+    for (let i = 0; i < w.ents.highWater; i++) {
+      if (c.alive[i] !== 1) continue;
+      const g = w.genomes.get(c.genome[i]!);
+      const motile = activeLoci(w.species[c.species[i]!]!, g)[0];
+      if (c.species[i] !== a01) {
+        expect(motile).toBe(true); // every other species here moves on its own
+        continue;
+      }
+      sunbeads++;
+      expect(motile).toBe(g.modules.includes('E07'));
+      if (motile) seekers++;
+      else stillSunbeads++;
+    }
     expect(sunbeads).toBeGreaterThan(0);
-    expect(mot.inactive).toBe(sunbeads);
-    expect(mot.bandCounts.reduce((a, b) => a + b, 0)).toBe(packed.count - sunbeads);
+    expect(stillSunbeads).toBeGreaterThan(0);
+    expect(seekers).toBeGreaterThan(0); // this seed's dish holds a Light seeker Sunbead by tick 2100
+    expect(mot.inactive).toBe(stillSunbeads);
+    expect(mot.bandCounts.reduce((a, b) => a + b, 0)).toBe(packed.count - stillSunbeads);
   });
 
   it('a branch row carries the recorded costs of the difference it is named after', () => {

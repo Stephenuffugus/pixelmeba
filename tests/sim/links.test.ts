@@ -28,6 +28,7 @@ import {
   removeFungalLink,
 } from '../../src/sim/links';
 import type { World } from '../../src/sim/world';
+import { G2_LISTS, registryWith } from '../helpers/registry';
 import { aliveOf, clearWater, linkAdhesion, linkFungal, place } from '../helpers/world';
 
 /** n B01 organisms in a row, low energy so none divides; returns their slots. */
@@ -148,7 +149,9 @@ describe('links: death, division and slot reuse', () => {
   });
 
   it('a division re-keys the retained daughter’s partner rows, so the links survive and stay valid', () => {
-    const w = clearWater();
+    // A dish whose rules have no E12 (the Phase 2 content set): the test-only adhesion link joins two
+    // non-carriers 34 cells apart, which E12's sever rules (shipped since D-0059) would cut at once.
+    const w = clearWater({}, registryWith(G2_LISTS));
     const s = place(w, 'B01', 64.5, 64.5, { B: 2, N: 0.2, E: 90, H: 100, age: 20 });
     const [p, q] = [place(w, 'B01', 30.5, 64.5, { E: 5 }), place(w, 'B01', 98.5, 64.5, { E: 5 })];
     linkFungal(w, s, p);

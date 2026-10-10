@@ -732,3 +732,46 @@ birth ids (tested), and differs only by the missing Brothmakers.
 
 **E204 stroke.** The M09 deposit at (45.5, 64.5) with radius 6 covers exactly the patch disk (113 cells,
 tested cell by cell); `interventionAccepted` = 113.
+
+# After the Phase 3 module flip (D-0059)
+
+The lead flip (P3.7, 2026-10-10) enables E04, E06, E07, E08, E09, E10 and E12 in `content/manifest.json`
+beside E01, E03 and E05 (moduleRegistryVersion 1 → 2). It changes a world only through its mutation
+module options: a module-gain draw now picks uniformly among CT §7.1's larger legal lists (a Sunbead,
+A01: E05, E06, E07 instead of E05 alone; a Sprinter, B01: E01, E03, E04, E05, E10, E12; a Recycler, B04:
+also E09; a Crumbsmith, B06: E03, E04, E05, E10, E12; an Amoeba, P01: E05, E08), and Diverse founders
+draw among the same lists. The wave A goldens (`tests/experiments/golden/wave-a-measurements.json`,
+unchanged) and the three recorded comparisons keep running on `registryWith(G2_LISTS)` and still pass.
+
+Measured with a one-off probe (not committed): every card through `runExperiment(registry, id)` and the
+three wave A comparisons through `runPairedComparison`, once under the pre-flip manifest
+(`registryWith({ enabledModules: shipped minus the seven, moduleRegistryVersion: 1 })`, whose content
+hash equals the pre-flip `d26e5d2391a3…`) and once under the shipped manifest.
+
+| Card | Gate, pre-flip → shipped | Measurements under the shipped manifest |
+|------|--------------------------|------------------------------------------|
+| EXP_101 | reached at 7 s → reached at 7 s | every catalog measurement and the timeline identical |
+| EXP_102 | reached at 180 s → reached at 180 s | the card's reported measurements identical; arm A only: birth 426 (a Sunbead, tick 1305) gains **Light seeker (E07)** instead of Reserve chamber (E05), so the catalog's `reservePeak.A01` 12.62 → 0 and `meanEnergy.A01` / `groupEnergy.A01.none` 63.865 → 63.831 E at 180 s (two living carriers either way); arm B identical |
+| EXP_103 | reached at 12 s → reached at 12 s | identical |
+| EXP_106 | reached at 180 s → reached at 180 s | identical (both arms) |
+| EXP_A | reached at 180 s → reached at 180 s | identical (both arms) |
+| EXP_B | reached at 300 s → reached at 300 s | identical (both arms) |
+| EXP_C | not reached → not reached (runSeconds 600, reservePeak.B01 0, as §2 records for V1) | identical (both arms) |
+| EXP_201 | reached at 8 s → reached at 8 s | identical |
+| EXP_202 | reached at 8 s → reached at 8 s | identical |
+| EXP_203 | reached at 1 s → reached at 1 s | identical (both arms) |
+| EXP_204 | reached at 120 s → reached at 120 s | identical (both arms) |
+
+Comparisons (wave A's hunters, feed and starch paired runs, under the shipped manifest): every result
+field is identical except each arm's `hash` (stateHash covers the content hash, which the manifest edit
+changes). Every arm of every card passes every ledger check under the shipped manifest.
+
+Why so little moves: within these horizons almost no module draw fires (Standard preset, 0.2 % per
+daughter, half of them gains), and a draw that fires may still pick the same module (the pick is
+`detInt(…, options.length, …)`, so index 0, E01 for a Sprinter, stays E01 whenever the draw falls in
+the first sixth). The trajectory fence agrees: at the fence ticks only one module draw fires in all 18
+entries (FOOD_TRAIL_V1, birth 45, a Sprinter at tick 443, E01 under both lists), and no currentDigest
+moved. Accelerated runs over longer horizons do move: FIRST_DISH_V1 seed 101's birth 71 gains Shade
+collector (E06) instead of Reserve chamber, and its first branch is established at tick 1927 instead of
+1415; seed 11's birth 72 gains Light seeker (E07). The tests that follow those trajectories were updated
+under D-0059 (docs/reports/reviews/g3-flip/flip-build.md).

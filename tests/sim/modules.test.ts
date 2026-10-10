@@ -17,6 +17,14 @@ import type { World } from '../../src/sim/world';
 import { clearWater, registry } from '../helpers/world';
 import { G2_LISTS, registryWith } from '../helpers/registry';
 
+/** The modules the shipped manifest enables (moduleRegistryVersion 2, D-0059). */
+const SHIPPED_MODULES = ['E01', 'E03', 'E04', 'E05', 'E06', 'E07', 'E08', 'E09', 'E10', 'E12'];
+
+/** A clear-water dish under the Phase 2 content set (the subject of the P2.1 pins). */
+function g2Water(overrides: Parameters<typeof clearWater>[0] = {}): World {
+  return clearWater(overrides, registryWith(G2_LISTS));
+}
+
 function genome(w: World, ancestor: string, modules: string[] = []) {
   return w.genomes.get(w.genomes.intern({ ...neutralGenome(ancestor), modules }));
 }
@@ -43,28 +51,59 @@ function tally(w: World, ancestor: string, modules: string[], n: number): { gain
 }
 
 describe('P2.1 module registry', () => {
-  it('the Phase 2 manifest enables exactly E01, E03 and E05, all implemented', () => {
+  it('the Phase 2 manifest enables exactly E01, E03 and E05; the shipped one (registry version 2) the ten implemented modules', () => {
     const reg = registry();
-    expect(reg.manifest.enabledModules).toEqual(['E01', 'E03', 'E05']);
+    // P3.7 (D-0059): the Phase 3 module flip enabled E04, E06–E10 and E12 under moduleRegistryVersion 2.
+    expect(reg.manifest.enabledModules).toEqual(SHIPPED_MODULES);
+    expect(reg.manifest.moduleRegistryVersion).toBe(2);
+    expect([...IMPLEMENTED_MODULES].sort()).toEqual(SHIPPED_MODULES);
     // The Phase 2 manifest is the g2 build's (tests/fixtures/saves/g2-manifest.json); the shipped one
     // moved to build phase 3 in the Phase 3 preflight (D-0036).
     const g2 = registryWith(G2_LISTS);
     expect(g2.manifest.buildPhase).toBe(2);
     expect(g2.manifest.enabledModules).toEqual(['E01', 'E03', 'E05']);
+    expect(g2.manifest.moduleRegistryVersion).toBe(1);
     for (const id of g2.manifest.enabledModules) expect(IMPLEMENTED_MODULES).toContain(id);
     for (const id of reg.manifest.enabledModules) expect(IMPLEMENTED_MODULES).toContain(id);
-    const w = clearWater();
-    expect(w.content.modules.map((m) => m.id)).toEqual(['E01', 'E03', 'E05']);
+    expect(clearWater().content.modules.map((m) => m.id)).toEqual(SHIPPED_MODULES);
+    expect(g2Water().content.modules.map((m) => m.id)).toEqual(['E01', 'E03', 'E05']);
   });
 
   it('eligibility by ancestor for the core roster (D06: E01 B01/B04; E03 B01/B04/B06; E05 all five)', () => {
-    const w = clearWater();
+    const w = g2Water();
     const expected: Record<string, string[]> = { A01: ['E05'], B01: ['E01', 'E03', 'E05'], B04: ['E01', 'E03', 'E05'], B06: ['E03', 'E05'], P01: ['E05'] };
     for (const id of Object.keys(expected).sort()) expect(eligibleGains(w, { ancestor: id, modules: [] }), id).toEqual(expected[id]);
   });
 
-  it('three slots at most; a full genome has no gain options', () => {
+  it('eligibility by ancestor under the shipped registry (CT §7.1 with E04, E06–E10 and E12 enabled; D-0059)', () => {
     const w = clearWater();
+    const expected: Record<string, string[]> = {
+      A01: ['E05', 'E06', 'E07'],
+      B01: ['E01', 'E03', 'E04', 'E05', 'E10', 'E12'],
+      B02: ['E01', 'E03', 'E05'],
+      B03: ['E03', 'E04', 'E05'],
+      B04: ['E01', 'E03', 'E04', 'E05', 'E09', 'E10', 'E12'],
+      B05: ['E01', 'E03', 'E04', 'E05', 'E09'],
+      B06: ['E03', 'E04', 'E05', 'E10', 'E12'],
+      B07: ['E03', 'E04', 'E05'],
+      B08: ['E03', 'E04', 'E05'],
+      F01: ['E05', 'E09'],
+      F02: ['E05', 'E09', 'E10'],
+      P01: ['E05', 'E08'],
+      P02: ['E05', 'E08'],
+      P03: ['E05', 'E08'],
+      P04: ['E05'],
+      V01: [],
+      X01: [],
+      Y01: ['E01', 'E03', 'E04', 'E05', 'E09', 'E10'],
+      Y02: ['E01', 'E03', 'E04', 'E05', 'E09'],
+    };
+    expect(w.species.map((sp) => sp.id).sort()).toEqual(Object.keys(expected).sort());
+    for (const id of Object.keys(expected).sort()) expect(eligibleGains(w, { ancestor: id, modules: [] }), id).toEqual(expected[id]);
+  });
+
+  it('three slots at most; a full genome has no gain options', () => {
+    const w = g2Water();
     expect(eligibleGains(w, { ancestor: 'B01', modules: ['E01', 'E03'] })).toEqual(['E05']);
     expect(eligibleGains(w, { ancestor: 'B01', modules: ['E01', 'E03', 'E05'] })).toEqual([]);
     const reg = registry();
@@ -95,7 +134,7 @@ describe('P2.1 module registry', () => {
   });
 
   it('gain and loss draws are uniform among the legal options, and only when the rate fires', () => {
-    const w = clearWater({ mutationPreset: 'accelerated' });
+    const w = g2Water({ mutationPreset: 'accelerated' });
     const { gain } = tally(w, 'B01', [], 60000);
     const total = Object.values(gain).reduce((a, b) => a + b, 0);
     // Accelerated: module event 1 % × gain half ⇒ ≈ 0.5 % of daughters.
@@ -113,6 +152,19 @@ describe('P2.1 module registry', () => {
     expect(f.loss).toEqual({});
   });
 
+  it('under the shipped registry a Sprinter gains each of its six legal modules uniformly (D-0059)', () => {
+    const w = clearWater({ mutationPreset: 'accelerated' });
+    const options = eligibleGains(w, { ancestor: 'B01', modules: [] });
+    expect(options).toEqual(['E01', 'E03', 'E04', 'E05', 'E10', 'E12']);
+    const { gain } = tally(w, 'B01', [], 60000);
+    const total = Object.values(gain).reduce((a, b) => a + b, 0);
+    expect(total / 120000).toBeGreaterThan(0.004);
+    expect(total / 120000).toBeLessThan(0.006);
+    expect(Object.keys(gain).sort()).toEqual(options);
+    const sd = Math.sqrt(total * (1 / 6) * (5 / 6));
+    for (const id of options) expect(Math.abs(gain[id]! - total / 6), id).toBeLessThan(5 * sd);
+  });
+
   it("eligibility is read from the world's recorded registry, never the build's current one", () => {
     const reg = registry();
     const edited: ContentRegistry = {
@@ -120,12 +172,14 @@ describe('P2.1 module registry', () => {
       modules: { ...reg.modules, E01: { ...reg.modules.E01!, eligibleAncestors: ['B04'] } },
     };
     const w = realizeRecipe(edited, { ...reg.recipes.FIRST_DISH_V1!, founders: [] }, { worldId: 'edited' });
-    expect(eligibleGains(w, { ancestor: 'B01', modules: [] })).toEqual(['E03', 'E05']);
+    expect(eligibleGains(w, { ancestor: 'B01', modules: [] })).toEqual(['E03', 'E04', 'E05', 'E10', 'E12']);
     const current = clearWater();
-    expect(eligibleGains(current, { ancestor: 'B01', modules: [] })).toEqual(['E01', 'E03', 'E05']);
+    expect(eligibleGains(current, { ancestor: 'B01', modules: [] })).toEqual(['E01', 'E03', 'E04', 'E05', 'E10', 'E12']);
     // Saved and reloaded, the dish keeps its own registry.
     const back = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(w))) as ReturnType<typeof serializeWorld>);
-    expect(eligibleGains(back, { ancestor: 'B01', modules: [] })).toEqual(['E03', 'E05']);
+    expect(eligibleGains(back, { ancestor: 'B01', modules: [] })).toEqual(['E03', 'E04', 'E05', 'E10', 'E12']);
+    // A Phase 2 dish keeps the Phase 2 registry after the flip.
+    expect(eligibleGains(g2Water(), { ancestor: 'B01', modules: [] })).toEqual(['E01', 'E03', 'E05']);
   });
 
   it('an E03 carrier also carries an active dormancy locus, which mutation may then vary', () => {

@@ -19,7 +19,7 @@
  *    intake.
  *
  * Worlds: clear water (FIRST_DISH_V1 without stones, background sugar 0) under the shipped manifest
- * plus E04 and E07 (registryWith; the lead enables them after the wave). Stones are placed and erased
+ * (which enables E04 and E07 since the P3.7 module flip, D-0059). Stones are placed and erased
  * with the real Lab command (radius 1 is a five-cell plus). Test-only state (E, B, age, position,
  * life state) is set directly and labelled; material overrides are logged as ledger inputs.
  */
@@ -36,11 +36,9 @@ import { realizeRecipe } from '../../src/sim/recipes';
 import { rebuildIndex } from '../../src/sim/spatial';
 import { step } from '../../src/sim/tick';
 import { speciesIndex, type World } from '../../src/sim/world';
-import { registryWith } from '../helpers/registry';
 import { registry, setField } from '../helpers/world';
 
-const SHIPPED_MODULES = registry().manifest.enabledModules;
-const REG = registryWith({ enabledModules: [...SHIPPED_MODULES, 'E04', 'E07'].sort() });
+const REG = registry();
 
 /** Stone plus centred on (40, 64): cells (40,63) (39,64) (40,64) (41,64) (40,65). */
 const STONE: [number, number] = [40.5, 64.5];

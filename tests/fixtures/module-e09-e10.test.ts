@@ -18,7 +18,7 @@
  *  - The module card: E09 / E10 "active now" read the protein bit and an accepted request.
  *
  * Worlds: clear water (FIRST_DISH_V1 without stones, background sugar 0) under the shipped manifest
- * plus E09 and E10 (registryWith; the lead enables them after the wave). F02 is in the shipped manifest.
+ * (which enables E09 and E10 since the P3.7 module flip, D-0059). F02 is in the shipped manifest.
  * Test-only state (E, B, age, fields, film clocks, substrate) is set directly and labelled; material
  * overrides are logged as ledger inputs.
  */
@@ -41,10 +41,9 @@ import { step } from '../../src/sim/tick';
 import { divisionBlocker } from '../../src/sim/births';
 import { speciesIndex, type World } from '../../src/sim/world';
 import { moduleText } from '../../src/ui/strings/modules';
-import { registryWith } from '../helpers/registry';
 import { aliveOf, registry, setField } from '../helpers/world';
 
-const REG = registryWith({ enabledModules: [...registry().manifest.enabledModules, 'E09', 'E10'].sort() });
+const REG = registry();
 
 type State = Partial<Record<'B' | 'N' | 'E' | 'H' | 'age', number>>;
 

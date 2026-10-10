@@ -131,11 +131,20 @@ describe('atlas completeness (P1.4)', () => {
 
   describe('module feature marks (ARCH §10.1)', () => {
     it('the committed atlas carries every frame of every enabled module mark, in all four headings', () => {
+      // Registry version 2 (D-0059): the ten enabled modules' visualLayers, each with a FEATURE_FRAMES row.
       expect(marks).toEqual([
         { moduleId: 'E01', layer: 'starch_notch' },
         { moduleId: 'E03', layer: 'resting_seam' },
+        { moduleId: 'E04', layer: 'anchor_foot' },
         { moduleId: 'E05', layer: 'reserve_pocket' },
+        { moduleId: 'E06', layer: 'shade_patch' },
+        { moduleId: 'E07', layer: 'light_trail' },
+        { moduleId: 'E08', layer: 'debris_granule' },
+        { moduleId: 'E09', layer: 'protein_notches' },
+        { moduleId: 'E10', layer: 'matrix_edge' },
+        { moduleId: 'E12', layer: 'adhesion_link' },
       ]);
+      for (const m of marks) expect(FEATURE_FRAMES[m.layer], m.layer).toBeDefined();
       expect(checkAtlas(atlas(), enabled, { png, marks })).toEqual([]);
       const a = atlas();
       for (const m of marks) {
@@ -195,7 +204,8 @@ describe('atlas completeness (P1.4)', () => {
       // An atlas from before marks were packed fails for every enabled module.
       const old = atlas() as Partial<Atlas>;
       delete old.features;
-      expect(markMessages(old)).toHaveLength(3);
+      expect(markMessages(old)).toHaveLength(marks.length);
+      expect(marks).toHaveLength(10);
       // Without marks to check (species-only callers), the sprite check is unchanged.
       expect(messages(old)).toEqual([]);
     });

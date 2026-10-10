@@ -85,7 +85,9 @@ function runCollecting(seed: number, ticks: number): { readonly w: World; readon
 }
 
 describe('through the simulation: every module line comes from the recorded descriptor', () => {
-  it('seed 11 (Accelerated): a Sunbead born at 0:30.5 gained Reserve chamber, and the feed says exactly that', () => {
+  // Under the shipped registry (version 2, D-0059) a Sunbead may gain E05, E06 or E07; the same birth
+  // gained Reserve chamber (E05) before the Phase 3 module flip.
+  it('seed 11 (Accelerated): a Sunbead born at 0:30.5 gained Light seeker, and the feed says exactly that', () => {
     const { w, events } = runCollecting(11, 320);
     const changes = events.filter((e) => moduleChangeOf(e) !== null);
     expect(changes.length).toBeGreaterThan(0);
@@ -97,11 +99,11 @@ describe('through the simulation: every module line comes from the recorded desc
       expect(flags & (MUT_MODULE_GAIN | MUT_MODULE_LOSS)).not.toBe(0);
     }
     const first = changes[0]!;
-    expect([first.tick, first.birthId, first.mutation]).toEqual([305, 72, { flags: MUT_MODULE_GAIN, delta: 0, module: 'E05' }]);
+    expect([first.tick, first.birthId, first.mutation]).toEqual([305, 72, { flags: MUT_MODULE_GAIN, delta: 0, module: 'E07' }]);
     clearFeed();
     const names = (id: string) => w.content.modules.find((m) => m.id === id)?.name;
     pushFeed([first], w.species.map((s) => s.def.name), names);
-    expect(lines()).toEqual(['A Sunbead offspring gained Reserve chamber.']);
+    expect(lines()).toEqual(['A Sunbead offspring gained Light seeker.']);
   });
 });
 
@@ -127,14 +129,16 @@ describe('birth record rows name the ability with its id', () => {
     expect(deltaText(row({ mutFlags: MUT_MODULE_GAIN, mutModule: 'E05' }), [])).toBe('gained E05');
   });
 
-  it('seed 101 (Accelerated): the founder of the first branch gained Reserve chamber; its family row names it from the dish content', () => {
-    const { w } = runCollecting(101, 1500);
+  // Shipped registry (version 2, D-0059): birth 71 gains Shade collector (Reserve chamber before the Phase 3
+  // module flip) and its branch is established at tick 1927 (1415 before).
+  it('seed 101 (Accelerated): the founder of the first branch gained Shade collector; its family row names it from the dish content', () => {
+    const { w } = runCollecting(101, 2100);
     const ans = buildLineage(w, { branch: 0 });
     const root = ans.selected?.family.root;
     expect(root?.birthId).toBe(71);
-    expect([root?.mutModule, root?.mutModuleName]).toEqual(['E05', 'Reserve chamber']);
+    expect([root?.mutModule, root?.mutModuleName]).toEqual(['E06', 'Shade collector']);
     const line = recordLine(root!, 'Founder', ans.loci);
-    expect(line).toContain('gained Reserve chamber (E05)');
-    expect(line).not.toMatch(/gained E05/);
+    expect(line).toContain('gained Shade collector (E06)');
+    expect(line).not.toMatch(/gained E06/);
   });
 });
