@@ -12,6 +12,10 @@
 > what is unfinished (edit RESUME_TASKS in that file: a finished builder becomes `prebuilt` with a pointer to its report).
 > Also running (planning only): the wave 5 task writer `docs/agent/g4-wave-5-tasks.workflow.js.txt` (run `wf_8b5d09bc-b0f`; first try `wf_4df67f51-cf1` derailed the same way)
 > → `docs/agent/g4-wave-5.tasks.js.txt`; patch its STATE's D-numbers and g3 facts after the gate; wave 5 launches after tag g3.
+> 13:50: the writer FINISHED (committed): favorites 4271 s1 critical, garden-home 4273 s1, stories 4272 s2, objectives 4274 s2
+> critical. Before launch read its header "LEAD PRE-LAUNCH" and its 13 PROPOSED DECISIONs (journal of run `wf_8b5d09bc-b0f`;
+> key ones: buildPhase 3→4 bump by the lead, run as 5a then 5b, notebook = top-level `notebook` sibling of `state` outside
+> the checksum with its own sha256, malformed notebook dropped whole with a message).
 
 > **Update 2026‑10‑10 13:20 UTC — PAUSED BY THE OWNER FOR A CODESPACE REFRESH. START HERE.**
 > - `main` = `072478e` + this note, pushed. P3.1–P3.10 are ticked; decisions run through D-0064; stage 1 is committed
