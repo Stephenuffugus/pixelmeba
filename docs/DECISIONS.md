@@ -599,3 +599,22 @@ Decision:
 Reason: SPEC §9 (E12), §14.3; D04 §6; saves are sacred (a failed import never touches the current world).
 Affects: src/sim/{adhesion,contacts,maintenance}.ts, src/persistence/saveFile.ts, tests/fixtures/module-e12.test.ts, tests/persistence/*.
 Owner review: yes — E12's "free" excludes anchored carriers; the link cost is ledgered as 'other'.
+
+## D-0059 · 2026-10-10 · P3.7 · Phase 3 modules enabled (moduleRegistryVersion 1 → 2); recipe trajectories change only through mutation module options
+Context: the lead module flip (docs/agent/g3-wave-3.tasks.js.txt "LEAD MODULE FLIP"; recheck W4-20…W4-24; D-0036, D-0042); reports docs/reports/reviews/g3-flip/flip-{build,verify,fix1}.md.
+Decision:
+- `content/manifest.json` enables E04, E06, E07, E08, E09, E10 and E12 beside E01, E03 and E05 (all of IMPLEMENTED_MODULES), with moduleRegistryVersion 1 → 2; contentHash rewritten by content-validate --write. The atlas is unchanged (all ten marks present since wave 2; art:build --check up to date).
+- A world changes only through what it records. New dishes record registry version 2 and the ten modules; module-gain draws (mutation and Diverse founders) pick uniformly among CT §7.1's larger legal lists. Old saves and Phase 2 dishes keep their recorded registry (version 1; E01, E03, E05) — verified: pre-flip worlds saved and loaded by this build keep v1 and continue to the same hash as without the save/load, 3,000 ticks on.
+- Fence: no digest moved at its tick. In all 18 entries a single module draw fires by the fence tick (FOOD_TRAIL_V1 birth 45, tick 443) and it picks E01 under both lists; `registryWith({ enabledModules: shipped minus the seven, moduleRegistryVersion: 1 })` reproduces every recorded currentDigest; g2Digests and the g2 saves' expected values are unchanged; `fence-update --all --reason D-0059` re-records nothing. So the fence does not see the flip; the curated and P3.9 recipes that wave 4 adds with modules on founders (L306, EXP_212) give it Phase 3 module coverage.
+- Longer horizons move: Accelerated FIRST_DISH_V1 seed 101 birth 71 gains Shade collector (E06) instead of Reserve chamber (E05) and its first branch is established at tick 1927 (1415 before); seed 11 birth 72 gains Light seeker (E07); EXP_102 arm A birth 426 gains E07 instead of E05 (reservePeak.A01 12.62 → 0). Tests that follow those trajectories were re-pinned with the new module names; tests whose subject is Phase 2 content pin `registryWith(G2_LISTS)`; measurement changes are in docs/reports/experiments-g2.md "After the Phase 3 module flip (D-0059)"; the wave-A goldens are unchanged.
+- Test helpers built as `registryWith({ enabledModules: [...shipped, 'E0x'] })` now duplicate and fail validation; module tests use the shipped registry. A no-film registry must also drop E10 (it needs the film system); link-table tests with test-only adhesion links use a dish without E12.
+Reason: SPEC §9; CT §7.1; D-0036 (the flip ends P3.7 under a registry version bump); old saves keep their recorded ruleset.
+Affects: content/manifest.json; tests/helpers/world.ts (clearWater registry argument); the pinned tests listed in flip-build.md; docs/reports/experiments-g2.md.
+Owner review: no
+
+## D-0060 · 2026-10-10 · saves · A field cell may sit within float roundoff below zero in a save
+Context: the flip verifier's MAJOR (predates the flip; g2 behaviour): a whole-body capture (`consumePrey`, takeN = N·B/B rounds one ulp above N) can leave an empty debris cell at about −1.4e-17. The game saved that world, then refused to load it ("Field detritusN has an invalid value at cell …"); a Deposits sample over that cell was refused too.
+Decision: the import (world fields in `parseSaveFile`, held-sample cells in `savedSampleProblem`) accepts a finite field value ≥ −1e-12 (`src/sim/fieldValue.ts` FIELD_ROUNDOFF) and keeps it bit for bit, so the loaded world continues exactly; anything lower is refused as before. The simulation is unchanged: clamping the split moves recorded trajectories (the wave-A EXP_B golden moves by one ulp), which would rewrite old worlds. The inspector lists only fields above 1e-6, so the player never sees the value.
+Reason: saves are sacred (the game must load what it saves); old saves keep their recorded ruleset.
+Affects: src/sim/fieldValue.ts, src/persistence/saveFile.ts, src/sim/sampleSlot.ts, tests/sim/capture-roundoff.test.ts.
+Owner review: yes — whether a future ruleset bump should also clamp the capture split in the simulation.
