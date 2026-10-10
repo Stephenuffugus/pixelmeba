@@ -11,6 +11,13 @@
 > - Running: `docs/agent/g3-wave-3-lead-fix.workflow.js.txt` (one fixer: stale FLAG.moving, E07 light test, E04/E12 lockout
 >   convention, E12 + module-param import refusals, NITs; report `docs/reports/reviews/g3-wave-3/lead-fixes.md`) and
 >   `docs/agent/g3-wave-4-tasks.workflow.js.txt` (writer → `docs/agent/g3-wave-4.tasks.js.txt`, stages 1/2).
+> - **08:10 UTC: MODULE FLIP COMMITTED `50c7c32` (+ docs `3d545dd`; D-0059, D-0060), P3.7 ticked; WAVE 4 STAGE 1 RUNNING** from
+>   `docs/agent/g3-wave-4a.run.workflow.js.txt` (field-guide 4251, g3-fixtures 4253, experiments-curated 4252, audio 4254; verifiers
+>   [field-guide+audio], [experiments-curated+g3-fixtures]; reports `docs/reports/reviews/g3-wave-4/`). Builders edit the tree and
+>   never commit. If this session dies mid-run: `git status`; back up the tree on a LOCAL `wip/g3-wave-4a` branch with a temp-index
+>   commit; read the reports; rerun only unfinished tasks (`only` + `finish` notes). After stage 1: integrate (MINORs, decisions
+>   D-0061+, check, the new journeys on desktop), commit, tick P3.8-P3.10; then build the stage 2 run file the same way
+>   (A.only = ['a11y','perf','g3-evidence'], perf critical 'own') and run it; then the G3 gate (wave 4 tasks header "LEAD AFTER").
 > - **05:40 UTC: WAVE 3 COMMITTED `a792e07`** (check 1352/1352; fence 77/77; desktop e2e 10/10); P3.5, P3.6 ticked. Next: the
 >   module flip (`docs/agent/g3-module-flip.workflow.js.txt`, D-0059) → commit → wave 4 stage 1
 >   (`docs/agent/g3-wave-4a.run.workflow.js.txt`) → integrate + commit → stage 2 (a11y, perf, g3-evidence) → G3 gate.
