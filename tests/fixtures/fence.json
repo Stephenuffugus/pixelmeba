@@ -173,8 +173,13 @@
       "recipe": "HIDDEN_NEIGHBORHOOD_V1",
       "ticks": 1200,
       "g2Digest": null,
-      "currentDigest": "e0e762d7fe0629c7",
-      "changedBy": []
+      "currentDigest": "5c356f1783cc0ac3",
+      "changedBy": [
+        {
+          "decision": "D-0068",
+          "field": "currentDigest"
+        }
+      ]
     },
     {
       "id": "ONE_HOST_V1",

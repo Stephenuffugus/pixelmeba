@@ -40,7 +40,7 @@ evidence is kept below as §4b–§4d.
 | 4–7 | Not started (Phase 4 runner edition prepared: docs/agent) | | | | |
 
 Phase 3 limitations (the last column of the Phase 3 row):
-- EXP_104 does not reach its gate on CT's recipe (D‑0062). The lead's revision is pending, otherwise the card is kept out of v1.0.
+- EXP_104 reaches its gate at 1 s on HIDDEN_NEIGHBORHOOD_V1 revision 2 (starting oxygen 0.03, D‑0068; revision 1 never did, D‑0062). Owner review: the oxygen-limited moment lasts only the first ~10 s.
 - Producers starve in the enzyme dishes. This is the open owner question of D‑0022 and D‑0051, and it is new in curated L303.
 - Device performance is unmeasured (§7).
 - Owner items are listed in §8.
@@ -192,7 +192,7 @@ npx tsc -p tsconfig.json --noEmit → exit 0 (16.7 s), after fixing one error in
 | conservation-all-pools | tests/fixtures/conservation-all-pools.test.ts | **pass**, 1 test, 111.5 s (b2). Closed lid, 10,000 ticks. Worst relative error C 6.13e‑15, N 7.05e‑14, M 0. Worst absolute residual C 3.6e‑11, N 8.1e‑11. Film, fungal transfer, phage lysis, Hitcher drain, captures, adhesion links, all three enzymes and both food objects acted (details below this table). |
 | relationship matrix (every catalog relationship) | tests/fixtures/relationship-matrix.test.ts; tools/relationship-matrix.ts | **pass**, 15 tests (b2). **711 of 711 rows** in 33.1 s, with 232 positive relationships (table below). Regenerated in this session under contentHash 8a004f51… into tmp/ev/relationships-g3.md: rows identical to docs/reports/relationships-g3.md except its header hash (`<lead>`: regenerate the committed file, D‑0063). |
 | module fixtures | module-accounting, shared-budget, module-e04, module-e06, module-e07, module-e08, module-e09-e10, module-e12 (tests/fixtures), tests/sim/stage8-order.test.ts | **pass**, 9 files, 113 tests, 141 s (b3). Per file: accounting 7, shared-budget 8 (C08: two actions never spend the same energy), E04 15, E06 5, E07 11, E08 8, E09/E10 23, E12 24, stage 8 order 12. |
-| experiments | tests/experiments/*.test.ts (17 files incl. e201-e204, hidden-neighborhood, hidden-neighborhood-host, one-host, fungal-supply-line), tests/recipes/curated.test.ts | **pass**, 18 files, 124 tests, 772 s (b4). Write-ups: docs/reports/experiments-g2.md and experiments-g3.md. EXP_212 gate at 1 s with the exact transfer ledger. EXP_105 gate at 1 s. **EXP_104 gate not reached** (D‑0062; its test asserts the measured limiter; revision `<lead>`). |
+| experiments | tests/experiments/*.test.ts (17 files incl. e201-e204, hidden-neighborhood, hidden-neighborhood-host, one-host, fungal-supply-line), tests/recipes/curated.test.ts | **pass**, 18 files, 124 tests, 772 s (b4). Write-ups: docs/reports/experiments-g2.md and experiments-g3.md. EXP_212 gate at 1 s with the exact transfer ledger. EXP_105 gate at 1 s. EXP_104 gate at 1 s on revision 2 (D‑0068; re-pinned 2026-10-10, tests/experiments 17 files 115 tests pass). |
 | P3.1 chemistry | tests/sim/chemistry.test.ts | **pass**, 14 tests (b5) |
 | P3.2 habitats, attachment | tests/fixtures/habitat-presets.test.ts, tests/sim/attachment.test.ts | **pass**, 7 + 3 tests (b5) |
 | P3.3 film, fungi, Dusk | tests/fixtures/film.test.ts, fungal-branching, dusk-suitability, relationships-film, relationships-w2 | **pass**, 15 + 13 + 2 + 5 + 5 tests (b5; film 160 s) |

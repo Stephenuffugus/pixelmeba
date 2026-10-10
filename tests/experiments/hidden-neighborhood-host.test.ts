@@ -3,47 +3,20 @@
  * host notes the inspector's oxygen reading for each organism the player taps (host.ts experimentSteps
  * → inspectedOxygenReading → PlayerSteps.noteOxygenLimit), and the stamp waits for it.
  *
- * The shipped recipe never reaches its gate (no Sprinter is ever OXYGEN_LIMITED; see
- * hidden-neighborhood.test.ts), so this drives the host's wiring with a test-only card whose gate is
- * `alive.B01 > 0 and alive.B03 > 0` (held at once) and, on the paused dish, one Sprinter's recorded limit set to
- * OXYGEN_LIMITED: the reading the inspector would show if oxygen ran short. Dusks show their real
- * SUIT_OXYGEN_HIGH reading on the shipped Water Garden.
+ * Revision 2 (D-0068) reaches its gate at 1 s, so this drives the real card: at 2 s the founders' feast
+ * has emptied the patch's oxygen (Sprinters read OXYGEN_LIMITED) and Dusks read SUIT_OXYGEN_HIGH.
  */
 import { describe, expect, it } from 'vitest';
-import type { ContentRegistry } from '../../src/sim/content/registry';
 import { R } from '../../src/sim/reasons';
 import { DishHost } from '../../src/worker/host';
 import type { FromWorker } from '../../src/worker/protocol';
 import { registry } from './helpers';
 
-function heldGateRegistry(): ContentRegistry {
-  const reg = registry();
-  const def = reg.experiments.EXP_104!;
-  return {
-    ...reg,
-    experiments: {
-      ...reg.experiments,
-      EXP_104: {
-        ...def,
-        gate: {
-          type: 'custom',
-          params: {
-            all: [
-              { measure: 'alive.B01', arm: 'A', op: 'gt', value: 0, label: 'Sprinters are alive' },
-              { measure: 'alive.B03', arm: 'A', op: 'gt', value: 0, label: 'Dusks are alive' },
-            ],
-          },
-        },
-      },
-    },
-  };
-}
-
 describe('EXP_104 player step through the worker host', () => {
   it('the stamp waits until a Dusk and a Sprinter were tapped with different oxygen readings', () => {
     let now = 0;
     const out: FromWorker[] = [];
-    const host = new DishHost(heldGateRegistry(), (m) => out.push(m), {
+    const host = new DishHost(registry(), (m) => out.push(m), {
       now: () => now,
       iso: () => '2026-10-10T00:00:00.000Z',
     });
@@ -86,12 +59,12 @@ describe('EXP_104 player step through the worker host', () => {
       });
     const dusk = first('B03');
     const sprinter = first('B01');
-    // A Dusk (real SUIT_OXYGEN_HIGH) and a Sprinter with plenty of oxygen (no oxygen reading): not yet the step.
+    expect(c.limitCode[sprinter]).toBe(R.OXYGEN_LIMITED);
+    // Only a Dusk (SUIT_OXYGEN_HIGH), seen twice: not yet the step.
     view(dusk);
-    view(sprinter);
+    view(dusk);
     expect(stamps()).toHaveLength(0);
-    // The same Sprinter, now showing too little oxygen: both species seen with different readings.
-    c.limitCode[sprinter] = R.OXYGEN_LIMITED;
+    // A Sprinter short of oxygen: both species seen with different readings.
     view(sprinter);
     expect(stamps()).toHaveLength(1);
     expect((stamps()[0] as Extract<FromWorker, { type: 'experimentStamp' }>).stamp.stamp.experimentId).toBe(

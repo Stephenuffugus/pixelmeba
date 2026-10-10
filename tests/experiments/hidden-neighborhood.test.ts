@@ -7,11 +7,12 @@
  * whose inspector reading was that reason; src/sim/pairedRun.ts). The in-app half of CT's evidence
  * ("both species inspected with different O2 limitations") is the player step 'inspectOxygenLimits'.
  *
- * Measured on the shipped content (docs/reports/experiments-g3.md): the gate is NOT reached. Dusks are
- * held back by too much oxygen from the first tick (oxygen 0.8 gives them suitability 0) and all die
- * of stress by about 50 s; Sprinters never run short: the lowest oxygen in any Sprinter's cell over the
- * run stays above 0.7, because forty small eaters use little of a whole closed dish's oxygen in 180 s.
- * The limiter is recorded, never tuned (SPEC §13.2; CT §11).
+ * Revision 2 (D-0068; docs/reports/exp104-revision-probe.md): the dish starts at oxygen 0.03 (revision 1's
+ * 0.8 never let a Sprinter run short and killed every Dusk by about 50 s; D-0062). Measured on the shipped
+ * content (docs/reports/experiments-g3.md): the gate is reached at 1 s. The founders' feast empties the
+ * patch's oxygen, so Sprinters read OXYGEN_LIMITED from tick 8 to tick 126 (≈ the first 10 s); after that
+ * FOOD_ACCESS_LOW leads and oxygen diffuses back. Dusks read SUIT_OXYGEN_HIGH (suitability 1 − O2/0.4) and
+ * all twenty live. Nothing was tuned to reach the gate beyond the recorded starting oxygen (SPEC §13.2).
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { entitySuitabilityAt } from '../../src/sim/crossing';
@@ -63,41 +64,51 @@ describe('EXP_104 A hidden neighborhood (HIDDEN_NEIGHBORHOOD_V1, seed 104, 180 s
     expect(patch.n).toBeCloseTo(0.2 * 113, 9);
   });
 
-  it('does not reach its gate on the shipped content: Dusks are held back by oxygen, Sprinters never run short (measured limiter)', () => {
+  it('reaches its gate at 1 s on revision 2: Sprinters short of oxygen while the patch is busiest, Dusks held back by it and alive', () => {
     const r = result;
-    expect(r.gate.reached).toBe(false);
-    expect(r.stamp).toBeNull();
+    expect(registry().recipes.HIDDEN_NEIGHBORHOOD_V1!.revision).toBe(2);
+    expect(r.gate.reached).toBe(true);
+    expect(r.gate.reachedAtSecond).toBe(1);
+    expect(r.stamp).toEqual(expect.objectContaining({ experimentId: 'EXP_104', recipeRevision: 2, reachedAtSecond: 1 }));
     const A = r.A.reported;
-    expect(A['limitSeconds.B03.SUIT_OXYGEN_HIGH']).toBeGreaterThan(0);
-    expect(A['limitSeconds.B01.OXYGEN_LIMITED']).toBe(0);
-    expect(A['alive.B03']).toBe(0);
-    expect(A['deaths.B03']).toBe(20);
-    expect(r.A.measurements['deaths.B03.DEATH_STRESS']).toBe(20);
-    expect(A['alive.B01']).toBeGreaterThan(0);
+    expect(A['limitSeconds.B01.OXYGEN_LIMITED']).toBeCloseTo(131.1, 6);
+    expect(A['limitSeconds.B03.SUIT_OXYGEN_HIGH']).toBeCloseTo(3496.7, 6);
+    expect(A['oxygenMean']).toBeCloseTo(0.0269, 4);
+    expect(A['alive.B01']).toBe(28);
+    expect(A['alive.B03']).toBe(20);
+    expect(A['births.B01']).toBe(9);
+    expect(A['deaths.B01']).toBe(1);
+    expect(A['deaths.B03']).toBe(0);
     expect(r.A.ledger.everyCheckOk).toBe(true);
     expect(r.endTick).toBe(1800);
   });
 
-  it('the limiter: the lowest oxygen in any Sprinter’s cell stays far above what limits its intake', () => {
+  it('the mechanism: Sprinters are oxygen-limited only in the first seconds; afterwards their cells recover', () => {
     const arms = realizeExperimentArms(registry(), 'EXP_104');
     const w = arms.A;
-    let lowest = Infinity;
+    let first = -1;
+    let last = -1;
+    let lowestLate = Infinity;
     for (let t = 0; t < 1800; t++) {
       stepObserved(w, arms.obsA);
       const c = w.ents.cols;
       for (let i = 0; i < w.ents.highWater; i++) {
         if (c.alive[i] !== 1 || w.species[c.species[i]!]!.id !== 'B01') continue;
-        lowest = Math.min(lowest, w.fields.oxygen![entityCell(c.x[i]!, c.y[i]!)]!);
-        expect(c.limitCode[i]).not.toBe(R.OXYGEN_LIMITED);
+        if (w.tick > 200) lowestLate = Math.min(lowestLate, w.fields.oxygen![entityCell(c.x[i]!, c.y[i]!)]!);
+        if (c.limitCode[i] === R.OXYGEN_LIMITED) {
+          if (first < 0) first = w.tick;
+          last = w.tick;
+        }
       }
     }
-    expect(lowest).toBeGreaterThan(0.7);
+    expect(first).toBe(8);
+    expect(last).toBe(126);
+    expect(lowestLate).toBeGreaterThan(0.003);
   });
 
   it('limitSeconds counts organism-seconds of the inspector’s reading, tick by tick (suitability and intake limits)', () => {
-    // Low-oxygen variant of the recipe (test-only, never shipped) so Sprinters really are oxygen-limited.
     const reg = registry();
-    const w = realizeRecipe(reg, 'HIDDEN_NEIGHBORHOOD_V1', { transform: (r) => ({ ...r, backgroundOverrides: { oxygen: 0.02 } }) });
+    const w = realizeRecipe(reg, 'HIDDEN_NEIGHBORHOOD_V1');
     const ids = ['limitSeconds.B01.OXYGEN_LIMITED', 'limitSeconds.B03.SUIT_OXYGEN_HIGH', 'limitSeconds.B01.FOOD_ACCESS_LOW'];
     const obs = new ArmObserver(w, { observe: ids });
     const expected = [0, 0, 0];
@@ -123,17 +134,13 @@ describe('EXP_104 A hidden neighborhood (HIDDEN_NEIGHBORHOOD_V1, seed 104, 180 s
     const dusk = firstLiving(w, 'B03');
     const sprinter = firstLiving(w, 'B01');
     expect(inspectedOxygenReading(w, dusk, ['B01', 'B03'])).toEqual({ species: 'B03', reason: 'SUIT_OXYGEN_HIGH' });
-    // A Sprinter with plenty of oxygen has no oxygen reading to show.
-    expect(inspectedOxygenReading(w, sprinter, ['B01', 'B03'])).toBeNull();
-    const low = realizeRecipe(reg, 'HIDDEN_NEIGHBORHOOD_V1', { transform: (r) => ({ ...r, backgroundOverrides: { oxygen: 0.02 } }) });
-    run(low, 20);
-    const c = low.ents.cols;
-    let limited = -1;
-    for (let i = 0; i < low.ents.highWater; i++) if (c.alive[i] === 1 && low.species[c.species[i]!]!.id === 'B01' && c.limitCode[i] === R.OXYGEN_LIMITED) limited = c.birthId[i]!;
-    expect(limited).toBeGreaterThan(0);
-    expect(inspectedOxygenReading(low, limited, ['B01', 'B03'])).toEqual({ species: 'B01', reason: 'OXYGEN_LIMITED' });
+    // At 2 s the feast has emptied the patch's oxygen: the Sprinter shows too little.
+    expect(inspectedOxygenReading(w, sprinter, ['B01', 'B03'])).toEqual({ species: 'B01', reason: 'OXYGEN_LIMITED' });
     // Not a species the card follows: no reading.
-    expect(inspectedOxygenReading(low, limited, ['B03'])).toBeNull();
+    expect(inspectedOxygenReading(w, sprinter, ['B03'])).toBeNull();
+    // Once the patch is eaten down (after ≈ 13 s), a Sprinter with enough oxygen has no oxygen reading to show.
+    run(w, 280);
+    expect(inspectedOxygenReading(w, firstLiving(w, 'B01'), ['B01', 'B03'])).toBeNull();
     const steps = new PlayerSteps(def);
     expect(steps.noteOxygenLimit('B03', 'SUIT_OXYGEN_HIGH', ['B01', 'B03'])).toBe(false);
     expect(steps.noteOxygenLimit('B03', 'SUIT_OXYGEN_HIGH', ['B01', 'B03'])).toBe(false);

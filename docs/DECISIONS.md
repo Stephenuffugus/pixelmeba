@@ -726,3 +726,14 @@ Decision:
 Reason: BUILD_DIRECTIVE G3 evidence; SPEC §13.2; determinism.
 Affects: tests/fixtures/determinism-g3.test.ts, tests/e2e/launch-ecology.spec.ts, docs/reports/tune-g3.md, docs/EXPANSION_RESPONSE.md (G3 draft), docs/reports/img/g3/.
 Owner review: yes — curated dishes that empty (L301, L306; L303 after D-0051).
+
+## D-0068 · 2026-10-10 · P3.9 · EXP_104 ships on HIDDEN_NEIGHBORHOOD_V1 revision 2 (starting oxygen 0.03)
+Context: D-0062 left EXP_104 not release-ready: revision 1 (closed Water Garden, oxygen 0.8) never lets a Sprinter run short of oxygen and kills every Dusk by about 50 s. The lead probe (docs/reports/exp104-revision-probe.md) measured starting oxygen 0.3 → 0.03 with CT's founders and patch unchanged.
+Decision:
+- HIDDEN_NEIGHBORHOOD_V1 revision 2: `backgroundOverrides.oxygen` 0.03; founders, patch, seed, lid and stopping time unchanged. Revision 1 is not kept as a separate record: no save or journal outside development holds it (the card was never released), and stamps record `recipeRevision`.
+- Measured (seed 104, 180 s, tests/experiments/hidden-neighborhood.test.ts): gate reached at 1 s; B01 OXYGEN_LIMITED 131.1 org·s, from tick 8 to tick 126 only (the founders' feast empties the patch's oxygen, then FOOD_ACCESS_LOW leads and oxygen diffuses back); B03 SUIT_OXYGEN_HIGH 3496.7 org·s; oxygen mean 0.027; alive B01 28 / B03 20; ledger checks all ok.
+- Because the oxygen-limited moment lasts only about the first ten seconds, the recipe text, the card's intervention and predicted trade-off, and the `inspectOxygenLimits` step line say the dish starts low in oxygen and to pause in the first seconds, while the patch is busiest. The step stays conditional ("if none is, note what holds them back instead").
+- The fence entry HIDDEN_NEIGHBORHOOD_V1 is re-recorded with this decision as its reason (`fence-update --recipe`); no other entry moves.
+Reason: SPEC §13.2 (a card ships only on a revision that reaches its gate); honest labels (the text says when the reading appears, nothing scripted makes it appear); the starting oxygen is a recorded recipe setting, not a hidden rescue.
+Affects: content/recipes/HIDDEN_NEIGHBORHOOD_V1.json, content/experiments/EXP_104.json, content/manifest.json (contentHash), src/ui/strings/experiments.ts, tests/experiments/{hidden-neighborhood,hidden-neighborhood-host,journal-and-words}.test.ts, tests/fixtures/fence.json, docs/reports/experiments-g3.md.
+Owner review: yes — EXP_104 now reaches its gate only in the first ~10 s of the run; the alternative is to keep it out of the v1.0 card list.

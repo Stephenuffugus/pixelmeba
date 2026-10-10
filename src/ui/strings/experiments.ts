@@ -344,11 +344,11 @@ export function playerStepText(card: ExperimentCardView, step: PlayerStep): stri
     case 'viewPreyHistory':
       return 'Open the population history of both copies on the results.';
     case 'inspectOxygenLimits': {
-      // P3.9 (EXP_104): each followed species tapped while the inspector shows an oxygen reading. Conditional
-      // wording: the shipped dish may never show one (docs/reports/experiments-g3.md, EXP_104 gate not reached).
+      // P3.9 (EXP_104): each followed species tapped while the inspector shows an oxygen reading. Revision 2
+      // (D-0068): Sprinters run short only while the patch is busiest (~first 10–20 s), so the line says when to look.
       const names = card.stepSpecies.map((id) => sp(card, id));
       const list = names.length <= 1 ? names.join('') : `${names.slice(0, -1).map((n) => `a ${n}`).join(', ')} and a ${names[names.length - 1]}`;
-      return `Tap ${names.length <= 1 ? `a ${list}` : list} and read what holds each back. Look for one held back by too little oxygen and the other by too much; if none is, note what holds them back instead.`;
+      return `Tap ${names.length <= 1 ? `a ${list}` : list} and read what holds each back; pause in the first seconds, while the patch is busiest. Look for one held back by too little oxygen and the other by too much; if none is, note what holds them back instead.`;
     }
     case 'observeInfection':
       return `Tap an infected ${card.stepSpecies.length >= 1 ? sp(card, card.stepSpecies[0]!) : 'organism'}: the inspector shows its infection and when it bursts.`;

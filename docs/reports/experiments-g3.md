@@ -77,37 +77,37 @@ host's `experimentSteps`.
   Crossfeeder does not take it; tapping an infected Sprinter posts the stamp recorded at the gate
   moment, equal to the headless one.
 
-### EXP_104 — gate NOT reached: measured limiting factor
+### EXP_104 — revision 2 reaches its gate at 1 s (D-0068)
 
-| Clause | Value at 180 s |
-|---|---|
-| `limitSeconds.B01.OXYGEN_LIMITED > 0` | **0** (fails) |
-| `limitSeconds.B03.SUIT_OXYGEN_HIGH > 0` | 998 organism-seconds (holds) |
+Revision 2 of HIDDEN_NEIGHBORHOOD_V1 starts the dish at oxygen 0.03 (`backgroundOverrides.oxygen`); founders,
+patch, seed, lid and stopping time are CT's. Probe across starting levels: docs/reports/exp104-revision-probe.md.
 
-- **Dusks**: the Water Garden's oxygen 0.8 gives B03 (OXYGEN_SUPPRESSED, factor `1 − O2/0.4`) a
-  suitability of 0 from the first tick; they take in nothing (`intake.B03` 0) and all 20 die of
-  stress (`DEATH_STRESS`) by 50 s.
-- **Sprinters never run short of oxygen**: the lowest oxygen in any Sprinter's cell over the whole run
-  is 0.715 (the fixture asserts > 0.7 every tick and that no Sprinter's limit code is ever
-  `OXYGEN_LIMITED`); the dish mean falls only from 0.764 to 0.761. Forty small aerobic eaters that
-  take in 111.7 C in 180 s use a small part of a closed Water Garden's oxygen, which diffuses in from
-  the whole dish. Their leading limit is `FOOD_ACCESS_LOW` throughout.
-- Extended to 600 s (CT §11): still 0 oxygen-limited seconds; Sprinters starve out by 453 s
-  (food access), Dusks extinct at 50 s.
-- `limitSeconds.B01.OXYGEN_LIMITED` itself is proven to count when the reading happens: in a
-  test-only variant of the recipe with background oxygen 0.02 it is positive and equals an independent
-  tick-by-tick count of the inspector's reading (tests/experiments/hidden-neighborhood.test.ts).
-- No mechanic, constant or recipe number was changed. Per SPEC §13.2 the card is not release-ready
-  until the owner picks a new recipe revision. Candidate revisions (not measured as a fix, not
-  applied): a lower starting oxygen in the dish (a `backgroundOverrides.oxygen` such that Sprinter
-  respiration can pull local cells under their demand, which also lets Dusks live where it is low),
-  or many more Sprinters on the patch.
-- **Measured outcome in one line**: gate not reached; Sprinters' measured limiter is `FOOD_ACCESS_LOW`
-  (never `OXYGEN_LIMITED`; lowest O2 in a Sprinter's cell 0.715), Dusks' is `SUIT_OXYGEN_HIGH` until
-  they die out at 50 s. Lead fix 4a: every player-facing EXP_104 text (intervention, predicted
-  trade-off, the `inspectOxygenLimits` step line) is now conditional: it tells the player what to look
-  for and to note the real limiter if the inspector names something else; it no longer promises an
-  oxygen reading for both species. CT §10's question text is unchanged.
+| Measure (seed 104, 180 s) | Revision 2 | Revision 1 (O2 0.8) |
+|---|---|---|
+| `limitSeconds.B01.OXYGEN_LIMITED` (gate > 0) | **131.1** org·s (holds) | 0 (failed) |
+| `limitSeconds.B03.SUIT_OXYGEN_HIGH` (gate > 0) | **3496.7** org·s (holds) | 998 |
+| gate reached | at 1 s | never |
+| oxygen mean | 0.027 | 0.761 |
+| intake B01 / B03 | 65.8 / 46.8 | 111.7 / 0 |
+| alive B01 / B03 | 28 / 20 | — / 0 |
+| births B01 / B03 | 9 / 0 | — |
+| deaths B01 / B03 | 1 / 0 | — / 20 (stress, by 50 s) |
+
+- **Mechanism**: the founders land on a rich sugar patch and feast; each Sprinter's oxygen demand scales
+  with its intake (`fracO = min(1, O2 / demandO2)`, src/sim/intake.ts). The feast empties the patch's
+  oxygen, so Sprinters read `OXYGEN_LIMITED` from tick 8 to tick 126 (all 20 at 2 s). Once the sugar
+  is eaten down `FOOD_ACCESS_LOW` leads, demand falls and oxygen diffuses back; after 20 s the lowest
+  oxygen in any Sprinter's cell stays above 0.003, and no Sprinter is oxygen-limited again.
+- **Dusks** live the whole run: at 0.03 their suitability `1 − O2/0.4` is about 0.93, a mild
+  `SUIT_OXYGEN_HIGH` reading that holds about 97 % of organism-seconds.
+- **Player texts**: the oxygen-limited reading appears only in about the first ten seconds, so the
+  recipe text, the intervention, the predicted trade-off and the `inspectOxygenLimits` step line say the
+  dish starts low in oxygen and to pause in the first seconds while the patch is busiest. The step line
+  stays conditional. In the app (worker test) the real card's stamp waits until a Dusk
+  (`SUIT_OXYGEN_HIGH`) and an oxygen-limited Sprinter have both been tapped.
+- Fixture: tests/experiments/hidden-neighborhood.test.ts pins these values and the tick-8-to-126 window;
+  the fence entry was re-recorded with reason D-0068. Owner review: the gate moment is short; the
+  alternative is to keep EXP_104 out of the v1.0 card list.
 
 ## Curated dishes (CT §9.3)
 
@@ -156,7 +156,7 @@ What happens (one run each, seed = recipe number, 600 s, Standard; reported, nev
 
 ## Not done / follow-ups
 
-- EXP_104 needs an owner-chosen recipe revision (above).
+- EXP_104 ships on recipe revision 2 (D-0068, above); owner review of the short gate moment.
 - The New Dish map is drawn by the host's `newDishPreview` from `habitatGrid(habitat, {removeStones})`,
   which does not include a recipe's own ops, so L306's gel disk is missing from the picture (the words
   say "Gel bed"). One-line fix in src/worker/host.ts (field-guide's file this wave):

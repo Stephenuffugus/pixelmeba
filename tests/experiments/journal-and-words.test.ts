@@ -167,7 +167,7 @@ describe('completion copy says what completing each kind of card does (SPEC §13
     expect(card('EXP_104').playerSteps).toEqual(['inspectOxygenLimits']);
     expect(card('EXP_104').stepSpecies).toEqual(['B01', 'B03']);
     expect(playerStepText(card('EXP_104'), 'inspectOxygenLimits')).toBe(
-      'Tap a Sprinter and a Dusk and read what holds each back. Look for one held back by too little oxygen and the other by too much; if none is, note what holds them back instead.',
+      'Tap a Sprinter and a Dusk and read what holds each back; pause in the first seconds, while the patch is busiest. Look for one held back by too little oxygen and the other by too much; if none is, note what holds them back instead.',
     );
     expect(card('EXP_105').playerSteps).toEqual(['observeInfection']);
     expect(playerStepText(card('EXP_105'), 'observeInfection')).toBe('Tap an infected Sprinter: the inspector shows its infection and when it bursts.');

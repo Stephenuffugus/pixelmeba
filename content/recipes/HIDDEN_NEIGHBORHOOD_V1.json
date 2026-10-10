@@ -1,6 +1,6 @@
 {
   "id": "HIDDEN_NEIGHBORHOOD_V1",
-  "revision": 1,
+  "revision": 2,
   "name": "A hidden neighborhood",
   "habitatId": "WATER_GARDEN",
   "seed": 104,
@@ -10,7 +10,7 @@
   "removeStones": false,
   "mutationPreset": "standard",
   "founderMode": "identical",
-  "backgroundOverrides": {},
+  "backgroundOverrides": {"oxygen": 0.03},
   "fieldPatches": [
     {"center": [50, 70], "radius": 6, "substrate": "water", "add": {"sugar": 0.5, "nutrient": 0.2}, "label": "Sugar and nutrient patch"}
   ],
@@ -20,6 +20,6 @@
   ],
   "labels": [],
   "question": "Who lives where the oxygen runs out?",
-  "expectedObservationsText": "Twenty Sprinters and twenty Dusks share a sugar patch under a closed lid, so no oxygen comes in from the air. Sprinters need oxygen to eat; Dusks are held back where there is a lot of it. The Oxygen overlay (Lab → Observe) shows where it runs low.",
+  "expectedObservationsText": "Twenty Sprinters and twenty Dusks share a sugar patch in a dish that starts low in oxygen, under a closed lid, so no oxygen comes in from the air. Sprinters need oxygen to eat; Dusks are held back where there is a lot of it. While the patch is busiest, in about the first ten seconds, eating can use up the oxygen around it. The Oxygen overlay (Lab → Observe) shows where it runs low.",
   "phase": 3
 }

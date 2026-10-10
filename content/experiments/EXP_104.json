@@ -4,8 +4,8 @@
   "title": "A hidden neighborhood",
   "question": "Who lives where the oxygen runs out?",
   "recipeId": "HIDDEN_NEIGHBORHOOD_V1",
-  "intervention": "Watch the Oxygen overlay (Lab → Observe) while the lid stays closed. Tap a Sprinter and a Dusk and read what holds each one back. Look for one held back by too little oxygen and the other by too much; if the inspector names something else, note what holds them back instead.",
-  "predictedTradeoff": "Sprinters burn oxygen to eat, so a busy patch under a closed lid can run short of it for them. Dusks are held back where oxygen is high; if the Sprinters use up enough oxygen, that may leave room for Dusks.",
+  "intervention": "The dish starts low in oxygen. Watch the Oxygen overlay (Lab → Observe) while the lid stays closed, and pause in the first seconds, while the patch is busiest. Tap a Sprinter and a Dusk and read what holds each one back. Look for one held back by too little oxygen and the other by too much; if the inspector names something else, note what holds them back instead.",
+  "predictedTradeoff": "Sprinters burn oxygen to eat, so a busy patch in a low-oxygen dish under a closed lid can run short of it for them, mostly in the first seconds while the food is plentiful. Dusks are held back where oxygen is high; in a dish this low in oxygen they may find room to live.",
   "measurements": [
     "limitSeconds.B01.OXYGEN_LIMITED",
     "limitSeconds.B03.SUIT_OXYGEN_HIGH",
