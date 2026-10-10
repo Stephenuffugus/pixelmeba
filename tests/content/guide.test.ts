@@ -85,8 +85,9 @@ describe('P3.8 every enabled record has Field Guide text (validator)', () => {
 
   it('a record that is not enabled is not held to it (a Phase 5 species with blank text still validates)', () => {
     expect(errors(edit(raw, 'species', 'B09', (d) => (guideOf(d).summary = ' ')))).toEqual([]);
-    // A tool of a later phase than the build is not enabled either.
-    expect(errors(edit(raw, 'tools', 'SAMPLE', (d) => ((d.phase = 4), (d.watchFor = ' '))))).toEqual([]);
+    // A tool of a later phase than the build is not enabled either (one phase past the shipped buildPhase).
+    const later = (raw.manifest.data as { buildPhase: number }).buildPhase + 1;
+    expect(errors(edit(raw, 'tools', 'SAMPLE', (d) => ((d.phase = later), (d.watchFor = ' '))))).toEqual([]);
   });
 });
 

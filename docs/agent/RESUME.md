@@ -3,6 +3,18 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑10 23:00 UTC — PHASE 4 PRE-LAUNCH COMMITTED; OWNER WILL REFRESH THE CODESPACE SOON. START HERE.**
+> - Committed with this note: D‑0070…D‑0072 (Phase 4 calls 1, 2, 6), content/manifest.json buildPhase 3 → 4 (contentHash
+>   14d6ce67…; check green, fence unmoved), the wave 5 STATE filled, the runner's phone-portrait rule, the wave 5a run file
+>   `docs/agent/g4-wave-5a.run.workflow.js.txt` (favorites + garden-home, A.only) and `tools/lead/backup-tree.sh`.
+> - BEST REFRESH POINT: right after this commit, before wave 5a launches (nothing running). Next clean point: after wave 5a
+>   is integrated and committed.
+> - If wave 5a is running when the codespace restarts: its uncommitted work is in the tree (and in `wip/g4-wave-5a` on
+>   origin, refreshed every 30 min by `tools/lead/backup-tree.sh wip/g4-wave-5a`). If `git status` is clean after the
+>   restart, restore with `git checkout wip/g4-wave-5a -- . && git reset -q`. Read docs/reports/reviews/g4-wave-5a/ for any
+>   finished reports, then rerun only the unfinished builders from the run file with a `finish` note each (as wave 4b's
+>   resume did: docs/agent/g3-wave-4b-resume.run.workflow.js.txt).
+
 > **Update 2026‑10‑10 22:15 UTC — G3 GATE PASSED, TAG `g3`. START HERE.**
 > - `main` = the gate commit (tag `g3`) on top of `1eb3025`; clean and pushed. WORKLOG: P3.1–P3.12 and the G3 gate ticked.
 >   Decisions through D‑0069. Evidence: check 154 files / 1542 tests; e2e 258/258 (3.0 h, all three projects) at 1eb3025;
