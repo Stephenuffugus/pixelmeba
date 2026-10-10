@@ -4,8 +4,8 @@
   "moduleRegistryVersion": 2,
   "phenotypeMappingVersion": 1,
   "contentVersion": 2,
-  "contentHash": "f276b113906cc8db696f162ce43496df826b3a05cc5867b918d0b8515678dc24",
-  "buildPhase": 3,
+  "contentHash": "14d6ce67d63ad4d040f06ed51b0709fb7bdec1927ea7674cb414ffd697ba39e8",
+  "buildPhase": 4,
   "enabledSpecies": [
     "A01",
     "B01",

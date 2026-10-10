@@ -757,3 +757,34 @@ Decision:
 Reason: UX §4.1 and §9 (reflow at 200 %, the dish stays usable on phones); BUILD_DIRECTIVE G3 (e2e journeys on every project); honest tests (a stale pin is updated to the measured app, never widened to anything).
 Affects: src/ui/styles.css, src/ui/gestures.ts, src/ui/a11y/{describe.ts,DishSummary.tsx}, tests/ui/a11y-describe.test.ts; tests/e2e/{add-life-w2,field-guide,food-objects,launch-ecology,phage,reactions}.spec.ts, tests/e2e/helpers.ts.
 Owner review: no.
+
+## D-0070 · 2026-10-10 · Phase 4 · Notebook state is not world state
+Context: docs/agent/g4-plan.md "Lead calls made up front", call 1; recorded before wave 5 (P4.1–P4.4).
+Decision:
+- Favorites, nicknames, story cards, bookmarks, gallery entries, prediction notes and goal progress live in a per-dish notebook record next to the world save (ARCH §11.2's "presentation" block, outside the state checksum).
+- The record is never in `stateHash`, and nothing in src/sim reads it. Each kind gets a hash test that it never alters behaviour (SPEC §12.6 "Favorites never alter behavior").
+- The record has its own schema version, checksum and import validation. An unknown or malformed record is dropped with a message and the world still loads.
+- Nicknames go into an export only when the player opts in (SPEC §12.6, §14.4).
+Reason: SPEC §12.6, §14.1–§14.4; the simulation contract (the renderer and UI never own biological state); saves are sacred.
+Affects: Phase 4 wave 5 (favorites owns src/persistence/notebook.ts; stories and objectives add kinds).
+Owner review: no.
+
+## D-0071 · 2026-10-10 · Phase 4 · Objectives are evaluated, never enforced in the sim
+Context: docs/agent/g4-plan.md call 2; recorded before wave 5 (P4.4).
+Decision:
+- The objective engine reads the same observation surface as experiments: the measurement grammar and `ArmObserver` in src/sim/pairedRun.ts, and the experiments' `GateWatch` pattern. It runs in the worker after each published tick.
+- It never changes a pause state or a speed, and never counts a blocked or cancelled proposal (SPEC §13.5).
+- A goal's state is saved in the notebook record (D-0070). Try my dish turns also keep a baseline reference, start tick and horizon (SPEC §13.6).
+Reason: SPEC §13.5–§13.6; no hidden rescue or scripted spectacle (a goal observes, it never steers).
+Affects: Phase 4 wave 5 objectives (src/sim/objectives.ts, src/worker/goals.ts).
+Owner review: no.
+
+## D-0072 · 2026-10-10 · Phase 4 · No new sim rules in Phase 4; buildPhase 3 → 4
+Context: docs/agent/g4-plan.md call 6; the three goals are phase 4 content (CT §10.5), and the registry refuses or filters content with phase > buildPhase.
+Decision:
+- `simulationVersion`, `evolutionRulesVersion`, `moduleRegistryVersion` and `phenotypeMappingVersion` do not move in Phase 4. If a task seems to need one, it stops and the lead decides.
+- The fence (g2-replay plus the four trajectory-fence files) must pass unchanged in every wave.
+- content/manifest.json `buildPhase` 3 → 4 (contentVersion stays 2), with `content-validate --write`; the fence digests are biology, so none may move with this bump.
+Reason: BUILD_DIRECTIVE Phase 4 (wonder, replay, Android) adds presentation and tools, not biology; determinism and old saves keep their recorded ruleset.
+Affects: content/manifest.json (buildPhase, contentHash); every Phase 4 wave.
+Owner review: no.
