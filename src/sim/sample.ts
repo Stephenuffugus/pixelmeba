@@ -515,6 +515,8 @@ export interface SampleHeldSummary {
   readonly radius: number;
   readonly origin: readonly [number, number];
   readonly organisms: number;
+  /** Held organisms per species (the world's species order); the dish summary counts them (P3.11). */
+  readonly speciesHeld: readonly number[];
   readonly cells: number;
   readonly objects: number;
   readonly c: number;
@@ -536,11 +538,14 @@ export function heldSummary(world: World): SampleHeldSummary | null {
   for (const cell of s.cells) add(cell.dx, cell.dy);
   for (const r of s.rows) add(Math.floor(r.cols.x) - s.origin[0], Math.floor(r.cols.y) - s.origin[1]);
   for (const o of s.objects) add(cellX(o.cell) - s.origin[0], cellY(o.cell) - s.origin[1]);
+  const speciesHeld = new Array<number>(world.species.length).fill(0);
+  for (const r of s.rows) speciesHeld[r.cols.species]!++;
   return {
     mode: s.mode,
     radius: s.radius,
     origin: [s.origin[0], s.origin[1]],
     organisms: s.rows.length,
+    speciesHeld,
     cells: s.cells.length,
     objects: s.objects.length,
     c: t.c,

@@ -61,7 +61,7 @@ import { SamplePanel } from '../panels/SamplePanel';
 import type { Speed } from '@worker/protocol';
 import { DishSummary } from '../a11y/DishSummary';
 import { CellDescription, CELL_DESCRIPTION_ID } from '../a11y/CellDescription';
-import { restoreFocus } from '../a11y/focus';
+import { lastInputWasKeyboard, restoreFocus } from '../a11y/focus';
 
 function formatTime(tick: number): string {
   const s = Math.floor(tick / 10);
@@ -136,9 +136,11 @@ export function DishScreen() {
 
   // P3.11 (W6-04/W6-06): when a key or a choice closes the panel that held focus (a sheet, the candidate
   // list, a Lab tray), focus returns to the dish instead of the page body, so the next key acts there.
+  // Not after a pointer action (restoreFocus checks the input modality): the reticle would stay hidden.
   const openCandidates = candidates.value;
   const openTray = labTray.value;
   const currentTool = tool.value;
+  useEffect(() => void lastInputWasKeyboard(), []);
   useEffect(() => {
     restoreFocus(dishFocus.current);
   }, [openSheet, openCandidates, openTray, currentTool]);

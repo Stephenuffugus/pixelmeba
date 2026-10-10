@@ -183,29 +183,56 @@ test('keyboard: arrows pan the dish under the reticle, Esc closes the candidate 
   await page.keyboard.press('Enter');
   await expectDishFocused(page);
 
-  // Enter at the reticle in Look with nothing there describes the cell (the dish's accessible description).
-  // Pan with the arrows until the reticle is over open water without organisms, then read it.
+  // Enter at the reticle in Look: over an organism it selects it or opens the candidate list (Esc closes the
+  // list and returns focus to the dish); over open water it describes the cell; over a stone nothing opens.
+  // `probe` presses Enter, handles what opened, and steps one ArrowLeft to try again until a cell is
+  // described; it returns that cell.
   const insp = page.getByTestId('inspector');
   const cellDescription = page.getByTestId('cell-description');
-  for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('Enter');
   const list = page.getByRole('listbox', { name: 'Choose an organism' });
-  await expect(list.or(insp)).toBeVisible();
-  if (await list.isVisible()) {
-    await expect(list.getByRole('option').first()).toBeFocused();
-    await page.keyboard.press('Escape');
-    await expect(list).toHaveCount(0);
-    await expectDishFocused(page);
-  } else {
-    const h = insp.getByRole('heading', { level: 2 });
-    if (/^Cell /.test(await h.innerText())) {
-      await expect(cellDescription).toHaveText(/^Selected cell \d+, \d+: .+\. pH .+ Residents: .+\.$/);
-      await expect(page.getByTestId('dish-focus')).toHaveAccessibleDescription(/Selected cell \d+, \d+/);
+  let listSeen = false;
+  async function probe(): Promise<{ x: number; y: number }> {
+    for (let tries = 0; tries < 12; tries++) {
+      await page.keyboard.press('Enter');
+      // A stone or the rim under the reticle opens nothing: step on.
+      const opened = await list
+        .or(insp)
+        .waitFor({ timeout: 3000 })
+        .then(() => true, () => false);
+      if (!opened) {
+        await expectDishFocused(page);
+      } else if (await list.isVisible()) {
+        listSeen = true;
+        await expect(list.getByRole('option').first()).toBeFocused();
+        await page.keyboard.press('Escape');
+        await expect(list).toHaveCount(0);
+        await expectDishFocused(page);
+      } else {
+        const heading = await insp.getByRole('heading', { level: 2 }).innerText();
+        const m = /^Cell (\d+), (\d+)/.exec(heading);
+        if (m) {
+          await expect(cellDescription).toHaveText(new RegExp(`^Selected cell ${m[1]}, ${m[2]}: .+\\. pH .+ Residents: .+\\.$`));
+          await expect(page.getByTestId('dish-focus')).toHaveAccessibleDescription(new RegExp(`Selected cell ${m[1]}, ${m[2]}`));
+          await page.keyboard.press('Escape');
+          await expect(insp).toHaveCount(0);
+          await expectDishFocused(page);
+          return { x: Number(m[1]), y: Number(m[2]) };
+        }
+        await page.keyboard.press('Escape');
+        await expect(insp).toHaveCount(0);
+        await expectDishFocused(page);
+      }
+      await page.keyboard.press('ArrowLeft');
     }
-    await page.keyboard.press('Escape');
-    await expect(insp).toHaveCount(0);
-    await expectDishFocused(page);
+    throw new Error('no open-water cell under the reticle after 12 tries');
   }
+  // The arrows pan the dish under the reticle: three ArrowDown presses move the described cell down the
+  // dish (larger y); probe's own ArrowLeft steps never change y.
+  const before = await probe();
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown');
+  const after = await probe();
+  expect(after.y, `cell under the reticle before ${JSON.stringify(before)}, after ${JSON.stringify(after)}`).toBeGreaterThan(before.y);
+  test.info().annotations.push({ type: 'candidate-list', description: listSeen ? 'opened and closed with Esc' : 'not met on this path' });
 
   // The species list summarizes the canvas.
   const summary = page.getByTestId('dish-summary');

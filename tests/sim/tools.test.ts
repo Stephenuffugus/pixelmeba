@@ -29,7 +29,7 @@ import { recordField } from '../../src/sim/lineage';
 import { killEntity } from '../../src/sim/maintenance';
 import { hostOf, parasiteOf } from '../../src/sim/parasites';
 import { R } from '../../src/sim/reasons';
-import { cancelSample, selectSample } from '../../src/sim/sample';
+import { cancelSample, heldSummary, selectSample } from '../../src/sim/sample';
 import { decodeSample, encodeSample, sampleTotals, type SavedSample } from '../../src/sim/sampleSlot';
 import { deserializeWorld, serializeWorld, stateHash } from '../../src/sim/serialize';
 import { rebuildIndex } from '../../src/sim/spatial';
@@ -149,6 +149,21 @@ describe('Sample: take and cancel (D-0037)', () => {
     cancelSample(w);
     expect(w.commands.nextSeq).toBe(seq0);
     expect(w.commands.log.length).toBe(log0);
+  });
+
+  it('heldSummary counts the held organisms per species, in the world’s species order', () => {
+    const w = busyDish();
+    const before = w.species.map(() => 0);
+    const c = w.ents.cols;
+    for (let i = 0; i < w.ents.highWater; i++) if (c.alive[i] === 1) before[c.species[i]!]!++;
+    take(w, 50.5, 50.5, 3, 'life');
+    const h = heldSummary(w)!;
+    const after = w.species.map(() => 0);
+    for (let i = 0; i < w.ents.highWater; i++) if (c.alive[i] === 1) after[c.species[i]!]!++;
+    expect(h.speciesHeld).toHaveLength(w.species.length);
+    expect(h.speciesHeld.reduce((a, n) => a + n, 0)).toBe(h.organisms);
+    expect(h.organisms).toBeGreaterThan(0);
+    expect(h.speciesHeld).toEqual(before.map((n, k) => n - after[k]!));
   });
 
   it('nothing in the circle: no sample, no change but the refused command', () => {

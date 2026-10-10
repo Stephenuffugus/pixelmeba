@@ -66,6 +66,21 @@ describe('species lines and the dish summary', () => {
     expect(s.absent).toBe('None in the dish now: Hitcher, Pinphage.');
     expect(s.lines.join(' ')).not.toMatch(/superior|advanced|perfect|adapted|immune|winning/i);
   });
+  it('members held in a Sample are named as held, never as extinct (wave-verify MINOR)', () => {
+    const s = dishSummaryText([
+      { ...base, name: 'Cordweaver', count: 0, seen: true, held: 6 },
+      { ...base, name: 'Sprinter', count: 20, held: 3 },
+      { ...base, name: 'Recycler', count: 0, seen: false, held: 2 },
+    ]);
+    expect(s.heading).toBe('20 alive, 1 kind of organism.');
+    expect(s.lines).toEqual([
+      'Sprinter: 20 alive, count rising over the last 30 s of dish time; 3 held in the sample.',
+      'Cordweaver: none in the dish now; 6 held in the sample.',
+      'Recycler: none in the dish now; 2 held in the sample.',
+    ]);
+    expect(s.absent).toBeNull();
+    expect(s.lines.join(' ')).not.toMatch(/extinct/);
+  });
   it('an empty dish says nothing is alive, and names no extinction it never saw', () => {
     const s = dishSummaryText([{ ...base, name: 'Sprinter', count: 0, seen: false }]);
     expect(s.heading).toBe('Nothing is alive in the dish now.');

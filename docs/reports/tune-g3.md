@@ -3801,7 +3801,7 @@ D-0015 asked for its three G1 proposals (tune-g1.md "Proposed recipe revisions")
   The content hash is rewritten and the copy is validated like shipped content.
 - Each candidate runs through `tuneSeed` (tools/sim-tune.ts) on the six development seeds for 600 s, Standard, with the G3
   shipped manifest (19 species, ten modules).
-- `content/` was never changed. Script: tmp/evidence/d0015-remeasure.ts (scratch, not committed).
+- `content/` was never changed. Script: tools/d0015-remeasure.ts (`npx tsx tools/d0015-remeasure.ts`).
 - The control ("V1 as is", the shipped registry) reproduces this report's six FIRST_DISH_V1 hashes at 600 s.
 - Proposal 2 was listed at G1 but not measured there; it is measured here for the first time.
 
