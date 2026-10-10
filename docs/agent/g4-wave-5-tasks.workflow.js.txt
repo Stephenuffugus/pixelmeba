@@ -1,0 +1,81 @@
+export const meta = {
+  name: 'g4-wave-5-tasks',
+  description: 'Write docs/agent/g4-wave-5.tasks.js.txt (Phase 4 wave 5 "Wonder": favorites, garden-home, stories, objectives) with one writer',
+  phases: [{ title: 'Write', detail: 'one writer, effort high, line ranges only' }],
+}
+
+// Launch only after tag g3 (CLAUDE.md: finish the phase, in order). Lead draft 2026-10-10; review the STATE facts below
+// against the tree at launch (decision numbers, the g3 tag) before running.
+
+const PROMPT = `You are the task-file writer for Pixelmeba Phase 4 wave 5 (repo /workspaces/pixelmeba; CLAUDE.md applies). You write ONE file: docs/agent/g4-wave-5.tasks.js.txt. Do not edit any other file and do not run tests, builds or git commands that change anything (git grep / git log / git show / ls are fine).
+
+WHAT WAVE 5 IS (read docs/agent/g4-plan.md whole, and docs/agent/fast-track.md): four builders in two stages, two agents at a time:
+  stage 1: favorites (P4.1, port 4271, critical: true), garden-home (P4.3, port 4273)
+  stage 2: stories (P4.2, port 4272), objectives (P4.4, port 4274, critical: true)
+favorites builds the per-dish notebook record (g4-plan.md call 1: its own schema version, checksum, import validation, autosave/export/import paths, never in stateHash) with favorites as its first kind; stories and objectives add their kinds to it additively in stage 2. The wave runs with docs/agent/g4-runner-ft.workflow.js.txt: read its PRE, REPORT and BUILD_FINAL strings; your prompts must not repeat them (they are prepended to every builder prompt).
+
+STATE WHEN WAVE 5 STARTS (write it as the STATE string; verify every claim against the tree and write facts, not plans): main has tag g3 (WORKLOG P3.1-P3.12 ticked); decisions (read every title: git grep -n "^## D-" docs/DECISIONS.md; in full the ones from D-0059 on, and the g4-plan.md calls once recorded); versions from content/manifest.json, SCHEMA_VERSION in src/sim/world.ts, PROTOCOL_VERSION in src/worker/protocol.ts; the shipped manifest lists; the persistence layout (src/persistence/: saveFile.ts, store.ts, idb.ts, checkpoints.ts, compress.ts, migrations/); the Notebook view (src/ui/views/Notebook.tsx, NotebookJournal.tsx and the journal module they use); Home (src/ui/views/Home.tsx, Play.tsx); lineage UI (src/ui/panels/Lineage*.tsx, FamilyMarkers.tsx); the event ring and event kinds (SPEC §12.3; find them in src/sim by grep); the experiments' observation surface (src/sim/pairedRun.ts ArmObserver / measureArm / stepObserved; GateWatch in src/sim/experiments.ts); content/objectives/ (empty; the registry already filters objectives by id); the e2e helpers (tests/e2e/*, expectNoSeriousA11yViolations).
+
+SOURCES (read only these ranges; find each by git grep -n):
+- docs/BUILD_DIRECTIVE.md: P4.1-P4.4 and "v1.0 gate — evidence".
+- SPEC: §12.3 Events, §12.6 Favorite families, §12.7 Story cards, §12.9 Copy rules, §13.5 Objectives and goals, §14.1-§14.3 (save contract, slots and autosave, export and import), §14.5 Migration.
+- UX: §3 Explore view (layout, first minutes, mode labels), §5.8 Favorites, §5.9 Story cards, and only the copy and accessibility rules these screens need (do not read UX whole).
+- CONTENT_TABLES §10.5 Goals (the three goals and their exact completion rules).
+- ARCH: the persistence and protocol sections (grep "^## " for the headings).
+- docs/agent/g3-wave-4.tasks.js.txt lines 1-130 (header and STATE format) and one task prompt (git grep -n "key: 'a11y'") for the prompt shape: ASSIGNMENT / Read / You own / SHARED (additive) / Build / Done when / E2E port line.
+- docs/source/ only where a canonical section is ambiguous (cite the line).
+- The tree, to check every path, symbol and line hint you put in a prompt.
+
+WHAT TO WRITE: the same shape as g3-wave-4.tasks.js.txt. First a header comment: sources; the stage table with ONE owner per file across all four tasks and the SHARED-additive files; "LEAD PRE-LAUNCH" (record g4-plan.md calls 1, 2 and 6 as D-numbers before launch, and name them); "LEAD AFTER WAVE 5" (integration, tick P4.1-P4.4, the touched journeys on desktop); "Decisions to record". Then:
+  export const STATE = \`...\`
+  export const TASKS = [ { key, port, stage, critical?, prompt }, ... ]
+  export const WAVE_TASKS = TASKS
+Each prompt has these parts:
+- ASSIGNMENT: the BUILD_DIRECTIVE row plus the SPEC/UX lines it implements.
+- Read: exact line ranges.
+- You own: new files, plus the files only this task edits.
+- SHARED (additive): name each hook point by symbol.
+- Build: numbered and concrete. Data shapes; where state lives; which command or protocol message; what is saved; the exact copy strings from UX.
+- Done when:
+  - the BUILD_DIRECTIVE test file names (tests/ui/favorites.test.ts, tests/ui/stories.test.ts, tests/sim/objectives.test.ts);
+  - a never-alters-behavior hash test per notebook kind;
+  - save, import and migration tests for the notebook record;
+  - one desktop e2e journey per task on its port.
+- The E2E port line.
+Specific requirements:
+- favorites:
+  - The notebook record:
+    - where it lives, its schema and its checksum;
+    - it is written atomically with the world save, and the predecessor is kept;
+    - nicknames are exported only on opt-in;
+    - an import drops a malformed record with a message and still loads the world;
+    - an older save without one migrates by copy.
+  - At most 3 favorites; Find; Follow next (birth tick, then id; never the healthiest).
+  - The extinction card copy from UX §5.8.
+  - At most 200 highlighted, then an aggregate marker. This is snapshot-side only: the renderer never owns state.
+- stories:
+  - Four templates. Evidence IDs are required: no card without evidence.
+  - At most 1 notification per 60 s, priority favorite → unseen template → earliest, with dedupe.
+  - The "Memory, not replay" badge. Spotlight moves only the camera.
+  - The detector runs in the worker from events and observation (name the file), never in src/sim.
+- garden-home:
+  - UX §3 Home with Continue/Play, and a Garden card with a live thumbnail from snapshots.
+  - One optional prompt at a time, with "Show me".
+  - Session memory on Save and leave. Nothing invented when the dish is quiet.
+- objectives:
+  - Five predicate types, evaluated read-only over observations; reuse the pairedRun.ts measurement grammar where it fits.
+  - Decide where the engine lives (src/sim/objectives.ts, or src/worker/ if it needs no sim internals) and say why.
+  - Goal states: inactive / running / completed / ended / continued freely.
+  - The three CT §10.5 goals as content/objectives/*.json, validated by the registry.
+  - Off by default in free play. One dismissible sentence plus Continue, without changing the pause state.
+  - Blocked or cancelled proposals never count: prove it with a fixture.
+The file must parse as JavaScript when its "export " keywords are removed and it is placed after a meta block. Check with: node -e "const s=require('fs').readFileSync('docs/agent/g4-wave-5.tasks.js.txt','utf8').replace(/^export /gm,''); new Function(s+'; return WAVE_TASKS.map(t=>[t.key,t.port,t.stage,t.critical||false,t.prompt.length])')().forEach(r=>console.log(r.join(' ')))". Run it and paste the output in your final message. Escape backticks and \${ inside prompts.
+Final message:
+- the parse output;
+- the stage and ownership table;
+- every place where the canonical docs were silent and what you chose, as PROPOSED DECISION lines for the lead;
+- anything in the tree that contradicts g4-plan.md.`
+
+phase('Write')
+const out = await agent(PROMPT, { label: 'writer:g4-wave-5', phase: 'Write', effort: 'high' })
+return out
