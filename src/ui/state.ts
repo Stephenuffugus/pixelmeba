@@ -83,6 +83,11 @@ export interface Settings {
   readonly muted?: boolean;
   readonly quietAudio?: boolean;
   readonly haptics?: boolean;
+  /**
+   * Settings "Simplified overlay colours" (UX §9; P3.11): every overlay drawn in one light-to-dark ramp.
+   * Optional so settings stored by older builds still load; off unless chosen.
+   */
+  readonly simplifiedOverlayPalette?: boolean;
 }
 
 /** Text sizes offered in Settings (UX §4.1 acceptance runs at 100 % and 200 %). */
@@ -150,7 +155,7 @@ function loadSettings(): Settings {
  */
 function applyDisplaySettings(): void {
   const s = settings.value;
-  renderer?.setOptions({ reducedMotion: s.reducedMotion, overlayOpacity: s.overlayOpacity });
+  renderer?.setOptions({ reducedMotion: s.reducedMotion, overlayOpacity: s.overlayOpacity, simplifiedOverlayPalette: s.simplifiedOverlayPalette === true });
   setAudioPrefs(audioPrefsOf(s));
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
@@ -1052,7 +1057,7 @@ export function attachCompareRenderer(arm: CompareArm, r: DishRenderer | null): 
   compareRenderers[arm] = r;
   if (!r) return;
   const info = dishInfo.value;
-  r.setOptions({ reducedMotion: settings.value.reducedMotion, overlayOpacity: settings.value.overlayOpacity });
+  r.setOptions({ reducedMotion: settings.value.reducedMotion, overlayOpacity: settings.value.overlayOpacity, simplifiedOverlayPalette: settings.value.simplifiedOverlayPalette === true });
   if (info) r.setSpecies(info.speciesIds, info.speciesAssets);
   const geo = compareLastGeometry[arm];
   const last = compareLastSnapshot[arm];

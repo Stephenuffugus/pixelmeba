@@ -137,7 +137,8 @@ export function CompareScreen() {
         {status === 'setup' && sheet.value === 'feed' ? <FeedSheet /> : null}
         {status === 'setup' && sheet.value === 'addLife' ? <AddLifeSheet /> : null}
         {toast.value ? (
-          <div class="toast" role="status" aria-live="polite">
+          // Visual only: the app's LiveRegion announces the toast (P3.11 W6-07).
+          <div class="toast">
             {toast.value}
           </div>
         ) : null}

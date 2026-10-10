@@ -252,13 +252,16 @@ export class EntityStore {
 
   constructor(capacity: number = AGENT_CAP) {
     this.capacity = capacity;
-    const cols: Record<string, ArrayFor<ColType>> = {};
+    const entries: [string, ArrayFor<ColType>][] = [];
     for (const [name, t] of ENTITY_COLUMNS) {
       const arr = makeArray(t, capacity);
       if (emptyValueOf(name) !== 0) (arr as Int32Array).fill(-1);
-      cols[name] = arr;
+      entries.push([name, arr]);
     }
-    this.cols = cols as unknown as EntityColumns;
+    // P3.12: built in one step (same key order as ENTITY_COLUMNS) so V8 keeps the object in fast-property
+    // mode. Adding ~90 properties one keyed store at a time turns it into a dictionary, and then every
+    // `cols.x` read in every stage is a hash lookup. Same arrays, same values: hash-neutral.
+    this.cols = Object.fromEntries(entries) as unknown as EntityColumns;
   }
 
   isAlive(slot: number): boolean {

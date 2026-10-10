@@ -33,6 +33,9 @@ const C = {
   catalysis: [0x9e, 0x72, 0x29],
 } as const;
 
+/** The dish and deposit colours above, read by the contrast audit (tools/contrast-audit.ts, P3.11). */
+export const DISH_COLORS = C;
+
 type RGB = readonly [number, number, number];
 
 export function cosmetic(i: number, salt: number): number {
@@ -181,9 +184,9 @@ function paintDepositCell(img: ImageData, bands: Uint8Array, i: number, hasSugar
 }
 
 /** Colormaps per overlay kind; alpha is applied by the sprite (45 % default). */
-export type Colormap = 'food' | 'gas' | 'nutrient' | 'light' | 'ph' | 'activity' | 'deposit' | 'viral';
+export type Colormap = 'food' | 'gas' | 'nutrient' | 'light' | 'ph' | 'activity' | 'deposit' | 'viral' | 'simple';
 
-const RAMPS: Record<Colormap, readonly RGB[]> = {
+export const RAMPS: Record<Colormap, readonly RGB[]> = {
   food: [[255, 247, 220], [247, 200, 90], [214, 120, 30]],
   gas: [[235, 245, 255], [120, 180, 235], [25, 80, 170]],
   nutrient: [[245, 255, 240], [150, 210, 120], [40, 120, 50]],
@@ -193,9 +196,15 @@ const RAMPS: Record<Colormap, readonly RGB[]> = {
   deposit: [[250, 245, 235], [210, 180, 130], [130, 90, 50]],
   // Viral units (Phase 3 Pinphage): pale to the V01 glyph blue, then deep.
   viral: [[238, 244, 252], [62, 123, 196], [30, 50, 110]],
+  // Simplified overlay palette (UX §9, P3.11 Settings): one light-to-dark ramp for every overlay
+  // (surface #F5F4EF → slate → deep ink #0A1419). Low → high reads by lightness alone, so it holds in
+  // grayscale and under every colour-vision deficiency, and its ends stay ≥ 3:1 apart even at the
+  // default 45 % opacity over water (docs/reports/contrast.md); the legend says which end is high.
+  simple: [[245, 244, 239], [122, 146, 158], [10, 20, 25]],
 };
 
-export function colormapFor(id: string): Colormap {
+export function colormapFor(id: string, simplified = false): Colormap {
+  if (simplified) return 'simple';
   if (id === 'v01' || id === 'v02') return 'viral';
   if (id === 'oxygen' || id === 'co2') return 'gas';
   if (id === 'nutrient' || id.endsWith('N')) return 'nutrient';
@@ -221,8 +230,8 @@ function ramp(map: Colormap, t: number): RGB {
  * (stone, wall, outside the rim) stay clear; porous beads hold and pass dissolved material, so the
  * overlay shows their measured values like open cells.
  */
-export function paintOverlay(img: ImageData, data: Float32Array, structure: Uint8Array | null, id: string, scaleMax: number): void {
-  const map = colormapFor(id);
+export function paintOverlay(img: ImageData, data: Float32Array, structure: Uint8Array | null, id: string, scaleMax: number, simplified = false): void {
+  const map = colormapFor(id, simplified);
   const isPh = id === 'ph';
   for (let i = 0; i < CELL_COUNT; i++) {
     const o = i * 4;
@@ -241,8 +250,8 @@ export function paintOverlay(img: ImageData, data: Float32Array, structure: Uint
 }
 
 /** Legend stops for the UI (low → high), matching paintOverlay. */
-export function legendStops(id: string): string[] {
-  const map = colormapFor(id);
+export function legendStops(id: string, simplified = false): string[] {
+  const map = colormapFor(id, simplified);
   return [0, 0.5, 1].map((t) => {
     const [r, g, b] = ramp(map, t);
     return `rgb(${r}, ${g}, ${b})`;

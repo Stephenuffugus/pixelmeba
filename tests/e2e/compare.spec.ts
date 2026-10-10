@@ -96,7 +96,7 @@ test('compare: Feed on B, run 60 s, read results beside the prediction, pick a c
   await page.getByTestId('compare-save-card').click();
   await expect(page.getByTestId('compare-save-card')).toHaveText('Result card saved');
   // G2 comprehension M1: the toast says where the card is kept, and Done says how to keep a changed dish.
-  await expect(page.getByText('Result card saved on this device. Notebook → Journal lists it.')).toBeVisible();
+  await expect(page.locator('.toast', { hasText: 'Result card saved on this device. Notebook → Journal lists it.' })).toBeVisible();
   await expect(page.getByTestId('compare-done-note')).toContainText('To keep a changed version as its own dish, use More → Duplicate dish and change the copy.');
   const cards = await page.evaluate(() => JSON.parse(localStorage.getItem('pixelmeba.compareCards') ?? '[]') as { prediction: string; conclusion: string; label: string; ticks: number }[]);
   expect(cards[0]).toMatchObject({ prediction, conclusion: 'supports', label: 'this paired run', ticks: 600 });
@@ -140,7 +140,7 @@ test('compare: A refuses the change, Clear change resets B, and closing from set
   await page.getByTestId('feed-choose').click();
   if (await page.getByTestId('compare-show-A').isVisible()) await page.getByTestId('compare-show-A').click();
   await tapArm(page, 'A', 0.42, 0.5);
-  await expect(page.getByText('A is the baseline and stays unchanged. Place your change on B.')).toBeVisible();
+  await expect(page.locator('.toast', { hasText: 'A is the baseline and stays unchanged. Place your change on B.' })).toBeVisible();
   await expect(page.getByTestId('compare-change')).toHaveCount(0);
 
   await page.getByTestId('compare-feed').click();
@@ -148,7 +148,7 @@ test('compare: A refuses the change, Clear change resets B, and closing from set
   if (await page.getByTestId('compare-show-B').isVisible()) await page.getByTestId('compare-show-B').click();
   // m4: a refused placement says why and keeps the chosen food for the next tap.
   await tapArm(page, 'B', 0.01, 0.01);
-  await expect(page.getByText("That can't go there: food can't go onto stone, a wall or beyond the rim. Tap open water.")).toBeVisible();
+  await expect(page.locator('.toast', { hasText: "That can't go there: food can't go onto stone, a wall or beyond the rim. Tap open water." })).toBeVisible();
   await expect(page.getByText('Now tap dish B to place it.')).toBeVisible();
   await expect(page.getByTestId('compare-change')).toHaveCount(0);
   await tapArm(page, 'B', 0.42, 0.5);

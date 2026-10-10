@@ -7,9 +7,13 @@
  *
  * It constructs the real DishRenderer with the real organism atlas and feeds it synthetic
  * snapshots in the worker's exact packed format (ENT_STRIDE float records, ID_STRIDE ids,
- * DEPOSIT_BANDS deposit bands) at 10 snapshots/s: 6,000 organisms of the five Phase 1 species,
- * moving smoothly, in mixed animation states, with a steady trickle of births and deaths so split
- * effects and death dissolves are exercised too.
+ * DEPOSIT_BANDS deposit bands) at 10 snapshots/s: 6,000 organisms, moving smoothly, in mixed animation
+ * states, with a steady trickle of births and deaths so split effects and death dissolves are exercised
+ * too. P3.12 (protocol 2): 2,000 of them are fungal segments (1,000 F01 on a gel pad, 1,000 F02 on the
+ * sediment band) drawn as connection-mask tiles from E_LINKMASK (a third of the F02 flagged as
+ * transferring), 300 E12 adhesion pairs sent as `links`, Phase 3 cue bits (infected, parasitized,
+ * anchored, linked, module marks) in E_CUE2, a film band on the gel pad and 32 food objects.
+ * `phase=1` restores the G1 scene (five Phase 1 species, no fungi, links or objects).
  *
  * Nothing here is simulation: motion comes from a fixed-seed cosmetic PRNG so runs are comparable.
  * Instrumentation wraps (never replaces) the renderer's per-frame update and the Pixi render call.
@@ -23,16 +27,25 @@ import { DishRenderer, type AtlasManifestLike } from '@render/renderer';
 import { CELL_COUNT, GRID_W, MASK_CX, MASK_CY, MASK_R } from '@sim/constants';
 import { FLAG } from '@sim/entities';
 import {
+  CUE2_ANCHORED,
+  CUE2_INFECTED,
+  CUE2_LINKED,
+  CUE2_MOD_E04,
+  CUE2_MOD_E07,
+  CUE2_MOD_E12,
+  CUE2_PARASITIZED,
   CUE_FEEDING,
   CUE_JUST_BORN,
   CUE_STRESSED,
   E_CUE,
+  E_CUE2,
   E_ENERGY,
   E_FLAGS,
   E_GROWTH,
   E_HEADING,
   E_HEALTH,
   E_LIFE,
+  E_LINKMASK,
   E_SIZE,
   E_SLOT,
   E_SPECIES,
@@ -40,7 +53,16 @@ import {
   E_Y,
   ENT_STRIDE,
   ID_STRIDE,
+  DEPOSIT_FILM_BAND,
+  LINK_KIND_ADHESION,
+  LINK_STRIDE,
+  LINKMASK_E,
+  LINKMASK_N,
+  LINKMASK_S,
+  LINKMASK_TRANSFER,
+  LINKMASK_W,
   type GeometryMsg,
+  type SnapshotObject,
   type SnapshotMsg,
   type VisualEvent,
 } from '@worker/protocol';
@@ -62,14 +84,37 @@ const SNAPSHOT_HZ = 10;
 const BIRTHS_PER_SNAPSHOT = 3;
 const DEATHS_PER_SNAPSHOT = 3;
 
-/** The five Phase 1 species (CT §1), with a share of the population and a cosmetic cruise speed. */
-const SPECIES: readonly { id: string; share: number; speed: number }[] = [
-  { id: 'A01', share: 0.18, speed: 0.15 },
-  { id: 'B01', share: 0.25, speed: 2.0 },
-  { id: 'B04', share: 0.23, speed: 1.0 },
-  { id: 'B06', share: 0.23, speed: 0.8 },
-  { id: 'P01', share: 0.11, speed: 0.6 },
-];
+const PHASE1 = q.get('phase') === '1';
+/** Fungal segments in the Phase 3 scene (CT §14: at most 2,000 within the 6,000). */
+const FUNGAL_PER_SPECIES = PHASE1 ? 0 : Math.round(Math.min(2000, COUNT / 3) / 2);
+/** E12 adhesion pairs in the Phase 3 scene (both members still). */
+const ADHESION_PAIRS = PHASE1 ? 0 : 300;
+
+/**
+ * Species with a share of the non-fungal population and a cosmetic cruise speed. G1's scene: the five
+ * Phase 1 species (CT §1). P3.12: a Phase 3 mix, plus F01 and F02 (`fungal`, placed as pads, never moving).
+ */
+const SPECIES: readonly { id: string; share: number; speed: number; fungal?: boolean }[] = PHASE1
+  ? [
+      { id: 'A01', share: 0.18, speed: 0.15 },
+      { id: 'B01', share: 0.25, speed: 2.0 },
+      { id: 'B04', share: 0.23, speed: 1.0 },
+      { id: 'B06', share: 0.23, speed: 0.8 },
+      { id: 'P01', share: 0.11, speed: 0.6 },
+    ]
+  : [
+      { id: 'A01', share: 0.17, speed: 0.15 },
+      { id: 'B01', share: 0.25, speed: 2.0 },
+      { id: 'B02', share: 0.08, speed: 0.8 },
+      { id: 'B04', share: 0.15, speed: 1.0 },
+      { id: 'B06', share: 0.12, speed: 0.8 },
+      { id: 'B07', share: 0.08, speed: 0.8 },
+      { id: 'P01', share: 0.06, speed: 0.6 },
+      { id: 'P02', share: 0.05, speed: 0.9 },
+      { id: 'X01', share: 0.04, speed: 0.5 },
+      { id: 'F01', share: 0, speed: 0, fungal: true },
+      { id: 'F02', share: 0, speed: 0, fungal: true },
+    ];
 
 // ---------------------------------------------------------------------------------------------
 // Private renderer members the bench reads (runtime access only; no behaviour is changed).
@@ -146,6 +191,9 @@ function makeDeposits(): Uint8Array {
     d[2 * CELL_COUNT + i] = Math.round(200 * blob(80, 60, 5)); // oil
     d[3 * CELL_COUNT + i] = Math.round(180 * blob(60, 30, 4)); // protein
     d[4 * CELL_COUNT + i] = Math.round(120 * blob(64, 64, 30)); // sugar haze
+    // P3.12: film over most of the gel pad (low seven bits = film level).
+    if (!PHASE1 && x < 40 && y < 60 && (x + y) % 5 !== 0)
+      d[DEPOSIT_FILM_BAND * CELL_COUNT + i] = 40 + ((x * 7 + y * 3) % 60);
   }
   return d;
 }
@@ -165,6 +213,12 @@ class Population {
   readonly bornAt: Float32Array;
   readonly birthId: Uint32Array;
   readonly entityId: Uint32Array;
+  /** P3.12: fungal segments and adhesion-pair members never move, die or split here. */
+  readonly fixed: Uint8Array;
+  readonly cue2: Uint16Array;
+  readonly linkMask: Uint8Array;
+  /** Index of the first organism births and deaths may pick (fixed ones are added first). */
+  firstFree = 0;
   private nextId = 1;
 
   constructor(cap: number) {
@@ -180,10 +234,16 @@ class Population {
     this.bornAt = new Float32Array(cap).fill(-1e9);
     this.birthId = new Uint32Array(cap);
     this.entityId = new Uint32Array(cap);
+    this.fixed = new Uint8Array(cap);
+    this.cue2 = new Uint16Array(cap);
+    this.linkMask = new Uint8Array(cap);
   }
 
-  add(sp: number, x: number, y: number, t: number): number {
+  add(sp: number, x: number, y: number, t: number, fixed = false, cue2 = 0): number {
     const k = this.n++;
+    this.fixed[k] = fixed ? 1 : 0;
+    this.cue2[k] = cue2;
+    this.linkMask[k] = 0;
     this.sp[k] = sp;
     this.x[k] = x;
     this.y[k] = y;
@@ -210,11 +270,21 @@ class Population {
       this.bornAt,
       this.birthId,
       this.entityId,
+      this.fixed,
+      this.cue2,
+      this.linkMask,
     ])
       a[k] = a[last]!;
   }
 
   pickMode(k: number, t: number): void {
+    if (this.fixed[k] === 1) {
+      this.mode[k] = 3;
+      this.modeUntil[k] = Infinity;
+      this.vx[k] = 0;
+      this.vy[k] = 0;
+      return;
+    }
     const r = rnd();
     const s = SPECIES[this.sp[k]!]!;
     const mode = r < 0.7 ? 0 : r < 0.85 ? 1 : r < 0.92 ? 2 : 3;
@@ -229,6 +299,7 @@ class Population {
   /** Advance one snapshot interval (seconds). Smooth straight runs, reflected at the rim. */
   step(dt: number, t: number): void {
     for (let k = 0; k < this.n; k++) {
+      if (this.fixed[k] === 1) continue;
       if (t >= this.modeUntil[k]!) this.pickMode(k, t);
       let nx = this.x[k]! + this.vx[k]! * dt;
       let ny = this.y[k]! + this.vy[k]! * dt;
@@ -276,6 +347,8 @@ function snapshotSource(
   geometry: GeometryMsg,
   deposits: Uint8Array,
   speciesCount: number,
+  pairStart: number,
+  objects: readonly SnapshotObject[],
 ): () => SnapshotMsg {
   // Three pooled buffers, like the worker's transfer/release cycle: the renderer holds the current
   // snapshot (and reads the previous one while applying the next).
@@ -290,8 +363,8 @@ function snapshotSource(
     const t = tick / SNAPSHOT_HZ;
     const events: VisualEvent[] = [];
     if (tick > 0) {
-      for (let d = 0; d < DEATHS_PER_SNAPSHOT && pop.n > 1; d++) {
-        const k = Math.floor(rnd() * pop.n);
+      for (let d = 0; d < DEATHS_PER_SNAPSHOT && pop.n > pop.firstFree + 1; d++) {
+        const k = pop.firstFree + Math.floor(rnd() * (pop.n - pop.firstFree));
         events.push({
           type: 'death',
           tick,
@@ -303,7 +376,7 @@ function snapshotSource(
         pop.remove(k);
       }
       for (let b = 0; b < BIRTHS_PER_SNAPSHOT && pop.n < pop.cap; b++) {
-        const parent = Math.floor(rnd() * pop.n);
+        const parent = pop.firstFree + Math.floor(rnd() * (pop.n - pop.firstFree));
         const k = pop.add(pop.sp[parent]!, pop.x[parent]! + 0.4, pop.y[parent]!, t);
         events.push({
           type: 'birth',
@@ -348,6 +421,8 @@ function snapshotSource(
       ents[o + E_LIFE] = 0;
       ents[o + E_SIZE] = 1;
       ents[o + E_CUE] = cue;
+      ents[o + E_CUE2] = pop.cue2[k]!;
+      ents[o + E_LINKMASK] = pop.linkMask[k]!;
       ids[k * ID_STRIDE] = pop.birthId[k]!;
       ids[k * ID_STRIDE + 1] = pop.entityId[k]!;
       speciesCounts[pop.sp[k]!]!++;
@@ -357,6 +432,15 @@ function snapshotSource(
       const c = Math.floor(rnd() * CELL_COUNT);
       if (deposits[c]! > 0) deposits[c] = deposits[c]! - 1;
     }
+    // P3.12: E12 adhesion pairs (the first 2·ADHESION_PAIRS organisms after the fungal pads) as links,
+    // and the food objects slowly emptying.
+    const links = new Float32Array(ADHESION_PAIRS * LINK_STRIDE);
+    for (let p = 0; p < ADHESION_PAIRS; p++) {
+      const a = pairStart + 2 * p;
+      links.set([pop.x[a]!, pop.y[a]!, pop.x[a + 1]!, pop.y[a + 1]!, LINK_KIND_ADHESION], p * LINK_STRIDE);
+    }
+    const fill = Math.max(0, 1 - tick / 6000);
+    const objectList = objects.map((o) => ({ ...o, fill }));
     const s: SnapshotMsg = {
       type: 'snapshot',
       dishId: 'bench',
@@ -368,6 +452,7 @@ function snapshotSource(
       ents,
       ids,
       deposits,
+      ...(PHASE1 ? {} : { links, objects: objectList }),
       overlay: null,
       geometry: geometrySent ? null : geometry,
       events,
@@ -541,6 +626,9 @@ function frameAudit(
       continue;
     }
     const [asset, anim, , idx] = key.split('/');
+    // P3.12: a fungal segment's mask/decaying tile is chosen by its links (frame index = connection mask),
+    // not an animation frame, so it is not part of the reduced-motion frame audit (its pulse still is).
+    if (anim === 'mask' || anim === 'decaying') continue;
     const a = manifest.sprites[asset!]?.animations[anim!];
     if (!a) {
       unknown++;
@@ -630,6 +718,88 @@ async function cpuPhase(
   };
 }
 
+/**
+ * Fill the population: fungal pads first (P3.12; one segment per cell, nearest-first around the pad
+ * centre, each with the connection mask of its same-species four-neighbours), then the E12 adhesion
+ * pairs (still, side by side), then the moving organisms by share up to COUNT.
+ */
+function populate(pop: Population): { pairStart: number; objects: SnapshotObject[] } {
+  const geometry = makeGeometry();
+  const speciesIdx = (id: string): number => SPECIES.findIndex((s) => s.id === id);
+  const pad = (id: string, cx: number, cy: number, ok: (x: number, y: number) => boolean): void => {
+    const sp = speciesIdx(id);
+    if (sp < 0 || FUNGAL_PER_SPECIES === 0) return;
+    const cells: number[] = [];
+    for (let i = 0; i < CELL_COUNT; i++) {
+      const x = i % GRID_W;
+      const y = Math.floor(i / GRID_W);
+      if (geometry.structure[i] === 0 && ok(x, y)) cells.push(i);
+    }
+    const d = (i: number): number => ((i % GRID_W) - cx) ** 2 + (Math.floor(i / GRID_W) - cy) ** 2;
+    cells.sort((a, b) => d(a) - d(b) || a - b);
+    const taken = new Map<number, number>();
+    for (const i of cells.slice(0, FUNGAL_PER_SPECIES))
+      taken.set(i, pop.add(sp, (i % GRID_W) + 0.5, Math.floor(i / GRID_W) + 0.5, -10, true));
+    for (const [i, k] of taken) {
+      let m = 0;
+      if (taken.has(i - GRID_W)) m |= LINKMASK_N;
+      if (taken.has(i + 1)) m |= LINKMASK_E;
+      if (taken.has(i + GRID_W)) m |= LINKMASK_S;
+      if (taken.has(i - 1)) m |= LINKMASK_W;
+      if (id === 'F02' && k % 3 === 0) m |= LINKMASK_TRANSFER;
+      pop.linkMask[k] = m;
+    }
+  };
+  pad('F01', 20, 34, (x, y) => x < 40 && y < 60);
+  pad('F02', 64, 110, (_x, y) => y > 92);
+  const pairStart = pop.n;
+  const b01 = speciesIdx('B01');
+  for (let p = 0; p < ADHESION_PAIRS; p++) {
+    const [x, y] = randomInDish();
+    pop.add(b01, x, y, -10, true, CUE2_LINKED | CUE2_MOD_E12);
+    pop.add(b01, x + 0.45, y, -10, true, CUE2_LINKED | CUE2_MOD_E12);
+  }
+  pop.firstFree = pop.n;
+  const free = COUNT - pop.n;
+  const start = pop.n;
+  let acc = 0;
+  const mobile = SPECIES.map((s, i) => ({ s, i })).filter(({ s }) => !s.fungal);
+  mobile.forEach(({ s, i }, j) => {
+    const target = j === mobile.length - 1 ? COUNT : start + Math.round(free * (acc + s.share));
+    acc += s.share;
+    while (pop.n < target) {
+      const [x, y] = randomInDish();
+      // Phase 3 cue bits on a few (cosmetic here): infected Sprinters, parasitized and E07 Sunbeads, E04 anchored.
+      const r = rnd();
+      const cue2 = PHASE1
+        ? 0
+        : s.id === 'B01' && r < 0.04
+          ? CUE2_INFECTED
+          : s.id === 'A01' && r < 0.05
+            ? CUE2_PARASITIZED
+            : s.id === 'A01' && r < 0.12
+              ? CUE2_MOD_E07
+              : s.id === 'B04' && r < 0.03
+                ? CUE2_ANCHORED | CUE2_MOD_E04
+                : 0;
+      pop.add(i, x, y, -10, false, cue2);
+    }
+  });
+  const objects: SnapshotObject[] = [];
+  if (!PHASE1)
+    for (let k = 0; k < 32; k++) {
+      const a = (2 * Math.PI * k) / 32;
+      objects.push({
+        id: k + 1,
+        x: Math.floor(CX + 30 * Math.cos(a)) + 0.5,
+        y: Math.floor(CY - 4 + 26 * Math.sin(a)) + 0.5,
+        kind: k % 2 === 0 ? 'pellet' : 'wafer',
+        fill: 1,
+      });
+    }
+  return { pairStart, objects };
+}
+
 // ---------------------------------------------------------------------------------------------
 async function main(): Promise<void> {
   requestAnimationFrame(rafLoop);
@@ -639,6 +809,9 @@ async function main(): Promise<void> {
     devicePixelRatio: globalThis.devicePixelRatio,
     viewport: { w: innerWidth, h: innerHeight },
     count: COUNT,
+    scene: PHASE1 ? 'phase1' : 'phase3',
+    fungalSegments: 2 * FUNGAL_PER_SPECIES,
+    adhesionLinks: ADHESION_PAIRS,
     snapshotHz: SNAPSHOT_HZ,
     warmupS: WARMUP_S,
     measureS: MEASURE_S,
@@ -669,18 +842,10 @@ async function main(): Promise<void> {
   for (const [k, t] of Object.entries(priv.frames)) reverse.set(t, k);
 
   const pop = new Population(COUNT + 16);
-  let acc = 0;
-  SPECIES.forEach((s, i) => {
-    const target = i === SPECIES.length - 1 ? COUNT : Math.round(COUNT * (acc + s.share));
-    acc += s.share;
-    while (pop.n < target) {
-      const [x, y] = randomInDish();
-      pop.add(i, x, y, -10);
-    }
-  });
+  const { pairStart, objects } = populate(pop);
   if (q.has('manual')) {
     // Exploratory profiling: expose the pieces and run nothing (drive from DevTools/Playwright).
-    const source = snapshotSource(pop, makeGeometry(), makeDeposits(), SPECIES.length);
+    const source = snapshotSource(pop, makeGeometry(), makeDeposits(), SPECIES.length, pairStart, objects);
     (window as unknown as { __benchApi?: unknown }).__benchApi = {
       renderer,
       priv,
@@ -692,7 +857,7 @@ async function main(): Promise<void> {
     say('manual mode: window.__benchApi');
     return;
   }
-  const source = snapshotSource(pop, makeGeometry(), makeDeposits(), SPECIES.length);
+  const source = snapshotSource(pop, makeGeometry(), makeDeposits(), SPECIES.length, pairStart, objects);
   const gpu = gpuInfo(priv);
   const canvas = {
     width: renderer.canvas.width,
@@ -800,7 +965,9 @@ async function main(): Promise<void> {
 
   // Gate rows (BUILD_DIRECTIVE P1.5). fps is reported, not enforced here: it depends on the GPU.
   const gates = {
-    aggregationRule: sweep.every((z) => z.aggregationVisible === z.spritePixelScale < 1 && z.particlesVisible === !z.aggregationVisible),
+    aggregationRule: sweep.every(
+      (z) => z.aggregationVisible === z.spritePixelScale < 1 && z.particlesVisible === !z.aggregationVisible,
+    ),
     wholeDishAggregates: wholeDish.spritePixelScale >= 1 || wholeDish.aggregationVisible,
     reducedMotion: reducedMotion.pass,
     fps60AtNeighborhood: neighborhood.fpsMean >= 58,

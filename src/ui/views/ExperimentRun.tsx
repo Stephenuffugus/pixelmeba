@@ -170,7 +170,8 @@ export function ExperimentRun() {
         <ExperimentViewport arm="A" title={titles.a} description={`Copy A: ${describeArms(card).a}`} />
         <ExperimentViewport arm="B" title={titles.b} description={`Copy B: ${describeArms(card).b}`} />
         {toast.value ? (
-          <div class="toast" role="status" aria-live="polite">
+          // Visual only: the app's LiveRegion announces the toast (P3.11 W6-07).
+          <div class="toast">
             {toast.value}
           </div>
         ) : null}

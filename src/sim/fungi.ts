@@ -33,7 +33,7 @@ import { CELL_COUNT, CELL_SOFT_CAPACITY, FUNGAL_CAP } from './constants';
 import { edibleFilmAt } from './film';
 import { cellIndex, inBounds, inMask } from './grid';
 import { emit } from './events';
-import { addFungalLink, fungalDegree, fungalNeighbors, FUNGAL_LINK_MAX, LINK_TRANSPORT, LINK_VISUAL, type FungalLinkKind } from './links';
+import { addFungalLink, fungalDegree, FUNGAL_BIRTH_COLUMNS, FUNGAL_LINK_MAX, FUNGAL_SLOT_COLUMNS, LINK_TRANSPORT, LINK_VISUAL, type FungalLinkKind } from './links';
 import { canOccupy } from './movement';
 import { profileOfGenome } from './profiles';
 import type { SpeciesRT } from './species';
@@ -204,6 +204,11 @@ export function fungalNetwork(world: World, i: number): FungalNetwork | null {
   let segments = 0;
   let threads = 0;
   let thisThread = 0;
+  // P3.12: the link columns resolved once (fungalNeighbors built its column table and a fresh array per
+  // segment; the inspector asks for this 10 times a second). Same partners in the same position order.
+  const slotCols = FUNGAL_SLOT_COLUMNS.map((n) => c[n]);
+  const birthCols = FUNGAL_BIRTH_COLUMNS.map((n) => c[n]);
+  const ents = world.ents;
   for (let s = 0; s < world.ents.highWater; s++) {
     if (c.alive[s] !== 1 || c.species[s] !== spIdx) continue;
     segments++;
@@ -216,9 +221,9 @@ export function fungalNetwork(world: World, i: number): FungalNetwork | null {
     for (let q = 0; q < queue.length; q++) {
       const m = queue[q]!;
       if (m === i) hasI = true;
-      const next = fungalNeighbors(world, m);
-      for (let k = 0; k < next.length; k++) {
-        const p = next[k]!;
+      for (let k = 0; k < slotCols.length; k++) {
+        const p = slotCols[k]![m]!;
+        if (p < 0 || !ents.refValid(p, birthCols[k]![m]!)) continue;
         if (seen[p] === 1) continue;
         seen[p] = 1;
         queue.push(p);

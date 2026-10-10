@@ -176,17 +176,27 @@ function filmCoefficients(world: World, tc: TransportCache): { kR: Float64Array;
   const film = world.fields.film;
   if (!film || !isFieldActive(world, 'film')) return { kR: tc.kR, kD: tc.kD };
   let anyFilm = false;
+  let anyNonZero = false;
   for (let y = 0; y < GRID_H; y++) {
     const base = y * GRID_W;
     for (let i = base + tc.rowX0[y]!, end = base + tc.rowX1[y]!; i <= end; i++) {
-      const here = film[i]! > 0;
+      const v = film[i]!;
+      const here = v > 0;
       if (here) anyFilm = true;
+      if (v !== 0) anyNonZero = true;
       const r = tc.kR[i]!;
       tc.kRf[i] = r !== 0 && (here || film[i + 1]! > 0) ? r * 0.5 : r;
       const d = tc.kD[i]!;
       tc.kDf[i] = d !== 0 && (here || film[i + GRID_W]! > 0) ? d * 0.5 : d;
     }
   }
+  // P3.12: film is a deposit (diffusion 'none'), so diffusion never clears its active flag and this scan
+  // would run every tick for the rest of the dish once film had ever formed. When every dish cell holds
+  // exactly 0 film the field is marked inactive (inactive fields are exactly zero; cells outside the dish
+  // are never written); every film writer marks it again (construction.ts, sample.ts, tools.ts,
+  // commands.ts). The coefficients are the same either way and filmStage still runs while filmN is
+  // active: hash-neutral.
+  if (!anyNonZero) world.derived.fieldActive[FIELD_INDEX.film] = 0;
   return anyFilm ? { kR: tc.kRf, kD: tc.kDf } : { kR: tc.kR, kD: tc.kD };
 }
 

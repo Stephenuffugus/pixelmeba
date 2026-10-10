@@ -127,7 +127,7 @@ test('taps around the dish edge: outside points open nothing and throw nothing; 
   }
   expect(outside.length).toBeGreaterThanOrEqual(4);
   const insp = page.getByTestId('inspector');
-  const toast = page.getByText('Outside the dish.');
+  const toast = page.locator('.toast', { hasText: 'Outside the dish.' }); // the sr-only live region repeats it (D-0065)
   for (const [x, y] of outside) {
     await page.mouse.click(x, y);
     await expect(toast).toBeVisible();

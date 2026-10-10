@@ -1,9 +1,9 @@
 /**
- * npx tsx tools/render-bench-run.ts [--quick] [--require-fps]
+ * [E2E_PORT=4176] npx tsx tools/render-bench-run.ts [--quick] [--require-fps] [--phase1]
  * Exits 1 when the bench fails or a behaviour gate (aggregation rule, reduced motion) fails; with
  * --require-fps also when 60 fps is not reached at neighborhood zoom (needs a real GPU).
  *
- * Headless renderer bench (P1.5): starts the Vite dev server on :4176, opens
+ * Headless renderer bench (P1.5; P3.12 Phase 3 scene): starts the Vite dev server on E2E_PORT (4176), opens
  * /tools/render-bench.html in Playwright Chromium with the same GPU flags as playwright.config.ts
  * (SwiftShader WebGL), at 1440×900, 360×800 and 360×800 @2x, waits for window.__bench and prints
  * one JSON document with the machine context (nproc, load average, GPU string). The server is
@@ -17,11 +17,21 @@ import { availableParallelism, cpus, loadavg } from 'node:os';
 import { chromium } from '@playwright/test';
 import { REPO_ROOT } from './lib/content-fs';
 
-const PORT = 4176;
+// P3.12 (W6-14): the port comes from E2E_PORT (default 4176) so parallel agents each use their own;
+// only that port is stopped afterwards. The bench runs the Vite dev server (no build), so E2E_OUTDIR
+// has nothing to name here.
+const PORT = Number(process.env.E2E_PORT ?? 4176);
+if (!Number.isInteger(PORT) || PORT <= 0)
+  throw new Error(`E2E_PORT must be a port number, got ${process.env.E2E_PORT}`);
 const BASE = `http://127.0.0.1:${PORT}`;
 const GPU_ARGS = ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'];
 const quick = process.argv.includes('--quick');
-const QUERY = quick ? '?warmup=1&measure=3&short=2' : '';
+// --phase1 replays G1's scene (five Phase 1 species, no fungi, links or objects) for comparison.
+const params = [
+  ...(quick ? ['warmup=1', 'measure=3', 'short=2'] : []),
+  ...(process.argv.includes('--phase1') ? ['phase=1'] : []),
+];
+const QUERY = params.length > 0 ? `?${params.join('&')}` : '';
 
 const VIEWPORTS: readonly { name: string; width: number; height: number; deviceScaleFactor: number }[] = [
   { name: 'desktop-1440x900', width: 1440, height: 900, deviceScaleFactor: 1 },

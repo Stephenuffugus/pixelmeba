@@ -196,6 +196,21 @@ export interface CreationFounders {
  * those founders are the first birth records: the scan stops at the first record born after tick 0.
  */
 export function creationFounders(world: World): CreationFounders {
+  // P3.12: the host adds this to every snapshot (10/s) and the scan walks every founder record. Once the
+  // dish has left 0:00 no record with birth tick 0 can be added, and those records never change, so the
+  // answer only changes when older records are summarized away (lineage base moves): memoized on that.
+  const memo = creationMemo.get(world);
+  if (memo !== undefined && world.tick > 0 && memo.base === world.lineage.base) return memo.value;
+  const value = computeCreationFounders(world);
+  if (world.tick > 0) creationMemo.set(world, { base: world.lineage.base, value });
+  return value;
+}
+
+// Derived, never saved or hashed; keyed by the world object (a reload or rollback is a new world).
+// eslint-disable-next-line no-restricted-syntax -- lookup only, never iterated
+const creationMemo = new WeakMap<World, { readonly base: number; readonly value: CreationFounders }>();
+
+function computeCreationFounders(world: World): CreationFounders {
   const L = world.lineage;
   const rows = world.species.map(
     (): { count: number; withModule: number; modules: Record<string, number> } => ({

@@ -82,8 +82,10 @@ export function traceFraction(world: World, sp: SpeciesRT, x0: number, y0: numbe
   if (cx === ex && cy === ey) return 1;
   const dx = x1 - x0;
   const dy = y1 - y0;
-  const len = Math.hypot(dx, dy);
-  if (len === 0) return 1;
+  // P3.12: Math.hypot(dx, dy) is 0 exactly when dx and dy are both ±0, and the length is read only on the
+  // early-return paths below, so it is computed there (same value, same operation): most traces reach
+  // their end cell and never needed it.
+  if (dx === 0 && dy === 0) return 1;
   const stepX = dx > 0 ? 1 : dx < 0 ? -1 : 0;
   const stepY = dy > 0 ? 1 : dy < 0 ? -1 : 0;
   const tDeltaX = stepX !== 0 ? Math.abs(1 / dx) : Infinity;
@@ -105,12 +107,12 @@ export function traceFraction(world: World, sp: SpeciesRT, x0: number, y0: numbe
       dir = stepY > 0 ? STEP_S : STEP_N;
     }
     if (t > 1) return 1;
-    if (!inBounds(cx, cy) || !inMask(cx, cy)) return Math.max(0, t - EPS / len);
+    if (!inBounds(cx, cy) || !inMask(cx, cy)) return Math.max(0, t - EPS / Math.hypot(dx, dy));
     if (cross < 0) {
-      if (!canOccupy(world, sp, cellIndex(cx, cy))) return Math.max(0, t - EPS / len);
+      if (!canOccupy(world, sp, cellIndex(cx, cy))) return Math.max(0, t - EPS / Math.hypot(dx, dy));
     } else {
       const next = enterCell(world, sp, cellIndex(cx, cy), traceCount, dir);
-      if (next < 0) return Math.max(0, t - EPS / len);
+      if (next < 0) return Math.max(0, t - EPS / Math.hypot(dx, dy));
       traceCount = next;
     }
     if (cx === ex && cy === ey) return 1;
@@ -168,32 +170,55 @@ function acquirePrey(world: World, slot: number, sp: SpeciesRT, radius: number):
   return best;
 }
 
-function foodScore(world: World, prof: Profile, cell: number, energy: number): number {
-  let best = 0;
+/**
+ * The food term F of a decision (SPEC §6.4): the best availability among the organism's foods (weight-0
+ * foods skipped); producers (native, or E01/E09 carriers) also seek convertible substrate (starch, oil,
+ * protein) at half weight while they can afford secretion (SPEC §6.4, §9); E08 carriers take the larger
+ * of this and the detritus score, never the sum (debrisFeeder.ts).
+ *
+ * P3.12: split in two so the per-organism lookups happen once per decision instead of once per window
+ * cell: prepareFoodScore picks the food arrays (profile order; weight-0 and unallocated foods dropped) and
+ * the substrates this organism can afford now; foodScoreAt does the per-cell arithmetic in the order the
+ * single function did, so every score is bit-identical.
+ */
+const FOOD_ARRS: Float64Array[] = [];
+let foodN = 0;
+let foodStarch: Float64Array | null = null;
+let foodOil: Float64Array | null = null;
+let foodProtein: Float64Array | null = null;
+
+function prepareFoodScore(world: World, prof: Profile, energy: number): void {
+  foodN = 0;
   const foods = prof.foods;
   for (let k = 0; k < foods.length; k++) {
     if (prof.weights !== null && prof.weights[k] === 0) continue;
     const f = world.fields[foods[k]!];
     if (!f) continue;
-    const s = avail(f[cell]!);
+    FOOD_ARRS[foodN++] = f;
+  }
+  foodStarch = prof.starch !== null && energy > prof.starch.minEnergy && world.fields.starch ? world.fields.starch : null;
+  foodOil = prof.oil !== null && energy > prof.oil.minEnergy && world.fields.oil ? world.fields.oil : null;
+  foodProtein = prof.protein !== null && energy > prof.protein.minEnergy && world.fields.protein ? world.fields.protein : null;
+}
+
+function foodScoreAt(world: World, prof: Profile, cell: number): number {
+  let best = 0;
+  for (let k = 0; k < foodN; k++) {
+    const s = avail(FOOD_ARRS[k]![cell]!);
     if (s > best) best = s;
   }
-  // Producers (native, or E01 carriers) also seek convertible substrate while they can afford
-  // secretion (SPEC §6.4, §9).
-  if (prof.starch !== null && energy > prof.starch.minEnergy && world.fields.starch) {
-    const s = 0.5 * avail(world.fields.starch[cell]!);
+  if (foodStarch !== null) {
+    const s = 0.5 * avail(foodStarch[cell]!);
     if (s > best) best = s;
   }
-  // P3.6: the same term for oil (native B07) and protein (native B08, E09 carriers) producers.
-  if (prof.oil !== null && energy > prof.oil.minEnergy && world.fields.oil) {
-    const s = 0.5 * avail(world.fields.oil[cell]!);
+  if (foodOil !== null) {
+    const s = 0.5 * avail(foodOil[cell]!);
     if (s > best) best = s;
   }
-  if (prof.protein !== null && energy > prof.protein.minEnergy && world.fields.protein) {
-    const s = 0.5 * avail(world.fields.protein[cell]!);
+  if (foodProtein !== null) {
+    const s = 0.5 * avail(foodProtein[cell]!);
     if (s > best) best = s;
   }
-  // E08 carriers (debrisFeeder.ts): the larger of this score and the detritus score, never the sum.
   return withDebrisScore(world, prof, cell, best);
 }
 
@@ -204,6 +229,23 @@ const SCORE_SCRATCH = new Float64Array(13 * 13);
 const startX = new Float64Array(6000);
 const startY = new Float64Array(6000);
 const CELL_SCRATCH = new Int32Array(13 * 13);
+/**
+ * P3.12 decision window (non-crossers only): per window cell 1 when a trace may not enter it (outside the
+ * grid or dish, or not occupiable by the species), and its 2-D prefix sums. A straight trace from the own
+ * cell to a target cell only visits cells inside the rectangle spanned by those two cells, so when that
+ * rectangle holds no such cell traceFraction would return exactly 1: the trace is skipped. Pure reads of
+ * the grid; nothing about the decision changes.
+ */
+const WIN_MAX = 13;
+const WIN_BLOCKED = new Uint8Array(WIN_MAX * WIN_MAX);
+const WIN_PREFIX = new Int32Array((WIN_MAX + 1) * (WIN_MAX + 1));
+
+/** Whether the window rectangle [x0, x1] × [y0, y1] (window coordinates, inclusive) holds no blocked cell. */
+function windowClear(W: number, x0: number, y0: number, x1: number, y1: number): boolean {
+  const P = WIN_PREFIX;
+  const S = W + 1;
+  return P[(y1 + 1) * S + x1 + 1]! - P[y0 * S + x1 + 1]! - P[(y1 + 1) * S + x0]! + P[y0 * S + x0]! === 0;
+}
 
 function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile): void {
   const c = world.ents.cols;
@@ -229,18 +271,40 @@ function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile): void 
   // E07 (lightSeeker.ts): F is effective light, and only its own cell and cells brighter by brighterBy are candidates.
   const seeker = prof.lightSeeker !== null;
   let brighter = 0;
+  if (!seeker) prepareFoodScore(world, prof, c.E[slot]!);
+  // P3.12: the blocked-cell window and its prefix sums (see WIN_BLOCKED), for a non-crosser only.
+  const W = 2 * r + 1;
+  const win = cross < 0 && Number.isInteger(r) && W <= WIN_MAX;
+  if (win) {
+    const P = WIN_PREFIX;
+    for (let k = 0; k <= W; k++) P[k] = 0;
+    for (let wy = 0; wy < W; wy++) {
+      const y = cy - r + wy;
+      let row = 0;
+      P[(wy + 1) * (W + 1)] = 0;
+      for (let wx = 0; wx < W; wx++) {
+        const x = cx - r + wx;
+        const blocked = !inBounds(x, y) || !inMask(x, y) || !canOccupy(world, sp, cellIndex(x, y)) ? 1 : 0;
+        WIN_BLOCKED[wy * W + wx] = blocked;
+        row += blocked;
+        P[(wy + 1) * (W + 1) + wx + 1] = P[wy * (W + 1) + wx + 1]! + row;
+      }
+    }
+  }
   for (let y = cy - r; y <= cy + r; y++) {
     for (let x = cx - r; x <= cx + r; x++) {
       if (!inBounds(x, y) || !inMask(x, y)) continue;
       const cell = cellIndex(x, y);
-      if (!canOccupy(world, sp, cell)) {
+      if (win ? WIN_BLOCKED[(y - cy + r) * W + (x - cx + r)] === 1 : !canOccupy(world, sp, cell)) {
         if (!crosser || !crossableWater(world, cell)) continue;
         if (cell === own && !crossingCompatible(world, slot, sp, cell)) continue;
       }
       if (seeker && cell !== own && !brightEnough(world, prof, own, cell)) continue;
-      if (cell !== own && traceFraction(world, sp, px, py, x + 0.5, y + 0.5, cross) < 1) continue;
-      const F = seeker ? lightScore(world, cell) : foodScore(world, prof, cell, c.E[slot]!);
-      const S = (crosser ? suitabilityAt(world, sp, prof, cell, true) : suitabilityAt(world, sp, prof, cell)).value;
+      if (cell !== own && !(win && windowClear(W, r + Math.min(x - cx, 0), r + Math.min(y - cy, 0), r + Math.max(x - cx, 0), r + Math.max(y - cy, 0))) && traceFraction(world, sp, px, py, x + 0.5, y + 0.5, cross) < 1) continue;
+      const F = seeker ? lightScore(world, cell) : foodScoreAt(world, prof, cell);
+      // A non-crosser reaches here only for a cell it can occupy (canOccupy is habitatCompatible), so the
+      // habitat factor is passed as known instead of re-derived (P3.12; same value).
+      const S = suitabilityAt(world, sp, prof, cell, true).value;
       const others = load[cell]! - (cell === own ? selfLoad : 0);
       const C = Math.min(1, Math.max(0, others) / CELL_SOFT_CAPACITY);
       const score = SCORE_FOOD * F + SCORE_SUIT * S - SCORE_CROWD * C;
