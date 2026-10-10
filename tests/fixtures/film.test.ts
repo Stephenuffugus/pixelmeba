@@ -382,7 +382,7 @@ describe('P3.3 film as detritus food (D-0038)', () => {
     const systems = shipped.manifest.enabledSystems.filter(
       (s) => s !== 'film' && s !== 'fungi',
     ) as SystemFlag[];
-    const species = shipped.manifest.enabledSpecies.filter((s) => s !== 'B02' && s !== 'F01');
+    const species = shipped.manifest.enabledSpecies.filter((s) => s !== 'B02' && s !== 'F01' && s !== 'F02');
     const w = gel(
       registryWith({ enabledSystems: systems, enabledSpecies: species }, { allowUnimplemented: true }),
     );
@@ -399,7 +399,7 @@ describe('P3.3 film as detritus food (D-0038)', () => {
     const noFilm = registryWith(
       {
         enabledSystems: shipped.manifest.enabledSystems.filter((s) => s !== 'film' && s !== 'fungi'),
-        enabledSpecies: shipped.manifest.enabledSpecies.filter((s) => s !== 'B02' && s !== 'F01'),
+        enabledSpecies: shipped.manifest.enabledSpecies.filter((s) => s !== 'B02' && s !== 'F01' && s !== 'F02'),
       },
       { allowUnimplemented: true },
     );

@@ -21,7 +21,18 @@ export type EventType =
   | 'firstIntake'
   /** Dormancy (P2.1): entered Resting (cause = RESTING_FOOD_SCARCE or RESTING_DRY) / finished waking. */
   | 'rest'
-  | 'wake';
+  | 'wake'
+  /**
+   * Links (P3.6): a link joined two organisms / a link ended. detail.kind 'fungal' (F01 visual and F02
+   * transport links: detail.link 'visual' | 'transport', detail.partner the other end's birthId) or
+   * 'adhesion' (E12). One event per link change, from the end named by birthId.
+   */
+  | 'linkFormed'
+  | 'linkBroken'
+  /** E12 (P3.7): a colony link that would exceed a cap was refused, at no cost. detail.kind 'adhesion', detail.partner, detail.reason 'links' | 'component'. */
+  | 'linkRefused'
+  /** Food objects (P3.6): an M10 pellet or M11 wafer ran out and left the store. detail.cell, detail.kind, detail.id. */
+  | 'objectEmptied';
 
 export interface SimEvent {
   readonly id: number;

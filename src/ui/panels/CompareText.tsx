@@ -9,6 +9,7 @@ import { reasonName } from '@sim/reasons';
 import { reasonText } from '../strings/reasons';
 import { paintName, structureName } from './LabTrayNames';
 import { evolutionLabel } from '../strings/whatif';
+import { CLEAN_WATER_LABELS, SAMPLE_MODE_LABELS } from '../strings/tools';
 
 /** Simulated time mm:ss (h:mm:ss when needed) from ticks. */
 export function clock(ticks: number): string {
@@ -54,6 +55,20 @@ export function describeChange(info: DishInfo, payload: CommandPayload, result: 
     // Branch notebook and specimens (P2.3).
     case 'lineage':
       return payload.op === 'spawnSpecimen' ? `${accepted} from specimen ${payload.specimen} added` : 'Family tree note';
+    // Finite food objects (P3.6): one per tap, named from content ("Leaf wafer").
+    case 'placeObject': {
+      const mat = info.materials.find((m) => m.id === payload.materialId)?.name ?? payload.materialId;
+      return accepted > 0 ? `${mat} placed at (${Math.floor(payload.x)}, ${Math.floor(payload.y)})` : `${mat} not placed`;
+    }
+    // Sample, Transfer and Clean water (P3.5).
+    case 'sampleTake':
+      return accepted > 0 ? `Sample taken (${SAMPLE_MODE_LABELS[payload.mode] ?? payload.mode}, radius ${payload.radius})` : 'Sample not taken';
+    case 'sampleTransfer':
+      return accepted > 0 ? `Sample moved by (${payload.dx}, ${payload.dy})` : 'Sample not moved';
+    case 'sampleDiscard':
+      return accepted > 0 ? 'Held sample discarded' : 'No sample discarded';
+    case 'cleanWater':
+      return `Clean water (${CLEAN_WATER_LABELS[String(payload.fraction)] ?? payload.fraction}) on ${accepted} cell${accepted === 1 ? '' : 's'}`;
   }
 }
 

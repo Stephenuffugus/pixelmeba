@@ -10,6 +10,9 @@ import type { WhatIfAnswer, WhatIfKeep, WhatIfKept, WhatIfPick, WhatIfPlan, What
 import type { KeepFrom, KeepRefusalCode } from './protocol';
 import type { ExperimentCardView } from '@sim/experiments';
 import type { NewDishPreview, RecipeOverrides } from './protocol';
+import type { SamplePreview } from './protocol';
+import type { SampleHeldSummary } from '@sim/sample';
+import type { SampleMode } from '@sim/sampleSlot';
 import { PROTOCOL_VERSION, stamp, type DishInfo, type DishSource, type Envelope, type FamilyAnswer, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 
 export class WorkerRequestError extends Error {
@@ -74,6 +77,8 @@ export class SimClient {
   private readonly lastGen: Record<string, number> = {};
   /** P3.1: each dish's lid setting from its latest snapshot (the Habitat tray's lid toggle). */
   private readonly lastLid: Record<string, 'open' | 'closed'> = {};
+  /** P3.5: each dish's held sample from its latest snapshot (null: none held). */
+  private readonly lastSample: Record<string, SampleHeldSummary | null> = {};
   private readonly snapshotListeners: ((s: SnapshotMsg) => void)[] = [];
   private readonly errorListeners: ((e: WorkerErrorNotice) => void)[] = [];
   private readonly compareListeners: ((s: ComparisonState) => void)[] = [];
@@ -92,6 +97,29 @@ export class SimClient {
   /** P3.1: a dish's lid setting as its latest snapshot reported it, or null before one arrived. */
   lidOf(dishId: string): 'open' | 'closed' | null {
     return this.lastLid[dishId] ?? null;
+  }
+
+  /** P3.5: the sample a dish holds as its latest snapshot reported it (null: none, or no snapshot yet). */
+  sampleOf(dishId: string): SampleHeldSummary | null {
+    return this.lastSample[dishId] ?? null;
+  }
+
+  /** P3.5 Sample Begin (host-level; D-0037): pauses the dish; resolves with its stateHash at that moment. */
+  async sampleBegin(dishId: string): Promise<{ hash: string; tick: number }> {
+    const msg = await this.request<Extract<FromWorker, { type: 'sampleBegun' }>>((requestId) => ({ type: 'sampleBegin', requestId, dishId }));
+    return { hash: msg.hash, tick: msg.tick };
+  }
+
+  /** P3.5: what a sample at (x, y) would take (read-only). */
+  async samplePreview(dishId: string, x: number, y: number, radius: number, mode: SampleMode): Promise<SamplePreview> {
+    const msg = await this.request<Extract<FromWorker, { type: 'samplePreview' }>>((requestId) => ({ type: 'samplePreview', requestId, dishId, x, y, radius, mode }));
+    return msg.preview;
+  }
+
+  /** P3.5 Cancel (host-level, exact; D-0037): resolves with the restored hash and the hash Begin recorded. */
+  async sampleCancel(dishId: string): Promise<{ hash: string; beginHash: string | null }> {
+    const msg = await this.request<Extract<FromWorker, { type: 'sampleCancelled' }>>((requestId) => ({ type: 'sampleCancel', requestId, dishId }));
+    return { hash: msg.hash, beginHash: msg.beginHash };
   }
 
   onSnapshot(fn: (s: SnapshotMsg) => void): () => void {
@@ -147,6 +175,7 @@ export class SimClient {
       if (msg.gen <= last) return; // stale
       this.lastGen[msg.dishId] = msg.gen;
       if (msg.lid) this.lastLid[msg.dishId] = msg.lid;
+      if (msg.sample !== undefined) this.lastSample[msg.dishId] = msg.sample;
       for (const fn of this.snapshotListeners) fn(msg);
       return;
     }

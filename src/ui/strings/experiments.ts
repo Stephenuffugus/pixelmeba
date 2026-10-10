@@ -232,6 +232,12 @@ export function describeArms(card: ExperimentCardView): { readonly a: string; re
     }
     case 'shade':
       return { a: 'The recipe as written.', b: `The same, with shade over the whole dish (light × ${ch.factor}).` };
+    case 'omitFounders': {
+      // P3.6 (E203): "The same, without the 20 Brothmaker founders."
+      const f = card.founders[ch.founderIndex];
+      const name = f ? (card.speciesNames[f.speciesId] ?? f.speciesId) : '';
+      return { a: 'The recipe as written.', b: f ? `The same, without the ${f.count} ${name} founders.` : 'The same, without one founder group.' };
+    }
     case 'commands':
       return {
         a: `The recipe as written, copied at ${ch.atSecond} s.`,

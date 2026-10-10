@@ -6,12 +6,12 @@
  * content (the same Zod schemas as the packs), array dimensions and dtypes, finite and nonnegative
  * pools, entity limits and reference integrity, then the checksum. A failure never produces a world.
  */
-import { AGENT_CAP, CELL_COUNT } from '@sim/constants';
+import { AGENT_CAP, CELL_COUNT, DT } from '@sim/constants';
 import { HabitatSchema, ManifestSchema, MaterialSchema, ModuleSchema, SpeciesSchema } from '@sim/content/schema';
 import { ENTITY_COLUMNS } from '@sim/entities';
 import { FIELD_DEFS, isFieldId } from '@sim/fields';
 import { canonicalJson, sha256Hex, base64ToBytes } from '@sim/hash';
-import { moduleSetProblem } from '@sim/content/moduleRules';
+import { missingModuleParams, moduleSetProblem } from '@sim/content/moduleRules';
 import { deserializeWorld, migrateWorldState, serializeWorld, type EncodedArray, type WorldState } from '@sim/serialize';
 import { SCHEMA_VERSION, type World } from '@sim/world';
 import { variantRecordOf } from '@sim/variants';
@@ -282,6 +282,12 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
     }
   }
   for (const m of c.modules) if (!ModuleSchema.safeParse(m).success) fail('content', 'A module definition is invalid.');
+  // D-0058: a recorded module must carry every parameter the simulation reads (as the content
+  // registry requires of the shipped packs); otherwise the world's first tick would throw.
+  for (const m of c.modules) {
+    const missing = missingModuleParams(m);
+    if (missing.length > 0) fail('content', `${m.id}: recorded parameter ${missing[0]} is missing. Nothing was loaded.`);
+  }
   for (const m of c.materials) if (!MaterialSchema.safeParse(m).success) fail('content', 'A material definition is invalid.');
   if (!HabitatSchema.safeParse(c.habitat).success) fail('content', 'The habitat definition is invalid.');
   const speciesIds = c.species.map((x) => x.id);
@@ -400,6 +406,9 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
   // P3.4 (parasites and viruses): host/parasite pairs and infections must be ones the dish could hold.
   const pairError = hostParasiteProblem(cols, hw, c.species, man.data.enabledSystems);
   if (pairError) fail('integrity', `${pairError} Nothing was loaded.`);
+  // P3.7 E12: colony pairing state must be one the simulation could have left (D-0058).
+  const adhesionError = adhesionStateProblem(cols, hw, genomes, c.modules, s.counters.nextBirthId);
+  if (adhesionError) fail('integrity', `${adhesionError} Nothing was loaded.`);
   if (!Number.isInteger(s.tick) || s.tick < 0) fail('integrity', 'The tick is invalid.');
   if (!Number.isInteger(s.seed) || s.seed < 0) fail('integrity', 'The seed is invalid.');
 
@@ -452,6 +461,47 @@ function hostParasiteProblem(
 }
 
 /**
+ * P3.7 E12 (D-0058): the first problem with the dish's colony pairing columns (adhLockout, adhSeconds,
+ * adhPartner), as a player-facing sentence, or null. adhesion.ts writes them only for living E12
+ * carriers in a world that records E12, and a freed slot is cleared (entities.ts clearSlot), so:
+ *  - with no E12 recorded, every one is 0; on a dead slot, every one is 0;
+ *  - on a living organism whose genome lacks E12, every one is 0 (a genome changes only at division,
+ *    and birth reconciliation clears the retained daughter's pairing state, onAdhesionDivision);
+ *  - the lockout lies in [0, lockoutSeconds] (set to lockoutSeconds on a break, then counts down);
+ *  - the clock is not negative and at most linkSeconds + maxLinks × dt: a proposed pair skipped at
+ *    resolution because an earlier link in the same pass spent one end's energy leaves the other end's
+ *    clock at linkSeconds, and it can add one more dt per link the spent end can still gain before it
+ *    is full (adhesion.ts step 3), so the clock may pass linkSeconds by a few ticks;
+ *  - the partner is a birthId already issued (below nextBirthId). It may name an organism that has
+ *    since died: the clock is re-checked at the next pairing check (like D-0050's prey links).
+ * u32 columns cannot hold a negative or fractional partner; non-finite values were refused earlier.
+ */
+function adhesionStateProblem(
+  cols: Record<string, ArrayLike<number>>,
+  hw: number,
+  genomes: readonly { readonly modules: readonly string[] }[],
+  modules: readonly { readonly id: string; readonly params: Readonly<Record<string, number | undefined>> }[],
+  nextBirthId: number,
+): string | null {
+  const e12 = modules.find((m) => m.id === 'E12');
+  const lockoutMax = (e12?.params.lockoutSeconds ?? 0) + 1e-9;
+  const clockMax = (e12?.params.linkSeconds ?? 0) + (e12?.params.maxLinks ?? 0) * DT + 1e-9;
+  for (let i = 0; i < hw; i++) {
+    const lockout = cols.adhLockout![i]!;
+    const clock = cols.adhSeconds![i]!;
+    const partner = cols.adhPartner![i]!;
+    if (lockout === 0 && clock === 0 && partner === 0) continue;
+    if (cols.alive![i] !== 1) return 'An empty place in the dish holds colony pairing state.';
+    if (e12 === undefined) return "An organism has colony pairing state, but this dish's rules have no colony adhesion.";
+    if (!genomes[cols.genome![i]!]!.modules.includes('E12')) return 'An organism has colony pairing state but cannot link into colonies.';
+    if (lockout < 0 || lockout > lockoutMax) return "An organism's colony relink wait is out of range.";
+    if (clock < 0 || clock > clockMax) return "An organism's colony pairing time is out of range.";
+    if (!Number.isInteger(partner) || partner < 0 || partner >= nextBirthId) return 'An organism is pairing with an organism that never existed.';
+  }
+  return null;
+}
+
+/**
  * The first problem with a (migrated) state's schema 4 records, as a player-facing sentence, or null:
  * link columns beyond the 4 fungal / 2 adhesion positions (more links than an organism may have),
  * asymmetric or dangling links, more than 128 food objects or one outside the dish or on a structure,
@@ -471,7 +521,13 @@ function phase3StateProblem(s: WorldState, cols: Record<string, ArrayLike<number
   const structure = base64ToBytes(s.grid.structure.b64);
   const objects = foodObjectsProblem(s.objects ?? [], structure, next as number);
   if (objects) return `The dish's food objects cannot be loaded (${objects}).`;
-  const sample = savedSampleProblem(s.sample ?? null, { speciesIds, genomes: s.genomes ?? [] });
+  const sample = savedSampleProblem(s.sample ?? null, {
+    speciesIds,
+    genomes: s.genomes ?? [],
+    entities: { alive: cols.alive!, birthId: cols.birthId!, highWater: hw },
+    // P3.5: where Cancel would put the sample back (cells, objects, the command and birth counters).
+    world: { structure, objects: s.objects ?? [], nextObjectId: next as number, nextSeq: s.commands.nextSeq, nextBirthId: s.counters.nextBirthId, log: s.commands.log },
+  });
   if (sample) return `The held sample cannot be loaded (${sample}).`;
   return null;
 }

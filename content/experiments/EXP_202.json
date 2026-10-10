@@ -1,0 +1,39 @@
+{
+  "id": "EXP_202",
+  "seed": 202,
+  "title": "Oil neighborhood",
+  "question": "Does an Oilwick's enzyme feed its neighbours?",
+  "recipeId": "OIL_NEIGHBORHOOD_V1",
+  "intervention": "Run the dish, then tap cells on the oil patch and read the reaction ledger: oil converted, metabolite made, and whether an Oilwick is close enough to have made the enzyme. Lab → Observe → Food access shows where food is.",
+  "predictedTradeoff": "Oilwicks pay 0.40 energy per second to release lipid enzyme; Crossfeeders pay nothing and eat the same metabolite. Both may grow, or the Crossfeeders may take food the Oilwicks paid for.",
+  "measurements": [
+    "patchInput.0",
+    "converted.oil",
+    "field.oil",
+    "field.metabolite",
+    "consumed.metabolite",
+    "intake.B07",
+    "intake.B05",
+    "alive.B07",
+    "alive.B05",
+    "births.B07",
+    "births.B05",
+    "deaths.B07",
+    "deaths.B05"
+  ],
+  "stoppingSeconds": 180,
+  "confounds": "Metabolite is the only food either of them eats, and the oil patch is the only source, so all their food comes through the enzyme. Some metabolite spreads away from the patch before anyone eats it. One run with one seed.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "converted.oil", "arm": "A", "op": "gte", "value": 1, "label": "The enzyme turned at least 1 oil carbon into metabolite"},
+        {"measure": "intake.B07", "arm": "A", "op": "gt", "value": 0, "label": "Oilwicks ate metabolite"},
+        {"measure": "intake.B05", "arm": "A", "op": "gt", "value": 0, "label": "Crossfeeders ate metabolite"}
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {"journalStamp": "Watched an oil neighbourhood share its metabolite", "playerSteps": []},
+  "phase": 3
+}

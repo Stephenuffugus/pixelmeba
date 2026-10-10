@@ -86,6 +86,8 @@ export interface BuilderRules {
   readonly bodyFloor: number;
   /** Energy charged per carbon actually accepted (E10 2 E/C; 0 for native film). */
   readonly energyPerC: number;
+  /** E10 only: local film must be below this to request (its recorded filmCap, 0.50); native film relies on the pass's FILM_CAP. */
+  readonly filmCap?: number;
 }
 
 /** Dormancy state machine rules (SPEC §7.6, CT §12.7): native (B12, F04, P08) or gained through E03. */
@@ -146,12 +148,82 @@ export interface Profile {
   readonly protein: ProducerRules | null;
   /** Shared-construction rules (native B02 film, module E10), or null. Null for every species until P3.3/E10. */
   readonly builder: BuilderRules | null;
+  /**
+   * Whether it swims on its own (movement.ts stage 4 gate): the template's speed > 0, or an E07 carrier
+   * (P3.7). Equal to SpeciesRT.selfPropelled for every profile without E07.
+   */
+  readonly selfPropelled: boolean;
+  /** E04 surface anchor rules (anchor.ts), or null when it does not carry E04. */
+  readonly anchor: AnchorRules | null;
+  /** E07 light seeker rules (lightSeeker.ts), or null when it does not carry E07. */
+  readonly lightSeeker: LightSeekerRules | null;
+  /** E06 shade collector rules (intake.ts photosynthetic route), or null when it does not carry E06. */
+  readonly shade: ShadeRules | null;
+  /** E08 debris feeder (debrisFeeder.ts): with no held meal it may eat local detritus. */
+  readonly debrisFeeder: boolean;
+}
+
+/** E04 Surface anchor (SPEC §9 E04, CT §12.6), from the world's recorded module numbers. */
+export interface AnchorRules {
+  /** Continuous seconds beside support before it attaches (5). */
+  readonly attachSeconds: number;
+  /** It attaches only with E above this (35). */
+  readonly minEnergy: number;
+  /** Extra upkeep per second while anchored (0.10), ledgered as 'upkeep'. */
+  readonly attachedUpkeep: number;
+  /** Seconds without usable intake (the D-0035 clock) after which it lets go (10). */
+  readonly detachNoIntakeSeconds: number;
+  /** It lets go when E falls below this (15). */
+  readonly detachEnergy: number;
+  /** Reattach lockout after any detach (10 s). */
+  readonly lockoutSeconds: number;
+}
+
+/**
+ * E06 Shade collector (SPEC §6.5, §9 E06; CT §7.1), from the world's recorded module numbers. Applied on
+ * the photosynthetic route only (intake.ts): light response min(1, light / lightHalf) and the intake
+ * ceiling × ceilingFactor. Kept out of Profile.q, which the usable-intake threshold and the lineage
+ * intake line read.
+ */
+export interface ShadeRules {
+  /** Light at which the response reaches 1 (0.35). */
+  readonly lightHalf: number;
+  /** Photosynthetic intake ceiling multiplier (0.70). */
+  readonly ceilingFactor: number;
+}
+
+/** E07 Light seeker (SPEC §9 E07, §6.4, §6.7; CT §7.1), from the world's recorded module numbers. */
+export interface LightSeekerRules {
+  /** Motility baseline in cells per second (0.15), scaled by the motility locus. */
+  readonly baseSpeed: number;
+  /** Sensing baseline in cells (2), scaled by the sensing locus. */
+  readonly lightSensing: number;
+  /** Self-propulsion cost factor: factor × (0.5 + g_mot)² E/s while moving (0.10). */
+  readonly moveCostFactor: number;
+  /** A candidate must be at least this much brighter than its own cell (0.01). */
+  readonly brighterBy: number;
 }
 
 const PH_DOMAIN: readonly [number, number] = [2, 12];
 const UNIT_DOMAIN: readonly [number, number] = [0, 1];
 
 const NATIVE_STARCH: StarchRules = Object.freeze({
+  source: 'native',
+  emitRate: ENZYME_EMIT_RATE,
+  minEnergy: ENZYME_EMIT_MIN_ENERGY,
+  emitCost: ENZYME_EMIT_COST,
+  localCap: ENZYME_LOCAL_CAP,
+});
+
+/** Native oil- and protein-enzyme producers (B07 E_OIL, B08 E_PROTEIN; SPEC §5.3, CT §12.6; P3.6). */
+const NATIVE_OIL: ProducerRules = Object.freeze({
+  source: 'native',
+  emitRate: ENZYME_EMIT_RATE,
+  minEnergy: ENZYME_EMIT_MIN_ENERGY,
+  emitCost: ENZYME_EMIT_COST,
+  localCap: ENZYME_LOCAL_CAP,
+});
+const NATIVE_PROTEIN: ProducerRules = Object.freeze({
   source: 'native',
   emitRate: ENZYME_EMIT_RATE,
   minEnergy: ENZYME_EMIT_MIN_ENERGY,
@@ -198,6 +270,23 @@ function starchFrom(mod: ModuleRT): StarchRules {
   return { source: 'E01', emitRate: param(mod, 'emitRate'), minEnergy: param(mod, 'minEnergy'), emitCost: param(mod, 'emitCost'), localCap: param(mod, 'localCap') };
 }
 
+/** E09 Protein release (SPEC §9 E09, §5.3): an E_PROTEIN producer with the world's recorded E09 numbers. */
+function proteinFrom(mod: ModuleRT): ProducerRules {
+  return { source: 'E09', emitRate: param(mod, 'emitRate'), minEnergy: param(mod, 'minEnergy'), emitCost: param(mod, 'emitCost'), localCap: param(mod, 'localCap') };
+}
+
+/** E10 Matrix builder (SPEC §9 E10, CT §12.6): a shared-construction builder with the world's recorded E10 numbers. */
+function builderFrom(mod: ModuleRT): BuilderRules {
+  return {
+    source: 'E10',
+    minEnergy: param(mod, 'minEnergy'),
+    ratePerSecond: param(mod, 'rate'),
+    bodyFloor: param(mod, 'minBodyMultiple'),
+    energyPerC: param(mod, 'energyPerCarbon'),
+    filmCap: param(mod, 'filmCap'),
+  };
+}
+
 function dormancyFrom(mod: ModuleRT): DormancyRules {
   return {
     source: 'E03',
@@ -214,6 +303,26 @@ function dormancyFrom(mod: ModuleRT): DormancyRules {
     drySuitability: param(mod, 'drySuitability'),
     drySeconds: param(mod, 'drySeconds'),
     wakeConditionSeconds: param(mod, 'wakeConditionSeconds'),
+  };
+}
+
+function anchorFrom(mod: ModuleRT): AnchorRules {
+  return {
+    attachSeconds: param(mod, 'attachSeconds'),
+    minEnergy: param(mod, 'minEnergy'),
+    attachedUpkeep: param(mod, 'attachedUpkeep'),
+    detachNoIntakeSeconds: param(mod, 'detachNoIntakeSeconds'),
+    detachEnergy: param(mod, 'detachEnergy'),
+    lockoutSeconds: param(mod, 'lockoutSeconds'),
+  };
+}
+
+function lightSeekerFrom(mod: ModuleRT): LightSeekerRules {
+  return {
+    baseSpeed: param(mod, 'baseSpeed'),
+    lightSensing: param(mod, 'lightSensing'),
+    moveCostFactor: param(mod, 'moveCostFactor'),
+    brighterBy: param(mod, 'brighterBy'),
   };
 }
 
@@ -249,6 +358,8 @@ export function locusG(genome: Genome, locus: number): number {
 export function activeLoci(sp: SpeciesRT, genome: Genome): boolean[] {
   const out = [...sp.def.lociActive];
   if (genome.modules.includes('E03')) out[L_DORMANCY] = true;
+  if (genome.modules.includes('E07')) out[L_MOTILITY] = true; // E07: the motility locus maps baseSpeed (SPEC §9)
+  if (genome.modules.includes('E07')) out[L_SENSING] = true; // E07: the sensing locus maps lightSensing
   return out;
 }
 
@@ -257,15 +368,22 @@ export function deriveProfile(sp: SpeciesRT, genome: Genome, modules: readonly M
   const active = activeLoci(sp, genome);
   const g = (l: number) => (active[l] ? locusG(genome, l) : 0.5);
 
+  // E07 (SPEC §9; P3.7): the recorded baseSpeed and lightSensing replace the template's speed and
+  // sensing radius as the baselines the motility and sensing loci scale.
+  const seekMod = modules.find((m) => m.id === 'E07');
+  const lightSeeker = seekMod ? lightSeekerFrom(seekMod) : null;
+  const baseSpeed = lightSeeker ? lightSeeker.baseSpeed : def.speed;
+  const baseSensing = lightSeeker ? lightSeeker.lightSensing : def.sensingRadius;
+
   // Quantitative loci (CT §6.1). Inactive loci act as neutral.
   const motilityFactor = 0.5 + g(L_MOTILITY);
-  const speed = def.speed > 0 ? def.speed * motilityFactor : 0;
+  const speed = baseSpeed > 0 ? baseSpeed * motilityFactor : 0;
   const feedFactor = 0.75 + 0.5 * g(L_FEEDING);
   const q = def.intakeRate * feedFactor;
   const sensing =
-    active[L_SENSING] && def.sensingRadius >= 1 && def.sensingRadius <= 6
-      ? Math.min(6, Math.max(1, Math.round(def.sensingRadius * (0.5 + g(L_SENSING)))))
-      : def.sensingRadius;
+    active[L_SENSING] && baseSensing >= 1 && baseSensing <= 6
+      ? Math.min(6, Math.max(1, Math.round(baseSensing * (0.5 + g(L_SENSING)))))
+      : baseSensing;
   const senseMaint = active[L_SENSING] ? 0.75 + 0.5 * g(L_SENSING) : 1;
   const gDiv = g(L_DIVISION);
   const minDivisionAge = def.minDivisionAge * (1.5 - gDiv);
@@ -279,6 +397,11 @@ export function deriveProfile(sp: SpeciesRT, genome: Genome, modules: readonly M
   // genome is created), so at most one source applies.
   let starch: StarchRules | null = sp.secretesStarch ? NATIVE_STARCH : null;
   let dormancy: DormancyRules | null = sp.abilities.includes('DORMANCY') ? NATIVE_DORMANCY : null;
+  let anchor: AnchorRules | null = null;
+  let moduleProtein: ProducerRules | null = null; // E09 (never on a native E_PROTEIN producer)
+  let moduleBuilder: BuilderRules | null = null; // E10 (never on a native builder)
+  let shade: ShadeRules | null = null;
+  let debrisFeeder = false;
 
   // Modules: surcharge is part of maintenance; upkeep and capacities are separate.
   let surchargeRaw = 0;
@@ -288,6 +411,11 @@ export function deriveProfile(sp: SpeciesRT, genome: Genome, modules: readonly M
     surchargeRaw += mod.surcharge;
     if (mod.id === 'E01') starch = starchFrom(mod);
     else if (mod.id === 'E03') dormancy = dormancyFrom(mod);
+    else if (mod.id === 'E04') anchor = anchorFrom(mod);
+    else if (mod.id === 'E09') moduleProtein = proteinFrom(mod);
+    else if (mod.id === 'E10') moduleBuilder = builderFrom(mod);
+    else if (mod.id === 'E06') shade = { lightHalf: param(mod, 'lightHalf'), ceilingFactor: param(mod, 'ceilingFactor') };
+    else if (mod.id === 'E08') debrisFeeder = true;
     else if (mod.id === 'E05') {
       energyCap += param(mod, 'capacityBonus');
       upkeep += param(mod, 'upkeepPerSecond');
@@ -324,8 +452,13 @@ export function deriveProfile(sp: SpeciesRT, genome: Genome, modules: readonly M
     lociActive: active,
     starch,
     dormancy,
-    oil: null,
-    protein: null,
-    builder: sp.abilities.includes('BIOFILM') ? NATIVE_FILM_BUILDER : null,
+    oil: sp.abilities.includes('E_OIL_SECRETION') ? NATIVE_OIL : null,
+    protein: moduleProtein ?? (sp.abilities.includes('E_PROTEIN_SECRETION') ? NATIVE_PROTEIN : null),
+    builder: moduleBuilder ?? (sp.abilities.includes('BIOFILM') ? NATIVE_FILM_BUILDER : null),
+    selfPropelled: sp.selfPropelled || lightSeeker !== null,
+    anchor,
+    lightSeeker,
+    shade,
+    debrisFeeder,
   };
 }

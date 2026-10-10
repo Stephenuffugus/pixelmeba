@@ -16,7 +16,10 @@
  *   genome), then the fixed order E, S, W, N. No randomness.
  * - No candidate: the proposal is kept, nothing is charged, DIV_BLOCK_PLACEMENT (births.ts).
  * - After the commit: one link parent–daughter, LINK_VISUAL for F01 (carries nothing);
- *   LINK_TRANSPORT for a species with TRANSPORT_LINKS (F02, whose transport pass lands in wave 3).
+ *   LINK_TRANSPORT for a species with TRANSPORT_LINKS (F02; the transport pass is fungalTransport.ts).
+ *   The link forms only if both ends have fewer than FUNGAL_LINK_MAX (4) links: otherwise the daughter
+ *   is placed unlinked and the 'birth' event says so (detail.link 'degree'); lineage is unchanged
+ *   (P3.6 proposed decision). Every link formed emits one 'linkFormed' event (detail.kind 'fungal').
  *
  * Capacity: segments count against AGENT_CAP (6,000) and FUNGAL_CAP (2,000). At 2,000 living fungal
  * segments, fungal births get DIV_BLOCK_CAPACITY with the capacity flag and fungal introductions are
@@ -29,7 +32,8 @@
 import { CELL_COUNT, CELL_SOFT_CAPACITY, FUNGAL_CAP } from './constants';
 import { edibleFilmAt } from './film';
 import { cellIndex, inBounds, inMask } from './grid';
-import { fungalNeighbors, LINK_TRANSPORT, LINK_VISUAL, type FungalLinkKind } from './links';
+import { emit } from './events';
+import { addFungalLink, fungalDegree, fungalNeighbors, FUNGAL_LINK_MAX, LINK_TRANSPORT, LINK_VISUAL, type FungalLinkKind } from './links';
 import { canOccupy } from './movement';
 import { profileOfGenome } from './profiles';
 import type { SpeciesRT } from './species';
@@ -70,6 +74,37 @@ export function fungalIntroductionRefused(world: World, spIdx: number): boolean 
 /** Link kind joining a parent segment and its daughter. */
 export function branchLinkKind(sp: SpeciesRT): FungalLinkKind {
   return sp.abilities.includes('TRANSPORT_LINKS') ? LINK_TRANSPORT : LINK_VISUAL;
+}
+
+/**
+ * Whether the parent–daughter link of fungal parent `i` is refused by the degree limit (SPEC §7.7
+ * "Degree ≤ 4"): the parent already has 4 links (the new daughter has none). Checked before the
+ * division commits, so the 'birth' event can say the daughter is unlinked.
+ */
+export function branchLinkRefused(world: World, i: number): boolean {
+  return fungalDegree(world, i) >= FUNGAL_LINK_MAX;
+}
+
+/**
+ * After a fungal division: join the retained segment `i` and the new daughter `slot` (both alive,
+ * new birthIds) with the species' link kind, unless the degree limit refuses it, and emit one
+ * 'linkFormed' event. Returns whether the link formed.
+ */
+export function joinBranch(world: World, i: number, slot: number): boolean {
+  const c = world.ents.cols;
+  const sp = world.species[c.species[i]!]!;
+  const kind = branchLinkKind(sp);
+  if (fungalDegree(world, i) >= FUNGAL_LINK_MAX || fungalDegree(world, slot) >= FUNGAL_LINK_MAX) return false;
+  if (!addFungalLink(world, i, slot, kind)) return false;
+  emit(world.events, world.counters, {
+    tick: world.tick,
+    type: 'linkFormed',
+    species: c.species[i]!,
+    birthId: c.birthId[i]!,
+    cell: entityCell(c.x[slot]!, c.y[slot]!),
+    detail: { kind: 'fungal', link: kind === LINK_TRANSPORT ? 'transport' : 'visual', partner: c.birthId[slot]! },
+  });
+  return true;
 }
 
 const occupied = new Uint8Array(CELL_COUNT);

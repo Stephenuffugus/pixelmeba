@@ -1,6 +1,6 @@
 /**
- * Stage 3 — conversion (SPEC §5): finite food release (later), grit dissolution (later) and enzyme
- * catalysis. Each enzyme converts its own substrate into its product from the pre-reaction pools:
+ * Stage 3 — conversion (SPEC §5): finite food release (objects.ts releaseFoodObjects, P3.6), grit
+ * dissolution (later) and enzyme catalysis. Each enzyme converts its own substrate into its product from the pre-reaction pools:
  *   converted = min(substrate, 0.10 × activity/(1 + breaker) × dt)
  * Carbon and its proportional bound nutrient move together; products are available to feeding in
  * this same tick (stage 6) and cannot chain through another enzyme until the next tick.
@@ -11,6 +11,8 @@ import type { FieldId } from './fields';
 import { maskCells } from './grid';
 import { isFieldActive, markField } from './transport';
 import { subtractPool } from './ledger';
+import { recordReaction, type ReactionEnzyme } from './reactions';
+import { releaseFoodObjects } from './objects';
 import type { World } from './world';
 
 interface EnzymeRule {
@@ -36,6 +38,8 @@ export interface ConversionTally {
 }
 
 export function stageConversion(world: World): void {
+  // SPEC §3.2 row 3, §5.1: finite food first; enzymes then read the pools it left (pre-reaction).
+  releaseFoodObjects(world);
   const cells = maskCells();
   const breaker = world.fields.breaker;
   const tally = world.conversionTally;
@@ -70,6 +74,7 @@ export function stageConversion(world: World): void {
       else if (nMoved > 0) world.fields.nutrient![i]! += nMoved; // product without companion: release N free
       total += converted;
       seen[i]! += converted;
+      recordReaction(world, r.name as ReactionEnzyme, i, converted, nMoved); // P3.6 reaction ledger (observation)
     }
     if (total > 0) {
       markField(world, r.product);

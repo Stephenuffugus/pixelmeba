@@ -60,7 +60,9 @@ function populate(w: World, perSpecies: number, exclude: readonly string[] = [])
     const onSediment = ['B02', 'F01', 'P04'].includes(id);
     for (let n = 0; n < perSpecies; n++) {
       const x = 32.5 + ((k * perSpecies + n) % 64);
-      const y = onSediment ? 79.5 + (n % 3) : 50.5 + (n % 6);
+      // Species that wrap past x = 96 get their own band, so no two species share cells.
+      const band = Math.floor((k * perSpecies + n) / 64);
+      const y = onSediment ? 79.5 + (n % 3) - 3 * band : 50.5 + (n % 6) + 8 * band;
       place(w, id, x, y);
     }
   });

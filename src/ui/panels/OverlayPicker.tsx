@@ -16,10 +16,10 @@ export const OPACITY_MIN = 0.2;
 export const OPACITY_MAX = 0.9;
 export const OPACITY_STEP = 0.05;
 
-/** Overlays this dish can show: fields it allocates, plus light (always derived). */
+/** Overlays this dish can show: fields it allocates, plus light and food access (always derived; P3.6). */
 export function availableOverlays(): typeof OVERLAYS {
   const fields = dishInfo.value?.fieldIds;
-  return OVERLAYS.filter((o) => o.id === 'light' || !fields || fields.includes(o.id));
+  return OVERLAYS.filter((o) => o.id === 'light' || o.id === 'foodAccess' || !fields || fields.includes(o.id));
 }
 
 /** Viral unit fields (Phase 3 Pinphage): a dish holding one offers the Infection markers toggle. */

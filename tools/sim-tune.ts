@@ -430,7 +430,7 @@ export class InheritanceObserver {
         if (m === 'E05' && reserveBand(c.E[i]!, profileOf(world, i)) > 0) s.reserveInUse++;
         if (m === 'E03' && c.lifeState[i] !== LIFE_ACTIVE) s.notActive++;
         if (m === 'E01') {
-          if (c.secreting[i] === 1) s.secreting++;
+          if (c.secreting[i] !== 0) s.secreting++;
           // The secretion stage writes a code only for Active organisms (as sampleReasons counts it).
           const code = c.lifeState[i] === LIFE_ACTIVE ? c.secretionCode[i]! : c.limitCode[i]!;
           inc(s.outcomes, reasonName(code), 1);

@@ -13,6 +13,8 @@ import type { SaveMetaVariant } from '@persist/saveFile';
 import type { DishJournalEntry, RegionalTraitSeries } from '@sim/history';
 import type { FounderOrigin } from '@sim/founders';
 import type { EvolutionState, MutationRates } from '@sim/mutation';
+import type { MissingMember, SampleHeldSummary } from '@sim/sample';
+import type { SampleMode } from '@sim/sampleSlot';
 
 /**
  * 2 since Phase 3 wave 2 (D-0036): ENT_STRIDE 12 → 14 (E_CUE2, E_LINKMASK), seven deposit bands (film),
@@ -32,7 +34,7 @@ export function stamp<T extends object>(msg: T): T & Envelope {
 export type Speed = 0 | 1 | 2 | 4;
 
 /** Overlays the renderer can request (one at a time). 'light' and 'ph' are derived fields. */
-export type OverlayId = FieldId | 'light' | 'ph';
+export type OverlayId = FieldId | 'light' | 'ph' | 'foodAccess';
 
 export type Selection =
   | { readonly kind: 'entity'; readonly birthId: number }
@@ -170,7 +172,31 @@ export type ToWorker =
    * New Dish (P2.2, UX §2.3): what a dish with these choices would start with — realized in the worker
    * exactly as `create` would build it, summarized, then discarded. Read-only; no dish is created.
    */
-  | { readonly type: 'newDishPreview'; readonly requestId: number; readonly recipeId: string; readonly seed: number; readonly overrides: RecipeOverrides };
+  | { readonly type: 'newDishPreview'; readonly requestId: number; readonly recipeId: string; readonly seed: number; readonly overrides: RecipeOverrides }
+  /**
+   * P3.5 Sample (SPEC §10.5; D-0037). Begin is host-level: the dish pauses and the worker records its
+   * stateHash (replied as sampleBegun). Take, Transfer and Discard are commands ('sampleTake',
+   * 'sampleTransfer', 'sampleDiscard'). Preview is read-only. Cancel is host-level and exact.
+   */
+  | { readonly type: 'sampleBegin'; readonly requestId: number; readonly dishId: string }
+  | { readonly type: 'samplePreview'; readonly requestId: number; readonly dishId: string; readonly x: number; readonly y: number; readonly radius: number; readonly mode: SampleMode }
+  | { readonly type: 'sampleCancel'; readonly requestId: number; readonly dishId: string };
+
+/** What a sample at a point would take (read-only; src/sim/sample.ts selectSample). Amounts are game units. */
+export interface SamplePreview {
+  readonly mode: SampleMode;
+  readonly radius: number;
+  readonly origin: readonly [number, number];
+  /** Footprint cells (inside the dish, open or porous), ascending. */
+  readonly cells: readonly number[];
+  readonly organisms: number;
+  readonly objects: number;
+  readonly c: number;
+  readonly n: number;
+  readonly m: number;
+  /** Partners of whole units outside the circle: non-empty ⇒ Take is refused whole. */
+  readonly missing: readonly MissingMember[];
+}
 
 export interface SlotSummary {
   readonly slotId: string;
@@ -421,6 +447,8 @@ export interface SnapshotMsg {
   readonly evolution?: EvolutionState;
   /** P3.1: the dish's lid setting now in effect (SPEC §4.5), for the Habitat tray's lid toggle. */
   readonly lid?: 'open' | 'closed';
+  /** P3.5: the held sample (SPEC §10.5), or null; while held the dish refuses Run, Step and other changes. */
+  readonly sample?: SampleHeldSummary | null;
 }
 
 /** What the lineage view asks the worker to mark: a locus to band, and/or a branch to highlight. */
@@ -542,6 +570,18 @@ export interface EntityInspect {
    */
   readonly network?: { readonly segments: number; readonly threads: number; readonly thisThread: number };
   /**
+   * P3.6: a segment of a species with transport links (F02): carbon it sent along its links and how many
+   * linked segments received it, and what it received and from how many, over the last `windowSeconds`
+   * dish seconds (src/sim/fungalTransport.ts fungalFlowOf; observation, empty again after a reload).
+   */
+  readonly transfer?: {
+    readonly sentC: number;
+    readonly sentTo: number;
+    readonly receivedC: number;
+    readonly receivedFrom: number;
+    readonly windowSeconds: number;
+  };
+  /**
    * P3.3: biofilm carbon in its cell (SPEC §12.1 Details "field values"), present only in a world with
    * the film system. A tap on an occupied cell selects the organism, so this is where film under an
    * organism (e.g. the Velvet that built it) is read.
@@ -571,6 +611,8 @@ export interface ModuleInspect {
   readonly params: Readonly<Record<string, number>>;
   /** Whether the module's action is happening right now (E01 releasing; E03 in a dormancy state). */
   readonly activeNow: boolean;
+  /** E09 only: whether this organism can itself eat broth (E09 never grants it; src/sim/moduleView.ts). */
+  readonly eatsBroth?: boolean;
 }
 
 export interface UpkeepInspect {
@@ -582,6 +624,10 @@ export interface UpkeepInspect {
   readonly surcharge: number;
   /** Separate upkeep (E05 chamber), E/s; 0 while Resting. */
   readonly chamber: number;
+  /** E04 attached upkeep, E/s; present only while anchored (P3.7). */
+  readonly anchor?: number;
+  /** E12 link upkeep, E/s (0.01 per incident colony link); present only while linked (P3.7). */
+  readonly links?: number;
 }
 
 export interface DormancyInspect {
@@ -697,6 +743,43 @@ export interface CellInspect {
       readonly damagePerSecond: number;
     }[];
   };
+  /**
+   * P3.6 reaction ledger (SPEC §12.1, §5.3): one row per enzyme with activity or conversion in this
+   * cell (src/worker/snapshot.ts reactionRows). Absent when the world records no enzymes.
+   */
+  readonly reactions?: readonly ReactionRow[];
+  /**
+   * P3.6 (SPEC §5.1): the finite food object in this cell, if any: its kind ('pellet' | 'wafer') and
+   * what it still holds, carbon per pool and bound nutrient (game units). Absent when the cell has none.
+   */
+  readonly object?: {
+    readonly id: number;
+    readonly kind: string;
+    readonly pools: { readonly sugar?: number; readonly starch?: number; readonly protein?: number };
+    readonly n: number;
+  };
+}
+
+/** One enzyme's line in the cell inspector's reaction ledger (P3.6). Carbon amounts are game units. */
+export interface ReactionRow {
+  readonly enzyme: 'starch' | 'oil' | 'protein';
+  /** The product field this enzyme makes (sugar, metabolite, broth). */
+  readonly product: 'sugar' | 'metabolite' | 'broth';
+  /** Enzyme activity in the cell, and activity / (1 + breaker). */
+  readonly activity: number;
+  readonly effectiveActivity: number;
+  readonly breaker: number;
+  /** Substrate carbon present in the cell now. */
+  readonly substrate: number;
+  /** In this cell during the last whole second: substrate carbon converted (= product carbon made) and bound nutrient moved. */
+  readonly converted: number;
+  readonly nMoved: number;
+  /** The same over the whole dish, and the dish's cumulative conversion (world.conversionTotals). */
+  readonly dishConverted: number;
+  readonly dishNMoved: number;
+  readonly cumulative: number;
+  /** Species ids of living producers that released this enzyme in the last tick, in the cell or a four-neighbour (empty: "Enzyme present"). */
+  readonly madeBy: readonly string[];
 }
 
 export type FromWorker =
@@ -820,7 +903,12 @@ export type FromWorker =
    */
   | { readonly type: 'experimentEnded'; readonly dishId: string; readonly cardId: string; readonly reason: ExperimentEndReason }
   /** Reply to newDishPreview (P2.2). */
-  | { readonly type: 'newDishPreview'; readonly requestId: number; readonly preview: NewDishPreview };
+  | { readonly type: 'newDishPreview'; readonly requestId: number; readonly preview: NewDishPreview }
+  /** P3.5: Begin paused the dish; `hash` is its stateHash at that moment (Cancel returns to it exactly). */
+  | { readonly type: 'sampleBegun'; readonly requestId: number; readonly dishId: string; readonly hash: string; readonly tick: number }
+  | { readonly type: 'samplePreview'; readonly requestId: number; readonly dishId: string; readonly preview: SamplePreview }
+  /** P3.5: Cancel restored the dish; `beginHash` is the hash Begin recorded (null after a reload). */
+  | { readonly type: 'sampleCancelled'; readonly requestId: number; readonly dishId: string; readonly hash: string; readonly tick: number; readonly beginHash: string | null };
 
 /** Why a card's observation ended without a stamp (see the experimentEnded packet). */
 export type ExperimentEndReason = 'changed' | 'failed' | 'undone' | 'closed';

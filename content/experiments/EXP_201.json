@@ -1,0 +1,38 @@
+{
+  "id": "EXP_201",
+  "seed": 201,
+  "title": "Shared lunch",
+  "question": "Who eats the sugar a Crumbsmith's enzyme makes?",
+  "recipeId": "SHARED_LUNCH_V1",
+  "intervention": "Tap cells on the starch patch and read the reaction ledger: how much starch the enzyme turned into sugar there, and who made the enzyme. Then inspect a Sprinter and see what it ate.",
+  "predictedTradeoff": "Crumbsmiths pay 0.40 energy per second to release enzyme while Sprinters pay nothing, yet the sugar it frees is free for both. The Sprinters may gain more from the enzyme than the Crumbsmiths that made it.",
+  "measurements": [
+    "patchInput.0",
+    "converted.starch",
+    "field.starch",
+    "field.sugar",
+    "consumed.sugar",
+    "intake.B06",
+    "intake.B01",
+    "alive.B06",
+    "alive.B01",
+    "births.B06",
+    "births.B01",
+    "deaths.B06",
+    "deaths.B01"
+  ],
+  "stoppingSeconds": 180,
+  "confounds": "The Water Garden also holds 0.02 sugar in every water cell, so not all the sugar the Sprinters eat came from starch; converted starch is counted separately. Crumbsmiths and Sprinters both eat sugar, so they compete for it as well as share it. One run with one seed.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "converted.starch", "arm": "A", "op": "gte", "value": 1, "label": "The enzyme turned at least 1 starch carbon into sugar"},
+        {"measure": "intake.B01", "arm": "A", "op": "gte", "value": 0.5, "label": "Sprinters ate at least 0.5 carbon"}
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {"journalStamp": "Measured a Crumbsmith's starch turning to sugar, and what Sprinters ate", "playerSteps": []},
+  "phase": 3
+}

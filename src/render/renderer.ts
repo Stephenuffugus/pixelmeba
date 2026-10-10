@@ -1228,8 +1228,8 @@ export class DishRenderer {
   /**
    * Show a brush footprint before release: covered cells the edit applies to are tinted; cells it
    * would refuse (a structure, a live organism, past the rim) are tinted red and crossed. Uses the same
-   * rule as the simulation (brushCellOutcome) over the latest geometry and snapshot, so it never
-   * promises what the command refuses; the command's own counts stay authoritative. 'life' marks
+   * rule as the simulation (brushCellOutcome) over the latest geometry and snapshot (its organisms and,
+   * P3.6, its food objects), so it never promises what the command refuses; the command's own counts stay authoritative. 'life' marks
    * the cells the inoculate command can use for that species (lifeCellOutcome: structure and
    * habitat, exactly canOccupy) and crosses out the rest. Returns the counts shown to the player;
    * null clears the preview.
@@ -1256,6 +1256,15 @@ export class DishRenderer {
         if (cell >= 0 && cell < CELL_COUNT) occupied[cell] = 1;
       }
     }
+    // P3.6: cells holding a food object (snapshot objects) refuse a structure and a second object.
+    let objectCells: Uint8Array | null = null;
+    if (s && (p.rule === 'place' || p.rule === 'object') && s.objects && s.objects.length > 0) {
+      objectCells = new Uint8Array(CELL_COUNT);
+      for (const ob of s.objects) {
+        const cell = Math.floor(ob.y) * GRID_W + Math.floor(ob.x);
+        if (cell >= 0 && cell < CELL_COUNT) objectCells[cell] = 1;
+      }
+    }
     const refused: number[] = [];
     let ok = 0;
     for (const cell of p.cells) {
@@ -1263,7 +1272,7 @@ export class DishRenderer {
       const o =
         p.rule === 'life'
           ? lifeCellOutcome(st, this.brushSubstrate ? this.brushSubstrate[cell]! : SUB_WATER, p.life, this.stoneEdgeAt(cell))
-          : brushCellOutcome(p.rule, st, occupied[cell] === 1);
+          : brushCellOutcome(p.rule, st, occupied[cell] === 1, objectCells !== null && objectCells[cell] === 1);
       if (o === 'ok') {
         ok++;
         g.rect(cell % GRID_W, Math.floor(cell / GRID_W), 1, 1);

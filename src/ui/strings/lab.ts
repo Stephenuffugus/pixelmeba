@@ -34,7 +34,7 @@ export const LAB_CATEGORIES: readonly {
  * recorded content enables; each needs a MATERIAL_COPY entry. Enzymes and the enzyme breaker join the
  * Chemistry tray with their system (P3.6).
  */
-export const FOOD_MATERIALS: readonly string[] = ['SUGAR', 'STARCH', 'OIL', 'PROTEIN', 'DEBRIS', 'METABOLITE'];
+export const FOOD_MATERIALS: readonly string[] = ['SUGAR', 'STARCH', 'OIL', 'PROTEIN', 'DEBRIS', 'METABOLITE', 'M01'];
 export const CHEMISTRY_MATERIALS: readonly string[] = [
   'NUTRIENT',
   'OXYGEN',
@@ -46,7 +46,50 @@ export const CHEMISTRY_MATERIALS: readonly string[] = [
   'INH_BACT',
   'INH_FUNG',
   'INH_PHOTO',
+  // P3.6: enzymes and the enzyme breaker (CT §5.2).
+  'M03',
+  'M04',
+  'M05',
+  'M09',
 ];
+
+/**
+ * Finite food objects in the Food tray (CT §5.2 M10, M11; P3.6): one object per tap, never a brush.
+ * Their tools are `object:<id>`; the Explore Feed keeps its own foods (UX §4.3).
+ */
+export const FOOD_OBJECTS: readonly string[] = ['M10', 'M11'];
+
+/** Food object copy beyond the content summary (CT §5.2; objects.ts FOOD_OBJECT_RULES). */
+export const OBJECT_COPY: Readonly<Record<string, Omit<ItemCopy, 'name' | 'purpose'>>> = {
+  M10: {
+    habitats: 'Any open cell inside the rim: water, gel or sediment. Not on a stone, wall or bead, and not on another food object.',
+    dose: 'One pellet per tap: 10 sugar carbon and 1 bound nutrient, logged as an input.',
+    changes:
+      'Each second it lets 0.02 sugar carbon, with its share of the nutrient, into its own cell, for about 500 seconds. Then it is gone and a stain fades where it was.',
+    unchanged: 'It never moves, spreads or refills, and nothing eats it directly; organisms eat the sugar it lets out. Organisms in the cell do not stop it being placed.',
+    watch: 'Its outline shrinking as it empties, and sugar eaters gathering in the haze around it.',
+  },
+  M11: {
+    habitats: 'Any open cell inside the rim: water, gel or sediment. Not on a stone, wall or bead, and not on another food object.',
+    dose: 'One wafer per tap: 6 starch carbon, 4 protein carbon and 1 bound nutrient, logged as an input.',
+    changes:
+      'Each second it leaves 0.012 starch carbon and 0.008 protein carbon in its own cell as deposits, each with 0.10 nutrient per carbon, for about 500 seconds. Then it is gone and a stain fades where it was.',
+    unchanged: 'It never moves, spreads or refills, and nothing eats it directly. Starch and protein stay deposits until something eats or converts them.',
+    watch: 'Its outline shrinking, and the starch and protein in its cell (the cell inspector lists what the wafer still holds).',
+  },
+};
+
+/** The announcement after a food object tap, from the simulation's own result. `name` is the content name. */
+export function objectOutcome(r: CommandResult, name: string): string {
+  if (r.accepted > 0) return `Placed one ${inSentence(name)}.`;
+  const note = r.note ?? '';
+  if (note.endsWith(NOT_IN_DISH)) return `Not placed: food objects are not in this dish’s recorded content.`;
+  if (note.startsWith('The dish holds')) return `Not placed: ${note}.`;
+  if (note.startsWith('a food object')) return 'Not placed: this cell already holds a food object.';
+  if (note.startsWith('a structure')) return 'Not placed: a stone, wall or bead is in this cell.';
+  if (note === 'outside the dish') return 'Not placed: that is outside the rim.';
+  return note ? `Not placed: ${note}.` : 'Not placed.';
+}
 
 export const RADII = [1, 3, 6] as const;
 export type LabRadius = (typeof RADII)[number];
@@ -258,7 +301,37 @@ export const MATERIAL_COPY: Readonly<Record<string, MaterialCopy>> = {
   INH_BACT: inhibitorCopy('Bacteria', 'Yeasts, fungi, algae, consumers, parasites and viruses are not affected.', 'Bacteria nearby slowing or dying while other organisms carry on.'),
   INH_FUNG: inhibitorCopy('Yeasts and fungi', 'Bacteria, algae, consumers, parasites and viruses are not affected.', 'Yeasts and fungi nearby slowing or dying while other organisms carry on.'),
   INH_PHOTO: inhibitorCopy('Algae', 'Bacteria, yeasts, fungi, consumers, parasites and viruses are not affected.', 'Algae nearby slowing or dying while other organisms carry on.'),
+  // P3.6 (CT §5.2; SPEC §5.3): soluble broth, the three enzymes and the enzyme breaker.
+  M01: {
+    habitats: SPREADS,
+    changes: 'Adds dissolved broth carbon with 0.10 bound nutrient per carbon to each covered open cell, logged as an input.',
+    unchanged: 'Nothing refills it. Only organisms that list broth as food can eat it.',
+    watch: 'Broth eaters such as Brothmakers and Creambuds feeding on it; the patch spreading out and thinning.',
+    unit: 'C',
+  },
+  M03: enzymeCopy('starch', 'sugar'),
+  M04: enzymeCopy('oil', 'metabolite'),
+  M05: enzymeCopy('protein', 'broth'),
+  M09: {
+    habitats: SPREADS,
+    changes:
+      'Adds enzyme breaker to each covered open cell. It spreads like sugar and loses 1 % of its amount each second. In its cell every enzyme works at activity / (1 + breaker), so breaker 1.0 halves starch, oil and protein conversion there.',
+    unchanged: 'It removes no enzyme and no food, and adds no carbon or nutrient. Organisms still release enzyme as before.',
+    watch: 'The reaction ledger in the cell inspector: effective activity and carbon converted falling where breaker is.',
+    unit: 'activity',
+  },
 };
+
+/** Copy for an enzyme material (M03–M05): it converts `substrate` deposits into dissolved `product`. */
+function enzymeCopy(substrate: string, product: string): MaterialCopy {
+  return {
+    habitats: 'Open water, gel or sediment, and porous beads. It spreads at half the rate of sugar.',
+    changes: `Adds ${substrate} enzyme activity to each covered open cell; it loses 2 % of its activity each second. Each second it turns up to 0.10 × its effective activity of ${substrate} carbon in its cell, with any bound nutrient, into ${product}.`,
+    unchanged: `It adds no carbon or nutrient and never converts living organisms. Without ${substrate} in the cell it does nothing.`,
+    watch: `The reaction ledger in the cell inspector (${substrate} converted, ${product} made), and ${product} eaters gathering nearby.`,
+    unit: 'activity',
+  };
+}
 
 export const FALLBACK_MATERIAL_COPY: MaterialCopy = {
   habitats: 'Open cells inside the rim, and porous beads.',
@@ -436,6 +509,8 @@ export const OVERLAYS: readonly { readonly id: string; readonly copy: OverlayCop
   // P3.3/P3.4 (wave 2 art-features): density overlays of the film and Pinphage fields.
   { id: 'film', copy: { name: 'Biofilm', unit: 'C per cell' } },
   { id: 'v01', copy: { name: 'Pinphage', unit: 'units per cell' } },
+  // P3.6 (SPEC §10.8): food the selected organism can eat here, or with none selected, food enzymes made last second.
+  { id: 'foodAccess', copy: { name: 'Food access', unit: 'C per cell: food the selected organism can eat, or with none selected, food enzymes made in the last second' } },
 ];
 
 export function overlayCopy(id: string): OverlayCopy {
@@ -451,6 +526,7 @@ function skippedText(r: CommandResult): string {
   const parts: string[] = [];
   if (k.organism > 0) parts.push(`${k.organism} had an organism in ${k.organism === 1 ? 'it' : 'them'}`);
   if (k.structure > 0) parts.push(`${k.structure} already had a structure`);
+  if (k.object !== undefined && k.object > 0) parts.push(`${k.object} held a food object`);
   if (k.enclosed > 0)
     parts.push(`${k.enclosed} had no open neighbour to take ${k.enclosed === 1 ? 'its' : 'their'} contents`);
   if (k.rim > 0) parts.push(`${k.rim} ${k.rim === 1 ? 'was' : 'were'} outside the rim`);

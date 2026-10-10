@@ -1,0 +1,25 @@
+{
+  "id": "OIL_NEIGHBORHOOD_V1",
+  "revision": 1,
+  "name": "Oil neighborhood",
+  "habitatId": "WATER_GARDEN",
+  "seed": 202,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {"center": [64, 64], "radius": 6, "substrate": "water", "add": {"oil": 0.5, "nutrient": 0.2}, "label": "Oil and nutrient patch"}
+  ],
+  "founders": [
+    {"species": "B07", "count": 20, "center": [64, 64], "radius": 6},
+    {"species": "B05", "count": 20, "center": [64, 64], "radius": 6}
+  ],
+  "labels": [],
+  "question": "Does an Oilwick's enzyme feed its neighbours?",
+  "expectedObservationsText": "Twenty Oilwicks and twenty Crossfeeders share an oil patch. Neither can eat oil; Oilwicks release lipid enzyme that turns it into metabolite, which both of them eat. The cell inspector's reaction ledger shows the oil converted and metabolite made in each cell.",
+  "phase": 3
+}

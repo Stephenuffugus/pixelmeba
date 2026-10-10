@@ -1,0 +1,25 @@
+{
+  "id": "PROTEIN_CHAIN_V1",
+  "revision": 1,
+  "name": "Protein chain",
+  "habitatId": "WATER_GARDEN",
+  "seed": 203,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {"center": [64, 64], "radius": 6, "substrate": "water", "add": {"protein": 0.5, "proteinN": 0.05}, "label": "Protein patch (0.05 bound nutrient)"}
+  ],
+  "founders": [
+    {"species": "Y02", "count": 10, "center": [64, 64], "radius": 6},
+    {"species": "B08", "count": 20, "center": [64, 64], "radius": 6}
+  ],
+  "labels": [],
+  "question": "Can Creambuds live on protein that only Brothmakers can open?",
+  "expectedObservationsText": "Ten Creambuds and twenty Brothmakers on a protein patch that carries 0.10 bound nutrient per carbon. Neither can eat protein; Brothmakers release protein enzyme that turns it, with its bound nutrient, into broth, which both of them drink.",
+  "phase": 3
+}

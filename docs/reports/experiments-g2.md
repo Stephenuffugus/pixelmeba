@@ -688,3 +688,47 @@ contentVersion 1. A stamp made by this build under the shipped manifest (in the 
 move as Phase 3 enables more content (the wave 4 module flip changes the module draws of Phase 2
 recipes); the trajectory fence's check (b) records each such move under a decision, while these tests
 keep checking the g2 numbers.
+
+# E201–E204 (G3)
+
+Phase 3 wave 3, P3.6 part 1 (e1-producers). Four expansion cards, CT §10.3 (D02 §21): seed = numeric id;
+Water Garden without stones (its 0.02 background sugar and 0.10 nutrient stay); fixed light 0.8; open lid;
+radius-6 patches (113 water cells); Standard preset; Identical founders placed nearest-first (D-0022).
+Recipes `SHARED_LUNCH_V1` (201), `OIL_NEIGHBORHOOD_V1` (202), `PROTEIN_CHAIN_V1` (203),
+`BROKEN_CATALYST_V1` (204: Shared lunch's setup under its own seed, since a card's seed equals its
+recipe's). Every gate is reached on the shipped content; nothing was tuned. Measured with
+`runExperiment(registry(), id)` on 2026-10-01 (shipped manifest, moduleRegistryVersion 1); the wave 4
+module flip may move the Standard-preset numbers, never the setups. Fixture:
+`tests/experiments/e201-e204.test.ts` (relations only, no hash literals).
+
+| Card | Gate (clauses) | Reached | Key measurements at the stopping point |
+|------|----------------|---------|-----------------------------------------|
+| EXP_201 Shared lunch (single arm, 180 s) | converted.starch ≥ 1; intake.B01 ≥ 0.5 | 8 s (1.16 C converted; Sprinters ate 1.95 C) | converted.starch 20.78 C of 56.5; Sprinters ate 42.03 C, Crumbsmiths 34.14 C; 20 + 20 alive, no births (mean E 14.1 / 9.2, under the 60 E division minimum) |
+| EXP_202 Oil neighborhood (single arm, 180 s) | converted.oil ≥ 1; intake.B07 > 0; intake.B05 > 0 | 8 s (1.16 C; 0.41 C and > 0) | converted.oil 17.63 C of 56.5; Oilwicks ate 9.66 C, Crossfeeders 10.22 C; all 40 starved (Oilwicks extinct at 154 s, Crossfeeders at 174 s) |
+| EXP_203 Protein chain (paired; B without the 20 Brothmakers, 180 s) | converted.protein > 0 (A); intake.Y02 > 0 (A) | 1 s | A: converted.protein 15.62 C, Creambuds drank 4.60 C, 8 of 10 alive; Brothmakers ate 9.22 C and all starved by 149 s. B: no broth at all, Creambuds took in 0 and died out at 150 s |
+| EXP_204 Broken catalyst (paired; B gets M09 = 4 per cell over the patch at 0 s, 120 s) | runSeconds (A) ≥ 120 | 120 s | converted.starch A 19.97 C, B 10.06 C: **B − A = −9.90 C** (B converted 50 % of A); Crumbsmith intake A 22.83 vs B 17.71 C, Sprinter 28.13 vs 25.59 C; all 40 alive in both |
+
+Balances checked by the fixture: E201 starch left + converted = 0.50 × 113; E202 metabolite left + net
+consumed (= 0.8 × the eaters' intake, since every eater returns METABOLITE_FRACTION 0.2 of its intake
+as metabolite) = converted oil, and oil left + converted = 0.50 × 113; E203 copy B keeps all 56.5 C of
+protein. Every arm passes every ledger check (carbon and nutrient relative error < 1e-5).
+
+**Measured limiting factor — E202 and E203 producers starve (reported, not tuned).** Oilwicks and
+Brothmakers pay 0.38–0.40 E/s maintenance plus 0.40 E/s for enzyme while it is released, and their only
+food is what the enzyme makes. One producer adds 0.02 activity per second to its own cell while the
+enzyme loses 2 % per second and spreads at half the coefficient; conversion is 0.10 × activity × dt
+per cell, so a cell holding 0.2 activity yields 0.02 C/s, shared with every other eater of the product
+(Crossfeeders in E202, Creambuds in E203) and thinned by diffusion. Over 180 s the twenty Oilwicks
+took in 9.66 C between them (≈ 0.003 C/s each ≈ 0.09 E/s at 30 E/C), far below their upkeep, so energy
+falls through the 35 E emit threshold, secretion stops, and they starve. Creambuds (Y02, maintenance
+0.40 E/s, no enzyme cost) outlast them in copy A (8 of 10 alive at 180 s) and coincide with the broth
+made there; without Brothmakers (copy B) they die out at 150 s. These are CT
+§1.2/§12.6 numbers working as written; a revision that keeps producers alive would be a content tuning
+question (new recipe revision or CT numbers), not a mechanics change, and is listed for the owner.
+
+**E203 last-group rule.** `change.kind 'omitFounders'` accepts only the recipe's last founder group
+(`experimentProblems`), so copy B places the ten Creambuds first, in exactly copy A's cells with copy A's
+birth ids (tested), and differs only by the missing Brothmakers.
+
+**E204 stroke.** The M09 deposit at (45.5, 64.5) with radius 6 covers exactly the patch disk (113 cells,
+tested cell by cell); `interventionAccepted` = 113.

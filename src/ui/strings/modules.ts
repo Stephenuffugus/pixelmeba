@@ -42,6 +42,7 @@ const FLAG_FEEDING = 1 << 2;
 const FLAG_HUNTING = 1 << 3;
 const FLAG_MOVING = 1 << 6;
 const FLAG_USABLE_INTAKE = 1 << 11;
+const FLAG_DETRITUS_INTAKE = 1 << 13;
 
 /**
  * The inspector's action chip, from recorded state only. "Eating" needs this tick's intake to reach the
@@ -52,6 +53,8 @@ export function actionLabel(e: Pick<EntityInspect, 'flags' | 'lifeState' | 'pred
   // A life state other than Active (Preparing, Resting, Waking) is the organism's real state (P2.1).
   if (e.lifeState !== LIFE_ACTIVE) return lifeStateLabel(e.lifeState);
   if (e.flags & FLAG_FEEDING) {
+    // E08: this tick's intake was local detritus, not a held meal (FLAG.detritusIntake, stage 6).
+    if (e.flags & FLAG_DETRITUS_INTAKE) return e.flags & FLAG_USABLE_INTAKE ? 'Eating detritus' : 'Finding only traces of detritus';
     if (e.predation) return 'Digesting';
     // m6: an organism that makes its food from light is never said to be eating (its intake is fixed carbon).
     if (e.diet?.metabolism === 'photosynthesis' && e.profile?.foods.length === 0) return e.flags & FLAG_USABLE_INTAKE ? 'Making food' : 'Making only a little food';
@@ -124,6 +127,64 @@ export function moduleText(m: ModuleInspect): ModuleText {
         costs: `${carry} except while resting; ${num(p.prepareCost, 0)} energy to get ready, ${num(p.restMaintenance)} energy/s while resting (instead of all other upkeep), ${num(p.wakeCost, 0)} energy to wake.`,
         now: m.activeNow ? 'In its resting cycle right now.' : null,
       };
+    case 'E04':
+      return {
+        id: m.id,
+        name: m.name,
+        does: `After ${num(p.attachSeconds, 0)} s in a row beside a stone, wall, bead or the dish edge with more than ${num(p.minEnergy, 0)} energy, it holds on and stops swimming. It lets go after ${num(p.detachNoIntakeSeconds, 0)} s without usable food, below ${num(p.detachEnergy, 0)} energy, when the surface is removed or when it rests, and then cannot hold on again for ${num(p.lockoutSeconds, 0)} s. Feeding and being eaten work as usual.`,
+        costs: `${carry}, plus ${num(p.attachedUpkeep)} energy/s while holding on.`,
+        now: m.activeNow ? 'Holding on to a surface right now.' : null,
+      };
+    case 'E07':
+      return {
+        id: m.id,
+        name: m.name,
+        does: `Swims slowly toward brighter light: ${num(p.baseSpeed)} cells/s and light sensing up to ${num(p.lightSensing, 0)} cells, which its motility and sensing traits adjust. It moves only when a cell in reach is at least ${num(p.brighterBy)} brighter than its own; walls and its habitat still stop it.`,
+        costs: `${carry}, plus ${num(p.moveCostFactor)} × (0.5 + motility)² energy/s while it swims, where motility runs from 0 to 1 (instead of a cost per cell moved).`,
+        now: m.activeNow ? 'Swimming toward brighter light right now.' : null,
+      };
+    case 'E06':
+      return {
+        id: m.id,
+        name: m.name,
+        does: `Only while making food from light: any light of ${num(p.lightHalf)} or more counts as full light (dimmer light counts as light divided by ${num(p.lightHalf)}), but it can make only ${num((p.ceilingFactor ?? NaN) * 100, 0)} % as much food at most. Carbon dioxide and nutrient limits still apply.`,
+        costs: `${carry}, and its most food from light is ${num((p.ceilingFactor ?? NaN) * 100, 0)} % of what it could make without it.`,
+        now: m.activeNow ? 'Making food from light right now.' : null,
+      };
+    case 'E08':
+      return {
+        id: m.id,
+        name: m.name,
+        does: 'When it holds no meal it may eat dead material (detritus) where it is, up to its usual intake limit, using oxygen. A held meal always comes first, and a catch cancels that turn of detritus. It moves toward whichever is better, prey or detritus. It can eat no new kinds of prey.',
+        costs: `${carry}, and nothing extra.`,
+        now: m.activeNow ? 'Eating detritus right now.' : null,
+      };
+    case 'E09':
+      return {
+        id: m.id,
+        name: m.name,
+        does: `Releases protein enzyme when protein is in or beside its cell, turning protein into broth that anyone nearby who drinks broth can use, until the enzyme there reaches ${num(p.localCap)}. ${
+          m.eatsBroth ? 'Its kind already drinks broth; this ability does not change that.' : 'Produces broth; cannot consume broth.'
+        }`,
+        costs: `${carry}, plus ${num(p.emitCost)} energy/s while releasing (only above ${num(p.minEnergy, 0)} energy).`,
+        now: m.activeNow ? 'Releasing protein enzyme right now.' : null,
+      };
+    case 'E10':
+      return {
+        id: m.id,
+        name: m.name,
+        does: `Moves up to ${num(p.rate)} body carbon per second into the film on its own spot, while it has more than ${num(p.minEnergy, 0)} energy, a body above ${num(p.minBodyMultiple)} times its starting size and film there below ${num(p.filmCap)}. Builders on one spot share the film room left. The film belongs to no one, and building it gives the builder no extra protection.`,
+        costs: `${carry}, plus ${num(p.energyPerCarbon)} energy for each carbon moved into film.`,
+        now: m.activeNow ? 'Building film right now.' : null,
+      };
+    case 'E12':
+      return {
+        id: m.id,
+        name: m.name,
+        does: `Two active carriers of the same kind that are not holding on to anything, both with at least ${num(p.minEnergy, 0)} energy, link after staying within ${num(p.linkDistance)} cells of each other for ${num(p.linkSeconds, 0)} s in a row. Each keeps at most ${num(p.maxLinks, 0)} links and a colony at most ${num(p.maxComponent, 0)} members; a link that would go over is refused at no cost. Linked members stop swimming. Links share no food or energy: each member still feeds, divides and is eaten on its own. A link breaks after ${num(p.severNoIntakeSeconds, 0)} s without usable food, below ${num(p.severEnergy, 0)} energy, on resting, division or death, or when pulled more than ${num(p.severDistance)} cells apart; then that member cannot link again for ${num(p.lockoutSeconds, 0)} s.`,
+        costs: `${carry}, plus ${num(p.linkCost, 0)} energy once per link made and ${num(p.perLinkUpkeep)} energy/s for each link it holds.`,
+        now: m.activeNow ? 'Linked to its colony right now.' : null,
+      };
     case 'E05':
       return {
         id: m.id,
@@ -150,6 +211,8 @@ export function upkeepText(e: Pick<EntityInspect, 'upkeep'>): string {
   const parts = [`${num(u.maintenance, 3)} energy/s`];
   if (u.surcharge > 0) parts.push(`${num(u.surcharge, 3)} for carrying extra abilities`);
   if (u.chamber > 0) parts.push(`${num(u.chamber, 3)} reserve chamber upkeep`);
+  if (u.anchor !== undefined && u.anchor > 0) parts.push(`${num(u.anchor, 3)} for holding on to a surface`);
+  if (u.links !== undefined && u.links > 0) parts.push(`${num(u.links, 3)} for its colony links`);
   return parts.join(' + ');
 }
 

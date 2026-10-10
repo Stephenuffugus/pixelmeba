@@ -12,7 +12,8 @@
  *
  * Also (wave B fixes): a saved specimen waiting for its placement tap takes that tap whatever Lab tool
  * is selected; the Habitat and Tools trays offer exactly what the dish's recorded content has, named
- * and described from content, and an older dish without paints or structures offers none; the Life
+ * and described from content, and an older dish without paints or structures offers none of those (it
+ * still offers Sample and Clean water, P3.5 / D-0037, which every world has); the Life
  * preview's rule is built from the dish's recorded species exactly as the simulation's species table
  * is; overlays and shade are drawn on porous beads.
  */
@@ -360,6 +361,9 @@ describe('Lab trays offer what the dish records (content is data; D-0024)', () =
       ['place:wall', reg.structures.WALL!.name],
       ['place:bead', reg.structures.BEAD!.name],
       ['erase', 'Erase structure'],
+      // P3.5 (D-0037): player tools on every world; Transfer appears only while a sample is held.
+      ['sample', 'Sample'],
+      ['cleanWater', 'Clean water'],
     ]);
     const wall = tray.itemCopy('place:wall')!;
     expect(wall).toMatchObject({
@@ -418,7 +422,7 @@ describe('Lab trays offer what the dish records (content is data; D-0024)', () =
     expect(other.dishId).not.toBe(info.dishId);
     expect(other.contentHash).toBe('b2'.repeat(32));
     expect(other.structureIds).toEqual(['BEAD', 'STONE', 'WALL']);
-    expect(tray.trayItems('tools').map((i) => i.id)).toEqual(TOOLS);
+    expect(tray.trayItems('tools').map((i) => i.id)).toEqual([...TOOLS, 'sample', 'cleanWater']);
     lab.setDishView('lab');
     const res = await lab.sendLabCommand({ kind: 'placeStructure', structure: 'wall', points: STROKE, radius: 3 });
     expect(res!.accepted).toBeGreaterThan(0);
@@ -442,7 +446,13 @@ describe('Lab trays offer what the dish records (content is data; D-0024)', () =
     // Its manifest has no enabledStructures: the worker lists none, so no structure tool is offered.
     expect(older.structureIds).toEqual([]);
     expect(tray.trayItems('habitat')).toEqual([]);
-    expect(tray.trayItems('tools')).toEqual([]);
+    // P3.5 (D-0037): Sample and Clean water are player tools offered on every world, older ones included.
+    expect(tray.trayItems('tools').map((i) => [i.id, i.name])).toEqual([
+      ['sample', 'Sample'],
+      ['cleanWater', 'Clean water'],
+    ]);
+    expect(tray.itemCopy('sample')?.name).toBe('Sample');
+    expect(tray.itemCopy('cleanWater')?.name).toBe('Clean water');
     for (const id of ['paint:gel', 'shade:paint', 'shade:erase', 'place:stone', 'place:wall', 'place:bead', 'erase'] as const) {
       expect(content.toolAvailable(older, id), id).toBe(false);
       expect(tray.itemCopy(id), id).toBeNull();

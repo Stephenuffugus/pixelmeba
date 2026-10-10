@@ -23,6 +23,18 @@ import { IconLab } from '../icons';
 import { editLabel, lifeBrushFor, shadeFactorOf } from '../panels/LabTrayContent';
 import { specimenPlacement } from '../panels/LineageState';
 import {
+  cleanFraction,
+  endSession,
+  labSession,
+  sampleFootprint,
+  samplePreview,
+  sampleTap,
+  transferFootprint,
+  transferTap,
+  type LabSessionId,
+} from '../panels/SampleSession';
+import { TOOLS_COPY } from '../strings/tools';
+import {
   candidates,
   dishInfo,
   getClient,
@@ -35,8 +47,10 @@ import {
   sheet,
   showToast,
 } from '../state';
+import { GRID_H, GRID_W } from '@sim/constants';
 import {
   habitatEditOutcome,
+  objectOutcome,
   LAB_TEXT,
   RADII,
   type LabCategory,
@@ -55,7 +69,14 @@ export type LabToolId =
   | 'shade:paint'
   | 'shade:erase'
   | `place:${PlaceableStructure}`
-  | 'erase';
+  | 'erase'
+  /** P3.6: one finite food object (M10 pellet, M11 wafer) per tap; not a brush. */
+  | `object:${string}`
+  /**
+   * P3.5 Tools-tray sessions (panels/SampleSession.tsx): Sample, Transfer and Clean water. They take the
+   * next tap or stroke through `labSession` and are never stored as the persistent `labTool`.
+   */
+  | LabSessionId;
 
 export const dishView = signal<DishView>('explore');
 /** The open tray (null = closed). Inspect has no tray. */
@@ -88,6 +109,11 @@ export function isLab(): boolean {
   return dishView.value === 'lab';
 }
 
+/** The tool the next tap or stroke uses: a Tools-tray session (P3.5), else the persistent tool. */
+export function activeTool(): LabToolId {
+  return labSession.value ?? labTool.value;
+}
+
 /** The view epoch (bumped by every switch); exposed for tests. */
 export function currentViewEpoch(): number {
   return viewEpoch;
@@ -110,6 +136,7 @@ export function setDishView(v: DishView): void {
   // stroke keeps its old epoch, so a release that still arrives is recognised and dropped.
   cancelGesture?.();
   clearPreview();
+  endSession();
   batch(() => {
     dishView.value = v;
     candidates.value = null;
@@ -157,6 +184,7 @@ export function selectLabTool(id: LabToolId): void {
   pending = null;
   clearPreview();
   cancelGesture?.();
+  endSession();
   labTool.value = id;
   if (id !== 'inspect') candidates.value = null;
 }
@@ -177,6 +205,8 @@ export function brushRule(id: LabToolId): LabBrushRule | null {
   if (id.startsWith('shade:')) return 'shade';
   if (id.startsWith('place:')) return 'place';
   if (id === 'erase') return 'erase';
+  // P3.5: clean water covers the cells a material brush would (open cells and porous beads).
+  if (id === 'cleanWater') return 'material';
   return null;
 }
 
@@ -190,7 +220,7 @@ function placingSpecimen(): boolean {
 
 /** Whether one-finger drag paints (true for every brush tool in Lab) instead of panning. */
 export function labPaints(): boolean {
-  return isLab() && !placingSpecimen() && brushRule(labTool.value) !== null;
+  return isLab() && !placingSpecimen() && brushRule(activeTool()) !== null;
 }
 
 /** The dose per cell the selected material tool uses (from the world's recorded material). */
@@ -228,6 +258,10 @@ export function payloadFor(
       radius,
     };
   if (id === 'erase') return { kind: 'eraseStructure', points: pts, radius };
+  // P3.6: a food object goes in the cell under the tap (the first point); one tap, one command.
+  if (id.startsWith('object:')) return { kind: 'placeObject', materialId: id.slice('object:'.length), x: pts[0]![0], y: pts[0]![1] };
+  // P3.5: one clean-water stroke at the chosen fraction.
+  if (id === 'cleanWater') return { kind: 'cleanWater', points: pts, radius, fraction: cleanFraction.value };
   return null;
 }
 
@@ -241,6 +275,20 @@ export async function sendLabCommand(payload: CommandPayload): Promise<CommandRe
   const info = dishInfo.value;
   if (!info) return null;
   const res = await getClient().command(info.dishId, `lab-${++commandCounter}`, payload, true);
+  if (res && dishInfo.value?.dishId === info.dishId && payload.kind === 'cleanWater') {
+    showToast(
+      res.accepted > 0
+        ? `${TOOLS_COPY.cleanWaterName}: ${Math.round(payload.fraction * 100)} % of the water replaced on ${res.accepted} cell${res.accepted === 1 ? '' : 's'}.`
+        : `${TOOLS_COPY.cleanWaterName}: nothing changed${res.note ? ` (${res.note})` : ''}.`,
+      4000,
+    );
+    return res;
+  }
+  if (res && dishInfo.value?.dishId === info.dishId && payload.kind === 'placeObject') {
+    const name = info.materials.find((m) => m.id === payload.materialId)?.name ?? payload.materialId;
+    showToast(objectOutcome(res, name), 4000);
+    return res;
+  }
   if (res && dishInfo.value?.dishId === info.dishId) {
     // Names and the shade factor come from the dish's recorded content (content is data).
     const label =
@@ -259,7 +307,7 @@ export async function sendLabCommand(payload: CommandPayload): Promise<CommandRe
 function previewCells(
   points: ReadonlyArray<readonly [number, number]>,
 ): { cells: number[]; rule: LabBrushRule } | null {
-  const rule = brushRule(labTool.value);
+  const rule = brushRule(activeTool());
   if (!rule) return null;
   return { cells: strokeFootprint(points, labRadius.value), rule };
 }
@@ -287,13 +335,31 @@ export function labHover(w: readonly [number, number] | null): void {
     clearPreview();
     return;
   }
-  const id = labTool.value;
+  const id = activeTool();
+  // P3.5: the sample circle, or the held sample's footprint where a transfer here would put it.
+  if (id === 'sample') {
+    // A tapped preview stays marked until it is taken or cancelled.
+    if (!samplePreview.value) showPreview(sampleFootprint(w[0], w[1], labRadius.value), 'material');
+    return;
+  }
+  if (id === 'transfer') {
+    showPreview(transferFootprint(w[0], w[1]), 'material');
+    return;
+  }
   if (id.startsWith('life:')) {
     // The inoculate command uses only cells the organism can occupy (habitat and structure), so the
     // preview crosses out the rest by the same rule (lifeCellOutcome).
     const info = dishInfo.value;
     const life = info ? lifeBrushFor(info, id.slice('life:'.length)) : null;
     if (life) showPreview(brushCells(w[0], w[1], labRadius.value), life);
+    else clearPreview();
+    return;
+  }
+  if (id.startsWith('object:')) {
+    // P3.6: the one cell a tap here would use, crossed when the command would refuse it.
+    const cx = Math.floor(w[0]);
+    const cy = Math.floor(w[1]);
+    if (cx >= 0 && cy >= 0 && cx < GRID_W && cy < GRID_H) showPreview([cy * GRID_W + cx], 'object');
     else clearPreview();
     return;
   }
@@ -304,7 +370,7 @@ export function labHover(w: readonly [number, number] | null): void {
 
 export function labStrokeStart(w: readonly [number, number]): void {
   if (!labPaints()) return;
-  pending = { epoch: viewEpoch, tool: labTool.value };
+  pending = { epoch: viewEpoch, tool: activeTool() };
   const p = previewCells([w]);
   if (p) showPreview(p.cells, p.rule);
 }
@@ -331,7 +397,7 @@ export function labStrokeEnd(points: ReadonlyArray<readonly [number, number]>): 
   clearPreview();
   if (s && s.epoch !== viewEpoch) return true; // started in the other view: dropped
   if (!isLab()) return false;
-  if (!s || s.tool !== labTool.value) return true;
+  if (!s || s.tool !== activeTool()) return true;
   const payload = payloadFor(s.tool, points);
   if (payload) void sendLabCommand(payload);
   return true;
@@ -349,8 +415,17 @@ export function labTap(wx: number, wy: number): boolean {
   if (!isLab()) return false;
   // A saved specimen waiting to be placed takes the tap whatever tool is selected (P2.3).
   if (placingSpecimen()) return false;
-  const id = labTool.value;
+  const id = activeTool();
   if (id === 'inspect') return false;
+  // P3.5: a sampling tap previews; a transfer tap moves the held sample (one command).
+  if (id === 'sample') {
+    void sampleTap(wx, wy, labRadius.value);
+    return true;
+  }
+  if (id === 'transfer') {
+    void transferTap(wx, wy);
+    return true;
+  }
   if (id.startsWith('life:')) {
     void sendLabCommand({
       kind: 'inoculate',
@@ -414,6 +489,7 @@ export function handleViewKey(e: KeyboardEvent): boolean {
     if (e.key === 'Escape') {
       labStrokeCancel();
       cancelGesture?.();
+      endSession();
       batch(() => {
         labTray.value = null;
         labTool.value = 'inspect';

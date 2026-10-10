@@ -28,6 +28,7 @@ import { MOVE_COST_PER_CELL } from './constants';
 import type { FeedingPolicy, Genome } from './genome';
 import { activeLoci, type Profile } from './phenotype';
 import { profileOfGenome } from './profiles';
+import { lightSeekerCostPerSecond } from './lightSeeker';
 import type { Specimen } from './specimens';
 import type { World } from './world';
 export const INTRODUCED_PARENT = 0;
@@ -311,8 +312,12 @@ export interface LineageModuleCost {
 export interface LineageProfile {
   /** Cells per second at full motility (0 for non-swimmers). */
   readonly speed: number;
-  /** Energy per cell moved (MOVE_COST_PER_CELL × motility factor). */
+  /** Energy per cell moved (MOVE_COST_PER_CELL × motility factor); 0 for an E07 carrier, which pays per second. */
   readonly moveCostPerCell: number;
+  /** E07 carriers only (P3.7): energy per second while it swims, moveCostFactor × (0.5 + g_mot)². */
+  readonly moveCostPerSecond?: number;
+  /** E07 carriers only (P3.7): its sensing radius senses light, not food. */
+  readonly sensesLight?: boolean;
   /** Intake ceiling, carbon per second. */
   readonly intake: number;
   /** Maintenance per second, module surcharges included. */
@@ -527,10 +532,12 @@ function ancestorIndex(world: World, br: Branch): number {
   return ancestorGenomeOf(world, br) ?? -1;
 }
 
-function profileSummary(p: Profile): LineageProfile {
+/** Exported for the module fixtures (P3.7 E07 lineage lines). */
+export function profileSummary(p: Profile): LineageProfile {
   return {
     speed: p.speed,
-    moveCostPerCell: p.speed > 0 ? MOVE_COST_PER_CELL * p.motilityFactor : 0,
+    moveCostPerCell: p.lightSeeker === null && p.speed > 0 ? MOVE_COST_PER_CELL * p.motilityFactor : 0,
+    ...(p.lightSeeker !== null ? { moveCostPerSecond: lightSeekerCostPerSecond(p), sensesLight: true } : {}),
     intake: p.q,
     maintenance: p.m,
     upkeep: p.upkeep,

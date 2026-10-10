@@ -29,13 +29,18 @@ import { mutate, rawPacks, registry, runTwiceIdentical } from './helpers';
 const errorsOf = (raw: ReturnType<typeof rawPacks>) => validateContent(raw).issues.filter((i) => i.severity === 'error');
 
 describe('experiment cards (SPEC §13.2; CT §10)', () => {
-  it('the seven Phase 2 cards ship with the seeds, recipes and pairing CT §10 nominates', () => {
+  it('the seven Phase 2 and four Phase 3 cards ship with the seeds, recipes and pairing CT §10 nominates', () => {
     const cards = experimentCatalog(registry()).map((e) => [e.id, e.seed, e.recipeId, e.paired, e.change.kind, e.stoppingSeconds]);
     expect(cards).toEqual([
       ['EXP_101', 101, 'FOOD_TRAIL_V1', false, 'none', 180],
       ['EXP_102', 102, 'LIGHT_AND_LIFE_V1', true, 'shade', 180],
       ['EXP_103', 103, 'CLEANING_CREW_V1', false, 'none', 180],
       ['EXP_106', 106, 'PREDATOR_BALANCE_V1', true, 'commands', 180],
+      // P3.6 (CT §10.3): seed = numeric id.
+      ['EXP_201', 201, 'SHARED_LUNCH_V1', false, 'none', 180],
+      ['EXP_202', 202, 'OIL_NEIGHBORHOOD_V1', false, 'none', 180],
+      ['EXP_203', 203, 'PROTEIN_CHAIN_V1', true, 'omitFounders', 180],
+      ['EXP_204', 204, 'BROKEN_CATALYST_V1', true, 'commands', 120],
       ['EXP_A', 104729, 'STARCH_UNLOCK_V1', true, 'omitPatch', 180],
       ['EXP_B', 104729, 'FIRST_DISH_V1', true, 'commands', 300],
       ['EXP_C', 104729, 'RESERVE_COMPARE_V1', true, 'omitScheduled', 600],

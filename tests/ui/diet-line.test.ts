@@ -51,13 +51,19 @@ const EXPECTED: Readonly<Record<string, string>> = {
   B05: 'Eats metabolite.',
   B06: 'Eats sugar.',
   F01: 'Eats debris, then starch, then protein, and digests film.',
-  P01: 'Hunts Sprinter, Velvet, Dusk, Recycler, Crossfeeder, Crumbsmith, Bubble and Sunbead, and 11 kinds not in this dish.',
-  P02: 'Hunts Sprinter, Dusk, Recycler, Crossfeeder and Sunbead (Crumbsmith only free-swimming), and 8 kinds not in this dish.',
-  P03: 'Hunts Sunbead and Bubble, and 4 kinds not in this dish.',
-  P04: 'Hunts Sprinter, Velvet, Dusk, Recycler and Crossfeeder (Crumbsmith only in sediment), and 7 kinds not in this dish.',
+  B07: 'Eats metabolite.',
+  B08: 'Eats broth.',
+  P01: 'Hunts Sprinter, Velvet, Dusk, Recycler, Crossfeeder, Crumbsmith, Oilwick, Brothmaker, Bubble, Creambud and Sunbead, and 8 kinds not in this dish.',
+  P02: 'Hunts Sprinter, Dusk, Recycler, Crossfeeder and Sunbead (Crumbsmith, Oilwick and Brothmaker only free-swimming), and 6 kinds not in this dish.',
+  P03: 'Hunts Sunbead, Bubble and Creambud, and 3 kinds not in this dish.',
+  P04: 'Hunts Sprinter, Velvet, Dusk, Recycler and Crossfeeder (Crumbsmith, Oilwick and Brothmaker only in sediment), and 5 kinds not in this dish.',
   V01: 'Infects Sprinter.',
   X01: 'Drains Sunbead.',
   Y01: 'Eats sugar without oxygen.',
+  // P3.6 (wave 3 e1-producers): B07, B08, Y02 and the predator lines that now name them.
+  Y02: 'Eats broth.',
+  // P3.6 part 2 (wave 3 f02-links): the Cordweaver.
+  F02: 'Eats sugar, then debris.',
 };
 const SYMBOL: Readonly<Record<string, string>> = { A01: 'light', P01: 'hunts', P02: 'hunts', P03: 'hunts', P04: 'hunts', V01: 'infects', X01: 'drains' };
 

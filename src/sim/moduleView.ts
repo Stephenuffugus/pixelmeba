@@ -7,7 +7,12 @@ import { FLAG, LIFE_ACTIVE, LIFE_RESTING } from './entities';
 import { dormancyReason, wakeConditions, type DormancyReason } from './dormancy';
 import type { Profile } from './phenotype';
 import { profileOf } from './profiles';
+import { anchorUpkeepPerSecond } from './anchor';
+import { adhesionLinked, adhesionUpkeepPerSecond } from './adhesion';
+import { photosynthesizedThisTick } from './intake';
 import { R } from './reasons';
+import { PRODUCER_BIT } from './secretion';
+import { matrixBuiltNow } from './matrixBuilder';
 import type { World } from './world';
 
 /**
@@ -27,6 +32,8 @@ export interface ModuleSummary {
   readonly surchargePerSecond: number;
   readonly params: Readonly<Record<string, number>>;
   readonly activeNow: boolean;
+  /** E09 only: whether this organism can itself eat broth (its recorded foods list broth). E09 never adds it. */
+  readonly eatsBroth?: boolean;
 }
 
 /**
@@ -48,7 +55,8 @@ export function moduleSummaries(world: World, i: number): ModuleSummary[] {
   const scale = raw > 0 ? profileOf(world, i).surcharge / raw : 1;
   return defs.map((def) => {
     const id = def.id;
-    return { id, name: def.name, surchargePerSecond: def.surchargePerSecond * scale, params: { ...def.params }, activeNow: moduleActiveNow(world, i, id) };
+    const out: ModuleSummary = { id, name: def.name, surchargePerSecond: def.surchargePerSecond * scale, params: { ...def.params }, activeNow: moduleActiveNow(world, i, id) };
+    return id === 'E09' ? { ...out, eatsBroth: profileOf(world, i).foods.includes('broth') } : out;
   });
 }
 
@@ -57,11 +65,25 @@ function moduleActiveNow(world: World, i: number, id: string): boolean {
   const c = world.ents.cols;
   switch (id) {
     case 'E01':
-      return c.secreting[i] === 1;
+      return (c.secreting[i]! & PRODUCER_BIT.starch) !== 0; // released starch enzyme this tick (secretion.ts)
     case 'E03':
       return c.lifeState[i] !== LIFE_ACTIVE;
+    case 'E04':
+      return c.anchorState[i] === 1; // anchored right now (anchor.ts)
     case 'E05':
       return true;
+    case 'E06':
+      return photosynthesizedThisTick(world, i); // made food from light this tick (intake.ts photosynthetic route)
+    case 'E07':
+      return (c.flags[i]! & FLAG.moving) !== 0; // swimming toward light this tick (lightSeeker.ts)
+    case 'E08':
+      return (c.flags[i]! & FLAG.detritusIntake) !== 0; // ate detritus this tick (intake.ts, debrisFeeder.ts)
+    case 'E09':
+      return (c.secreting[i]! & PRODUCER_BIT.protein) !== 0; // released protein enzyme this tick (secretion.ts)
+    case 'E10':
+      return matrixBuiltNow(world, i); // its film request was accepted in this tick's shared construction pass (matrixBuilder.ts)
+    case 'E12':
+      return adhesionLinked(world, i); // holds at least one valid colony link (adhesion.ts)
     default:
       return false;
   }
@@ -72,6 +94,10 @@ export interface UpkeepSummary {
   readonly maintenance: number;
   readonly surcharge: number;
   readonly chamber: number;
+  /** E04 attached upkeep, E/s, present only while anchored (anchor.ts; stage 7 ledgers it as upkeep). */
+  readonly anchor?: number;
+  /** E12 link upkeep, E/s (perLinkUpkeep × incident links), present only while linked (adhesion.ts; ledgered as upkeep). */
+  readonly links?: number;
 }
 
 /** Energy per second stage 7 charges in the organism's current state (movement excluded). */
@@ -79,7 +105,11 @@ export function upkeepNow(world: World, i: number): UpkeepSummary {
   const prof = profileOf(world, i);
   const rest = world.ents.cols.lifeState[i] === LIFE_RESTING ? prof.dormancy : null;
   if (rest) return { resting: true, maintenance: rest.restMaintenance, surcharge: 0, chamber: 0 };
-  return { resting: false, maintenance: prof.m - prof.surcharge, surcharge: prof.surcharge, chamber: prof.upkeep };
+  const anchor = anchorUpkeepPerSecond(world, i, prof);
+  const links = adhesionUpkeepPerSecond(world, i, prof);
+  const out = { resting: false, maintenance: prof.m - prof.surcharge, surcharge: prof.surcharge, chamber: prof.upkeep };
+  const withAnchor = anchor > 0 ? { ...out, anchor } : out;
+  return links > 0 ? { ...withAnchor, links } : withAnchor;
 }
 
 export interface DormancySummary {
