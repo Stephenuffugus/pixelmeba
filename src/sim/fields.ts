@@ -138,12 +138,14 @@ export const CARBON_WITH_COMPANION: ReadonlyArray<readonly [FieldId, FieldId]> =
 export type FieldStore = Partial<Record<FieldId, Float64Array>>;
 
 export function allocateFields(systems: readonly SystemFlag[]): FieldStore {
-  const store: FieldStore = {};
+  const entries: [FieldId, Float64Array][] = [];
   for (const id of FIELD_IDS) {
     const sys = FIELD_DEFS[id].system;
-    if (sys === 'core' || systems.includes(sys)) store[id] = new Float64Array(CELL_COUNT);
+    if (sys === 'core' || systems.includes(sys)) entries.push([id, new Float64Array(CELL_COUNT)]);
   }
-  return store;
+  // P3.12: one Object.fromEntries (canonical FIELD_IDS order, as before) keeps V8's fast-property mode;
+  // one keyed store per field made the store a dictionary, so every `fields.sugar` was a hash lookup.
+  return Object.fromEntries(entries);
 }
 
 /** Iterate allocated fields in canonical order. */

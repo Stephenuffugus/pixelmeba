@@ -9,7 +9,9 @@
   --primary: #256e9e; /* 5.3:1 on surface */
   --primary-ink: #ffffff;
   --focus: #f2b84b;
-  --danger: #b3473f;
+  /* Dark companion ring around the focus amber (P3.11 contrast audit). */
+  --focus-ink: #172c35;
+  --danger: #ad4239; /* P3.11: UX §6.1 #B3473F darkened to 4.7:1 on --surface-2 (docs/reports/contrast.md) */
   --ok: #3d7a3a;
   --line: #c9c6bb;
   --shadow: 0 6px 24px rgba(10, 20, 26, 0.28);
@@ -58,9 +60,17 @@ textarea {
   color: inherit;
 }
 
+/*
+ * Focus (UX §4.1, §6.1, §9; P3.11): the 3 px focus amber (#F2B84B) ring, offset 2 px, with a dark ink
+ * companion (#172C35) beneath and around it. The amber alone is 1.3–1.6:1 on the light surfaces; the ink
+ * companion is ≥ 3:1 on every light surface and the amber ≥ 3:1 on every dark one, so the ring is visible
+ * everywhere (docs/reports/contrast.md). The companion is a box-shadow: a control that draws its own
+ * shadow keeps the amber outline.
+ */
 :focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
+  box-shadow: 0 0 0 7px var(--focus-ink);
 }
 
 .sr-only {
@@ -401,10 +411,10 @@ textarea {
   background: var(--primary);
 }
 .bar.energy > span {
-  background: #d99a2b;
+  background: #9a6a12; /* P3.11: 3.4:1 on the track (was #D99A2B, 1.8:1) */
 }
 .bar.health > span {
-  background: #4f9a58;
+  background: #3f8146; /* P3.11: 3.4:1 on the track (was #4F9A58, 2.5:1) */
 }
 .constraint {
   margin: 0.6rem 0;
@@ -587,6 +597,10 @@ textarea {
   border-radius: var(--radius-s);
   box-shadow: var(--shadow);
   padding: 0.25rem;
+  display: grid;
+  gap: 0.25rem;
+}
+.candidate-options {
   display: grid;
   gap: 0.25rem;
 }
@@ -2906,4 +2920,54 @@ html[data-text-scale='2'] .tab-context {
 .setting-note.sound-note {
   margin: 0;
   font-size: var(--fs-body);
+}
+
+/* ---------------------------------------------------------------- accessibility pass 1 (P3.11) */
+/* The dish's keyboard stop (UX §4.2, §9; W6-06): over the canvas, under every panel, no pointer input. */
+.dish-focus {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.dish-focus:focus-visible {
+  outline-offset: -8px;
+  box-shadow: inset 0 0 0 10px var(--focus-ink);
+}
+/* The centre reticle that Enter taps at: amber cross-hair with an ink edge, readable on every substrate. */
+.dish-focus .reticle {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 36px;
+  height: 36px;
+  margin: -18px 0 0 -18px;
+  border: 3px solid var(--focus);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--focus-ink), inset 0 0 0 2px var(--focus-ink);
+}
+.dish-focus .reticle::before,
+.dish-focus .reticle::after {
+  content: '';
+  position: absolute;
+  background: var(--focus);
+  box-shadow: 0 0 0 1px var(--focus-ink);
+}
+.dish-focus .reticle::before {
+  left: 50%;
+  top: -12px;
+  bottom: -12px;
+  width: 2px;
+  margin-left: -1px;
+}
+.dish-focus .reticle::after {
+  top: 50%;
+  left: -12px;
+  right: -12px;
+  height: 2px;
+  margin-top: -1px;
+}
+.dish-focus:focus-visible .reticle {
+  display: block;
 }

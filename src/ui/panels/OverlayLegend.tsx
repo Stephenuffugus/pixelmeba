@@ -4,7 +4,7 @@
  * snapshot; drawing it never touches the simulation.
  */
 import { legendStops } from '@render/layers';
-import { overlay, overlayMax } from '../state';
+import { overlay, overlayMax, settings } from '../state';
 import { LAB_TEXT, overlayCopy } from '../strings/lab';
 
 export function formatOverlayValue(v: number): string {
@@ -20,7 +20,8 @@ export function OverlayLegend({ floating = false }: { floating?: boolean }) {
   const id = overlay.value;
   if (!id) return null;
   const copy = overlayCopy(id);
-  const [lo, mid, hi] = legendStops(id);
+  // P3.11: the legend follows Settings "Simplified overlay colours" exactly as the renderer does.
+  const [lo, mid, hi] = legendStops(id, settings.value.simplifiedOverlayPalette === true);
   return (
     <div
       class={`overlay-legend${floating ? ' floating' : ''}`}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { DishRenderer } from '@render/renderer';
 import { loadAtlas } from '../atlas';
-import { attachGestures } from '../gestures';
+import { attachGestures, type GestureHandlers } from '../gestures';
 import { dishCellAt } from '../dishPoint';
 import {
   IconBack,
@@ -59,6 +59,9 @@ import { LabToolbar, LabTrayHost } from './LabToolbar';
 import { OverlayLegend } from '../panels/OverlayLegend';
 import { SamplePanel } from '../panels/SamplePanel';
 import type { Speed } from '@worker/protocol';
+import { DishSummary } from '../a11y/DishSummary';
+import { CellDescription, CELL_DESCRIPTION_ID } from '../a11y/CellDescription';
+import { restoreFocus } from '../a11y/focus';
 
 function formatTime(tick: number): string {
   const s = Math.floor(tick / 10);
@@ -68,12 +71,23 @@ function formatTime(tick: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
 }
 
+/**
+ * Keyboard placement and selection (UX §4.2, §9; P3.11 W6-06): with the dish focused, a centre reticle
+ * marks the target and Enter is one tap there, through the same handlers the pointer gestures use. The
+ * candidate list that a keyboard tap opens takes focus on its first organism.
+ */
+let candidatesFromKey = false;
+
 /** Controls that Space activates when the player reached them with the keyboard (UX §4.2; D-0029). */
 const SPACE_CONTROLS =
   'button, [role="button"], [role="radio"], [role="tab"], [role="checkbox"], [role="switch"], a[href], summary';
 
 export function DishScreen() {
   const host = useRef<HTMLDivElement>(null);
+  /** The dish's keyboard stop (W6-06): focusable, under every panel, never in the pointer's way. */
+  const dishFocus = useRef<HTMLDivElement>(null);
+  /** The handlers attachGestures received (Lab-wrapped): Enter at the reticle taps through them. */
+  const gestures = useRef<GestureHandlers | null>(null);
   const [ready, setReady] = useState(false);
   const info = dishInfo.value;
   const m = meta.value;
@@ -92,7 +106,7 @@ export function DishScreen() {
       }
       attachRenderer(r);
       // Lab (P2.7) wraps the same handlers: in Lab its persistent tool uses the gesture first.
-      detach = attachGestures(host.current, r, labGestures({
+      detach = attachGestures(host.current, r, (gestures.current = labGestures({
         paints: () => tool.value.kind === 'feed' && tool.value.paint,
         onCameraMoved: () => undefined,
         onTap: (sx, sy, wx, wy) => onTap(r!, sx, sy, wx, wy),
@@ -100,11 +114,12 @@ export function DishScreen() {
           const t = tool.value;
           if (t.kind === 'feed') void sendCommand({ kind: 'deposit', materialId: t.materialId, points, radius: t.radius, dose: t.dose });
         },
-      }));
+      })));
       setReady(true);
     })();
     return () => {
       disposed = true;
+      gestures.current = null;
       detach?.();
       attachRenderer(null);
       r?.destroy();
@@ -118,6 +133,15 @@ export function DishScreen() {
   useEffect(() => {
     if (openSheet !== 'none' && dishView.value === 'lab') labTray.value = null;
   }, [openSheet]);
+
+  // P3.11 (W6-04/W6-06): when a key or a choice closes the panel that held focus (a sheet, the candidate
+  // list, a Lab tray), focus returns to the dish instead of the page body, so the next key acts there.
+  const openCandidates = candidates.value;
+  const openTray = labTray.value;
+  const currentTool = tool.value;
+  useEffect(() => {
+    restoreFocus(dishFocus.current);
+  }, [openSheet, openCandidates, openTray, currentTool]);
 
   // Autosave every 30 real seconds while this dish is open (SPEC §14.2).
   useEffect(() => {
@@ -141,6 +165,20 @@ export function DishScreen() {
       if (e.key === ' ' && modality === 'keyboard' && (e.target as HTMLElement | null)?.closest(SPACE_CONTROLS)) return;
       if (handleViewKey(e)) return; // I / L / F / Esc per view (UX §4.2; P2.7)
       const r = getRenderer();
+      // P3.11 (W6-06): Enter on the focused dish is one tap at the reticle (the viewport's centre), through
+      // the same handlers as a pointer tap: a placement tool commits one gesture, Look / Lab Inspect selects.
+      if (e.key === 'Enter' && e.target === dishFocus.current && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        const h = gestures.current;
+        if (!r || !h) return;
+        const sx = r.camera.viewW / 2;
+        const sy = r.camera.viewH / 2;
+        const [wx, wy] = r.camera.screenToWorld(sx, sy);
+        candidatesFromKey = true;
+        h.onTap(sx, sy, wx, wy);
+        if (!candidates.value) candidatesFromKey = false;
+        return;
+      }
       if (e.key === ' ') {
         e.preventDefault();
         togglePause();
@@ -213,6 +251,24 @@ export function DishScreen() {
 
       <div class="viewport" ref={host} data-testid="viewport">
         {!ready ? <p style={{ color: '#c9d6d8', padding: '1rem' }}>Preparing the dish…</p> : null}
+        {/* P3.11 (UX §4.2, §9): the dish's keyboard stop. It lies under every panel and takes no pointer
+            input (taps reach the canvas); focused, it shows the centre reticle that Enter taps at. */}
+        <div
+          class="dish-focus"
+          ref={dishFocus}
+          tabIndex={0}
+          role="application"
+          aria-label={`Dish: ${info?.name ?? 'Dish'}`}
+          aria-describedby={`dish-keys-hint ${CELL_DESCRIPTION_ID}`}
+          data-testid="dish-focus"
+        >
+          <div class="reticle" aria-hidden="true" data-testid="reticle" />
+        </div>
+        <p id="dish-keys-hint" class="sr-only">
+          Enter uses the chosen tool at the centre mark; with Look it inspects there. Arrow keys pan, plus and minus zoom, Space runs or pauses, U undoes.
+        </p>
+        <CellDescription />
+        <DishSummary />
         {waiting ? (
           <div class="prompt" role="status" data-testid="experiment-waiting">
             <p>{waiting.text}</p>
@@ -247,11 +303,8 @@ export function DishScreen() {
         <SamplePanel />
         {candidates.value ? <CandidateList /> : null}
         {m?.capacityReached ? <div class="capacity-banner">Simulation capacity reached — a limit of the game, not the ecosystem.</div> : null}
-        {toast.value ? (
-          <div class="toast" role="status" aria-live="polite">
-            {toast.value}
-          </div>
-        ) : null}
+        {/* Announced once by the app's live region (src/ui/a11y/LiveRegion.tsx); this one is visual only. */}
+        {toast.value ? <div class="toast">{toast.value}</div> : null}
         {sheet.value === 'addLife' ? <AddLifeSheet /> : null}
         {sheet.value === 'feed' ? <FeedSheet /> : null}
         {sheet.value === 'inspect' ? <InspectorSheet /> : null}
@@ -331,13 +384,23 @@ function onTap(r: DishRenderer, sx: number, sy: number, wx: number, wy: number):
 function CandidateList() {
   const c = candidates.value!;
   const info = dishInfo.value;
+  const list = useRef<HTMLDivElement>(null);
+  // P3.11 (W6-06): a list opened by Enter at the reticle takes focus on its first organism.
+  useEffect(() => {
+    if (!candidatesFromKey) return;
+    candidatesFromKey = false;
+    list.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
+  }, [c]);
   return (
-    <div class="candidates" style={{ left: `${Math.max(8, c.x - 80)}px`, top: `${Math.max(8, c.y + 12)}px` }} role="listbox" aria-label="Choose an organism">
-      {c.items.map((it) => (
-        <button key={it.birthId} class="btn" role="option" aria-selected="false" onClick={() => select({ kind: 'entity', birthId: it.birthId })}>
-          {info?.speciesNames[it.species] ?? '?'} #{it.birthId}
-        </button>
-      ))}
+    <div class="candidates" ref={list} style={{ left: `${Math.max(8, c.x - 80)}px`, top: `${Math.max(8, c.y + 12)}px` }}>
+      {/* P3.11: a listbox holds options only (axe aria-required-children); Cancel sits beside it. */}
+      <div class="candidate-options" role="listbox" aria-label="Choose an organism">
+        {c.items.map((it) => (
+          <button key={it.birthId} class="btn" role="option" aria-selected="false" onClick={() => select({ kind: 'entity', birthId: it.birthId })}>
+            {info?.speciesNames[it.species] ?? '?'} #{it.birthId}
+          </button>
+        ))}
+      </div>
       <button class="btn ghost" onClick={() => (candidates.value = null)}>
         Cancel
       </button>

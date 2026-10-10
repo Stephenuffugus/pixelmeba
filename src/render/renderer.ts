@@ -168,6 +168,8 @@ export interface PickCandidate {
 export interface RendererOptions {
   readonly reducedMotion: boolean;
   readonly overlayOpacity: number;
+  /** Settings "Simplified overlay colours" (UX §9; P3.11): every overlay in one light-to-dark ramp. */
+  readonly simplifiedOverlayPalette?: boolean;
 }
 
 export class DishRenderer {
@@ -465,8 +467,22 @@ export class DishRenderer {
   }
 
   setOptions(o: Partial<RendererOptions>): void {
+    const palette = this.opts.simplifiedOverlayPalette === true;
     this.opts = { ...this.opts, ...o };
     this.overlaySprite.alpha = this.opts.overlayOpacity;
+    // A paused dish sends no new snapshot: repaint the shown overlay in the chosen palette now.
+    if ((this.opts.simplifiedOverlayPalette === true) !== palette && this.lastOverlay) this.paintOverlayLayer(this.lastOverlay);
+  }
+
+  /** The overlay last painted (kept so a palette switch can repaint it; cosmetic only). */
+  private lastOverlay: NonNullable<SnapshotMsg['overlay']> | null = null;
+
+  private paintOverlayLayer(o: NonNullable<SnapshotMsg['overlay']>): void {
+    const ctx = this.overlayCanvas.getContext('2d')!;
+    const img = (this.overlayImg ??= ctx.createImageData(GRID_W, GRID_W));
+    paintOverlay(img, o.data, this.structure, o.id, o.max, this.opts.simplifiedOverlayPalette === true);
+    ctx.putImageData(img, 0, 0);
+    this.overlayTex.source.update();
   }
 
   /** Observe tray "Infection markers" (SPEC §10.8): the glyph on every infected host while on. */
@@ -535,13 +551,13 @@ export class DishRenderer {
     }
     this.applyFilm(s.deposits);
     if (s.overlay) {
-      const ctx = this.overlayCanvas.getContext('2d')!;
-      const img = (this.overlayImg ??= ctx.createImageData(GRID_W, GRID_W));
-      paintOverlay(img, s.overlay.data, this.structure, s.overlay.id, s.overlay.max);
-      ctx.putImageData(img, 0, 0);
-      this.overlayTex.source.update();
+      this.lastOverlay = s.overlay;
+      this.paintOverlayLayer(s.overlay);
       this.overlaySprite.visible = true;
-    } else this.overlaySprite.visible = false;
+    } else {
+      this.lastOverlay = null;
+      this.overlaySprite.visible = false;
+    }
 
     // Interpolation endpoints, keyed by entityId against the previous snapshot.
     const n = s.count;
@@ -888,8 +904,9 @@ export class DishRenderer {
           p.y = py;
           p.scaleX = sc;
           p.scaleY = sc;
-          // Newborns fade in over their first snapshot; feeders glow very slightly brighter.
-          const born = cue & CUE_JUST_BORN ? 0.75 + 0.25 * alpha : 1;
+          // Newborns fade in over their first snapshot (not in reduced motion, UX §7.4: no flash);
+          // feeders glow very slightly brighter.
+          const born = cue & CUE_JUST_BORN && !reduced ? 0.75 + 0.25 * alpha : 1;
           if (p.alpha !== born) p.alpha = born;
           const tint = dormant ? 0xc8c8c8 : cue & CUE_FEEDING ? 0xffffff : 0xf0f0f0;
           if (this.poolTint[k] !== tint) {

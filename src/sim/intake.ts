@@ -88,6 +88,17 @@ const needO2 = new Float64Array(AGENT_CAP);
 const scaleFrac = new Float64Array(AGENT_CAP);
 
 const FIELD_INDEX: Readonly<Record<FieldId, number>> = Object.fromEntries(FIELD_IDS.map((id, i) => [id, i])) as Record<FieldId, number>;
+/**
+ * P3.12: per-field facts by FIELD_IDS index, and this stage's field arrays by index (filled at the start
+ * of every stage 6), so the allocation and commit loops index arrays instead of looking fields and
+ * definitions up by name for every request. Same arrays, same arithmetic: hash-neutral.
+ */
+const COMPANION_INDEX = Int16Array.from(FIELD_IDS, (id) => {
+  const comp = FIELD_DEFS[id].companion;
+  return comp ? FIELD_INDEX[comp] : -1;
+});
+const IS_CARBON = Uint8Array.from(FIELD_IDS, (id) => (FIELD_DEFS[id].material === 'carbon' ? 1 : 0));
+const fieldAt: (Float64Array | undefined)[] = new Array<Float64Array | undefined>(FIELD_IDS.length).fill(undefined);
 const demand: (Float64Array | undefined)[] = [];
 const demandN = new Float64Array(CELL_COUNT);
 const demandO2 = new Float64Array(CELL_COUNT);
@@ -168,6 +179,7 @@ function intakeBody(world: World): void {
   const load = world.derived.cellLoad;
   const light = world.derived.light;
   touched.length = 0;
+  for (let fi = 0; fi < FIELD_IDS.length; fi++) fieldAt[fi] = world.fields[FIELD_IDS[fi]!];
   // P3.8 observation: this tick's record starts empty (never read by the simulation).
   const seen = world.intakeSeen;
   if (seen.bits !== null) seen.bits.fill(0);
@@ -295,14 +307,13 @@ function intakeBody(world: World): void {
     for (let k = 0; k < n; k++) {
       const o = i * K + k;
       const fi = reqField[o]!;
-      const id = FIELD_IDS[fi]!;
-      const pool = world.fields[id]![cell]!;
+      const pool = fieldAt[fi]![cell]!;
       const dem = demand[fi]![cell]!;
       const scale = dem > pool ? pool / dem : 1;
       const alloc = reqAmt[o]! * scale;
       reqAlloc[o] = alloc;
-      const comp = FIELD_DEFS[id].companion;
-      const ratio = comp && pool > 0 ? world.fields[comp]![cell]! / pool : 0;
+      const comp = COMPANION_INDEX[fi]!;
+      const ratio = comp >= 0 && pool > 0 ? fieldAt[comp]![cell]! / pool : 0;
       reqRatio[o] = ratio;
       C += alloc;
       bn += alloc * ratio;
@@ -369,12 +380,12 @@ function intakeBody(world: World): void {
     const n = reqCount[i]!;
     for (let k = 0; k < n; k++) {
       const o = i * K + k;
-      const id = FIELD_IDS[reqField[o]!]!;
+      const fi = reqField[o]!;
       const take = reqAlloc[o]! * L;
-      if (take > 0) markIntake(world, c.species[i]!, reqField[o]!);
-      subtractPool(world, world.fields[id]!, cell, take, FIELD_DEFS[id].material === 'carbon' ? 'c' : 'n');
-      const comp = FIELD_DEFS[id].companion;
-      if (comp) subtractPool(world, world.fields[comp]!, cell, take * reqRatio[o]!, 'n');
+      if (take > 0) markIntake(world, c.species[i]!, fi);
+      subtractPool(world, fieldAt[fi]!, cell, take, IS_CARBON[fi] === 1 ? 'c' : 'n');
+      const comp = COMPANION_INDEX[fi]!;
+      if (comp >= 0) subtractPool(world, fieldAt[comp]!, cell, take * reqRatio[o]!, 'n');
     }
     const boundUsed = boundN[i]! * L;
     const freeUsed = nN * L;
@@ -473,6 +484,7 @@ function clearScratch(): void {
     demand[fi]![key - fi * CELL_COUNT] = 0;
   }
   touched.length = 0;
+  fieldAt.fill(undefined); // never keep another world's arrays alive between stages
   demandN.fill(0);
   demandO2.fill(0);
 }

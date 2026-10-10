@@ -62,6 +62,20 @@ export function SimplePage({ title, body, settings: showSettings, about }: { tit
                 Every minute of dish time, keep an automatic copy of the dish you are playing (not the copies of a comparison), up to the last 10 across all your dishes; the oldest automatic one is replaced. Your named saves are never removed. Open them from Saved dishes: each opens as a new branch.
                 {checkpointSettingText(lastCheckpoint.value)}
               </p>
+              {/* P3.11 (UX §9): every overlay in one light-to-dark ramp; off unless chosen. */}
+              <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', minHeight: '48px' }}>
+                <input
+                  type="checkbox"
+                  checked={s.simplifiedOverlayPalette === true}
+                  onChange={(e) => updateSettings({ simplifiedOverlayPalette: e.currentTarget.checked })}
+                  aria-describedby="simplified-overlay-note"
+                  data-testid="setting-simplified-overlay"
+                />
+                Simplified overlay colours
+              </label>
+              <p class="setting-note" id="simplified-overlay-note">
+                Every overlay uses one light-to-dark scale: darker means higher.
+              </p>
               <label style={{ display: 'grid', gap: '0.25rem' }}>
                 Overlay opacity {Math.round(s.overlayOpacity * 100)} %
                 <input
