@@ -3,6 +3,13 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑10 13:35 UTC — RESUMED (owner: "lets get started"; the machine was not restarted, the tree ==
+> `wip/g3-wave-4b` + RESUME.md).** Stage 2 RESUME RUNNING from `docs/agent/g3-wave-4b-resume.run.workflow.js.txt`
+> (run `wf_225c5a01-0c8`): a11y PREBUILT (verify only), perf + g3-evidence finish from the tree; rules verifier over all
+> three + perf's own saves verifier; reports `docs/reports/reviews/g3-wave-4b/`. If this session dies mid-run: back up
+> the tree onto `wip/g3-wave-4b` again (temp-index commit, parent = the branch), read the new reports, and rerun only
+> what is unfinished (edit RESUME_TASKS in that file: a finished builder becomes `prebuilt` with a pointer to its report).
+
 > **Update 2026‑10‑10 13:20 UTC — PAUSED BY THE OWNER FOR A CODESPACE REFRESH. START HERE.**
 > - `main` = `072478e` + this note, pushed. P3.1–P3.10 are ticked; decisions run through D-0064; stage 1 is committed
 >   (`8c8a65f`).
