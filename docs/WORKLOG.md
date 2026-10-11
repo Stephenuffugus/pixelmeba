@@ -62,9 +62,9 @@ with the next task).
 - [x] (7eca504, 35d12c3, 0527977, 1eb3025, gate commit; tag `g3`; e2e 258/258 at 1eb3025; D-0068, D-0069) G3 gate: host‑specificity · transport‑obstacles · conservation‑all‑pools · relationship matrix · module fixtures · experiments · e2e incl. keyboard · axe clean → tag `g3`
 
 ## Phase 4 — Wonder, Replay, Android → v1.0.0-rc1
-- [ ] P4.1 Favorite families
+- [x] (9b40210; D-0073, D-0075) P4.1 Favorite families
 - [ ] P4.2 Story cards (4 templates) + notification limits + notebook tab
-- [ ] P4.3 Garden card, session memory, optional prompts
+- [x] (9b40210; D-0074; prompt progress per page session is an owner item) P4.3 Garden card, session memory, optional prompts
 - [ ] P4.4 Objective engine (5 types) + 3 goals
 - [ ] P4.5 Paired Garden variants (R2)
 - [ ] P4.6 Share (Picture 1080², Starting recipe, Living dish, recipe IDs, stripped export)

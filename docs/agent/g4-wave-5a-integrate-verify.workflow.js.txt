@@ -1,0 +1,66 @@
+export const meta = {
+  name: 'g4-wave-5a-integrate-verify',
+  description: 'Resume of the wave 5a lead integration after the codespace stop: one adversarial verifier over the integration diff (both fixers finished), one repair round only for BLOCKER/MAJOR, then one re-verify',
+  phases: [
+    { title: 'Verify', detail: 'one adversarial verifier over the integration diff vs e96976b, effort high' },
+    { title: 'Repair', detail: 'only if a BLOCKER/MAJOR is found; then one re-verify' },
+  ],
+}
+
+const OWNER_CONTEXT = `OWNER CONTEXT (written by the lead, the main session working for the owner): the owner's latest message is "lets get started" after the codespace stopped overnight; it means resume the unattended Pixelmeba build. You do only the Pixelmeba task below.`
+const ag = (prompt, opts) => agent(`${OWNER_CONTEXT}\n\n${prompt}`, opts)
+
+const DIFF_HOWTO = `The integration changes are the difference between commit e96976b (branch wip/g4-wave-5a's earlier backup: the wave 5a tree before integration) and the CURRENT working tree. Many wave 5a files are untracked, so plain \`git diff e96976b\` is WRONG (it shows them as deleted). Get the current tree like this and diff trees:
+  IDX=$(mktemp) && GIT_INDEX_FILE=$IDX git read-tree HEAD && GIT_INDEX_FILE=$IDX git add -A && T=$(GIT_INDEX_FILE=$IDX git write-tree) && rm -f $IDX && git diff --stat e96976b $T && git diff e96976b $T -- src tests docs/ARCHITECTURE.md
+Ignore docs/DECISIONS.md, docs/agent/** and docs/reports/** in that diff (the lead's).`
+
+const ASSIGNMENTS = `The two integration fixers' assignments (both finished):
+--- code-minors ---
+1. MINOR (wave-verify item 10): the favorite-family extinction card (src/ui/panels/FavoriteExtinct.tsx, extinctCard in src/ui/favorites.ts) and the one notice (src/ui/views/NoticeHost.tsx, src/ui/notices.ts) could show at the same time, against docs/source/D09 line 133 "Do not layer this message over another D8 notification" (also D08 lines 140-155, attention limits). Required: while the extinction card is open nothing shows in the notice slot and the waiting notices return when it closes; two blockers (discovery card, extinction card) never unblock each other early; the extinction card never appears over an open discovery card (it waits, then shows). Unit tests in tests/ui/notices.test.ts prove each case.
+2. MINOR (wave-verify item 11; existing P3.8 bug): src/worker/host.ts duplicateDish copied the dish with a spread (...d), so the copy shared the original's RelationshipWatcher (Dish.relationships; src/worker/relationships.ts; reaches the UI via the 'relationships' request, src/ui/badges.ts, Field Guide "Seen in your dishes"). Fix: a fresh watcher (chosen as PROPOSED DECISION: like after a reload; the device store keeps device-wide first-seen). Then audit the rest of the spread for any other mutable worker object shared by reference. Test under tests/worker/ that fails on the old spread.
+--- e2e-docs ---
+1. MAJOR: tests/e2e/keep-dish.spec.ts test "with prompts on, the kept line leads the new dish prompt (no toast over it); an experiment card says beforehand what happens first": after Run, .prompt now shows the Garden step-1 prompt ("Tap a Sprinter.", PROMPT_TEXT.tapSprinter in src/ui/strings/home.ts) instead of count 0; update to the intended behaviour, keep every other claim.
+2. tests/e2e/a11y-screens.spec.ts: add the wave 5a screens to the axe sweep (Follow sheet, dish with a followed family's slot, Family sheet, Notebook → Favorites with a record, session memory card, thumbnails on Play/Home); the extinction card is unreachable in a journey (say so in a comment).
+3. docs/ARCHITECTURE.md §7 (worker protocol) and §11.2 (save format): the wave 5a protocol messages and the notebook block, exactly as built in src/worker/protocol.ts, src/persistence/notebook.ts and src/persistence/saveFile.ts.
+Their reports: docs/reports/reviews/g4-wave-5a/integrate-code-minors.md (rebuilt by the lead from the fixer's transcript; it also records the lead's own one-line hardening, undoLabels: [] in duplicateDish) and docs/reports/reviews/g4-wave-5a/integrate-e2e-docs.md. Earlier wave reports for context only: wave-verify.md, wave-reverify1.md in the same folder.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+
+const VERIFY = (round) => `You are the adversarial verifier of the lead's integration of Phase 4 wave 5a in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Do NOT edit any repository file except your report docs/reports/reviews/g4-wave-5a/integrate-verify${round}.md; do NOT run git add/commit/stash/checkout/reset/restore/branch. Scratch in tmp/integrate-verify${round}/ (git-ignored). Playwright: port 4391 with build folder tmp/dist-integrate-verify (E2E_PORT=4391 E2E_OUTDIR=tmp/dist-integrate-verify npx playwright test <spec> -g "<name>" --project=desktop); stop the port before and after each run with \`lsof -t -i :4391 | xargs -r kill\` (never pkill). Two CPUs are shared with the lead's low-priority \`npm run check\`: targeted vitest files only, never the whole suite; long commands with run_in_background and an until-loop wait; never end your turn while a command you started is still running.
+${DIFF_HOWTO}
+${ASSIGNMENTS}
+Try to REFUTE that each item is done correctly, completely and honestly:
+- read the whole integration diff;
+- for each code fix write a load-time mutant under tmp/ (or revert the hunk in a scratch copy you restore byte-for-byte; verify with cmp) and show the new test fails without it;
+- check D08/D09 for the notification rule and that the discovery card (src/ui/panels/LineageState.tsx and its pacer) still behaves as before; look for a way the extinction card or a notice could be lost forever (never shown) rather than only delayed;
+- check the duplicate fix against how relationships reach the UI, and re-do the shared-reference audit of the Dish literal in duplicateDish yourself (every Dish field);
+- check every ARCH §7/§11.2 statement against src/worker/protocol.ts, src/persistence/notebook.ts and saveFile.ts (quote any mismatch);
+- re-run: the changed unit tests, tests/fixtures/g2-replay.test.ts and tests/fixtures/trajectory-fence, npx tsc -p tsconfig.json --noEmit, npx eslint on the changed files, and the two changed e2e tests on desktop only (keep-dish "kept line leads", a11y-screens "wave 5a"); re-run one phone-portrait test only if a selector looks layout-dependent.
+Grade every problem exactly like "MAJOR [code-minors] <file:line> — <what is wrong> — <repro>" (keys: code-minors, e2e-docs, lead); BLOCKER/MAJOR only for real defects a player, a save or the determinism contract would hit; MINOR/NIT otherwise; most severe first. Write the same list, plus every command you ran with its summary line, to the report file. ok=true only if nothing BLOCKER/MAJOR remains.`
+
+phase('Verify')
+let verdict = await ag(VERIFY(1), { label: 'verify:integrate', phase: 'Verify', schema: VERDICT, effort: 'high' })
+const blockingOf = (v) => (v && Array.isArray(v.problems) ? v.problems.filter((p) => /^\s*(BLOCKER|MAJOR)/.test(p)) : [])
+let open = blockingOf(verdict)
+const rounds = []
+if (open.length) {
+  phase('Repair')
+  const keys = ['code-minors', 'e2e-docs', 'lead'].filter((k) => open.some((p) => p.includes(`[${k}]`)))
+  log(`repair: ${keys.join(', ')}`)
+  const fix = await ag(`You are the repair fixer for the lead's integration of Phase 4 wave 5a in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). The work is in the tree; do not start over.
+RULES: do NOT run git add/commit/stash/checkout/reset/restore/rm; never edit docs/DECISIONS.md (write any decision you need as "PROPOSED DECISION: …" in your report); no change under src/sim/** or content/** (D-0072). Scratch in tmp/integrate-repair/. Playwright port 4392, build folder tmp/dist-integrate-repair; stop the port before and after (lsof -t -i :4392 | xargs -r kill; never pkill). Two CPUs shared: targeted vitest files only; long commands with run_in_background and an until-loop wait; never end your turn while a command you started is still running.
+${DIFF_HOWTO}
+${ASSIGNMENTS}
+The adversarial verifier found these BLOCKER/MAJOR problems (its full report: docs/reports/reviews/g4-wave-5a/integrate-verify1.md):
+${open.join('\n')}
+Fix each in the smallest correct way, prove each with a test that fails without the fix (show it), and BEFORE FINISHING run: npx tsc -p tsconfig.json --noEmit; npx eslint <your files>; npx vitest run tests/fixtures/g2-replay.test.ts tests/fixtures/trajectory-fence plus every test file you touched or that covers code you changed; any e2e test you changed on desktop AND phone-portrait. Final message: a plain report — each problem FIXED (file:line, proving test, how you showed it fails without the fix) or NOT FIXED (why); files changed; every command with its summary line. Also write it to docs/reports/reviews/g4-wave-5a/integrate-repair.md.`, { label: 'repair:integrate', phase: 'Repair', effort: 'high' })
+  rounds.push({ keys, fix: fix ? String(fix) : null })
+  verdict = await ag(`${VERIFY(2)}\n\nREPAIR ROUND: the earlier verifier's BLOCKER/MAJOR problems were:\n${open.join('\n')}\nRepair report (also docs/reports/reviews/g4-wave-5a/integrate-repair.md):\n${fix ? String(fix) : 'NO REPORT'}\nFor EACH earlier problem, reproduce it against the current tree and say VERIFIED FIXED or NOT FIXED; then grade anything new as before.`, { label: 'reverify:integrate', phase: 'Repair', schema: VERDICT, effort: 'high' })
+  open = blockingOf(verdict)
+}
+log(`integration verify: ${open.length ? `${open.length} BLOCKER/MAJOR remain` : 'no BLOCKER/MAJOR remains'}`)
+return { verdict, rounds, open }

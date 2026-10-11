@@ -1,0 +1,74 @@
+export const meta = {
+  name: 'g4-wave-5a-integrate',
+  description: 'Lead integration of Phase 4 wave 5a: two fixers (code MINORs; e2e + a11y screens + ARCH docs), one adversarial verifier over the integration diff, one fix round only for BLOCKER/MAJOR',
+  phases: [
+    { title: 'Fix', detail: 'code-minors and e2e-docs fixers in parallel, effort high' },
+    { title: 'Verify', detail: 'one adversarial verifier over git diff e96976b (the pre-integration tree backup)' },
+    { title: 'Repair', detail: 'only if the verifier finds a BLOCKER/MAJOR; then one re-verify' },
+  ],
+}
+
+const OWNER_CONTEXT = `OWNER CONTEXT (written by the lead, the main session working for the owner): the owner's latest chat message says "keep going" with the unattended Pixelmeba build and that the codespace will be refreshed in the next few hours. The lead handles refresh timing and backups; you do only the Pixelmeba task below. G3 is tagged; Phase 4 wave 5a (favorites P4.1, garden-home P4.3) is built, verified and fixed; this run integrates it.`
+const ag = (prompt, opts) => agent(`${OWNER_CONTEXT}\n\n${prompt}`, opts)
+
+const BASE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). The working tree holds Phase 4 wave 5a UNCOMMITTED (favorites P4.1 and garden-home P4.3; reports in docs/reports/reviews/g4-wave-5a/, decisions D-0070 notebook state, D-0071 objectives, D-0072 no new sim rules). Branch wip/g4-wave-5a = e96976b is a backup commit of exactly that tree before this integration (git diff e96976b shows only integration changes).
+RULES: do NOT run git add/commit/stash/checkout/reset/restore/rm; do not delete files you did not create; edit ONLY the files your assignment lists; never edit docs/DECISIONS.md (the lead writes decisions — put any decision you need in your report as "PROPOSED DECISION: …"). No change under src/sim/** or content/** (D-0072). Scratch goes in tmp/<your key>/ (git-ignored). Two CPUs are shared with another agent: targeted vitest files only (never the whole suite), long commands with run_in_background and an until-loop wait, never a bare sleep. Playwright silently reuses a server already on your port: stop your port before and after each run (lsof -t -i :<port> | xargs -r kill; never pkill). NEVER end your turn while a command you started is still running. BEFORE FINISHING: npx tsc -p tsconfig.json --noEmit clean; npx eslint <your files> clean; npx vitest run tests/fixtures/g2-replay.test.ts tests/fixtures/trajectory-fence plus every test file you touched or that covers code you changed. Final message: a plain report — each item DONE (file:line and the proving test, and how you checked the test fails without the fix) or NOT DONE (why); files changed; every command you ran with its summary line.`
+
+const FIX_A = `${BASE}
+
+YOUR KEY: code-minors (no browser tests needed; if you add one, use E2E_PORT=4282 E2E_OUTDIR=tmp/dist-code-minors).
+You own: src/ui/notices.ts, src/ui/views/NoticeHost.tsx, src/ui/panels/FavoriteExtinct.tsx, src/ui/favorites.ts (only what item 1 needs), src/worker/host.ts (only the duplicateDish path, ~line 1541, and what item 2 needs), tests/ui/notices.test.ts, and new or existing tests under tests/worker/ for item 2.
+
+1. MINOR (wave-verify, lead): the favorite-family extinction card (src/ui/panels/FavoriteExtinct.tsx, shown via extinctCard in src/ui/favorites.ts) and the one notice (src/ui/views/NoticeHost.tsx, src/ui/notices.ts) can show at the same time, against docs/source/D09 line 133 "Do not layer this message over another D8 notification". notices.ts already hides every notice while the discovery card is open (a single 'blocked' flag; garden-home PROPOSED DECISION 5). Make the rule "one D8 notification at a time" hold for the extinction card too: while the extinction card is open nothing shows in the notice slot and the waiting notices return when it closes; two blockers (discovery card and extinction card) must not unblock each other early (use a set or counter of blockers, not one boolean); and the extinction card itself must not appear over an open discovery card (it waits and then shows). Read docs/source/D08 lines 140-155 (attention limits) and D09 117-134 first. Unit tests in tests/ui/notices.test.ts prove each case (notice hidden while the extinction card is open and back after it closes; overlapping discovery + extinction keep notices hidden until both close; the extinction card waits for the discovery card).
+2. MINOR (wave-verify, lead; existing bug): src/worker/host.ts duplicateDish copies the dish with a spread (...d), so the copy shares the original's RelationshipWatcher (Dish.relationships, P3.8 "relationships first seen while this dish is played (worker state; never saved)", created lazily at host.ts ~1227): relationships first seen in the copy are written into the original's record. Read src/worker/relationships.ts and how its entries reach the UI (the 'relationships' request ~host.ts:845, src/ui/badges.ts, the Field Guide "Seen in your dishes") and choose the faithful behaviour (a fresh watcher, or one seeded with a copy of the original's entries so the copy's history up to the duplicate moment is kept); say which and why as a PROPOSED DECISION. Then audit the rest of that spread for any other mutable worker object the copy still shares by reference (journal, experiment/gate watch, checkpoint ring, notebook, NotebookWatch/favorites tracker, history, sample session, anything with internal state) and fix only real sharing bugs. A test under tests/worker/ proves the original no longer changes when the copy records a relationship (and fails on the old spread), and that each other fix you make is covered.`
+
+const FIX_B = `${BASE}
+
+YOUR KEY: e2e-docs. Your Playwright port is 4281 with build folder tmp/dist-e2e-docs: E2E_PORT=4281 E2E_OUTDIR=tmp/dist-e2e-docs npx playwright test <specs> --project=desktop --project=phone-portrait.
+You own: tests/e2e/keep-dish.spec.ts (only the test named below), tests/e2e/a11y-screens.spec.ts, docs/ARCHITECTURE.md (§7 and §11.2 only).
+
+1. MAJOR (lead): tests/e2e/keep-dish.spec.ts test "with prompts on, the kept line leads the new dish prompt (no toast over it); an experiment card says beforehand what happens first" (~line 552). At :563 and :572 it expects .prompt to have count 0 after Run. garden-home (P4.3, src/ui/prompts.ts, copy in src/ui/strings/home.ts) now intentionally shows the Garden step 1 prompt ("Tap a Sprinter." — check the exact text in the source) in .prompt once the arrival line clears. Update both checks to the intended behaviour: after Run the arrival/kept line is gone and the next prompt is the Garden step 1 prompt (assert its exact text), still with no toast over the kept line. Keep every other claim of that test. Run it on desktop and phone-portrait.
+2. tests/e2e/a11y-screens.spec.ts (the axe sweep; each screen is "await a.scan('<name>')"): add the wave 5a screens — the Follow sheet (src/ui/panels/FavoriteFollow.tsx, opened by "Follow this family" in the inspector, data-testid follow-family), the Family sheet (FavoriteSheet.tsx), the dish with a followed family's slot (FavoriteSlots.tsx), Notebook → Favorites tab with at least one record (src/ui/views/NotebookFavorites.tsx), the session memory card shown after leaving a dish ("Saved for later", src/ui/views/SessionMemory.tsx), and the Play shelf / Saved dishes with dish thumbnails (src/ui/views/DishThumb.tsx). Put them into the existing tests where the flow already passes (e.g. the dish test at ~:220 after an inspector depth; the pages test at ~:125 for Notebook/Play) or a new test if cleaner. The extinction card cannot be reached in a journey: say so in a comment. Read tests/e2e/favorites.spec.ts and tests/e2e/garden-home.spec.ts for working selectors and flows. Run every test you changed on desktop and phone-portrait; all must pass, axe serious/critical clean.
+3. docs/ARCHITECTURE.md: §7 (worker protocol, line ~138) — add the messages wave 5a added, exactly as built in src/worker/protocol.ts (notebookGet / notebook / notebookChanged and its change union, the favorite ops, loaded.notebookDropped, exportDish/exportSave includeNicknames, SnapshotMsg.favorites, the thumbnail on SaveRequest/SlotInfo, the read-only 'sessionSummary' query; PROTOCOL_VERSION is unchanged at 2). §11.2 (save format, line ~262) — the notebook block as built (src/persistence/notebook.ts, saveFile.ts): the "notebook" sibling of "state" outside the state checksum, its own version and sha256 checksum, the size cap, a malformed or oversized record dropped with a message while the world loads, nicknames only by opt-in on export, an empty notebook not written. Facts only, each traceable to the code; keep the section's style.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+
+phase('Fix')
+const [repA, repB] = await parallel([
+  () => ag(FIX_A, { label: 'fix:code-minors', phase: 'Fix', effort: 'high' }),
+  () => ag(FIX_B, { label: 'fix:e2e-docs', phase: 'Fix', effort: 'high' }),
+])
+const reports = `=== FIXER code-minors ===\n${repA ? String(repA) : 'NO REPORT'}\n\n=== FIXER e2e-docs ===\n${repB ? String(repB) : 'NO REPORT'}`
+
+const VERIFY = (round) => `You are the adversarial verifier of the lead's integration of Phase 4 wave 5a in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Do NOT edit any repository file except your report docs/reports/reviews/g4-wave-5a/integrate-verify${round}.md; do NOT run git add/commit/stash/checkout/reset/restore. Scratch in tmp/integrate-verify${round}/. Port 4391 with build folder tmp/dist-integrate-verify (stop the port before and after; never pkill). Two CPUs shared: targeted runs only; never end your turn while a command you started is running.
+The integration changes are exactly \`git diff e96976b\` (wip/g4-wave-5a, the backup of the wave 5a tree before integration), ignoring docs/DECISIONS.md and docs/agent/** (the lead's). The two fixers' assignments:
+--- code-minors ---
+${FIX_A}
+--- e2e-docs ---
+${FIX_B}
+--- the fixers' reports ---
+${reports}
+Try to REFUTE that each item is done correctly, completely and honestly: read the diff; for each code fix write a load-time mutant under tmp/ (or revert the hunk in a scratch copy) and show the new test fails without it; check D08/D09 for the notification rule; check the duplicate fix against how relationships reach the UI; check that the ARCH text matches src/worker/protocol.ts, notebook.ts and saveFile.ts exactly (quote mismatches); re-run the changed unit tests, tests/fixtures/g2-replay.test.ts and tests/fixtures/trajectory-fence, and the changed e2e tests on desktop only (the fixer ran phone-portrait; re-run one phone-portrait test only if a selector looks layout-dependent). Grade every problem exactly like "MAJOR [code-minors] <file:line> — <what is wrong> — <repro>" (keys: code-minors, e2e-docs, lead); BLOCKER/MAJOR only for real defects, MINOR/NIT otherwise; most severe first. Write the same list to the report file.`
+
+phase('Verify')
+let verdict = await ag(VERIFY(1), { label: 'verify:integrate', phase: 'Verify', schema: VERDICT, effort: 'high' })
+const blockingOf = (v) => (v && Array.isArray(v.problems) ? v.problems.filter((p) => /^\s*(BLOCKER|MAJOR)/.test(p)) : [])
+const rounds = []
+let open = blockingOf(verdict)
+if (open.length) {
+  phase('Repair')
+  const keys = ['code-minors', 'e2e-docs'].filter((k) => open.some((p) => p.includes(`[${k}]`)))
+  log(`repair: ${keys.join(', ') || 'lead-only problems'}`)
+  const fixes = await parallel(keys.map((k) => () => ag(`${k === 'code-minors' ? FIX_A : FIX_B}\n\nYou are the repair round for this assignment (the work is in the tree; do not start over). The adversarial verifier found:\n${open.filter((p) => p.includes(`[${k}]`)).join('\n')}\nFix each, prove each with a test that fails without the fix, and report as before.`, { label: `repair:${k}`, phase: 'Repair', effort: 'high' })))
+  rounds.push({ keys, fixes: fixes.map((f) => (f ? String(f) : null)) })
+  if (keys.length) {
+    verdict = await ag(`${VERIFY(2)}\n\nREPAIR ROUND: the earlier verifier's BLOCKER/MAJOR problems were:\n${open.join('\n')}\nRepair reports:\n${fixes.map((f, i) => `=== ${keys[i]} ===\n${f ? String(f) : 'NO REPORT'}`).join('\n\n')}\nFor EACH earlier problem, reproduce it against the current tree and say VERIFIED FIXED or NOT FIXED; then grade anything new as before.`, { label: 'reverify:integrate', phase: 'Repair', schema: VERDICT, effort: 'high' })
+    open = blockingOf(verdict)
+  }
+}
+log(`integration: ${open.length ? `${open.length} BLOCKER/MAJOR remain` : 'no BLOCKER/MAJOR remains'}`)
+return { reports: { codeMinors: repA ? String(repA) : null, e2eDocs: repB ? String(repB) : null }, verdict, rounds, open }

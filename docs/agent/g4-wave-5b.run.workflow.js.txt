@@ -1,0 +1,761 @@
+export const meta = {
+  name: 'g4-wave-5b',
+  description: 'Phase 4 wave 5, stage 2 (fast track): story cards (P4.2) and the objective engine with three goals (P4.4, critical); one rules verifier, a saves lens for objectives; fix rounds only for BLOCKER/MAJOR',
+  phases: [
+    { title: 'Build', detail: 'one builder per task, effort high; unit tests + own e2e on desktop and phone-portrait' },
+    { title: 'Verify', detail: 'one rules verifier over the wave diff; a saves lens per critical task' },
+    { title: 'Fix', detail: 'only tasks with a BLOCKER/MAJOR; at most two rounds' },
+  ],
+}
+
+// ---- wave 5 tasks (docs/agent/g4-wave-5.tasks.js.txt, "export" removed; TASKS renamed WAVE_TASKS); this run = stage 2
+// only (A.only below). Runner: docs/agent/g4-runner-ft.workflow.js.txt from "// ---- runner" on, with agent( → ag( so
+// every prompt starts with OWNER_CONTEXT.
+// Phase 4 wave 5 "Wonder" tasks for docs/agent/g4-runner-ft.workflow.js.txt (fast track; WAVE_ID 'g4-wave-5', or
+// 'g4-wave-5a' / 'g4-wave-5b' when run as two files, see LEAD PRE-LAUNCH 5). Every task has a 'stage' field: stage 2
+// starts only after every stage 1 builder has finished.
+// meta.description: "Phase 4 wave 5 (fast track): the per-dish notebook record with favorite families (P4.1) and the Garden
+// card, session memory and prompts (P4.3); then story cards (P4.2) and the objective engine with three goals (P4.4)."
+//
+// Sources (line ranges as of 2026-10-10, tree = main cbdddf3 + wave 4 stage 2 uncommitted):
+// - docs/agent/g4-plan.md (whole: lead calls 1-6, waves, risks); docs/agent/fast-track.md; the runner's PRE / REPORT /
+//   BUILD_FINAL (not repeated in the prompts below).
+// - BUILD_DIRECTIVE 580-605 (P4.1-P4.4), 673-677 (v1.0 gate evidence).
+// - SPEC 876-882 (§12.3), 896-905 (§12.6), 906-915 (§12.7), 926-933 (§12.9), 970-979 (§13.5), 992-1021 (§14.1-§14.3),
+//   1031-1036 (§14.5).
+// - UX 16-35 (§2, §2.1), 36-40 (§2.2), 58-78 (§3.1-§3.3), 172-176 (§5.3), 200-212 (§5.8, §5.9), 213-226 (§5.10, §5.11),
+//   347-355 (§9).
+// - CT 511-516 (§10.5 Goals), 613-617 (§12.10 limits: favorites 3, descendants highlighted <= 200, bookmarks 50 text,
+//   notifications <= 1 per 60 s, name fields <= 60).
+// - ARCH 56-68 (§3 module boundaries), 138-188 (§7 protocol, §8 snapshots), 243-278 (§11 persistence; §11.2 already puts
+//   "favorites, notebook refs" in a "presentation" block outside the state checksum).
+// - docs/source/D08 56-64 (first connection; guidance without a tutorial), 116-155 (favorites, stories, attention limits:
+//   line 151 "at most one new card notification per 60 simulated seconds"), 172-174 (session memory), 190-191 (presentation
+//   data); docs/source/D09 117-134 (goals: offer on Garden, "Continued freely", start/pause/finish, no layering).
+// - docs/agent/g3-wave-4.tasks.js.txt 1-130 and the a11y prompt (shape); docs/reports/reviews/g3-wave-4b/a11y-build.md.
+// - The tree: every path and symbol below was checked with git grep / ls (line numbers are hints; find code by symbol).
+//
+// Stage-file owner this wave (one owner per file across all four tasks; everyone else makes only the additive lines their
+// prompt names):
+//   favorites (1):  NEW src/persistence/notebook.ts, src/worker/{notebookWatch,favorites}.ts, src/ui/favorites.ts,
+//                   src/ui/strings/favorites.ts, src/ui/panels/{FavoriteFollow,FavoriteSlots,FavoriteSheet,FavoriteMarkers,
+//                   FavoriteExtinct}.tsx, src/ui/views/NotebookFavorites.tsx, tests/ui/favorites.test.ts,
+//                   tests/persistence/notebook.test.ts, tests/worker/favorites-host.test.ts, tests/e2e/favorites.spec.ts;
+//                   OWNER of src/persistence/{saveFile,store}.ts, src/worker/{host,protocol,client}.ts,
+//                   src/render/renderer.ts, src/ui/panels/Inspector.tsx
+//   garden-home (1): NEW src/ui/{prompts,notices}.ts, src/ui/views/{DishThumb,SessionMemory,NoticeHost}.tsx,
+//                   src/ui/strings/home.ts, src/worker/thumbnail.ts, tests/ui/{prompts,notices}.test.ts,
+//                   tests/worker/{thumbnail,session-summary}.test.ts, tests/e2e/garden-home.spec.ts;
+//                   OWNER of src/ui/views/{Home,Play,DishScreen}.tsx, src/ui/state.ts, src/ui/panels/MoreSheet.tsx,
+//                   src/ui/styles.css
+//   stories (2):    NEW src/worker/stories.ts, src/persistence/notebookStories.ts, src/ui/stories.ts,
+//                   src/ui/strings/stories.ts, src/ui/views/NotebookStories.tsx, src/ui/panels/StoryCard.tsx,
+//                   tests/ui/stories.test.ts, tests/worker/stories-host.test.ts, tests/e2e/stories.spec.ts;
+//                   OWNER of src/ui/views/Notebook.tsx
+//   objectives (2): NEW src/sim/objectives.ts, src/worker/goals.ts, src/persistence/notebookGoals.ts,
+//                   content/objectives/{SEE_SPRINTER_SPLIT,KEEP_SPRINTERS_GOING,WATCH_STARCH_BECOME_FOOD}.json,
+//                   src/ui/goals.ts, src/ui/panels/GoalChoice.tsx, src/ui/strings/goals.ts, tests/sim/objectives.test.ts,
+//                   tests/worker/goals-host.test.ts, tests/content/objectives.test.ts, tests/e2e/goals.spec.ts;
+//                   OWNER of src/sim/content/{schema,registry}.ts
+// SHARED (additive) across tasks:
+//   src/worker/{protocol,host,client}.ts (favorites owns; garden-home: thumb + 'sessionSummary'; stories: 'storyMark' and the
+//   'story' change; objectives: 'goalStart'/'goalLeave'/'goalShown'/'goalCatalog' and the 'goal' change);
+//   src/persistence/store.ts (favorites owns; garden-home: thumb on SaveRequest/SlotInfo);
+//   src/persistence/notebook.ts (favorites owns; stories and objectives: one KIND_PROBLEMS entry + one optional key each);
+//   src/worker/notebookWatch.ts (favorites owns; stories and objectives: one construct/call line each);
+//   src/ui/state.ts (garden-home owns; favorites: 'favorites' tab, 'favorite' sheet, onNotebook handling, export option;
+//   stories: 'stories' tab; objectives: the optional goal on startRecipe);
+//   src/ui/views/DishScreen.tsx (garden-home owns; favorites: mount lines for its four components);
+//   src/ui/views/Notebook.tsx (stories owns; favorites adds the Favorites tab first, in stage 1);
+//   src/ui/views/Home.tsx (garden-home owns; stories: the unseen-card dot); src/ui/views/Play.tsx (garden-home owns;
+//   objectives: the GoalChoice mount); src/ui/panels/MoreSheet.tsx (garden-home owns; favorites: the nickname export option;
+//   objectives: the Goal row); src/ui/styles.css (garden-home owns; others append their own blocks);
+//   src/ui/notices.ts (garden-home owns; stories and objectives only call requestNotice);
+//   tests/helpers/host.ts (helper methods only), tests/helpers/trajectory.ts (POST_G2_* only; nobody should need it),
+//   tests that pin a list another task moves (e.g. a content count, a Notebook tab list).
+// Content editors: objectives only (stage 2: the three objective files, then "npx tsx tools/content-validate.ts --write").
+// Nobody edits art/src or public/atlas (no art:build: favorite glyphs are vector strokes and HTML, not atlas frames).
+// Untouched by all: src/sim/** except src/sim/objectives.ts (new) and src/sim/content/{schema,registry}.ts (objectives);
+// in particular serialize.ts, world.ts, tick.ts, history.ts, lineage.ts, ledger.ts, rng.ts (no new stream, no world
+// schema bump, no version bump: g4-plan call 6); content/manifest.json; content/variants/* (P4.5 adds objectiveIds there in
+// wave 6); android/**.
+// Order inside each stage does not matter (two builders at a time); stage 2 depends on stage 1's notebook API.
+//
+// LEAD PRE-LAUNCH:
+//  1. The G3 gate is done: tag g3; WORKLOG P3.1-P3.12 and the G3 line ticked; replace every "<lead: ...>" in STATE below
+//     with the real D-numbers and outcomes (wave 4 stage 2, EXP_104, the gate).
+//  2. Record g4-plan.md calls 1, 2 and 6 as decisions before launch (Context: g4-plan.md "Lead calls made up front"):
+//       D-<n>   "Notebook state is not world state" (call 1: per-dish notebook record next to the world save, own schema
+//               version, checksum and import validation, never in stateHash, never read by src/sim; nickname export by
+//               choice);
+//       D-<n+1> "Objectives are evaluated, never enforced in the sim" (call 2: read-only over the pairedRun observation
+//               surface, never changes pause or speed, never counts a blocked or cancelled proposal; goal state in the
+//               notebook record);
+//       D-<n+2> "No new sim rules in Phase 4" (call 6: simulationVersion, evolutionRulesVersion, moduleRegistryVersion and
+//               phenotypeMappingVersion do not move; the fence passes unchanged every wave) with the content bump of item 3.
+//     Put the three numbers into STATE (it names them as <lead: D-number>).
+//  3. Bump content/manifest.json buildPhase 3 -> 4 (contentVersion stays 2) in the same lead commit as item 2, then
+//     "npx tsx tools/content-validate.ts --write", npm run check, and the fence (tests/fixtures/g2-replay.test.ts and the
+//     tests/fixtures/trajectory-fence prefix: the fence digests are biology, so none should move; if one does, stop).
+//     Why: the three goals are phase 4 content (CT §10.5 "Phase 4") and the registry refuses or filters phase > buildPhase.
+//  4. Free the ports: for p in $(seq 4271 4274); do lsof -t -i :$p | xargs -r kill; done
+//  5. Run the wave as two run files, as wave 4 did (4a/4b): g4-wave-5a = stage 1 (favorites, garden-home; favorites is
+//     critical -> its saves verifier), integrate and commit (npm run check green), then g4-wave-5b = stage 2 (stories,
+//     objectives; objectives is critical). Stage 2's builders extend the notebook record, NotebookWatch and the notice slot
+//     that stage 1 built, so they must start from an integrated, verified stage 1. (One run file also works with the
+//     stage gate, but then the stage 1 verify sees stage 2's half-built extensions.)
+//  6. No assignment writes a docs file besides its build report, so the runner's REPORT line needs no change.
+//
+// LEAD AFTER WAVE 5 (per stage, then once more for the wave):
+//  1. Integrate: MINORs, the decisions below, npm run check, npm run content:validate (stage 2), the fence, the new journeys
+//     on desktop (favorites 4271, garden-home 4273 | stories 4272, goals 4274) and the touched journeys on desktop:
+//     garden, save-reload, keep-dish, whatif, experiments (Notebook tabs), keyboard, a11y-screens. Add the new screens to
+//     tests/e2e/a11y-screens.spec.ts (Follow sheet, Family sheet, the favorite slots, the extinction card, Notebook
+//     Favorites and "Something happened" tabs, a story card, the Play card with its goal choice, a goal sentence, the
+//     session memory card). Update ARCH §7 (new messages) and §11.2 (the notebook block as built) in the same commit.
+//  2. Commit; tick P4.1 and P4.3 (stage 1), P4.2 and P4.4 (stage 2) in docs/WORKLOG.md; push.
+//  3. Stage 2 also: confirm that an old save (tests/fixtures/saves, g2) and a stage 1 save both load with every kind empty.
+//
+// Decisions to record (from this wave's PROPOSED DECISIONs; next ids after the pre-launch three):
+//  - favorites: the notebook record as built (in the save file as the "notebook" sibling of "state", ARCH §11.2's
+//    presentation block; its own version and checksum; a malformed record is dropped, the world loads; no world schema
+//    bump; holdsSave covers it); limits (3 active, 20 unpinned kept); the membership tracker (living members from lineage
+//    parents each tick, saved as a list, so compaction never loses a family); the three glyph patterns; default family
+//    name "{Species} #{root}"; Look back = History "What happened"; Duplicate and checkpoint branches copy favorites only;
+//    nicknames kept in local saves and checkpoints, left out of every exported file unless opted in.
+//  - garden-home: thumbnail format (32 x 32 dominant species); the prompt triggers and the copy UX leaves open (prompt 5,
+//    prompt 6, session memory lines); the notice slot priority; the read-only 'sessionSummary' query (client.history has
+//    side effects).
+//  - stories: card record, 50-card bound and removal order; pacing in simulated seconds (D08 151) while the P2.3 discovery
+//    pacer stays wall-clock; dedupe keys; region wording; Save picture deferred to P4.6; the no-dish copy.
+//  - objectives: engine in src/sim/objectives.ts with the runner in src/worker/goals.ts; per-tick evaluation; the gate
+//    predicate has no shipped use until Phase 5 gates; 'custom' refused for objectives; Undo ends a running attempt
+//    ('undone'); goal copy; where goals are offered (Play Garden card, More) and compatibility.
+
+const STATE = `On main: tag g3 (Phases 0-3 complete). WORKLOG P3.1-P3.12 and the G3 gate are ticked. Decisions D-0001...D-0064 are as read; wave 4 stage 2 (P3.11 accessibility, P3.12 performance, the G3 evidence), the EXP_104 revision and the G3 gate are D-0065 (P3.11 accessibility), D-0066 (P3.12 performance; the tick and memory criteria stay open), D-0067 (gate evidence choices), D-0068 (EXP_104) and D-0069 (fixes from the gate's full e2e run: Field Guide reflow at 200 %, the sample panel on phones, tap timing by event timestamps in src/ui/gestures.ts, viral species left out of the dish summary, and the e2e helpers chooseSpeed/expectSpeed in tests/e2e/helpers.ts); EXP_104: HIDDEN_NEIGHBORHOOD_V1 revision 2 (backgroundOverrides.oxygen 0.03) shipped; its gate is reached at 1 s. The Phase 4 lead calls are recorded: call 1 "Notebook state is not world state" = D-0070; call 2 "Objectives are evaluated, never enforced in the sim" = D-0071; call 6 "No new sim rules in Phase 4" (with the buildPhase 3 -> 4 bump) = D-0072.
+
+VERSIONS: buildPhase 4 (lead bump before this wave), contentVersion 2, simulationVersion 3 (pinned by ManifestSchema and loadSaveFile), evolutionRulesVersion 1, moduleRegistryVersion 2, phenotypeMappingVersion 1 (none of the last four moves in Phase 4), world SCHEMA_VERSION 4 (src/sim/world.ts), PROTOCOL_VERSION 2 (src/worker/protocol.ts; ENT_STRIDE 14, E_CUE2 12, E_LINKMASK 13, ID_STRIDE 2 = [birthId, entityId] per snapshot entity, DEPOSIT_BANDS 7 in snapshot.ts; P3.8 and P3.10 added messages and VisualEvent types without a bump). Shipped manifest: enabledSpecies A01, B01-B08, F01, F02, P01-P04, V01, X01, Y01, Y02 (19); enabledModules E01, E03, E04, E05, E06, E07, E08, E09, E10, E12; enabledSystems chemistry, core, enzymes, film, foodObjects, fungi, parasites, viruses; enabledMaterials ACID, BASE, BUFFER, CO2, DEBRIS, GEL, INH_BACT, INH_FUNG, INH_PHOTO, M01, M03, M04, M05, M09, M10, M11, METABOLITE, NUTRIENT, OIL, OXYGEN, PROTEIN, SALT, SEDIMENT, SHADE, STARCH, SUGAR, WATER; enabledHabitats GEL_COLONY, SEDIMENT_EDGE, WATER_GARDEN; enabledStructures BEAD, STONE, WALL (no gate or edge structure exists: S01-S12 are Phase 5). Content: 18 recipes (FIRST_DISH_V1 "Little Living Garden", seed 104729: 24 B01 Sprinters, 12 B06, 8 B04, 12 A01, a sugar, a starch and a debris patch; B01's recorded diet is sugar only), 14 experiments, variants R-G0...R-G3 (sourceId FIRST_DISH_V1; VariantSchema has an optional objectiveId cross-checked against the objectives), the tools pack (D-0061), content/objectives/ EMPTY. ObjectiveSchema = { id, title, predicate: PredicateSchema, phase }; PredicateSchema = { type: keepSpeciesAlive | biomassThreshold | transferAcrossGate | observeEvent | fieldInRange | custom, params: record (untyped), durationSeconds? } and is SHARED with ExperimentSchema.gate (every experiment gate is type 'custom' with params.all clauses). The registry parses objectives (registry.objectives/objectiveIds) but applies no phase filter and no predicate check yet; experiments, variants and tools are filtered by phase <= buildPhase.
+
+PERSISTENCE (src/persistence/): saveFile.ts (SaveFile = { format 'pixelmeba-save', schemaVersion, appVersion, simulationVersion, contentVersion, contentHash, tick, meta, state, checksum }; checksum = sha256 of canonicalJson(state) only, so a top-level sibling of state is outside it; buildSaveFile(world, meta, { stripNames }) and "Export without names or notes" (D-0029) drop branch names and journal entries; parseSaveFile validates everything and throws SaveFileError; loadSaveFile -> { file, world }); store.ts (SaveStore: ten named slots + 'autosave', one atomic backend commit per write putting the new record and the slot pointer and deleting the record older than the kept predecessor; load(slotId, verify) falls back to the predecessor when verify throws; SaveRequest -> slotRecordFor -> SlotInfo index copies; holdsSave(held, req) compares every index field as canonical JSON, D-0033 fix round 3; MemoryBackend with failNextCommit and quotaBytes); idb.ts (IdbBackend, one readwrite transaction per commit, D-0013); checkpoints.ts (the device ring, D-0031; branchWorldId, branchName); compress.ts (gzipText/gunzipText); appVersion.ts. src/persistence/migrations/ is an EMPTY directory: world migrations live in src/sim/serialize.ts migrateWorldState (COLUMNS_ADDED_IN; provenance.migratedFrom, D-0029). Old-save fixtures: tests/fixtures/saves/ (nine g2 saves, tests/helpers/g2-saves.ts readG2SaveText/readExpected) and tests/persistence/fixtures/schema2-cleaning-crew-t1900.pixelmeba.gz; tests/persistence/{persistence,migration,strip-names}.test.ts. The journal precedent (D-0027, D-0031): a dish's journal entries live in world.history.journal (inside the checksummed state, outside stateHash), are kept across Undo and rollback, and the device list is src/ui/journal.ts (localStorage 'pixelmeba.journal', JOURNAL_MAX 200, journalUnseen).
+
+WORKER (src/worker/host.ts DishHost): Dish = { id, world, name, speed, ..., undo, checkpoint, replay, arm (comparison copies), experiment (single-arm card: GateWatch + ArmObserver), relationships (RelationshipWatcher, D-0061), transient (the Continue copy loaded only to be kept) }. stepDish(d) composes the read-only stage hooks of the relationship watcher and a running card's ArmObserver into step(world, { afterStage }) and is never used for comparison arms; rollback(d, tick) replays with plain step(); the 'undo' case swaps in d.undo and keeps the journal and lineage labels. Saves: buildSaveFile is called in handleAsync 'saveSlot', 'exportDish', autosave(), buildFor(), maybeCheckpoint() and the keep paths (keepDish/keepFirst; keepPlan: rebuildsExactly -> 'unchanged', holdsExactly -> 'saved'); 'exportSave' sends a stored file exactly as stored; duplicateDish gives a new branchWorldId. sendSnapshot builds SnapshotMsg (ents, ids, deposits, links, objects, overlay, events: VisualEvent[], selection, speciesCounts, lineage marks via packLineageMarks, evolution, lid, sample). Read-only queries: 'family' (snapshot.ts buildFamily: lineage root = oldest retained ancestor, members capped at FAMILY_MAX_MEMBERS 200), 'lineage' (buildLineage), 'relationships'. WARNING: the 'history' request is NOT side-effect free: it calls experimentHistoryOpened, which records the experiment player steps openResourceHistory / viewPreyHistory; never call client.history for a summary (a11y-build.md). The UI subscribes with client.onSnapshot / onError / onCompare / onExperiment / onCheckpoint (src/ui/state.ts ~:221).
+
+EVENTS AND OBSERVATION: src/sim/events.ts EventType = birth, death, introduce, mutation, capture, conversion, stressOnset, command, capacity, branchCandidate, branchEstablished, branchExtinct, secretionStart, firstIntake, rest, wake, linkFormed, linkBroken, linkRefused, objectEmptied; ring of EVENT_RING_SIZE 500 (src/sim/constants.ts), ids from world.counters.nextEventId. 'birth' is emitted only on a committed division (births.ts; detail parent, daughterA, daughterB, changedA, changedB) and history.pendingBirths counts only committed births; a blocked division sets FLAG.capacityBlocked / divBlockCode and charges nothing; a drawn proposal (propG0/propG1) is dropped when its parent's slot is cleared. 'death' is emitted by contacts.ts, maintenance.ts and sample.ts only (division and some removals emit none). 'branchEstablished' detail { branch, shortId, members }. 'command' detail { kind, accepted, rejected, seq } (the payload is in world.commands.log by seq). 'conversion' is declared but NEVER emitted: enzyme work is recorded in the reaction ledger (src/sim/reactions.ts recordReaction, reactionInCell / reactionInDish for the last complete second, observation only) with producer provenance from src/worker/snapshot.ts producersNear (D-0051). Lineage records (src/sim/lineage.ts) keep parent, birthTick, generation, species, deathTick, deathCause per birthId and are compacted beyond LINEAGE_RETAIN 10,000 births (pinned branches excepted); the entity table has a 'generation' column. History (src/sim/history.ts): per-second samples (count, biomass, births, deaths per species), minute summaries, regional trait samples every 10 s for TRAIT_REGIONS dish, topLeft, topRight, bottomLeft, bottomRight (quarterOf(x, y) -> 1-4, TRAIT_SPLIT 64; UI labels REGION_LABELS in src/ui/panels/TraitData.ts). Measurement grammar (src/sim/pairedRun.ts header): ArmObserver (read-only; hook + afterTick; births.SP, alive.SP, biomass.SP, biomassTotal, extinctAt.SP (whole seconds, resets when members return), converted.starch|oil|protein, field.F dish total, ...), stepObserved, measureArm, aliveCounts, poolTotal; GateWatch in src/sim/experiments.ts evaluates gate clauses at whole seconds and never stops a world.
+
+UI: Home.tsx (Continue card: the open dish, else the autosave from listSlots with continueCardText and mode labels; Play card; secondary row New dish, Notebook with the journalUnseen dot, Saved dishes, Field Guide, Settings, About). Play.tsx (one Garden card with a PAINTED svg GardenThumb, "not a live capture"; Start = startRecipe('FIRST_DISH_V1', 'Little Living Garden'); the What if? link). DishScreen.tsx (top strip with Home back button; viewport with dish-focus + reticle (P3.11), CellDescription, DishSummary, ONE notice spot showing experimentWaiting else prompt (role=status), FamilyMarkers, LineageLegend, DiscoveryCard, trays, the sheets by the state.ts 'sheet' signal; bottombar Undo + Add Life / Feed / Look; 30 s autosave interval). state.ts: route (notebook tab 'journal' | 'experiments'), sheet union, prompt signal with PLAY_PROMPT "Press play and look closely." (cleared on first run; shown only when settings.showPrompts, labelled "Show gentle prompts" in Settings), startRecipe/startDish/enterDish, saveToSlot (which also autosaves), exportCurrent(strip), familyView, historyFocus, select, toast. Notebook.tsx: tabs Journal and Experiments (role=tablist, arrow keys), NotebookJournal.tsx (JournalComposer, ObservationCard). Lineage UI: LineageSheet/LineageState/LineageLegend (Follow lineage via renderer.followLineage, Pin branch as a lineage command, specimens), FamilyMarkers.tsx (HTML rings from the 'family' answer: double ring = close family, dashed = other relatives; do not reuse these two styles), Inspector.tsx shortcuts (data-testid shortcut-eat, shortcut-why, shortcut-family, shortcut-changed). Renderer: src/render/renderer.ts drawLineage (rings for marked members, LINEAGE_RINGS_MAX 200, dark 0x172c35 companion stroke), positionOf(entityId), zoomPreset('dish' | 'neighborhood' | 'close', around?), camera.centerOn(x, y, zoom?). P3.11 as built: one polite LiveRegion in App.tsx reads every toast; visible toasts carry no role; src/ui/a11y/{DishSummary,CellDescription,LiveRegion,describe,contrast,focus}; 48 px targets, 16 px text, a dark companion focus ring.
+
+TESTS: tests/helpers/host.ts FakeClockHost (drives the real DishHost with a fake clock); tests/helpers/world.ts (registry, clearWater, place, setField, aliveOf, ...); tests/helpers/registry.ts registryWith / G2_LISTS (filters objectives by id with the other packs); tests/helpers/trajectory.ts trajectoryDigest(world, 'g2' | 'full'). E2E: tests/e2e/helpers.ts (seedSettings, startGarden (seeds showPrompts false and waits for "56 alive"), simSeconds, selectOrganism, tapViewport, expectNoSeriousA11yViolations, expectReachable, expectNoHorizontalOverflow); the worker-hash pattern (wrap Worker in an init script and speak the protocol) is watchWorker/workerHash in tests/e2e/infection-overlay.spec.ts and lab-tools.spec.ts.`
+
+const STAGE1_AS_BUILT = `
+
+STAGE 1 AS BUILT (wave 5a: favorites P4.1 and garden-home P4.3, committed on main as 9b40210; WORKLOG P4.1 and P4.3 ticked; reports in docs/reports/reviews/g4-wave-5a/; decisions D-0073 "Favorite families and the notebook record as built", D-0074 "Garden card, session memory, prompts and the one-notice slot as built", D-0075 "A duplicated dish shares no worker state"). Read D-0073 and D-0074 before you start. Your assignment was written before stage 1 was built: where a name or shape it plans differs from the code, the code wins; say so in your report. Hook points as built:
+- src/persistence/notebook.ts: NotebookRecord = { format 'pixelmeba-notebook', notebookVersion 1, worldId, favorites, nextFavorite, checksum }; sealNotebook = sha256 over the canonical record without checksum; every kind is validated through the KIND_PROBLEMS table (a missing kind key reads as []; an unknown top-level key drops the record); notebookProblem / readNotebook with NotebookWorldRefs (world-reference checks: species, birth ids < nextBirthId, ticks <= world.tick); NOTEBOOK_MAX_BYTES 1 MB (D-0073); NOTEBOOK_DROPPED_TEXT already names "favorites, story cards and goals"; notebookIsEmpty (an empty notebook is not written, so older files stay byte-identical); favoritesOnly(record, worldId) (Duplicate and an opened checkpoint branch copy favorites only: story cards and goal attempts stay with the world they were recorded in, D-0073); notebookWithoutNicknames.
+- src/worker/notebookWatch.ts: NotebookWatch(world, ref) with 'hook' (a read-only stage hook slot, undefined in stage 1), watches, rebind, materialize, afterTick(world) -> NotebookChange[] (called once after every step of a played dish and after each accepted command; never for comparison or experiment arms, never during a rollback replay); notebookAfterRestore(world, record) re-checks each kind after Undo, rollback and Cancel ("Stage 2 adds its kinds here, one line each").
+- src/worker/host.ts: Dish.notebook and Dish.notebookWatch; notebookOf(d), notebookChanges(d, changes) posts { type: 'notebookChanged', dishId, record, change }; restoreNotebook(d) after Undo/rollback/Cancel. src/worker/protocol.ts: NotebookChange union ('favoriteExtinct' | 'favoriteRepresentativeGone' | 'favoritesRestored'; stage 2 adds 'story' and 'goal'), notebookGet / notebook, the favorite ops, loaded.notebookDropped, exportDish/exportSave includeNicknames, SnapshotMsg.favorites, the read-only 'sessionSummary' query (ARCH §7 "As built" block and §11.2 notebook block describe all of it). PROTOCOL_VERSION stays 2.
+- src/ui/notices.ts: ONE visible notice. NoticeKind 'goal' | 'experiment' | 'story' | 'prompt', priority goal > experiment > story > prompt, each kind keeps only its latest request, a dismissed id never returns; requestNotice / dismissNotice / withdrawNotice / withdrawKind. Cards that sit in the same place (setCardOpen('discovery' | 'extinct'); shownCard) hide every notice while open (D09 "Do not layer this message over another D8 notification"). src/ui/views/NoticeHost.tsx wires the experiment and prompt sources; story cards and goals request their notices through requestNotice only (its header says so).
+- src/ui/views/Notebook.tsx tabs today: Favorites, Journal, Experiments (src/ui/state.ts Route: notebook tab 'journal' | 'experiments' | 'favorites'). UX §2 orders them "Something happened (story cards) · Favorites · Journal · … · Experiments".
+- Garden prompts (src/ui/prompts.ts, copy in src/ui/strings/home.ts): only with Show prompts on and in a Garden dish; step 1 is "Tap a Sprinter."; tests/e2e/helpers.ts startGarden seeds showPrompts false. Home.tsx shows the Continue card with a live thumbnail (DishThumb); Play.tsx shows the Garden card with its thumbnail and Start (startRecipe).
+- Integration evidence for stage 1: npm run check 162 files / 1623 tests passed at the commit's tree; desktop e2e favorites x2, garden-home, keep-dish x4, a11y-screens pages + wave 5a: 9 passed; integration verifier ok (docs/reports/reviews/g4-wave-5a/integrate-verify1.md). Its three MINORs on the notice cards are this wave's notice-cards task.`
+
+const WAVE_TASKS = [
+  {
+    key: 'favorites',
+    port: 4271,
+    stage: 1,
+    // critical: the notebook record is a second persisted record per dish (saves, import, migration, atomic writes).
+    critical: true,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P4.1 "Favorite families" (lines 582-588) and the per-dish notebook record of g4-plan.md call 1 (D-0070), with favorites as its first kind; stories and objectives add their kinds to it in stage 2. It implements SPEC §12.6 (896-905), the "favorites, bookmarks, story cards, goal state" items of §14.1 (992-1004) with §14.2-§14.3 (1005-1021) and §14.5 (1031-1036); UX §3.1 (58-64: "three favorite marker slots at the right edge"), §5.8 (200-206), the §5.10 option "include nickname (off)" (213-219), §9 (347-355); CT §12.10 (613-617: favorites 3, descendants highlighted <= 200, name fields <= 60).
+Read: those lines; ARCH §3 (56-68), §7 (138-168), §11 (243-278; §11.2's "presentation" block outside the checksum is where the notebook goes); docs/source/D08 lines 116-130 (favorite contract, growth, gentle failure, names and sharing) and 190-191 (presentation data); D-0013, D-0027, D-0029, D-0031, D-0033 (keep the open dish first; holdsSave), D-0035, D-0039; src/persistence/saveFile.ts and store.ts whole; src/worker/host.ts: Dish, stepDish, sendSnapshot, rollback, the 'undo' case, handleAsync (saveSlot, autosave, loadSlot, exportDish, exportSave, importDish, create), buildFor, saveRequest, autosave(), keepPlan, rebuildsExactly, holdsExactly, duplicateDish, maybeCheckpoint; src/worker/snapshot.ts buildFamily and findSlotByBirth; src/sim/lineage.ts (record fields, LINEAGE_RETAIN, compaction); src/render/renderer.ts drawLineage; src/ui/panels/{FamilyMarkers,Inspector,LineageState}.tsx; src/ui/strings/inherited.ts; tests/helpers/{host,g2-saves,trajectory}.ts; tests/persistence/{persistence,migration,strip-names}.test.ts.
+
+You own (new): src/persistence/notebook.ts, src/worker/notebookWatch.ts, src/worker/favorites.ts, src/ui/favorites.ts, src/ui/strings/favorites.ts, src/ui/panels/{FavoriteFollow,FavoriteSlots,FavoriteSheet,FavoriteMarkers,FavoriteExtinct}.tsx, src/ui/views/NotebookFavorites.tsx, tests/ui/favorites.test.ts, tests/persistence/notebook.test.ts, tests/worker/favorites-host.test.ts, tests/e2e/favorites.spec.ts. As this wave's owner (other tasks add the lines their prompts name): src/persistence/saveFile.ts, src/persistence/store.ts, src/worker/host.ts, src/worker/protocol.ts, src/worker/client.ts, src/render/renderer.ts, src/ui/panels/Inspector.tsx.
+SHARED (additive): garden-home builds at the same time and owns these; re-read before each edit:
+- src/ui/state.ts: the Route notebook tab union gains 'favorites'; the sheet union gains 'favorite'; a client.onNotebook subscription next to client.onExperiment; exportCurrent(strip, includeNicknames).
+- src/ui/views/DishScreen.tsx: one mount line each for FavoriteSlots (in the bottombar after the .actions group), FavoriteMarkers (next to FamilyMarkers), FavoriteExtinct, and the sheet 'favorite' branch.
+- src/ui/views/Notebook.tsx (stories owns it in stage 2): 'favorites' in Tab and TABS, placed before Journal (UX §2 order: Something happened · Favorites · Journal · ... · Experiments), and one render branch.
+- src/ui/panels/MoreSheet.tsx: an "Include family nicknames" checkbox (unchecked) that both export buttons read.
+- src/ui/styles.css: append your own block.
+- garden-home adds a 'thumb' field to SaveRequest/SlotInfo, a 'sessionSummary' request and NewDishPreview.thumb in your files: leave those lines alone.
+Build:
+1. The notebook record: src/persistence/notebook.ts. It imports only @sim/hash, @sim/constants and types; nothing in src/sim imports it.
+   - NotebookRecord = { format: 'pixelmeba-notebook', notebookVersion: 1, worldId: string, favorites: FavoriteRecord[], nextFavorite: number, checksum: 'sha256:<hex>' }.
+   - The checksum is sha256Hex(canonicalJson(record without checksum)).
+   - Kinds are validated through one table, KIND_PROBLEMS = { favorites: favoritesProblem }. Stage 2 adds 'stories' and 'goals' as one entry and one optional key each. A missing kind key reads as [] (an explicit default, SPEC §14.5). An unknown key is a problem.
+   - Exports: NOTEBOOK_FORMAT, NOTEBOOK_VERSION, NOTEBOOK_MAX_BYTES (256 KB of canonical JSON), emptyNotebook(worldId), sealNotebook(record) -> Promise<NotebookRecord>, notebookProblem(raw, worldId) -> Promise<string | null> (envelope, version <= NOTEBOOK_VERSION, worldId, every kind, size, checksum), readNotebook(raw, worldId) -> Promise<{ record, dropped: string | null }>, notebookWithoutNicknames(record), notebookIsEmpty(record).
+   - FavoriteRecord = { id: 'fav-<n>' (from nextFavorite, never reused), rootBirthId, speciesId, nickname: string | null, pattern: 'circle' | 'triangle' | 'square', representative: number, active: boolean, createdTick, members: [birthId, birthTick][], historyIncomplete: boolean, extinct: null | { tick, lastBirthId, cause, cell } }.
+     - rootBirthId is buildFamily(world, birthId).rootBirthId at Follow time.
+     - nickname follows saveFile cleanName's rules (<= 60 characters, control characters removed); an empty one is null.
+     - members are the living members, ascending birthId, at most AGENT_CAP.
+     - cause is the lineage deathCause, a reason code.
+   - Limits: at most 3 active (CT §12.10) and 20 unpinned per dish. A 21st unpinned removes the oldest unpinned extinct record first, else the oldest unpinned, and the UI names it.
+   - No organism data is copied into the record (D08 line 119 "Do not store a duplicate organism").
+2. In the save file (ARCH §11.2 "presentation"):
+   - SaveFile gains an optional top-level notebook?: NotebookRecord beside state. It is outside the state checksum, so the world checksum and stateHash never change with it.
+   - buildSaveFile(world, meta, options) gains options.notebook and options.includeNicknames (default false).
+     - The host passes true for named slots, the autosave, keep writes and automatic checkpoints: local files keep nicknames.
+     - exportDish passes the player's choice. stripNames always drops nicknames.
+   - loadSaveFile returns { file, world, notebook, notebookDropped }. A notebook with any problem (including another world's id) becomes emptyNotebook(world.worldId), and notebookDropped carries: "This dish's notebook (favorites, story cards and goals) could not be read, so it was left out. The dish itself loaded."
+   - A notebook problem never throws. So SaveStore.load's verify never falls back to the predecessor because of one, and parseSaveFile's world checks are unchanged.
+   - A file without a notebook (every save written before this wave, the g2 saves) loads with an empty one. That is its migration by copy, with explicit defaults. The next save writes a new record, the store keeps the old one as the predecessor, and there is no world SCHEMA_VERSION bump.
+3. Written atomically with the world save:
+   - The notebook travels inside the same save text, so SaveStore.save's one commit writes both, and the predecessor keeps the previous pair.
+   - SaveRequest and SlotInfo gain an optional notebookChecksum (slotRecordFor copies it). So holdsSave sees a notebook-only change, and an autosave after a Follow writes.
+   - 'exportSave' (the stored autosave sent as a file) replaces only the file's notebook with notebookWithoutNicknames, unless the player opted in. The state text and its checksum stay unchanged.
+4. Worker state (host.ts):
+   - Dish gains notebook: NotebookRecord. It is emptyNotebook on create, read from the file on loadSlot, importDish and the transient Continue copy, and kept by Undo and rollback (like the journal, D-0031).
+   - Every buildSaveFile call in host.ts passes the dish's notebook: saveSlot, autosave(), buildFor, exportDish, maybeCheckpoint and the keep paths.
+   - rebuildsExactly is false while the notebook is not empty, so a followed family is never dropped as 'unchanged'.
+   - duplicateDish and an opened checkpoint branch copy the favorites only, with the new world id (PROPOSED DECISION: story cards and goal attempts belong to the world they were recorded in).
+   - Comparison arms and experiment arms get an empty notebook and no watcher.
+5. Protocol (additive; no PROTOCOL_VERSION bump, as P3.8 added 'relationships'):
+   - ToWorker 'notebookGet' { requestId, dishId }.
+   - ToWorker 'favorite' { requestId, dishId, op }, where op is one of:
+     { kind: 'follow', birthId, nickname, pattern } | { kind: 'rename', id, nickname } | { kind: 'pattern', id, pattern } | { kind: 'representative', id, birthId } | { kind: 'unpin', id } | { kind: 'pin', id }.
+   - FromWorker 'notebook' { requestId, dishId, record, refused?: string }.
+   - Unsolicited FromWorker 'notebookChanged' { dishId, record, change }, with change a union that stage 2 extends: { kind: 'favoriteExtinct', id } | { kind: 'favoriteRepresentativeGone', id, candidates: number[] }.
+   - 'loaded' gains notebookDropped?: string. 'exportDish' gains includeNicknames?: boolean.
+   - SnapshotMsg gains favorites?: FavoriteMarks = { marks: Uint8Array in snapshot entity order (bit k = highlighted member of active slot k, bit 3 + k = its representative), slots: { id, pattern, members, highlighted, aggregate: { x, y, count } | null }[] }. It is built in src/worker/favorites.ts from the tracker and entity columns, and transferred like the lineage marks.
+   - A favorite op never becomes a CommandPayload and never touches a world.
+6. Membership tracker (src/worker/favorites.ts), driven by NotebookWatch (src/worker/notebookWatch.ts):
+   - NotebookWatch = { hook?: (stage, world) => void; afterTick(world); watches(world); rebind(world) }. It is created per played dish, never for d.arm and never in rollback replays.
+   - stepDish builds one list of the read-only stage hooks (relationship watcher, a running card's ArmObserver, NotebookWatch.hook), calls step once with a combined afterStage, then calls NotebookWatch.afterTick. Stage 2 adds the story detector and the goal runner as one line each inside notebookWatch.ts, so keep that file the single place.
+   - After each tick, a living organism is a member if it already was, or if its recorded parent (lineage records always retain the newest births) was a living member at the previous tick. Members no longer alive leave. Every removal path counts, not only 'death' events. Members carry their birth tick.
+   - When the representative is no longer alive, the candidates are its living descendants, else every living member, sorted by birth tick then birthId. "Follow next" picks the first. Never choose by energy, size or health (SPEC §12.6, D08 line 120).
+   - When the last member is gone: extinct = { tick, lastBirthId, cause (its lineage deathCause), cell }, and an unsolicited notebookChanged { kind: 'favoriteExtinct' }.
+   - After undo, rollback or reload (watches/rebind, as RelationshipWatcher does), rebuild members from the saved list against living birthIds and lineage parents.
+   - Highlighting: the first 200 members by birth tick then birthId get the slot bit. Beyond 200, the slot's aggregate is all members' mean position and count (CT §12.10 "descendants highlighted <= 200"). This is snapshot-side only.
+7. UI. src/ui/favorites.ts holds the open dish's notebook from 'notebook' packets. Components read only that and snapshots; the renderer never owns state.
+   - "Follow this family" button in the Inspector entity summary, beside "Where is its family?" (data-testid="follow-family"; garden-home's prompt 6 highlights it). It opens FavoriteFollow:
+     - an optional nickname input (maxLength 60) with the line "Nicknames stay on this device unless you choose to share them.";
+     - the three patterns as a labelled choice group (Circle, Triangle, Square: shape, not colour; D-0029 choice-group keys);
+     - Follow.
+     With three active, it says "You are following three families. Unpin one to follow another." and offers the three to unpin.
+   - FavoriteSlots: the active favorites at the right edge of the bottom actions (UX §3.1).
+     - Each slot is a >= 48 px button with the glyph, the name and the member count (aria-label "Find the {name} family: {n} members").
+     - Tap = Find: select the representative and center on it from the latest snapshot (ids -> entity id -> positionOf; zoomPreset('neighborhood', position)).
+     - If the representative is gone, the Family sheet opens on its candidates.
+     - No empty or broken buttons.
+   - FavoriteSheet (sheet 'favorite'):
+     - name, species, "from {Species} #{root}", living members, generation depth (the entity generation column, max over living members minus the root's);
+     - confirmed inherited differences through the existing lineage answer (client.lineage(dishId, null, representative)) and src/ui/strings/inherited.ts, keeping founder traits, individual mutations and established branches distinct as the Lineage sheet does;
+     - buttons Find, Follow next ("Follow next: {Species} #{id}, born {m:ss}"), Rename, Pattern, Unpin.
+   - Renderer: drawFavorites in src/render/renderer.ts draws each highlighted member's slot glyph (an outline circle, triangle or square with the dark 0x172c35 companion stroke drawLineage uses) from snapshot marks only, at most 200 per slot. FavoriteMarkers (an HTML overlay like FamilyMarkers) shows the aggregate marker "+{n}". Reduced motion: no animation.
+   - FavoriteExtinct uses the exact UX §5.8 copy "No members of the {name} family remain.", then the last conditions "The last member, {Species} #{id}, was recorded at {m:ss}: {reasonText(cause)}." Buttons:
+     - Look back: History "What happened" filtered to that species (historyFocus, then sheet 'history');
+     - Continue exploring: closes the card;
+     - Start a new dish: route newDish; the D-0033 keep flow applies.
+     No sound cue and no alarm styling. {name} is the nickname, else "{Species} #{rootBirthId}" (D08 line 127: the default caption uses the ancestor and ID).
+   - Notebook tab "Favorites" (NotebookFavorites.tsx): the open dish's active and unpinned favorites with their state ("Following", "Unpinned", "No members remain since {m:ss}") and "Pin again". With no dish open: "Favorites are kept with each dish. Open a dish to see its families."
+   - Every favorite change autosaves (state.ts autosave()), as a journal note does.
+Done when:
+- tests/ui/favorites.test.ts:
+  - at most 3 active, and a 4th Follow is refused with its copy;
+  - Follow next order: birth tick, then id; a later-born candidate with more energy, biomass or health is never picked first;
+  - the tracker across divisions, deaths, a Sample Take (a removal without a 'death' event), undo and reload;
+  - the extinction record and its exact copy;
+  - with more than 200 members, the 200 cap and the aggregate (count and mean position);
+  - nickname cleaning and the 60-character limit; the default name.
+- Never alters behavior (the notebook kind 'favorites'):
+  - a FakeClockHost dish with three followed families (tracker and marks active, 4×, >= 3,000 ticks, a save -> load in the middle) against the same commands without favorites: equal stateHash and trajectoryDigest(world, 'full');
+  - buildSaveFile's checksum is equal with and without a notebook.
+- tests/persistence/notebook.test.ts:
+  - round trip: save -> load gives an equal record;
+  - atomic with the world: with MemoryBackend.failNextCommit the slot still holds the previous world and the previous notebook; a corrupt current record falls back to the predecessor pair;
+  - holdsSave is false after a notebook-only change;
+  - each malformed record loads the world with notebookDropped and the same stateHash as the file without a notebook: bad checksum, another worldId, an unknown kind key, 4 active favorites, a 61-character nickname, a non-integer birthId, notebookVersion 2;
+  - a g2 save (tests/helpers/g2-saves) and the schema 2 fixture load with an empty notebook and keep their recorded hashes, then re-save with a notebook while the store keeps the original as the predecessor;
+  - exportDish and exportSave carry no nickname unless includeNicknames; stripNames drops them always.
+- tests/worker/favorites-host.test.ts: favorite ops through DishHost; rebuildsExactly with a non-empty notebook; Duplicate copies favorites only; a comparison arm has no watcher.
+- tests/e2e/favorites.spec.ts (desktop):
+  - Garden -> run until a Sprinter has split -> select it -> Follow this family (nickname "Mango", Triangle);
+  - the slot shows the count; tap = Find selects the representative;
+  - Save -> reload -> Continue: the slot and nickname are back;
+  - "Export living dish file": the downloaded file's notebook has nickname null; with "Include family nicknames" it has "Mango";
+  - the worker hash is unchanged by Follow and Find (the workerHash pattern of tests/e2e/infection-overlay.spec.ts);
+  - expectNoSeriousA11yViolations on the Follow sheet, the Family sheet and the Favorites tab.
+E2E: E2E_PORT=4271 E2E_OUTDIR=tmp/dist-favorites.`,
+  },
+  {
+    key: 'garden-home',
+    port: 4273,
+    stage: 1,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P4.3 "Garden card, session memory, prompts" (lines 596-599). It implements UX §2 (16-31: "Home ─ Continue (last dish, live thumbnail)"), §2.1 Home (32-35), §2.2 Play shelf (36-40: "Square live-state thumbnails") and §3.2 First minutes (65-72), with docs/source/D08 lines 56-58 (first connection: offer "Follow this family" after a real division) and 63-64 (guidance without a compulsory tutorial: one optional prompt, "Show me" highlights without using it, never fabricate) and 172-174 (a satisfying stopping point: session memory on Save and leave; nothing invented when quiet). It also builds the wave's one visible notice slot, which stories and objectives use in stage 2.
+Read: those lines; UX §1 (8-14), §3.1 (58-64), §5.3 (172-176), §5.11 (220-226), §9 (347-355); CT §12.10 (613-617); D09 line 133 ("Do not layer this message over another D8 notification"); D-0029 (Space modality), D-0033 (Continue, keep first), D-0061 (blocking panels pause); docs/reports/reviews/g3-wave-4b/a11y-build.md, the "canvas is summarized" item (client.history has side effects); src/ui/views/{Home,Play,DishScreen}.tsx; src/ui/state.ts (prompt, PLAY_PROMPT, startRecipe, startDish, enterDish, setSpeed, saveToSlot, autosave, select, tool, sheet, settings.showPrompts, experimentWaiting); src/ui/panels/{MoreSheet,DiscoveryCard}.tsx; src/worker/protocol.ts (SnapshotMsg, VisualEvent, E_CUE, CUE_FEEDING, NewDishPreview, SlotSummary, DishInfo.recipeId/whatIfSourceId/speciesDiets); src/worker/host.ts (newDishPreview, the 'history' case, describeSlot, saveRequest); src/render/speciesColors.ts; tests/e2e/{helpers.ts,garden.spec.ts,save-reload.spec.ts}.
+
+You own (new): src/ui/prompts.ts (a pure prompt state machine), src/ui/notices.ts (the one visible notice), src/ui/views/{DishThumb,SessionMemory,NoticeHost}.tsx, src/ui/strings/home.ts, src/worker/thumbnail.ts, tests/ui/prompts.test.ts, tests/ui/notices.test.ts, tests/worker/thumbnail.test.ts, tests/worker/session-summary.test.ts, tests/e2e/garden-home.spec.ts. As this wave's owner (others add lines): src/ui/views/{Home,Play,DishScreen}.tsx, src/ui/state.ts, src/ui/panels/MoreSheet.tsx, src/ui/styles.css.
+SHARED (additive): favorites builds at the same time and owns these; re-read before each edit:
+- src/worker/protocol.ts: SlotSummary.thumb?: string; NewDishPreview.thumb?: string; ToWorker 'sessionSummary' { requestId, dishId, sinceTick }; FromWorker 'sessionSummary' { requestId, dishId, summary }.
+- src/worker/host.ts: the 'sessionSummary' case, thumb in saveRequest and describeSlot, thumb in newDishPreview.
+- src/worker/client.ts: sessionSummary().
+- src/persistence/store.ts: SaveRequest.thumb / SlotInfo.thumb, copied by slotRecordFor.
+- favorites adds lines to your files (state.ts, DishScreen.tsx, MoreSheet.tsx, styles.css): leave them alone.
+Build:
+1. Live thumbnails:
+   - src/worker/thumbnail.ts dishThumb(world) is a pure read of entity columns: a 32 × 32 grid over the dish, each byte 0 = empty, else 1 + the index of the species with the most living organisms in that block (lowest index on a tie), base64.
+   - The same function shape over a SnapshotMsg (ents + ids) serves the UI: thumbFromSnapshot.
+   - It is attached to SaveRequest/SlotInfo for named slots and the autosave. It is outside the checksum, and holdsSave still holds because the same world gives the same bytes.
+   - It is attached to NewDishPreview.
+   - DishThumb.tsx draws it on a 96 × 96 canvas (image-rendering: pixelated) with species colours from src/render/speciesColors.ts and the dish rim; role="img", aria-label "Picture of {dish name}".
+   - Sources:
+     - the open dish: the latest snapshot;
+     - Continue without an open dish: the autosave's SlotSummary.thumb;
+     - the Play Garden card: newDishPreview('FIRST_DISH_V1', recipe seed, {}).thumb, which replaces the painted GardenThumb.
+   - Nothing painted is presented as the dish.
+2. Home (UX §2.1): the Continue card shows the name, dish time (continueCardText), the thumbnail, a "Paused" badge and the mode labels. First launch with no saves: Play is emphasized and Continue hidden (already). The secondary row is unchanged.
+3. One optional prompt at a time (UX §3.2), in src/ui/prompts.ts:
+   - A pure state machine fed by snapshots, selection, tool and command results, with dish ticks as its clock; tested without a DOM.
+   - Active only when settings.showPrompts, and only on a Play-shelf Garden dish (DishInfo.recipeId FIRST_DISH_V1, or whatIfSourceId FIRST_DISH_V1).
+   - Steps and triggers, each from real state:
+     0. Arrival: "Press play and look closely." (the existing PLAY_PROMPT; cleared on first run as today).
+     1. "Tap a Sprinter.": after the arrival line clears; done when an organism is selected.
+     2. "Press Run.": only if the dish is paused when step 1 is done; done on run.
+     3. "It's eating sugar — tap to see how much.":
+        - only after a snapshot shows a B01 entity with CUE_FEEDING in its E_CUE word;
+        - say "sugar" only when DishInfo.speciesDiets lists sugar as B01's only food, else skip the step;
+        - done when the inspector opens on a Sprinter.
+     4. "A cell split.": after a snapshot VisualEvent 'birth' of B01.
+        - Fallback: when 120 dish seconds pass since the dish started with no B01 birth: "Nothing has split yet — tap one to see what's stopping it.";
+        - its Show me highlights the "Why did it stop?" shortcut (data-testid shortcut-why) once a Sprinter is selected.
+     5. "Try Feed: choose a food, see where it lands, then place it." (PROPOSED copy for UX's step description): done on an accepted deposit command; Explore already returns to Look.
+     6. "Follow this family?":
+        - only after a real B01 division;
+        - its Show me highlights the Inspector's follow button (data-testid="follow-family", which favorites builds this stage);
+        - with no such element it shows without Show me.
+   - Every prompt:
+     - ✕ dismisses it and moves to the next eligible one;
+     - "Show me" adds a highlight class (an outline, plus a pulse unless reduced motion) to the control for 3 s without pressing it;
+     - no step advances without its evidence; nothing shows while a sheet covering the dish is open;
+     - Settings "Show gentle prompts" off -> none.
+4. One visible notice (src/ui/notices.ts + NoticeHost.tsx):
+   - It replaces DishScreen's current experimentWaiting/prompt block, in the same place and role="status".
+   - API: requestNotice({ kind: 'goal' | 'experiment' | 'story' | 'prompt', id, text, actions }), dismissNotice(id), currentNotice (signal).
+   - Priority goal > experiment > story > prompt. A notice that cannot show waits, keeping the latest per kind. Nothing is ever layered (D09 line 133).
+   - While DiscoveryCard is open, nothing new shows.
+   - The LiveRegion stays the only announcer of toasts.
+5. Session memory on "Save and leave" (D08 line 174):
+   - SaveSheet gets "Save and leave" next to the slot buttons: saveToSlot (which also autosaves), then route Home.
+   - Home then shows a SessionMemory card for this visit: the dish name, the thumbnail, the dish time, and at most one recorded change since the dish was opened this session.
+   - That change comes from a new read-only worker query, 'sessionSummary' { dishId, sinceTick } -> { births: number[], deaths: number[], branches: { id, name, tick }[], fromTick, toTick, compacted }. host.ts computes it from history samples (per-second births and deaths; minute summaries where compacted, flagged) and branch records. NEVER from client.history: its host case records experiment player steps.
+   - Lines (PROPOSED copy):
+     - first established branch: "A new branch was established: {name}.";
+     - else births: "{n} births were recorded since you opened it.";
+     - else nothing (no invented highlight when the dish was quiet).
+   - Continue resumes paused at the same moment (existing).
+Done when:
+- tests/ui/prompts.test.ts:
+  - each step fires only with its evidence (snapshot fixtures with and without CUE_FEEDING, with and without a B01 'birth' VisualEvent);
+  - the 120 s text only with zero B01 births;
+  - one prompt at a time; dismiss and Show me never send a command;
+  - showPrompts false -> none; a non-Garden dish -> none.
+- tests/ui/notices.test.ts: one visible notice; priority and waiting; a dismissed notice never comes back; nothing new while the discovery card is open.
+- tests/worker/thumbnail.test.ts: dishThumb is deterministic and read-only (stateHash equal before and after); the same world gives the same bytes; the tie rule; thumbFromSnapshot agrees with dishThumb on the same moment.
+- tests/worker/session-summary.test.ts:
+  - the query is read-only (hash equal) and records no experiment player step;
+  - a quiet paused dish yields no line;
+  - a dish with births yields the births line.
+- tests/e2e/garden-home.spec.ts (desktop; seedSettings { showPrompts: true }):
+  - Home -> Play: the Garden card shows a canvas thumbnail;
+  - Start -> the arrival prompt -> Run -> "Tap a Sprinter." -> select;
+  - the Feed prompt's Show me highlights Feed without pressing it (worker hash unchanged; no sheet opened);
+  - Save and leave -> Home shows the session memory card with the dish name and thumbnail -> Continue opens paused at the same time;
+  - expectNoSeriousA11yViolations on Home, Play, the dish with a prompt, and the session memory card.
+E2E: E2E_PORT=4273 E2E_OUTDIR=tmp/dist-garden-home.`,
+  },
+  {
+    key: 'stories',
+    port: 4272,
+    stage: 2,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P4.2 "Story cards" (lines 589-595). It implements SPEC §12.7 (906-915) from §12.3 events (876-882) with §12.9 copy rules (926-933); UX §2 (16-31: the Notebook tab order), §5.9 (207-212), §9 (347-355); CT §12.10 (613-617: notifications <= 1 per 60 s; bookmarks 50 text); docs/source/D08 lines 128-155: the four templates with their required evidence and allowed explanation, the card structure, and the attention limits ("at most one new card notification per 60 simulated seconds", line 151).
+STAGE 2: stage 1 is integrated and committed. Read its code before you start: the notebook record (src/persistence/notebook.ts: NotebookRecord, KIND_PROBLEMS, readNotebook, sealNotebook), NotebookWatch (src/worker/notebookWatch.ts), favorites (src/worker/favorites.ts: active favorites and their living members), the notice slot (src/ui/notices.ts requestNotice) and the Notebook Favorites tab.
+Read: those lines; D-0025, D-0041 (event evidence wording), D-0051 (provenance); src/sim/events.ts; src/sim/reactions.ts (reactionInCell, reactionInDish, lastCompleteSecond); src/worker/snapshot.ts producersNear; src/sim/history.ts (TRAIT_REGIONS, quarterOf, TraitHistory 'recent' 10 s samples); src/sim/lineage.ts buildLineage (branch rows: differences and tradeoffs); src/ui/panels/CompareText.tsx (clock, describeChange); src/ui/strings/{lineage,inherited}.ts; src/ui/panels/TraitData.ts REGION_LABELS; src/ui/views/Notebook.tsx; the 'command' detail and world.commands.log.
+Where the detector runs: src/worker/stories.ts, in the worker, from events and observation, called by NotebookWatch after each tick of a played dish. Never in src/sim; never for comparison arms or rollback replays.
+
+You own (new): src/worker/stories.ts (StoryDetector + StoryPacer), src/persistence/notebookStories.ts (the StoryCard type + storiesProblem), src/ui/stories.ts, src/ui/strings/stories.ts, src/ui/views/NotebookStories.tsx, src/ui/panels/StoryCard.tsx, tests/ui/stories.test.ts, tests/worker/stories-host.test.ts, tests/e2e/stories.spec.ts. As this wave's owner: src/ui/views/Notebook.tsx.
+SHARED (additive):
+- src/persistence/notebook.ts: KIND_PROBLEMS.stories and the optional stories?: StoryCard[] key.
+- src/worker/notebookWatch.ts: one line constructing the detector and one calling it.
+- src/worker/protocol.ts: ToWorker 'storyMark' { requestId, dishId, id, mark: 'seen' | 'dismissed' }; the notebookChanged change { kind: 'story', id, notify: boolean }.
+- src/worker/host.ts, src/worker/client.ts: the storyMark case and method.
+- src/ui/state.ts: the Route notebook tab union gains 'stories'.
+- src/ui/views/Home.tsx: the Notebook button's quiet dot for an unseen card.
+- src/ui/styles.css: your own block.
+objectives builds at the same time and adds its own lines to the same shared files: re-read before each edit. No content/ edits.
+Build:
+1. The StoryCard record (notebook kind 'stories'):
+   - At most 50 per dish (CT §12.10 "bookmarks 50 text"; D08 line 149 "Reuse existing bookmark, gallery and snapshot limits"). When full, the oldest dismissed card goes first, else the oldest seen, else the oldest card, and the tab says one was removed.
+   - Shape: { id: 'story-<n>', template: 'firstSplit' | 'enzymeAtWork' | 'familyChanged' | 'placeChanged', key, worldId, ruleset: { simulationVersion, evolutionRulesVersion, moduleRegistryVersion, contentHash }, evidence: string[], summary, timeRange: [fromTick, toTick], imageRefs: [], favoriteId: string | null, notified, seen, dismissed }.
+     - key = template + ':' + the lineage root or the region (dedupe).
+     - evidence has at least one id: 'event:<id>', 'reaction:<enzyme>:<second>:<cell>', 'branch:<id>', 'traits:<region>:<second>', 'command:<seq>'.
+     - summary holds the template's ids, species ids, counts, amounts and ticks: everything the captions need, so a card outlives its raw events (D08 line 149).
+     - imageRefs stays empty until P4.6 adds pictures.
+   - storiesProblem refuses: a card without evidence, an unknown template, a non-finite value, more than 50 cards, a summary missing a field its template needs.
+2. Detector (StoryDetector, read-only), templates and evidence (D08 lines 130-145):
+   - firstSplit:
+     - Trigger: a committed 'birth' event, the first per species in this dish, and, for an active favorite family, the first in that family (key by root).
+     - Evidence: the event id, with parent and daughter references.
+     - Summary: changedA/changedB and the recorded values of a changed locus when lineage records still hold them.
+     - Captions:
+       - earlier "A {Species} was growing.";
+       - event "A cell split. Its offspring inherited these traits." (SPEC §12.7, exact);
+       - later "Both daughters carry the parent's traits." or "{n} of 2 daughters carry a recorded change: {locus} {from} → {to}." (inherited.ts locus names).
+   - enzymeAtWork:
+     - Trigger: once per whole second, reactionInDish > 0 for an enzyme. Key = enzyme + region (quarterOf of the cell that converted most).
+     - Evidence: the reaction id plus the cell's recorded amount.
+     - Caption: "Starch became sugar here." (exact; for the other enzymes "Oil became metabolite here." and "Protein became broth here.").
+     - A producer is named only when producersNear returns a provenance (D-0051); otherwise none.
+   - familyChanged:
+     - Trigger: a 'branchEstablished' event.
+     - Evidence: the event id and the branch id.
+     - Captions name the inherited difference and its tradeoff in the Lineage sheet's wording (strings/lineage.ts). Never "better", "adapted", "helps" or any benefit claim (SPEC §12.9).
+   - placeChanged:
+     - Trigger: a 'command' event with accepted > 0 whose logged payload has a position (inoculate, deposit, placeObject). Its region is quarterOf(x, y).
+     - Once a trait sample at least 60 s later exists, compare that region's per-species counts with the last sample at or before the command. A card only if a count changed.
+     - Evidence: the command seq and both samples.
+     - Captions:
+       - "{describeChange wording, e.g. You added sugar}" at {m:ss};
+       - "Before: {n} {Species} in the {region}" at {m:ss};
+       - "After: {m} {Species} in the {region}" at {m:ss};
+       - plus "Other recorded changes in between: {k}" when other interventions fell inside (D08 line 145). It describes a sequence and claims no cause.
+       - Region words come from REGION_LABELS, lower-cased: "top left", ...
+   - No template records a card without its evidence.
+3. Pacing (StoryPacer; dish ticks, deterministic):
+   - At most 1 new notification per 600 ticks (60 simulated seconds: D08 line 151; CT §12.10).
+   - Dedupe by key within that window: later evidence joins the waiting card.
+   - When several wait: a favorite-family card first, then the first unseen template (no seen card of that template in this dish), then the earliest.
+   - Cards not notified enter the notebook quietly.
+   - The worker posts notebookChanged { kind: 'story', id, notify }.
+   - PROPOSED DECISION: sim time here, while the P2.3 DiscoveryPacer keeps its wall-clock 60 s.
+4. UI:
+   - A notify card calls requestNotice({ kind: 'story' }) with "Something happened: {title}" and the buttons Open and ✕. There is never a second visible notice, and no sound.
+   - Notebook tab "Something happened", first in TABS (UX §2 order), with a quiet dot when a card is unseen (UX §5.9); the Home Notebook button shows the same dot.
+   - Card view (StoryCard.tsx):
+     - at most 3 panels, captions with sim time (m:ss);
+     - the badge "Memory, not replay" (every card has no snapshot now; SPEC §12.7);
+     - buttons Spotlight and Dismiss; Save picture comes with P4.6 share and is not shown (PROPOSED DECISION).
+   - Opening a card marks it seen (storyMark).
+   - Spotlight routes to the dish without changing its speed, then centers the camera (renderer camera.centerOn / zoomPreset) on the surviving target (its birthId in the latest snapshot ids) or else the recorded cell. Camera only: no command, no world change, nothing re-enacted.
+   - With no dish open the tab says "Story cards are kept with each dish. Open a dish to see what happened in it."
+Done when:
+- tests/ui/stories.test.ts:
+  - no card without evidence: each template refused without it;
+  - caption resolution: every caption built from the stored summary plus the dish's names; a species missing from the dish falls back to its id; times as m:ss; the exact SPEC strings;
+  - pacing: 1 per 600 ticks, dedupe within the window, priority favorite -> unseen template -> earliest, quiet cards recorded.
+- Never alters behavior (the notebook kind 'stories'): the detector on vs off over the same FakeClockHost run (Garden plus one sugar deposit, 4×, >= 3,000 ticks): equal stateHash and trajectoryDigest(world, 'full'). Spotlight sends no command.
+- tests/worker/stories-host.test.ts:
+  - cards round-trip in the notebook through save -> load;
+  - a malformed card drops the notebook with notebookDropped and the world loads;
+  - a stage 1 notebook (no 'stories' key) and a g2 save load with no cards;
+  - 50 cards plus one removes by the stated order.
+- tests/e2e/stories.spec.ts (desktop):
+  - Garden -> run at 4× until the first split -> the notice appears once;
+  - Notebook "Something happened" shows "A first split" with its captions and "Memory, not replay";
+  - Spotlight returns to the dish with the worker hash unchanged (workerHash pattern) -> Dismiss;
+  - expectNoSeriousA11yViolations on the tab and the card.
+E2E: E2E_PORT=4272 E2E_OUTDIR=tmp/dist-stories.`,
+  },
+  {
+    key: 'objectives',
+    port: 4274,
+    stage: 2,
+    // critical: goal state is saved in the notebook record and must resume exactly after a load.
+    critical: true,
+    prompt: `ASSIGNMENT: BUILD_DIRECTIVE P4.4 "Objective engine and goals" (lines 600-605). It implements SPEC §13.5 (970-979) and CT §10.5 Goals (511-516) under g4-plan.md call 2 (D-0071), with docs/source/D09 lines 117-134:
+- offer goals on Garden;
+- Start arms the predicate at the current tick; pause stops the goal clock;
+- one dismissible sentence and Continue, without changing the pause/run state; never layered over another notice;
+- "Continued freely";
+- never change the simulation to force success.
+The custom challenge editor in §13.5 belongs to P4.8 and Try my dish (§13.6) to P4.7, both in wave 6: not now.
+STAGE 2: stage 1 is integrated and committed. Read its code before you start: src/persistence/notebook.ts (KIND_PROBLEMS, readNotebook, sealNotebook), src/worker/notebookWatch.ts, src/ui/notices.ts (requestNotice), src/ui/views/Play.tsx and MoreSheet.tsx as they now are.
+Read: those lines; SPEC §13.2 (946-952); src/sim/pairedRun.ts lines 1-66 (the measurement grammar), ArmObserver, stepObserved, measureArm, aliveCounts, poolTotal; src/sim/experiments.ts GateWatch, gateClauses, evaluateGate; src/sim/content/schema.ts (PredicateSchema, ObjectiveSchema, ExperimentSchema.gate, VariantSchema.objectiveId); src/sim/content/registry.ts (objectives parsing, the variants' objectiveId check, the phase filters of experiments and variants); src/sim/history.ts (TRAIT_REGIONS, quarterOf); src/sim/births.ts (the commit path; capacityBlocked and divBlockCode; propG0/propG1); tests/helpers/{world,host,registry}.ts; D-0022, D-0027, D-0062.
+Where the engine lives (decided here; record it as a PROPOSED DECISION):
+- The evaluator is src/sim/objectives.ts. It is pure and read-only like GateWatch in src/sim/experiments.ts: it reads entity columns, fields and an ArmObserver, which only src/sim may read (ARCH §3), and it runs headless in tests/sim as BUILD_DIRECTIVE asks. Nothing in the tick or its stages imports it; add a test that no src/sim file except src/sim/content/** imports it.
+- The per-dish runner and the goal state are src/worker/goals.ts (notebook state, never in src/sim; g4-plan call 1).
+
+You own (new): src/sim/objectives.ts, src/worker/goals.ts, src/persistence/notebookGoals.ts, content/objectives/{SEE_SPRINTER_SPLIT,KEEP_SPRINTERS_GOING,WATCH_STARCH_BECOME_FOOD}.json, src/ui/goals.ts, src/ui/panels/GoalChoice.tsx, src/ui/strings/goals.ts, tests/sim/objectives.test.ts, tests/worker/goals-host.test.ts, tests/content/objectives.test.ts, tests/e2e/goals.spec.ts. As this wave's owner: src/sim/content/schema.ts (ObjectiveSchema, additive) and src/sim/content/registry.ts (objective checks and the phase filter).
+SHARED (additive):
+- src/persistence/notebook.ts: KIND_PROBLEMS.goals and the optional goals?: GoalRecord[] key.
+- src/worker/notebookWatch.ts: one line constructing the runner and one calling it (its stage hook joins the list).
+- src/worker/protocol.ts: ToWorker 'goalStart' { requestId, dishId, objectiveId }, 'goalLeave' { requestId, dishId }, 'goalShown' { dishId, id } and 'goalCatalog' { requestId, dishId: string | null, recipeId: string | null } with a reply 'goalCatalog' { requestId, goals }; the notebookChanged change { kind: 'goal', id, state }.
+- src/worker/host.ts, src/worker/client.ts: the matching cases and methods.
+- src/ui/views/Play.tsx: mount GoalChoice under the Garden card's Start.
+- src/ui/panels/MoreSheet.tsx: the Goal row.
+- src/ui/state.ts: startRecipe's optional goal.
+- src/ui/styles.css: your own block.
+- tests that pin content counts (update them).
+stories builds at the same time and adds its own lines to the same shared files: re-read before each edit. Never change PredicateSchema (experiment gates share it) or content/variants/*.
+Build:
+1. Content:
+   - ObjectiveSchema gains (additively) summary, completedText, endedText (optional) and offerOn: string[] (recipe ids; a variant counts through its sourceId).
+   - objectivePredicateProblem(def, registry) in src/sim/objectives.ts types the params, and validateContent calls it. It refuses:
+     - an unknown species, field, region, enzyme or event type;
+     - a non-finite or <= 0 duration or threshold;
+     - 'custom' (PROPOSED DECISION: objectives use the five named types only);
+     - transferAcrossGate naming a gate that no enabled structure provides.
+   - Registry: objectives with phase > buildPhase are skipped, not errors (as experiments and variants are), so registryWith(G2_LISTS) (buildPhase 2) and the fence still validate.
+   - The three files, phase 4 (titles are CT §10.5's; the other copy is PROPOSED):
+     - SEE_SPRINTER_SPLIT:
+       - predicate observeEvent { event: 'birth', species: 'B01' }; offerOn ['FIRST_DISH_V1'];
+       - summary "Watch for a Sprinter to divide. Splits that are blocked or cancelled don't count.";
+       - completedText "A Sprinter split at {time}.".
+     - KEEP_SPRINTERS_GOING:
+       - predicate keepSpeciesAlive { species: 'B01' }, durationSeconds 180;
+       - summary "Keep at least one Sprinter alive for 180 seconds of dish time.";
+       - completedText "Sprinters kept going for 180 seconds.";
+       - endedText "No Sprinters remain, so this attempt ended at {time}. The dish keeps going.".
+     - WATCH_STARCH_BECOME_FOOD:
+       - predicate observeEvent { event: 'conversion', enzyme: 'starch' };
+       - summary "Watch for starch being turned into sugar.";
+       - completedText "Starch became sugar at {time}." It names no producer (D09: "Do not invent a producer attribution").
+   - Then run npx tsx tools/content-validate.ts --write.
+2. Engine (src/sim/objectives.ts):
+   - ObjectiveWatch(def, world) starts its own ArmObserver at Start and evaluates after EVERY tick. GateWatch's whole-second cadence would miss a birth that commits between a whole second and a save.
+   - The five predicate types, with the pairedRun grammar where it fits:
+     - keepSpeciesAlive: alive.SP > 0 at every tick from Start for durationSeconds -> completed; alive.SP = 0 at any tick -> ended, latched (a later Add Life does not revive the attempt; ArmObserver's extinctAt resets, so the latch is the engine's).
+     - biomassThreshold: biomass.SP (biomassTotal when no species is named) >= threshold -> completed.
+     - transferAcrossGate: the quantity of a material across a named gate. This build has no gate structures (S02 is Phase 5): evaluate through an injected GateReading interface, null when the world has no such gate (then the goal is never offered), and test it with a fake reader.
+     - observeEvent:
+       - 'birth' -> births.SP since Start > 0 (committed births only: history.pendingBirths);
+       - 'conversion' -> converted.<enzyme> since Start > 0 (actual converted carbon, not enzyme presence; the 'conversion' EventType is never emitted);
+       - other event types (e.g. 'branchEstablished', 'capture') through the event ring by type and species since Start.
+     - fieldInRange: the mean of field F over region R's playable cells (TRAIT_REGIONS: dish or a quarter by quarterOf) within [min, max] at every tick for durationSeconds -> completed. Leaving the range resets the hold; it does not end the attempt.
+   - ObjectiveProgress = { startTick, holdSinceTick: number | null, state } is serializable. A running goal resumes after a load: durations from holdSinceTick; event goals from a fresh observer at the load tick, which is exact because evaluation is per tick.
+3. Goal state (notebook kind 'goals': src/persistence/notebookGoals.ts goalsProblem; src/worker/goals.ts GoalRunner via NotebookWatch, played dishes only):
+   - GoalRecord = { id: 'goal-<n>', objectiveId, title, predicate (copied at Start, so later content cannot relabel it), state: 'inactive' | 'running' | 'completed' | 'ended' | 'continuedFreely', startTick, endTick: number | null, endReason?: 'zero' | 'undone' | 'left', progress, value?: number, shown: boolean }.
+   - At most one running; at most 20 records per dish.
+   - Off by default: no goal starts unless the player chooses one.
+   - Start arms the goal at the current tick. Pause stops its clock (dish ticks).
+   - Completion -> 'completed' and notebookChanged { kind: 'goal' }. The UI shows ONE dismissible sentence (completedText) with "Continue" through requestNotice({ kind: 'goal' }) and never calls setSpeed: the dish keeps its pause/run state.
+   - 'Leave goal' -> 'continuedFreely'; the record says "Continued freely.".
+   - ended -> endedText with "Try again" (a new attempt from the current tick) and "Continue freely".
+   - Undo or an error rollback while a goal runs ends the attempt with endReason 'undone' (the observer cannot rewind; the experiments' precedent, D-0027; PROPOSED DECISION). A completed goal stays completed.
+   - A reload resumes a running goal at its saved progress.
+4. Compatibility and catalog (goalCatalog): a goal is offered when offerOn includes the dish's recipe id or its variant's sourceId, and the world's recorded manifest has everything the predicate names (species, the enzymes system and STARCH for the starch goal).
+5. UI:
+   - GoalChoice on the Play Garden card, below Start: "Goal (optional)", a radio group with "No goal" checked by default and each compatible goal with its summary. Start starts the dish (startRecipe) and then goalStart at its tick 0 (the dish starts paused).
+   - More sheet, Goal row:
+     - while running: "Goal: {title} — running since {m:ss}" and "Leave goal";
+     - otherwise: "Try a goal…" listing the compatible goals, and the last record's state.
+   - Strings in src/ui/strings/goals.ts; the goal texts come from content.
+Done when:
+- tests/sim/objectives.test.ts:
+  - each predicate type passes, waits and ends on small worlds (tests/helpers/world.ts), the gate type with a fake reader;
+  - the three goals on FIRST_DISH_V1 (seed 104729) complete at a recorded tick;
+  - BLOCKED OR CANCELLED PROPOSALS NEVER COUNT, fixture:
+    - B01s whose division is blocked (capacityBlocked or divBlockCode, e.g. no room or the agent cap) and a parent holding a drawn proposal that is removed before it commits: births stay 0 and the goal stays running;
+    - then the first committed birth completes it at that tick;
+  - the starch goal needs converted carbon: a dish with the producer and no starch never completes;
+  - keepAlive ends at the first zero tick, and a later inoculate does not revive it;
+  - save -> load at an awkward tick (paused in the middle of a second, right after a commit) completes at the same tick as an uninterrupted run;
+  - evaluation is read-only (the notebook kind 'goals' never alters behavior): stateHash and trajectoryDigest(world, 'full') are equal with and without a running goal over >= 3,000 ticks at 4×.
+- tests/worker/goals-host.test.ts:
+  - completion never changes speed (running stays running, paused stays paused);
+  - leave -> continuedFreely; undo -> ended 'undone';
+  - goal records round-trip through save -> load;
+  - a malformed goal record drops the notebook with notebookDropped and the world loads;
+  - a stage 1 notebook (no 'goals' key) and a g2 save load with no goals;
+  - nothing runs without goalStart.
+- tests/content/objectives.test.ts: the three files validate; a gate objective, a 'custom' one and an unknown species are refused; a phase 5 objective is skipped under buildPhase 4; registryWith(G2_LISTS) still validates.
+- tests/e2e/goals.spec.ts (desktop):
+  - Play: "No goal" is checked by default -> choose "See a Sprinter split" -> Start -> Run at 4×;
+  - the one sentence appears while the dish keeps running -> Continue dismisses it -> More shows the goal as completed;
+  - expectNoSeriousA11yViolations on the Play card with the goal choice and on the goal sentence.
+E2E: E2E_PORT=4274 E2E_OUTDIR=tmp/dist-objectives.`,
+  },
+  {
+    key: 'notice-cards',
+    port: 4271,
+    stage: 2,
+    prompt: `ASSIGNMENT: the wave 5a integration verifier's three MINORs about the notice place (docs/reports/reviews/g4-wave-5a/integrate-verify1.md, items 1-3), under the rules D08 "Attention limits" (docs/source/D08 lines 150-151: "never more than one visible notice"; "Prefer a favorite-family event"), D09 line 133 ("Do not layer this message over another D8 notification"), CT §12.10 ("notifications <= 1 per 60 s") and D-0074. Small, UI-only task: no worker, persistence, sim or content change.
+Read first: src/ui/notices.ts (setCardOpen, shownCard, CARD_ORDER, recompute), src/ui/views/NoticeHost.tsx (wire(): the two card effects), src/ui/favorites.ts (extinctCard, onNotebookNotice 'favoriteExtinct' and 'favoritesRestored', followOpenDish, extinctCardFavorite), src/ui/panels/FavoriteExtinct.tsx, src/ui/panels/LineageState.tsx (discovery, pacer env cardOpen/deliver, showDiscovery, dismissDiscovery), src/ui/panels/DiscoveryPacer.tsx, src/ui/panels/DiscoveryCard.tsx, tests/ui/notices.test.ts, docs/reports/reviews/g4-wave-5a/integrate-code-minors.md.
+LEAD DECISION (implement exactly; the lead records it as D-0076 from your PROPOSED DECISION text):
+1. No preemption. A card on screen keeps the notice place until its own source closes it. In notices.ts, shownCard stays the current card while its source still asks for it. Only when it closes does the next requested card show. When two cards are asked for and none is on screen, the followed family's extinction card goes first (D08 "Prefer a favorite-family event"): CARD_ORDER ['extinct', 'discovery'].
+2. A new discovery card is not created while the extinction card is on screen. In LineageState.tsx showDiscovery, for a new card (newCard true), after the lineage answer arrives and before anything is shown or paused: if shownCard is 'extinct', return [].
+   - The pacer then keeps those branch ids waiting, starts no 60 s gap and tries again after DISCOVERY_RETRY_MS.
+   - The pause-on-discoveries pause happens only when a card really shows.
+   - Joining an open discovery card is unchanged.
+   - DiscoveryCard.tsx renders only while shownCard is 'discovery'; otherwise it is only a waiting request.
+3. One new card notification per 60 s across the two cards (CT §12.10). When the extinction card becomes the shown card, the discovery pacer counts it as the last card shown: a small DiscoveryPacer method, e.g. otherCardShown(), sets lastShownAt to now. So a waiting discovery card shows no sooner than 60 s after the extinction card appeared. The extinction card itself is never delayed except while a discovery card is on screen.
+4. No extinction card is lost. extinctCard holds one id, so a second favoriteExtinct while the first card waits or shows overwrites it. Make it a FIFO queue of favorite ids with no duplicates:
+   - the card shows the head;
+   - Close, Look back, Continue exploring and Start a new dish each remove the head;
+   - 'favoritesRestored' removes every queued id whose family is back or gone from the record, not only the shown one;
+   - followOpenDish clears the queue.
+   Keep the exported names other files use, or update every use.
+5. Test the wiring that makes the cards appear. vitest runs in node with no DOM.
+   - Move the two card effects of NoticeHost.tsx wire() into an exported function, e.g. wireNoticeCards().
+   - Move FavoriteExtinct's render guard into an exported pure function in src/ui/favorites.ts, e.g. extinctCardToShow(): the head favorite when shownCard is 'extinct', it is extinct and a dish is open; else null. The component uses it.
+   - Test both with signals in node.
+You own: src/ui/notices.ts; src/ui/favorites.ts (only the extinction-card queue and its guard); src/ui/panels/{FavoriteExtinct,DiscoveryCard,DiscoveryPacer}.tsx; src/ui/panels/LineageState.tsx (only showDiscovery and the call of the new pacer method); src/ui/views/NoticeHost.tsx (only the two card effects). The stories and objectives builders may add notice sources to NoticeHost.tsx at the same time: re-read it before each edit and keep your edit small. Tests: tests/ui/notices.test.ts, tests/ui/favorites.test.ts (additive), the pacer's existing unit test (find it with grep -rl DiscoveryPacer tests/), and a new tests/ui/notice-cards.test.ts if cleaner.
+Done when:
+- Unit tests prove each of these, and each new test fails on the old code (show it with a load-time mutant or by reverting the hunk in a scratch copy, restored byte for byte):
+  - a discovery card asked for while the extinction card shows does not take its place (shownCard stays 'extinct'), and shows after it closes;
+  - a tie goes to the extinction card;
+  - two extinctions queue and both show, in order;
+  - 'favoritesRestored' drops queued ids whose family is back;
+  - the pacer's 60 s gap counts the extinction card;
+  - showDiscovery's refusal keeps the ids waiting with no gap and no pause (test through the pacer env or an exported predicate);
+  - the wiring and the render guard (item 5).
+- E2E on desktop AND phone-portrait, E2E_PORT=4271 E2E_OUTDIR=tmp/dist-notice-cards, still pass: the specs that show discovery cards (find them with grep -rln "discovery-dismiss" tests/e2e) and tests/e2e/favorites.spec.ts.
+- Your report has a PROPOSED DECISION paragraph for D-0076 (the five rules as built).`,
+  },
+]
+
+
+const WAVE_ID = 'g4-wave-5b' // stage 2 reports go to docs/reports/reviews/g4-wave-5b/ (stage 1's are in g4-wave-5a/)
+const OWNER_CONTEXT = `OWNER CONTEXT (written by the lead, the main session working for the owner): the owner's latest chat message is "lets get started" (after the codespace stopped overnight), the owner's standing instruction to resume the unattended Pixelmeba build where docs/agent/RESUME.md says (CLAUDE.md "Start here, every session"; docs/agent/fast-track.md). The task below is part of that build: G3 is tagged, Phase 4 wave 5 stage 1 (favorites, garden-home) is committed, and this run is stage 2. Do only the Pixelmeba task below.`
+const ag = (prompt, opts) => agent(`${OWNER_CONTEXT}\n\n${prompt}`, opts)
+
+// ---- runner" on, with A.wave set.
+// Builders: effort high, unit tests + their own new e2e journeys on the desktop and phone-portrait projects (G3 lesson, D-0069).
+// One rules verifier over the whole wave diff (effort high), plus a targeted saves/determinism verifier for
+// each task marked critical: true. Fix rounds only for tasks with a BLOCKER or MAJOR (at most two);
+// MINORs go to the lead's integration.
+//
+// export const meta = {
+//   name: 'g4-wave-N',
+//   description: 'Phase 4 wave N (fast track): file-disjoint builders, one wave verifier over the whole diff, a saves lens for critical tasks, fix rounds only for BLOCKER/MAJOR',
+//   phases: [
+//     { title: 'Build', detail: 'one builder per task, effort high; unit tests + own e2e on desktop and phone-portrait' },
+//     { title: 'Verify', detail: 'one rules verifier over the wave diff; a saves lens per critical task' },
+//     { title: 'Fix', detail: 'only tasks with a BLOCKER/MAJOR; at most two rounds' },
+//   ],
+// }
+
+// ---- runner
+// A = { wave, state, tasks: [{ key, port, prompt, critical?: true | 'own', finish?: '<resume note>' }], only?: ['key', ...], verifyGroups?: [['key', ...], ...] }
+// critical: 'own' → its own saves verifier; critical: true → one saves verifier shared by all such tasks.
+const A = { wave: WAVE_ID, state: STATE + STAGE1_AS_BUILT, tasks: WAVE_TASKS, only: ['stories', 'objectives', 'notice-cards'] }
+const WAVE = A.wave
+const R = `docs/reports/reviews/${WAVE}`
+const TASKS = A.only ? A.tasks.filter((t) => A.only.includes(t.key)) : A.tasks
+const KEYS = TASKS.map((t) => t.key)
+
+const PRE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Phases 0–3 are tagged g0/g1/g2/g3. ${A.state} You build part of Phase 4 "Wonder, Replay, Android" (docs/BUILD_DIRECTIVE.md "Phase 4"; the lead's plan and up-front calls: docs/agent/g4-plan.md). Canonical rules: docs/PIXELMEBA_IMPLEMENTATION_SPEC.md (SPEC), docs/CONTENT_TABLES.md (CT, every number), docs/ARCHITECTURE.md (ARCH), docs/UX_SPEC.md (UX), docs/CONFLICT_REGISTER.md. docs/DECISIONS.md holds rulings: read every title, and in full the ones your assignment names. Most relevant: D-0006, D-0007 and D-0008 were written for Phase 3; D-0019 schema bump + migration by copy + old-save test; D-0024/D-0028 Lab edits, structures as content; D-0030 founder modes, import refusal of unimplemented modules; D-0032 module marks in the atlas; D-0033 keep the open dish first; D-0035 world schema 4 with a hash-neutral stateHash; D-0036 version bumps (buildPhase 3, contentVersion 2; simulationVersion stays 3); D-0037 Sample; D-0038 film is eaten as detritus; D-0039 tool texts as content; D-0043 links as entity columns; D-0044 chemistry and habitats as built; D-0045 the stage 8 reservation framework as built; D-0046 organism art as built; D-0047…D-0050 wave 2 as built; D-0051…D-0058 wave 3 as built (Sample D-0054, modules D-0055…D-0058); D-0059 the module flip (moduleRegistryVersion 2); D-0060 and later: read every title (Phase 3 wave 4, EXP_104, the G3 gate, and the Phase 4 lead calls of docs/agent/g4-plan.md once recorded). Contract (CLAUDE.md): determinism (randomness only via det(seed, stream, ...keys) in src/sim/rng.ts; prefer an existing stream with a new KIND key; add a NEW stream id only if unavoidable and never reuse one; never Math.random, Date, or Map/Set/object-key iteration order in src/sim), conservation ledger (every material move is internal and balanced, or an input/export), no hidden rescue, honest labels ("coincided with" until a mechanism supports "because"; never "superior/advanced/perfect/adapted/immune"), content is validated JSON, the UI changes the world only through commands, saves are sacred (no world schema bump in this wave unless your assignment says so).
+
+DETERMINISM FENCE (unchanged from Phase 3; Phase 4 adds NO simulation rule, g4-plan.md call 6: if your work seems to need one, stop and report it). tests/fixtures/g2-replay.test.ts (saves written by the g2 build load and continue bit-identically) and the four tests/fixtures/trajectory-fence*.test.ts files (each registered recipe's biology digest under registryWith(G2_LISTS) and under the shipped manifest) must pass after your change. Gate every new rule on the world's own recorded manifest through src/sim/gates.ts (worldHasSystem / worldHasSpecies / worldHasModule; or world.fields[id] !== undefined, world.modules[id] !== undefined), or on the presence of the organisms it concerns — never on a build constant — so an old save never gains a rule it did not record. Never hard-code stateHash literals in new tests; compare relationally or with tests/helpers/trajectory.ts trajectoryDigest(world, 'g2' | 'full'). tests/helpers/trajectory.ts is SHARED only to register new post-g2 state in its POST_G2_* tables. If your work would change a fence value, do not make that change: report "FENCE: <recipe> <why>". Only the lead updates the fence; you may run "npx tsx tools/fence-update.ts --add <recipe>" for recipes you create.
+
+NOTEBOOK STATE (g4-plan.md call 1). Favorites, nicknames, story cards, bookmarks, gallery entries, prediction notes and goal progress are notebook state, kept in the per-dish notebook record next to the world save: never in stateHash, never read by src/sim, never sent to the sim as a command that changes biology. Every kind you add gets a test that it never alters behavior (equal stateHash over a run with and without it) and an import test (a malformed record is dropped with a message; the world still loads; a failed write never touches the current world).
+
+CONTENT AND MANIFEST. content/manifest.json is SHARED: only insert the IDs your assignment names (arrays sorted ascending), never remove IDs, never change version fields unless your assignment says so. Add the native abilities/modules you implement to src/sim/content/implemented.ts (additive). For content another builder of this wave enables, test through registryWith({...}) (allowUnimplemented only for species whose ability another builder of this wave implements; say so). After changing anything under content/ run "npx tsx tools/content-validate.ts --write" (a contentHash or atlas mismatch caused by another agent's in-flight edit is not your bug; say so). An enabled species needs its atlas frames (all 14 Phase 3 species have them since wave 1), an enabled module its feature-mark frames (D-0032). Update any test that pins a shipped list your edit moves (e.g. tests/worker/host.test.ts speciesIds).
+
+OWNERSHIP. The lead commits: do NOT run git add/commit/stash/checkout/reset/rm/restore and do not delete files you did not create. Other agents edit the same working tree right now. Edit ONLY the files your assignment lets you own. SHARED files: additive edits only (new functions, cases, fields, or a one-line hook call into your own new file), re-read the file immediately before each edit, keep edits small, never reformat/reorder/rename code you did not write. Only the wave's art owner edits art/src/** or runs npm run art:build. Never run prettier on files you do not own. If you need a change elsewhere, describe it precisely in your report. Line numbers in your assignment are hints: find code by symbol (git grep -n) before editing.
+
+TESTS (fast track). The machine has 2 CPUs shared by several agents. Run targeted vitest files only (never the whole suite), long commands with run_in_background and an until-loop wait (never a bare sleep). Browser tests: ONLY your own new or changed journeys, on the desktop AND phone-portrait projects, with your own port and build folder: E2E_PORT=<port> E2E_OUTDIR=tmp/dist-<key> npx playwright test <your specs> --project=desktop --project=phone-portrait. (At G3, journeys run on desktop only hid nine phone failures until the gate, D-0069: on a 360 px phone a tap picks organisms within about 4 cells, the inspector and sample panels cover part of the dish, and the speed control is one cycling button; use the helpers in tests/e2e/helpers.ts such as chooseSpeed/expectSpeed.) Do not re-run other specs and do not run phone-landscape: the lead runs the whole three-project suite at the gate. Playwright silently reuses a server already on your port: stop your port before and after each run (lsof -t -i :<port> | xargs -r kill; never pkill). The e2e app has no test hook: journeys that need the worker wrap Worker in an init script and speak the protocol, as tests/e2e/lab-tools.spec.ts watchWorker/workerHash do. Timings taken while others run are inflated; leave perf numbers to the lead. NEVER end your turn while a command you started is still running: no notification can reach you after you return, so wait for it in the same turn (an until-loop on its output file or exit marker) and only then write your report; your final message must be the full report, never a promise to report later.
+
+BEFORE FINISHING: npx tsc -p tsconfig.json --noEmit and npx eslint <your files> clean; npx vitest run tests/fixtures/g2-replay.test.ts tests/fixtures/trajectory-fence tests/fixtures/conservation-closed-lid.test.ts tests/fixtures/determinism.test.ts <your tests> all pass; your own e2e journeys pass on desktop; screens you touched have no serious/critical axe violations (expectNoSeriousA11yViolations), touch targets ≥ 48 px and text ≥ 16 px. Put proposed decisions in your report as "PROPOSED DECISION: …".`
+
+const FINISH_NOTE = (what) => `IMPORTANT — RESUMING INTERRUPTED WORK. A previous builder with exactly this assignment was cut off; its uncommitted work is in the working tree (git status / git diff). ${what} Do NOT start over and do not discard its work. First audit the existing work against EVERY item of the assignment's Build and "Done when" lists: per item DONE (file:line + the test that proves it, re-run now) / PARTIAL / MISSING / WRONG. Then complete everything PARTIAL/MISSING/WRONG and re-run your tests.`
+const REPORT = (key, suffix) => `When you finish, write your final report ALSO to ${R}/${key}-${suffix}.md (create the folder if needed; besides the docs files your assignment names, this is the only docs file you may create), then return the same report as your final message.`
+const BUILD_FINAL = `Final message: a plain report — a checklist of every Build and "Done when" item (DONE with file:line and the proving test / NOT DONE and why), files created/changed, what each test proves (and how you checked it fails without the mechanism), commands with results (paste the pass/fail summary lines), FENCE notes, bugs noticed elsewhere, proposed decisions.`
+
+const SAFE = (dir, port) => `Do NOT edit any repository file except your own report file named below, and do NOT run git add/commit/stash/checkout/reset/restore. Scratch goes in tmp/${dir}/ (git-ignored). 2 CPUs shared: targeted commands, generous timeouts, run_in_background + an until-loop for long runs. Browser tests only to prove a UI problem you suspect: E2E_PORT=${port} E2E_OUTDIR=tmp/dist-${dir}, desktop project only; stop only that port before and after (lsof -t -i :${port} | xargs -r kill). Never pkill. Never end your turn while a command you started is still running: wait for it first (no notification reaches you after you return).`
+const RULES_LENS = `LENS: rules, determinism, conservation, tests and player-facing truth. Check every rule and number against the cited canonical docs (quote the doc line when you claim a mismatch). Run tests/fixtures/g2-replay.test.ts, tests/fixtures/trajectory-fence (the four-file prefix), tests/fixtures/conservation-closed-lid.test.ts and the builders' new tests yourself. Read the diff (git status / git diff; new files are untracked). Look for: vacuous tests or weaker proxies (would the test fail if the mechanism were deleted? try it with a load-time mutant under tmp/, never by editing tracked files); rules gated on a build constant instead of the world's manifest; determinism leaks (Math.random, Date, Map/Set/object-key iteration in src/sim, reused RNG streams, float order changed for existing species); unledgered material moves; save-shape changes without a schema bump and migration; hard-coded stateHash literals; edits outside a task's ownership; non-additive edits to SHARED files; manifest or version-field edits no assignment allowed; and, by reading the UI code and strings, visible claims that do not trace to a measured value or reason code, marks or animations without the state behind them, and copy against UX_SPEC tone.`
+const SAVES_LENS = `LENS: saves and determinism only, for the task(s) named below. Prove or refute: same seed + content + command log gives the identical stateHash at 1×, at 4× (run(world, n) vs four quarter runs), and across serialize → deserialize and saveFile build → load at awkward moments (mid-transaction, right after the new state appears, right before it ends); g2 saves load and continue bit-identically; any new saved state is canonical (order-independent), validated on import (refused with a message that ends "Nothing was loaded."), counted in the ledger, and either hash-neutral while empty or deliberately hashed; nothing outside src/sim draws simulation randomness. Write load-time probes under tmp/; never edit tracked files.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+const graded = (v) => (v && Array.isArray(v.problems) ? v.problems.filter((p) => /^(BLOCKER|MAJOR|MINOR)/.test(p.trim())) : [])
+const blocking = (ps) => ps.filter((p) => /^(BLOCKER|MAJOR)/.test(p.trim()))
+const keyOf = (p) => {
+  const m = /^\s*(?:BLOCKER|MAJOR|MINOR)\s*\[([^\]]+)\]/.exec(p)
+  return m && KEYS.includes(m[1].trim()) ? m[1].trim() : null
+}
+const FORMAT = `Prefix every problem with its grade and the task key it belongs to, exactly like "MAJOR [${KEYS[0]}] <file:line> — <what is wrong> — <repro>" (task keys: ${KEYS.join(', ')}; use [lead] for a problem no single task owns). Most severe first. Add "VERIFIED OK — <item> — <evidence>" entries for parts that hold. ok=false if any BLOCKER or MAJOR.`
+
+log(`${WAVE}: ${TASKS.length} task(s): ${KEYS.join(', ')}`)
+
+phase('Build')
+// Tasks may carry stage: 1, 2, ... (default 1); a stage starts only after every builder of the previous stage returned.
+const STAGES = [...new Set(TASKS.map((t) => t.stage || 1))].sort((a, b) => a - b)
+const builds = {}
+for (const s of STAGES) {
+  const group = TASKS.filter((t) => (t.stage || 1) === s)
+  if (STAGES.length > 1) log(`build stage ${s}: ${group.map((t) => t.key).join(', ')}`)
+  const res = await parallel(
+    group.map((t) => () =>
+      ag(`${PRE}\n\nYour Playwright port is ${t.port}.\n\n${t.finish ? FINISH_NOTE(t.finish) + '\n\n' : ''}${t.prompt}\n\n${REPORT(t.key, 'build')} ${BUILD_FINAL}`, {
+        label: `${t.finish ? 'finish' : 'build'}:${t.key}`,
+        phase: 'Build',
+        effort: 'high',
+      }),
+    ),
+  )
+  group.forEach((t, i) => {
+    builds[t.key] = res[i]
+  })
+}
+const built = {}
+TASKS.forEach((t) => {
+  built[t.key] = builds[t.key] ? String(builds[t.key]) : 'NO REPORT (the builder failed or was skipped)'
+})
+log(`builders done: ${TASKS.filter((t) => builds[t.key]).map((t) => t.key).join(', ')}`)
+
+
+phase('Verify')
+// Rules verifiers: one per group in A.verifyGroups (task keys), else one over the whole wave.
+const VGROUPS = (A.verifyGroups || [KEYS]).map((g) => TASKS.filter((t) => g.includes(t.key))).filter((g) => g.length)
+const verifyJobs = [
+  ...VGROUPS.map((group, gi) => () =>
+    ag(`You are an adversarial wave verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-${WAVE}-${gi}`, 4390 + gi)}
+Wave ${WAVE} ran ${TASKS.length} builders in one working tree; their work is uncommitted (git status / git diff). You verify ${group.length === TASKS.length ? 'all of them' : `these ${group.length}: ${group.map((t) => t.key).join(', ')} (others verify the rest; read their diffs only where they meet yours)`}. Assignments and reports:
+${group.map((t) => `=== TASK ${t.key} (port ${t.port}) ===\nASSIGNMENT:\n${t.prompt}\n\nBUILDER REPORT:\n${built[t.key]}`).join('\n\n')}
+
+${RULES_LENS}
+Try to REFUTE that each assignment is done correctly, completely and honestly — every item of its Build and "Done when" lists. ${FORMAT} Write the same list to ${R}/wave-verify${VGROUPS.length > 1 ? `-${gi + 1}` : ''}.md.`, { label: `verify:${WAVE}${VGROUPS.length > 1 ? `:${gi + 1}` : ''}`, phase: 'Verify', schema: VERDICT, effort: 'high' }),
+  ),
+  // Saves/determinism lens: one verifier per task marked critical: 'own'; one shared verifier for every task marked critical: true.
+  ...[...TASKS.filter((t) => t.critical === 'own').map((t) => [t]), ...(TASKS.some((t) => t.critical === true) ? [TASKS.filter((t) => t.critical === true)] : [])].map((group, i) => () =>
+    ag(`You are an adversarial saves/determinism verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-saves-${i}`, 4396 + i)}
+Task(s) ${group.map((t) => t.key).join(', ')} of wave ${WAVE}; their work is uncommitted in the tree with other builders' work.
+${group.map((t) => `=== TASK ${t.key} ===\nASSIGNMENT:\n${t.prompt}\n\nBUILDER REPORT:\n${built[t.key]}`).join('\n\n')}
+
+${SAVES_LENS}
+${FORMAT} Write the same list to ${R}/saves-verify-${group.map((t) => t.key).join('+')}.md.`, { label: `verify:saves:${group.map((t) => t.key).join('+')}`, phase: 'Verify', schema: VERDICT, effort: 'high' }),
+  ),
+]
+const verdicts = (await parallel(verifyJobs)).filter(Boolean)
+let problems = verdicts.flatMap(graded)
+const toLead = problems.filter((p) => !blocking([p]).length || keyOf(p) === null)
+log(`verify: ${verdicts.length} verdict(s), ${problems.length} graded item(s), ${blocking(problems).length} BLOCKER/MAJOR`)
+
+const rounds = []
+for (let round = 1; round <= 2; round++) {
+  const open = blocking(problems).filter((p) => keyOf(p) !== null)
+  if (!open.length) break
+  const fixKeys = KEYS.filter((k) => open.some((p) => keyOf(p) === k))
+  log(`fix round ${round}: ${fixKeys.join(', ')}`)
+  phase('Fix')
+  const fixes = await parallel(
+    fixKeys.map((k) => () => {
+      const t = TASKS.find((x) => x.key === k)
+      const mine = problems.filter((p) => keyOf(p) === k)
+      return ag(`${PRE}\n\nYour Playwright port is ${t.port}.\n\nYou are the round-${round} fixer for this assignment (the work is in the tree; do not start over):\n---\n${t.prompt}\n---\nThe adversarial verifier found these problems in it (full lists: ${R}/wave-verify*.md and saves-verify-*.md${round > 1 ? `, and ${R}/wave-reverify${round - 1}.md` : ''}):\n---\n${mine.join('\n')}\n---\nFix EVERY BLOCKER and MAJOR, and every MINOR that is cheap and inside your files. For each behavioural problem add or tighten a test that fails on the old behaviour and passes now. If a problem is wrong (the verifier misread a rule), say why with quotes from the canonical docs instead of changing code. If a fix needs a file outside your ownership, make it only if it is small and additive, or describe it precisely for the lead. Re-run your unit tests, the fence fixtures and your own e2e journeys (desktop) before finishing. ${REPORT(k, `fix${round}`)} Final message: per problem FIXED (how, which test) / NOT A PROBLEM (why, quotes) / NOT FIXED (why); files changed; commands + results.`, { label: `fix${round}:${k}`, phase: 'Fix', effort: 'high' })
+    }),
+  )
+  const fixReports = fixKeys.map((k, i) => `=== FIXER ${k} ===\n${fixes[i] ? String(fixes[i]) : 'NO REPORT'}`).join('\n\n')
+  const fixedProblems = problems.filter((p) => fixKeys.includes(keyOf(p)))
+  const rv = await ag(`You are the adversarial re-verifier for wave ${WAVE} of Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`reverify${round}-${WAVE}`, 4394)}
+The assignments of the fixed tasks:
+${TASKS.filter((t) => fixKeys.includes(t.key)).map((t) => `=== TASK ${t.key} ===\n${t.prompt}`).join('\n\n')}
+
+The verifier found these problems:
+---
+${fixedProblems.join('\n')}
+---
+Round-${round} fixers reported:
+${fixReports}
+
+${RULES_LENS}
+For EACH problem try to REFUTE that it is fixed: reproduce the original finding against the current tree, read the diff, check the new test fails on the old behaviour (load-time mutant under tmp/), and check nothing regressed (the touched unit tests and the fence fixtures). ${FORMAT} Write the same list to ${R}/wave-reverify${round}.md.`, { label: `reverify${round}:${WAVE}`, phase: 'Fix', schema: VERDICT, effort: 'high' })
+  rounds.push({ round, fixKeys, fixes: fixes.map((f) => (f ? String(f) : null)), reverify: rv })
+  if (!rv) break
+  const unfixed = problems.filter((p) => !fixKeys.includes(keyOf(p)))
+  problems = [...unfixed, ...graded(rv)]
+}
+
+const remaining = blocking(problems)
+log(`${WAVE}: ${remaining.length ? `${remaining.length} BLOCKER/MAJOR remain` : 'no BLOCKER/MAJOR remains'}; ${problems.length - remaining.length} MINOR for the lead`)
+return { wave: WAVE, built, verdicts, rounds, remaining, minors: problems.filter((p) => !blocking([p]).length), toLead }

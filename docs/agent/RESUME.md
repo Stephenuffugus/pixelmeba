@@ -3,6 +3,50 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑11 09:45 UTC — WAVE 5a COMMITTED (`9b40210`), P4.1 and P4.3 ticked. Wave 5b launching. START HERE.**
+> - Evidence:
+>   - check 162 files / 1623 tests;
+>   - desktop e2e 9/9 (favorites, garden-home, keep-dish ×4, a11y pages and wave 5a);
+>   - integration verify ok: `docs/reports/reviews/g4-wave-5a/integrate-verify1.md`. Its three MINORs are wave 5b's
+>     `notice-cards` task.
+> - Wave 5b = `docs/agent/g4-wave-5b.run.workflow.js.txt`:
+>   - stories (P4.2, port 4272); objectives (P4.4, port 4274, critical); notice-cards (port 4271);
+>   - reports go to `docs/reports/reviews/g4-wave-5b/`.
+>   - Backups: `tools/lead/backup-tree.sh wip/g4-wave-5b` every 30 min.
+> - If this session dies mid-wave:
+>   1. If `git status` is clean, restore with `git checkout wip/g4-wave-5b -- . && git reset -q`.
+>   2. Read the 5b reports.
+>   3. Rerun only the unfinished builders: set `A.only` and give each a `finish` note, as wave 4b's resume did.
+> - After 5b:
+>   1. Lead integration: MINORs, D‑0076 (the notice-card rules), D‑0077+, check, desktop e2e of the touched
+>      journeys, commit, tick P4.2 and P4.4.
+>   2. Then wave 6 (P4.5–P4.9): one task-file writer, then the run file.
+
+> **Update 2026‑10‑11 08:55 UTC — RESUMED AFTER THE OVERNIGHT STOP (owner: "lets get started"). START HERE.**
+> - What survived: wave 5a (favorites P4.1, garden-home P4.3) finished at 02:22 (re-verify ok). The lead's
+>   integration run `wf_811f8395-c0f` died at about 02:41. Its e2e-docs fixer had finished. Its code-minors fixer had
+>   also finished its fixes and final tests, 13 files / 174 passed, but wrote no report. The tree matched backup
+>   `wip/g4-wave-5a` = `a1efb6b` exactly.
+> - Done since the resume:
+>   - both fixer reports saved, in `docs/reports/reviews/g4-wave-5a/integrate-{code-minors,e2e-docs}.md`;
+>   - the lead's hardening `undoLabels: []` in duplicateDish;
+>   - D‑0075 (a duplicated dish shares no worker state); D‑0073 and D‑0074 had already been written at 02:25.
+> - Running:
+>   - the integration verifier `docs/agent/g4-wave-5a-integrate-verify.workflow.js.txt`, run `wf_38e11b55-360`
+>     (verify, then repair and re-verify only for a BLOCKER/MAJOR);
+>   - the lead's `npm run check`, at nice 10, log in tmp/lead/check-5a.log;
+>   - backups every 30 min to `wip/g4-wave-5a`.
+> - Next:
+>   1. commit wave 5a;
+>   2. tick P4.1 and P4.3;
+>   3. fill `STAGE1_AS_BUILT` in `docs/agent/g4-wave-5b.run.workflow.js.txt` (already made from the 5a file:
+>      only stories + objectives, WAVE_ID g4-wave-5b);
+>   4. launch wave 5b.
+> - If this session dies before the 5a commit:
+>   1. the tree is on `wip/g4-wave-5a`;
+>   2. read `docs/reports/reviews/g4-wave-5a/integrate-verify*.md`;
+>   3. rerun only what is unfinished, from the verify workflow file.
+
 > **Update 2026‑10‑10 23:00 UTC — PHASE 4 PRE-LAUNCH COMMITTED; OWNER WILL REFRESH THE CODESPACE SOON. START HERE.**
 > - Committed with this note: D‑0070…D‑0072 (Phase 4 calls 1, 2, 6), content/manifest.json buildPhase 3 → 4 (contentHash
 >   14d6ce67…; check green, fence unmoved), the wave 5 STATE filled, the runner's phone-portrait rule, the wave 5a run file
