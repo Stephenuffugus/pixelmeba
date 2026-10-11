@@ -178,7 +178,7 @@
 //     page's directory); 'pixelmeba:resume' never runs the dish; the D-0085 default (pool sums start when the map is first
 //     opened); budgets stop at the renderer (snapshot frequency unchanged); perf numbers under load + the lead's quiet
 //     re-measure; the Play icon as an opaque RGBA PNG.
-//     [LEAD REVIEW 2026-10-11 23:10, during 6b] Every PROPOSED DECISION of the writer's report is ACCEPTED, including
+//     [LEAD REVIEW 2026-10-11 22:45, during 6b] Every PROPOSED DECISION of the writer's report is ACCEPTED, including
 //     D-<n+1> as written (Filesystem on the native app, the canonical rule of BUILD_DIRECTIVE P4.10, ARCH §11.1/§12, R27 and
 //     g4-plan call 5). Reasons recorded with it: the crash-point enumeration proves the journal; the record is the gzip
 //     bytes (the 3,000-tick Garden save text is about 10.7 MB uncompressed, perf-g3.md), so an autosave crosses the
