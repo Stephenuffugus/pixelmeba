@@ -67,8 +67,8 @@ with the next task).
 - [x] (9b40210; D-0074; prompt progress per page session is an owner item) P4.3 Garden card, session memory, optional prompts
 - [x] (c3f214e; D-0078) P4.4 Objective engine (5 types) + 3 goals
 - [ ] P4.5 Paired Garden variants (R2)
-- [ ] P4.6 Share (Picture 1080², Starting recipe, Living dish, recipe IDs, stripped export)
-- [ ] P4.7 Try my dish (R4)
+- [x] (ca8c184; D-0080, D-0083; strict build match for recipe files is an owner item) P4.6 Share (Picture 1080², Starting recipe, Living dish, recipe IDs, stripped export)
+- [x] (ca8c184; D-0081, D-0082, D-0084; the Storage panel that empties the shelf ships with 6b in the same release) P4.7 Try my dish (R4)
 - [ ] P4.8 Observation tools (relationship map, region probes, follow family, bookmarks, recipe card, gallery, challenge editor, transfer preview)
 - [ ] P4.9 Narration (16 phrases), sound polish, reduced‑motion audit table
 - [ ] P4.10 Android (Filesystem adapter, lifecycle, share/import, offline launch, debug build or documented blocker, ANDROID_SETUP.md signing)

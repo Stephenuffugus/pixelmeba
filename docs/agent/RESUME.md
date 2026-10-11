@@ -3,6 +3,28 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑11 22:35 UTC — WAVE 6a COMMITTED (`ca8c184`), P4.6 and P4.7 ticked. WAVE 6b LAUNCHING. START HERE.**
+> - Evidence (commit message): check 1785/1786 with the one failure a timeout under load (goals-host, 121 s vs 120 s;
+>   15/15 alone; its limit is now 600 s, re-run 26/26 with try-dish-host); all 74 desktop journeys of the touched specs
+>   pass, stories on phone-portrait too.
+> - The 6a as-built note is appended to the STATE of `docs/agent/g4-wave-6.tasks.js.txt`.
+> - Wave 6b = `docs/agent/g4-wave-6b.run.workflow.js.txt`, built with tools/lead/build-run-file.py:
+>   - stage 2: observation-notebook (4274, critical 'own': bookmarks, gallery, Storage panel) and challenge-editor (4275);
+>   - stage 3: variants-paired (4276) and narration (4277);
+>   - two rules verifiers (verifyGroups: [observation-notebook, challenge-editor] on 4390, [variants-paired, narration]
+>     on 4391), one saves lens for observation-notebook (4396), re-verifier 4394;
+>   - reports go to `docs/reports/reviews/g4-wave-6b/`.
+> - Backups: `nohup tools/lead/backup-loop.sh wip/g4-wave-6b "wip: wave 6b in flight"` (pid in tmp/lead/backup-6b.pid;
+>   log tmp/lead/backup-g4-wave-6b.log).
+> - If this session dies mid-wave:
+>   1. If `git status` is clean, restore with `git checkout wip/g4-wave-6b -- . && git reset -q`.
+>   2. Read the run's journal (~/.claude/projects/-workspaces-pixelmeba/<session>/subagents/workflows/<run>/journal.jsonl)
+>      and the reports in docs/reports/reviews/g4-wave-6b/.
+>   3. Rerun only the unfinished builders: set `A.only` and give each a `finish` note (as wave 4b's resume did).
+> - After 6b: integrate (MINORs, D‑0086+, ARCH §7/§11.2, a11y screens, check, desktop e2e of the touched journeys), commit,
+>   tick P4.5, P4.8, P4.9. The LEAD AFTER WAVE 6 list in the tasks file has the rest (old saves load with every new kind
+>   empty; tests/e2e/full-journey.spec.ts for P4.14; owner items for EXPANSION_RESPONSE §8).
+
 > **Update 2026‑10‑11 21:15 UTC — RESUMED AFTER A CODESPACE RESTART (≈ 21:04; the session died ≈ 20:40). 6a STILL UNCOMMITTED.**
 > - The tree matched backup `27ba3f6` exactly; new backup `wip/g4-wave-6a` = `10d6bad` (with the two test fixes below).
 > - What the 19:03 runs showed:
