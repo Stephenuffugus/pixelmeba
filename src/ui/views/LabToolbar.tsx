@@ -13,6 +13,7 @@ import { LAB_CATEGORIES, LAB_TEXT, MATERIAL_COPY, RADII, type LabCategory } from
 import { LabTray, categoryOf, itemCopy } from '../panels/LabTray';
 import { toolAvailable } from '../panels/LabTrayContent';
 import { IconChemistry, IconHabitat, IconInspect, IconObserve, IconTools } from '../panels/LabTrayIcons';
+import { ProbeOutlines, ProbeSessionPanel } from '../panels/ProbeSession';
 import {
   brushInfo,
   brushRule,
@@ -70,6 +71,9 @@ export function LabTrayHost() {
         </div>
       ) : null}
       {!side && tray && tray !== 'inspect' ? <LabTray category={tray} /> : null}
+      {/* P4.8: region outlines on the dish (Lab only) and the drawing session's bar. */}
+      <ProbeOutlines />
+      <ProbeSessionPanel />
     </>
   );
 }

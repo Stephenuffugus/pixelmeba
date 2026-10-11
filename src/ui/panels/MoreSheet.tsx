@@ -24,6 +24,9 @@ import {
 import { saveAndLeave } from '../state';
 import { HOME_TEXT } from '../strings/home';
 import { GoalRow } from './GoalChoice';
+import { TryMoreRow } from './TrySetup';
+import { openShare } from '../share';
+import { IconShare } from './ShareSheet';
 
 export function MoreSheet() {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -78,6 +81,8 @@ export function MoreSheet() {
               {WHATIF_TEXT.moreItem}
             </button>
           ) : null}
+          {/* P4.7 (SPEC §13.6): Try my dish… (a turn at its horizon: its result card again). */}
+          <TryMoreRow />
           {/* UX §2.4: Compare lives in More (and in the Lab Tools tray from P2.7). */}
           <button
             class="btn"
@@ -91,6 +96,10 @@ export function MoreSheet() {
           </button>
           <button class="btn" disabled={!meta.value?.undoAvailable} onClick={() => void undo()}>
             <IconUndo /> Undo (rewinds time)
+          </button>
+          {/* P4.6 (UX §5.10): Share — Picture, Starting recipe or Living dish, through the OS share/save flow. */}
+          <button class="btn" onClick={() => openShare()} data-testid="more-share">
+            <IconShare /> Share…
           </button>
           <label class="fav-share-option">
             <input type="checkbox" checked={nicknames} onChange={(e) => setNicknames(e.currentTarget.checked)} data-testid="more-include-nicknames" />

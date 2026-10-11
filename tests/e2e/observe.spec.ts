@@ -419,7 +419,7 @@ test('a shared file with a malformed journal entry changes nothing, and a malfor
   await page.getByRole('button', { name: 'Saved dishes' }).click();
   await page.locator('input[aria-label="Import a dish file"]').setInputFiles(file);
   await expect(
-    page.getByRole('status').filter({ hasText: "Nothing was changed: The dish's journal has an entry this version of Pixelmeba cannot read (entry 1: its title is not text)." }),
+    page.getByRole('status').filter({ hasText: "Import failed: The dish's journal has an entry this version of Pixelmeba cannot read (entry 1: its title is not text). Nothing changed." }),
   ).toBeVisible();
   await expect(page.getByTestId('dish-screen')).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem('pixelmeba.journal') ?? '')).not.toContain('evil-import');

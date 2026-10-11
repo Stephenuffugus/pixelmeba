@@ -360,9 +360,12 @@ test('What if? over a dish is a blocking modal (backdrop and keys never reach th
     mimeType: 'application/json',
     buffer: Buffer.from('this is not a dish'),
   });
-  await expect(page.locator('.toast')).toContainText('Nothing was changed');
+  // UX §5.11 (wave 6a integration): one toast, "Import failed: {exact reason}. Nothing changed."
+  const REFUSED = 'Import failed: This is not a Pixelmeba file (it is not valid JSON). Nothing changed.';
+  await expect(page.locator('.toast')).toHaveText(REFUSED);
+  await page.waitForTimeout(1000);
   const toasts = await page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts);
-  expect(toasts.some((t) => t.startsWith('Nothing was paused or changed:'))).toBe(true);
+  expect(toasts.filter((t) => /Import failed|nothing (was )?(paused or )?changed/i.test(t))).toEqual([REFUSED]);
   expect(toasts.filter((t) => /dish was paused/i.test(t))).toEqual([]);
   await expect(title(page)).toHaveText('Little Living Garden');
 

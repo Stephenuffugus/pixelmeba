@@ -245,7 +245,7 @@ describe('goals through DishHost', () => {
     h.runTo('d2', 4, 1830);
     const g = h.goals('d2')[1]!;
     expect([g.state, g.endTick, g.startTick]).toEqual(['completed', want.endTick, 20]);
-  }, 120_000);
+  }, 600_000); // two 1,830-tick runs with save → load: over two minutes on a loaded 2-CPU machine
 });
 
 describe('goal records in files', () => {

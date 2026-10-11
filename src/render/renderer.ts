@@ -56,6 +56,7 @@ import { featureFrameKeys, featureLayers, featureMarkScale, type AtlasFeatureLik
 import { brushCellOutcome, lifeCellOutcome, ST_NONE, ST_STONE, SUB_WATER, type LabBrushRule, type LifeBrush } from '@sim/grid';
 import type { LineageMarks } from '@worker/protocol';
 import type { FavoriteMarks } from '@worker/protocol';
+import type { ProbeMask } from '@worker/probes';
 
 const FLAG_MOVING = 1 << 6;
 
@@ -1030,6 +1031,7 @@ export class DishRenderer {
     }
     this.drawLineage(s, alpha);
     this.drawFavorites(s, alpha);
+    this.drawProbes();
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1294,6 +1296,63 @@ export class DishRenderer {
   }
 
   // -------------------------------------------------------------------------------------------
+  // Region probes (P4.8; SPEC §12.8): each mask's outline as a light dashed stroke over the dark
+  // companion stroke drawLineage uses, and its letter (shape + letter, never colour alone), from the
+  // masks the UI passes in, never from the world. Static: nothing moves or blinks, so reduced motion
+  // needs no change. The region being dragged is drawn the same way in amber.
+
+  private probes: readonly ProbeMask[] = [];
+  private probeDraft: ProbeMask | null = null;
+  private probesG: Graphics | null = null;
+
+  /** The regions to outline (and the one being dragged, or null). Cosmetic only. */
+  setProbes(masks: readonly ProbeMask[], draft: ProbeMask | null = null): void {
+    this.probes = masks;
+    this.probeDraft = draft;
+    if (!this.destroyed) this.drawProbes();
+  }
+
+  /** 3 × 5 pixel letters A–F (rows top to bottom, bit 2 = left column). */
+  private static readonly PROBE_GLYPHS: Readonly<Record<string, readonly number[]>> = {
+    A: [2, 5, 7, 5, 5],
+    B: [6, 5, 6, 5, 6],
+    C: [3, 4, 4, 4, 3],
+    D: [6, 5, 5, 5, 6],
+    E: [7, 4, 6, 4, 7],
+    F: [7, 4, 6, 4, 4],
+  };
+
+  private drawProbes(): void {
+    if (!this.probesG) {
+      if (this.probes.length === 0 && !this.probeDraft) return;
+      this.probesG = new Graphics();
+      this.world.addChild(this.probesG);
+    }
+    const g = this.probesG;
+    g.clear();
+    const z = this.camera.zoom;
+    const list = this.probeDraft ? [...this.probes, this.probeDraft] : this.probes;
+    for (const m of list) {
+      const path = probeOutline(m);
+      const draft = m === this.probeDraft;
+      // Companion stroke (solid, dark) under a dashed light stroke: readable on any dish colour.
+      g.poly(path, true).stroke({ width: 4 / z, color: 0x172c35, alpha: 0.85 });
+      dashed(g, path, 6 / z, 4 / z);
+      g.stroke({ width: 2 / z, color: draft ? 0xf2b84b : 0xf5f4ef, alpha: 1 });
+      // The letter on a dark tile at the mask's top-left (rectangle) or top (circle).
+      const glyph = DishRenderer.PROBE_GLYPHS[m.id];
+      if (!glyph) continue;
+      const px = 3 / z;
+      const [lx, ly] = m.shape === 'rect' ? [Math.min(m.x0, m.x1), Math.min(m.y0, m.y1)] : [m.cx + 0.5 - 2.5 * px, m.cy + 0.5 - m.r - 0.5 - 7 * px];
+      g.rect(lx, ly, 5 * px, 7 * px).fill({ color: 0x172c35, alpha: 0.9 });
+      for (let row = 0; row < 5; row++) {
+        for (let col = 0; col < 3; col++) if (glyph[row]! & (4 >> col)) g.rect(lx + (1 + col) * px, ly + (1 + row) * px, px, px);
+      }
+      g.fill({ color: draft ? 0xf2b84b : 0xf5f4ef, alpha: 1 });
+    }
+  }
+
+  // -------------------------------------------------------------------------------------------
   // Lab brush preview (UX §4.2; P2.7): drawn above everything, cosmetic only.
 
   private brushG: Graphics | null = null;
@@ -1389,5 +1448,54 @@ export class DishRenderer {
     this.hostObserver?.disconnect();
     this.destroyed = true;
     this.app.destroy(true, { children: true, texture: true });
+  }
+}
+
+/** A region's outline in world units: cells are [x, x+1); integer cell indices are the mask's centres. */
+export function probeOutline(m: ProbeMask): number[] {
+  if (m.shape === 'rect') {
+    const x0 = Math.min(m.x0, m.x1);
+    const y0 = Math.min(m.y0, m.y1);
+    const x1 = Math.max(m.x0, m.x1) + 1;
+    const y1 = Math.max(m.y0, m.y1) + 1;
+    return [x0, y0, x1, y0, x1, y1, x0, y1];
+  }
+  const cx = m.cx + 0.5;
+  const cy = m.cy + 0.5;
+  const r = m.r + 0.5;
+  const out: number[] = [];
+  const n = 72;
+  for (let k = 0; k < n; k++) {
+    const a = (2 * Math.PI * k) / n;
+    out.push(cx + r * Math.cos(a), cy + r * Math.sin(a));
+  }
+  return out;
+}
+
+/** Add a closed polyline as dashes (dash and gap in world units) to `g`'s current path. */
+function dashed(g: Graphics, pts: readonly number[], dash: number, gap: number): void {
+  const n = pts.length / 2;
+  let on = true;
+  let left = dash;
+  for (let k = 0; k < n; k++) {
+    let x = pts[2 * k]!;
+    let y = pts[2 * k + 1]!;
+    const x2 = pts[(2 * ((k + 1) % n))]!;
+    const y2 = pts[(2 * ((k + 1) % n)) + 1]!;
+    let len = Math.hypot(x2 - x, y2 - y);
+    while (len > 0) {
+      const step = Math.min(left, len);
+      const nx = x + ((x2 - x) * step) / len;
+      const ny = y + ((y2 - y) * step) / len;
+      if (on) g.moveTo(x, y).lineTo(nx, ny);
+      x = nx;
+      y = ny;
+      len -= step;
+      left -= step;
+      if (left <= 1e-9) {
+        on = !on;
+        left = on ? dash : gap;
+      }
+    }
   }
 }

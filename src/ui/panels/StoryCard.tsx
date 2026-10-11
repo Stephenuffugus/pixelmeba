@@ -1,12 +1,13 @@
 /**
  * One story card (P4.2; UX §5.9, SPEC §12.7): at most three panels (earlier state or action · recorded
  * event · later observation), each captioned with dish time; the "Memory, not replay" badge (no card
- * holds a snapshot yet); Spotlight and Dismiss. Save picture arrives with P4.6 share and is not shown.
+ * holds a snapshot yet); Spotlight, Save picture (P4.6: the Share sheet on Picture) and Dismiss.
  * Everything shown comes from the card's stored summary (src/ui/strings/stories.ts); nothing here sends
  * a command or reads the world.
  */
 import type { StoryCard as StoryCardRecord } from '@persist/notebookStories';
 import { STORY_TEXT, storyPanels, storyTitle, type StoryNames } from '../strings/stories';
+import { openShareFromStory } from '../share';
 
 export function StoryCard({
   card,
@@ -50,6 +51,10 @@ export function StoryCard({
       <div class="story-actions">
         <button class="btn primary" onClick={onSpotlight} data-testid="story-spotlight">
           {STORY_TEXT.spotlight}
+        </button>
+        {/* P4.6 (UX §5.9): the dish NOW as a picture, the card's title as its question, labelled with its own dish time. */}
+        <button class="btn" onClick={() => openShareFromStory(storyTitle(card))} data-testid="story-save-picture">
+          Save picture
         </button>
         {onDismiss ? (
           <button class="btn" onClick={onDismiss} data-testid="story-dismiss">

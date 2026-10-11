@@ -15,6 +15,7 @@ import { AGENT_CAP, CELL_COUNT } from '@sim/constants';
 import { canonicalJson, sha256Hex } from '@sim/hash';
 import { goalsProblem, goalsWorldProblem, type GoalRecord } from './notebookGoals';
 import { storiesProblem, storiesRefsProblem, type StoryCard } from './notebookStories';
+import { turnsProblem, turnsWorldProblem, type TurnRecord } from './notebookTurns';
 
 export const NOTEBOOK_FORMAT = 'pixelmeba-notebook';
 export const NOTEBOOK_VERSION = 1;
@@ -76,6 +77,8 @@ export interface NotebookRecord {
   readonly goals?: readonly GoalRecord[];
   /** P4.2: story cards (src/persistence/notebookStories.ts); absent in records written before them (reads as []). */
   readonly stories?: readonly StoryCard[];
+  /** P4.7: a Try my dish turn (src/persistence/notebookTurns.ts; at most one); absent in every other dish (reads as []). */
+  readonly turns?: readonly TurnRecord[];
   readonly checksum: string;
 }
 
@@ -233,6 +236,8 @@ function worldRefsProblem(raw: Record<string, unknown>, refs: NotebookWorldRefs)
   if (goals) return goals;
   const stories = storiesRefsProblem(raw.stories, refs); // P4.2
   if (stories) return stories;
+  const turns = turnsWorldProblem(raw, refs); // P4.7
+  if (turns) return turns;
   return null;
 }
 
@@ -243,6 +248,7 @@ const KIND_PROBLEMS: Readonly<
   favorites: favoritesProblem,
   goals: goalsProblem, // P4.4 (notebookGoals.ts)
   stories: storiesProblem, // P4.2 (notebookStories.ts)
+  turns: turnsProblem, // P4.7 (notebookTurns.ts)
 };
 const ENVELOPE_KEYS = ['format', 'notebookVersion', 'worldId', 'nextFavorite', 'checksum'];
 
@@ -324,7 +330,7 @@ export function notebookWithoutNicknames(record: NotebookRecord): NotebookRecord
 
 /** True when the record holds nothing (no favorite, followed or not). Such a record is not written to a file. */
 export function notebookIsEmpty(record: NotebookRecord): boolean {
-  return record.favorites.length === 0 && (record.goals ?? []).length === 0 && (record.stories ?? []).length === 0;
+  return record.favorites.length === 0 && (record.goals ?? []).length === 0 && (record.stories ?? []).length === 0 && (record.turns ?? []).length === 0;
 }
 
 /** Whether any favorite carries a nickname. */
@@ -335,7 +341,8 @@ export function notebookHasNicknames(record: NotebookRecord): boolean {
 /**
  * The record a copy of the dish starts with (Duplicate, an opened checkpoint branch): the favorites
  * only, under the copy's world id. PROPOSED DECISION: story cards and goal attempts belong to the world
- * they were recorded in, so stage 2's kinds are not copied. Unsealed.
+ * they were recorded in, so stage 2's kinds are not copied. P4.7: nor a Try my dish turn (a copy is an
+ * ordinary dish, D-0081). Unsealed.
  */
 export function favoritesOnly(record: NotebookRecord, worldId: string): NotebookRecord {
   return { ...emptyNotebook(worldId), favorites: record.favorites, nextFavorite: record.nextFavorite };

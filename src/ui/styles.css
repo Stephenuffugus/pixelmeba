@@ -3427,3 +3427,288 @@ html[data-text-scale='2'] .tab-context {
 .goal-offers .btn {
   width: 100%;
 }
+
+/* ---------------------------------------------------------------- try my dish (P4.7; SPEC §13.6) */
+/* The setup sheet, the horizon card and the top strip's turn badge. Text ≥ 16 px; buttons ≥ 48 px. */
+.try-badge {
+  font-size: 1rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.try-text {
+  font-size: 1rem;
+  margin: 0.5rem 0;
+  overflow-wrap: anywhere;
+}
+.try-muted {
+  color: var(--text-muted);
+}
+.try-prediction {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.75rem 0 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.try-prediction textarea {
+  font: inherit;
+  font-weight: 400;
+  font-size: 1rem;
+  min-height: var(--target);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+  width: 100%;
+  box-sizing: border-box;
+}
+.try-prediction-note {
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 4px solid var(--line);
+}
+.try-prediction-note h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+.try-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.try-actions-stack {
+  display: grid;
+}
+
+/* P4.6 Share sheet and Import recipe ID (UX §5.10, §2; targets ≥ 48 px, text ≥ 16 px). */
+.share-choices {
+  border: 0;
+  margin: 0.5rem 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.share-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-height: var(--target);
+  padding: 0.6rem 0.75rem;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: var(--fs-body);
+}
+.share-choice.selected {
+  border-color: var(--primary);
+  background: #eef4f6;
+}
+.share-choice.disabled {
+  cursor: not-allowed;
+  color: var(--text-muted);
+}
+.share-choice input {
+  width: 22px;
+  height: 22px;
+  margin: 0.15rem 0 0;
+  flex: none;
+}
+.share-choice-text {
+  display: grid;
+  gap: 0.15rem;
+}
+.share-reason {
+  color: var(--text);
+}
+.share-options {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+}
+.share-preview canvas {
+  display: block;
+  width: min(100%, 280px);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  image-rendering: pixelated;
+  border-radius: 6px;
+  margin: 0 auto;
+}
+.share-field {
+  display: grid;
+  gap: 0.25rem;
+  font-size: var(--fs-body);
+}
+.share-field input,
+.recipe-id-row input {
+  min-height: var(--target);
+  padding: 0 0.75rem;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+  font-size: var(--fs-body);
+  min-width: 0;
+}
+.share-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.share-identity code {
+  font-size: var(--fs-body);
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+.share-go {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+.share-status:empty {
+  display: none;
+}
+.recipe-id-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.recipe-id-row input {
+  flex: 1 1 14rem;
+}
+.recipe-id-msg[hidden] {
+  display: none;
+}
+
+/* P4.8 Observe: the relationship map and region probes (observation-map). */
+.observe-window {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  margin: 0.5rem 0;
+  padding: 0.25rem 0.5rem 0.5rem;
+}
+.observe-window legend {
+  font-size: var(--fs-body);
+  padding: 0 0.25rem;
+}
+.observe-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--target);
+  padding: 0 0.5rem;
+  font-size: var(--fs-body);
+  cursor: pointer;
+}
+.observe-radio input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+.relmap-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.relmap-table,
+.probe-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--fs-body);
+  margin: 0.25rem 0 0.5rem;
+}
+.relmap-table th,
+.relmap-table td,
+.probe-table th,
+.probe-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.relmap-table thead th {
+  background: var(--surface-2);
+}
+.probe-table caption {
+  text-align: left;
+  font-weight: 600;
+  padding: 0.25rem 0;
+}
+.relmap-picture {
+  width: 100%;
+  max-width: 30rem;
+  margin: 0.5rem auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+}
+.relmap-picture svg {
+  display: block;
+}
+.relmap-exchange,
+.probe-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+}
+.probe-region {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.probe-region-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.probe-region-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: var(--fs-body);
+}
+.probe-overlap {
+  border: 2px solid var(--text);
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+  padding: 0.25rem 0.75rem;
+  margin: 0.5rem 0;
+}
+.probe-overlap p {
+  margin: 0.25rem 0;
+}
+.probe-session .segmented {
+  margin: 0.25rem 0;
+}
+.probe-session p {
+  margin: 0 0 0.25rem;
+}
+.probe-session-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+/* Phones: the bar stays short so most of the dish is free to draw on (the title is read, not shown). */
+@media (max-width: 480px) {
+  .probe-session .probe-session-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}

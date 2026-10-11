@@ -45,6 +45,9 @@ import { FamilyMarkers } from '../panels/FamilyMarkers';
 import { FavoriteExtinct } from '../panels/FavoriteExtinct';
 import { FavoriteMarkers } from '../panels/FavoriteMarkers';
 import { FavoriteSheet } from '../panels/FavoriteSheet';
+import { ShareSheet } from '../panels/ShareSheet';
+import { RelationshipMapSheet } from '../panels/RelationshipMap';
+import { ProbeSheet } from '../panels/ProbePanel';
 import { FavoriteSlots } from '../panels/FavoriteSlots';
 import { LineageSheet } from '../panels/LineageSheet';
 import { EvolutionSheet } from '../panels/AdvancedEvolution';
@@ -65,6 +68,11 @@ import { DishSummary } from '../a11y/DishSummary';
 import { CellDescription, CELL_DESCRIPTION_ID } from '../a11y/CellDescription';
 import { lastInputWasKeyboard, restoreFocus } from '../a11y/focus';
 import { NoticeHost } from './NoticeHost';
+import { TryBadge } from '../panels/TryBadge';
+import { TrySetupSheet } from '../panels/TrySetup';
+import { closeTrySetup } from '../tryDish';
+import { shareSheetKey } from '../share';
+import { TryHorizonSheet } from '../panels/TryHorizon';
 
 function formatTime(tick: number): string {
   const s = Math.floor(tick / 10);
@@ -166,6 +174,11 @@ export function DishScreen() {
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Tab') modality = 'keyboard';
       if (whatIfOpen.value !== null) return; // What if? is a blocking modal (D-0026): no dish key acts behind it
+      if (sheet.value === 'trySetup') {
+        if (e.key === 'Escape') closeTrySetup(); // P4.7: a blocking panel; Esc is its Cancel (run state restored)
+        return;
+      }
+      if (shareSheetKey(e.key)) return; // P4.6: the Share sheet is a blocking panel too; Esc is its Close (run state restored)
       if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
       if (e.key === ' ' && modality === 'keyboard' && (e.target as HTMLElement | null)?.closest(SPACE_CONTROLS)) return;
       if (handleViewKey(e)) return; // I / L / F / Esc per view (UX §4.2; P2.7)
@@ -224,6 +237,8 @@ export function DishScreen() {
           <span class="time" aria-live="off" data-testid="sim-time">
             {formatTime(m?.tick ?? 0)} · {m?.count ?? 0} alive{behind ? <span class="speed-badge"> · running at {m.effectiveSpeed.toFixed(1)}×</span> : null}
           </span>
+          {/* P4.7: a Try my dish turn's time left, or "Turn n finished" at its horizon. */}
+          <TryBadge />
         </div>
         <button class={`btn ${running ? '' : 'primary'}`} onClick={togglePause} aria-label={running ? 'Pause' : 'Run'} data-testid="run-toggle">
           {running ? <IconPause /> : <IconPlay />}
@@ -306,6 +321,13 @@ export function DishScreen() {
         {sheet.value === 'lineage' ? <LineageSheet /> : null}
         {sheet.value === 'evolution' ? <EvolutionSheet /> : null}
         {sheet.value === 'favorite' ? <FavoriteSheet /> : null}
+        {/* P4.6 (UX §5.10): the Share sheet (opening it paused the dish; closing restores the speed). */}
+        {sheet.value === 'share' ? <ShareSheet /> : null}
+        {sheet.value === 'trySetup' ? <TrySetupSheet /> : null}
+        {sheet.value === 'tryHorizon' ? <TryHorizonSheet /> : null}
+        {/* P4.8: the Observe tray's relationship map and region probes (read-only sheets). */}
+        {sheet.value === 'relationshipMap' ? <RelationshipMapSheet /> : null}
+        {sheet.value === 'probes' ? <ProbeSheet /> : null}
         <WhatIfHost context="dish" />
       </div>
 

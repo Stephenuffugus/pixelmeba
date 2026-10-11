@@ -193,7 +193,7 @@ test('New Dish → Varied + Accelerated → labels → rates → change during p
     mimeType: 'application/json',
     buffer: Buffer.from('not a dish'),
   });
-  await expect(page.getByTestId('page-toast')).toContainText('Nothing was changed');
+  await expect(page.getByTestId('page-toast')).toHaveText('Import failed: This is not a Pixelmeba file (it is not valid JSON). Nothing changed.');
   await expect(page.getByRole('heading', { name: 'Saved dishes' })).toBeVisible();
 });
 
