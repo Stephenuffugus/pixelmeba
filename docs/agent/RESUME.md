@@ -3,7 +3,7 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
-> **Update 2026‑10‑11 09:45 UTC — WAVE 5a COMMITTED (`9b40210`), P4.1 and P4.3 ticked. Wave 5b launching. START HERE.**
+> **Update 2026‑10‑11 09:45 UTC — WAVE 5a COMMITTED (`9b40210`), P4.1 and P4.3 ticked. Wave 5b RUNNING (run `wf_12469c4e-45d`, launched 09:48). START HERE.**
 > - Evidence:
 >   - check 162 files / 1623 tests;
 >   - desktop e2e 9/9 (favorites, garden-home, keep-dish ×4, a11y pages and wave 5a);
@@ -17,6 +17,8 @@
 >   1. If `git status` is clean, restore with `git checkout wip/g4-wave-5b -- . && git reset -q`.
 >   2. Read the 5b reports.
 >   3. Rerun only the unfinished builders: set `A.only` and give each a `finish` note, as wave 4b's resume did.
+> - Also running (planning only): the wave 6 task writer `docs/agent/g4-wave-6-tasks.workflow.js.txt`, run
+>   `wf_f47d216e-763`. It writes `docs/agent/g4-wave-6.tasks.js.txt` with `<lead: …>` placeholders for the wave 5b facts.
 > - After 5b:
 >   1. Lead integration: MINORs, D‑0076 (the notice-card rules), D‑0077+, check, desktop e2e of the touched
 >      journeys, commit, tick P4.2 and P4.4.
