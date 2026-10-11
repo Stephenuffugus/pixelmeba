@@ -3,6 +3,29 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑11 13:35 UTC — 5b INTEGRATED except ONE follow-up (running). START HERE.**
+> - Integration fixers and verifier done (`integrate-*.md`, verify ok). The lead's own fixes:
+>   - the saveFile import refs plus a host test;
+>   - Notebook Back during a story visit;
+>   - goal-sentence tests;
+>   - ARCH §7/§11.2 for 5b.
+>   - Decisions D‑0076…D‑0079 written (uncommitted).
+> - check: 169 files / 1709 tests green at 12:32.
+> - Desktop e2e at 13:27: 11/13 passed. garden-home :54 and keep-dish :553 failed because the story notice "An
+>   enzyme at work" outranks "Tap a Sprinter." right after Run.
+> - Lead decision (amends D‑0079): the story pacer's window starts when a dish opens, so the first story notice comes
+>   at least 60 dish‑seconds later.
+> - Running: `docs/agent/g4-wave-5b-first-minute.workflow.js.txt`, run `wf_5932c567-024` (one fixer and one verifier).
+> - Then:
+>   1. check plus the desktop e2e again;
+>   2. commit 5b, then tick P4.2 and P4.4;
+>   3. run `python3 tools/lead/patch-wave6-placeholders.py <5b commit> "<evidence>"`;
+>   4. append D‑0080…D‑0082 (from `docs/agent/g4-wave-6-prelaunch-decisions.draft.md`);
+>   5. run `python3 tools/lead/build-run-file.py docs/agent/g4-wave-6.tasks.js.txt g4-wave-6a "<desc>" "<owner ctx>"
+>      share,try-my-dish,observation-map docs/agent/g4-wave-6a.run.workflow.js.txt`;
+>   6. free ports 4271‑4277;
+>   7. launch.
+
 > **Update 2026‑10‑11 ≈ 11:40 UTC — WAVE 5b BUILT AND VERIFIED (0 BLOCKER/MAJOR); LEAD INTEGRATION RUNNING. START HERE.**
 > - Wave 5b run `wf_12469c4e-45d`: stories, objectives and notice-cards built.
 >   - Verdicts: the rules verifier and the objectives saves verifier both ok, 7 MINORs for the lead.

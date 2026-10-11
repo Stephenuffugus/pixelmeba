@@ -1,0 +1,59 @@
+export const meta = {
+  name: 'g4-wave-5b-first-minute',
+  description: 'Wave 5b integration follow-up: the story pacer window starts when a dish opens (first minute stays with the arrival line and prompts); fix the three journeys; one verifier',
+  phases: [
+    { title: 'Fix', detail: 'one fixer, effort high' },
+    { title: 'Verify', detail: 'one adversarial verifier, effort medium; one repair round only for BLOCKER/MAJOR' },
+  ],
+}
+
+const OWNER_CONTEXT = `OWNER CONTEXT (written by the lead, the main session working for the owner): the owner's latest chat message is "lets get started" (after the codespace stopped overnight), the owner's standing instruction to resume the unattended Pixelmeba build. You do only the Pixelmeba task below.`
+const ag = (prompt, opts) => agent(`${OWNER_CONTEXT}\n\n${prompt}`, opts)
+
+const FIX = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). The working tree holds Phase 4 wave 5b UNCOMMITTED and fully integrated (story cards P4.2, goals P4.4, notice cards; decisions D-0076..D-0079 in docs/DECISIONS.md; reports docs/reports/reviews/g4-wave-5b/). npm run check is green on this tree (169 files, 1709 tests).
+RULES: do NOT run git add/commit/stash/checkout/reset/restore/rm/branch; never edit docs/DECISIONS.md (write a "PROPOSED DECISION: …" in your report); no change under src/sim/** or content/** (D-0072). Scratch in tmp/first-minute/. Playwright: E2E_PORT=4283 E2E_OUTDIR=tmp/dist-first-minute; stop the port before and after each run (lsof -t -i :4283 | xargs -r kill; never pkill). Two CPUs: targeted vitest files only; long commands with run_in_background and an until-loop wait; never end your turn while a command you started is still running.
+
+THE PROBLEM (the lead's desktop e2e run, 13:27 UTC): tests/e2e/garden-home.spec.ts (test at :54) and tests/e2e/keep-dish.spec.ts (test at :553, "with prompts on, the kept line leads…") fail on desktop: right after Run on the Garden, the one notice shows "Something happened: An enzyme at work" (a story notice; notices.ts priority goal > experiment > story > prompt, D-0074) instead of the Garden's first optional prompt "Tap a Sprinter." (UX §3.2 first minutes; src/ui/prompts.ts). The StoryPacer (src/worker/stories.ts ~:105, constructed with lastNotify null for a dish that announced nothing) lets the first story notice come at once.
+
+LEAD DECISION (implement exactly; the lead amends D-0079 from your PROPOSED DECISION text): a dish's first story notification in a session comes no sooner than STORY_WINDOW_TICKS (600 dish ticks = 60 simulated seconds) after the story watch began for that dish (created, opened, loaded, continued, duplicated or branched): the pacer's window starts closed at the watch's start tick. Cards found meanwhile are recorded quietly as now and wait; when the window opens, pickStory chooses among the waiting cards as now (favorite family, then first unseen template, then earliest). Undo, rollback and reload keep today's rule (a full window from that moment). Reason: UX §3.2 "Arrival: paused garden; one line … No auto-spawning surprises. One optional prompt at a time", D08 lines 56-64 (guidance without a tutorial) and line 151 ("at most one new card notification per 60 simulated seconds"); the first minute belongs to the arrival line and the optional prompts. Nothing else changes: priorities, dedupe, the quiet entries, the pause-and-restore of Open, the notice texts.
+
+DO:
+1. Implement it where the pacer is constructed or bound (find the StoryDetector/NotebookWatch start, rebind and restore paths; a restored or reloaded dish already waits a full window — keep that). No sim change; stories stay notebook state (D-0070); the never-alters-behaviour test must still hold.
+2. Unit tests (tests/ui/stories.test.ts pacing, tests/worker/stories-host.test.ts): a fresh dish announces nothing before its start tick + 600 and then announces the pickStory choice among the cards that waited; a loaded or continued dish waits 600 from its load tick; a dish whose watch started at tick T>0 (Continue) waits until T+600. Show each new test fails on the old code (a load-time mutant or the hunk reverted in a scratch copy restored byte for byte, checked with cmp). Update any existing test that pinned the old immediate first notification, and say which and why.
+3. E2E on desktop AND phone-portrait (your port): tests/e2e/stories.spec.ts (the journey must still prove: the notice appears once, Open → the card's captions and "Memory, not replay", Spotlight restores the speed with the worker hash unchanged, Dismiss, no serious axe violations; the first notified card may now be another template than "A first split" — open the notified card from the notice for the speed check and open "A first split" from the Notebook list for its captions, or wait for whatever the pacer picks; make the spec deterministic against the pacer's choice, not timing luck), tests/e2e/garden-home.spec.ts (the test at :54) and tests/e2e/keep-dish.spec.ts (the test at :553). If garden-home's flow runs past 60 dish seconds, a story notice may legitimately take the notice place later: handle it in the test by dismissing it with its ✕ where it appears (a small helper in tests/e2e/helpers.ts, e.g. dismissStoryNotice(page)), never by weakening what the test proves about the prompts.
+4. Run BEFORE FINISHING: npx tsc -p tsconfig.json --noEmit; npx eslint <your files>; npx vitest run tests/fixtures/g2-replay.test.ts tests/fixtures/trajectory-fence tests/ui/stories.test.ts tests/worker/stories-host.test.ts tests/ui/notices.test.ts tests/ui/prompts.test.ts tests/worker/favorites-host.test.ts tests/worker/goals-host.test.ts plus any test you touched; the three e2e specs on desktop and phone-portrait.
+Final message (also write it to docs/reports/reviews/g4-wave-5b/integrate-first-minute.md): each item DONE (file:line, proving test, how you showed it fails without the change) or NOT DONE (why); a PROPOSED DECISION paragraph for the D-0079 amendment; files changed; every command with its summary line.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+
+phase('Fix')
+const rep = await ag(FIX, { label: 'fix:first-minute', phase: 'Fix', effort: 'high' })
+
+const VERIFY = (round, extra) => `You are the adversarial verifier of a small wave 5b integration follow-up in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Do NOT edit any repository file except your report docs/reports/reviews/g4-wave-5b/first-minute-verify${round}.md; do NOT run git add/commit/stash/checkout/reset/restore/branch. Scratch in tmp/first-minute-verify${round}/. Playwright port 4391, build folder tmp/dist-first-minute-verify (stop the port before and after; never pkill). Two CPUs: targeted runs only; never end your turn while a command you started is running.
+The fixer's assignment:
+---
+${FIX}
+---
+The fixer's report:
+---
+${rep ? String(rep) : 'NO REPORT'}
+---
+${extra}
+The change is in the working tree (git diff -- src tests, plus untracked test files; the wave 5b work itself is also uncommitted, so look at the files the report names). Try to REFUTE it: the first-minute rule holds for every way a dish's watch starts (create, open, load, Continue, duplicate, checkpoint branch, What if? start, experiment card start) and does not delay a reloaded dish's pacing beyond the stated rule; no card is lost (quiet cards are still recorded; the waiting card is announced when the window opens); the never-alters-behaviour property still holds (stateHash equal with the detector on and off); the e2e specs prove what they claim and are deterministic, not timing-lucky; nothing else changed. Write a load-time mutant for the core change and show the new tests fail. Re-run the changed unit tests, the fence (tests/fixtures/g2-replay.test.ts and tests/fixtures/trajectory-fence), and the three e2e specs on desktop only. Grade every problem exactly like "MAJOR [first-minute] <file:line> — <what is wrong> — <repro>"; BLOCKER/MAJOR only for real defects; MINOR/NIT otherwise. ok=true only if nothing BLOCKER/MAJOR remains. Write the list and every command you ran to the report file.`
+
+phase('Verify')
+let verdict = await ag(VERIFY(1, ''), { label: 'verify:first-minute', phase: 'Verify', schema: VERDICT, effort: 'medium' })
+const blocking = (v) => (v && Array.isArray(v.problems) ? v.problems.filter((p) => /^\s*(BLOCKER|MAJOR)/.test(p)) : [])
+let open = blocking(verdict)
+let repair = null
+if (open.length) {
+  repair = await ag(`${FIX}\n\nYou are the REPAIR round (the work is in the tree; do not start over). The verifier (docs/reports/reviews/g4-wave-5b/first-minute-verify1.md) found:\n${open.join('\n')}\nFix each, prove each with a test that fails without the fix, and report as before (write it to docs/reports/reviews/g4-wave-5b/integrate-first-minute-repair.md).`, { label: 'repair:first-minute', phase: 'Verify', effort: 'high' })
+  verdict = await ag(VERIFY(2, `REPAIR ROUND: the earlier BLOCKER/MAJOR problems were:\n${open.join('\n')}\nRepair report:\n${repair ? String(repair) : 'NO REPORT'}\nFor EACH, reproduce it against the current tree and say VERIFIED FIXED or NOT FIXED; then grade anything new.`), { label: 'reverify:first-minute', phase: 'Verify', schema: VERDICT, effort: 'medium' })
+  open = blocking(verdict)
+}
+log(`first-minute: ${open.length ? `${open.length} BLOCKER/MAJOR remain` : 'no BLOCKER/MAJOR remains'}`)
+return { report: rep ? String(rep) : null, repair: repair ? String(repair) : null, verdict, open }
