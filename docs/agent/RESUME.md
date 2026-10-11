@@ -21,7 +21,7 @@
 >   - Stage 1: share 4271, try-my-dish 4272, observation-map 4273.
 >   - Stage 2: observation-notebook 4274, challenge-editor 4275.
 >   - Stage 3: variants-paired 4276, narration 4277.
->   - Lead review (11:10): accept every PROPOSED DECISION. The "shelf" (write-once slot records outside the ten named
+>   - Lead review (10:00): accept every PROPOSED DECISION. The "shelf" (write-once slot records outside the ten named
 >     slots) is the reading of SPEC §13.6 "an immutable baseline into a slot"; owner review: yes.
 >   - Before launch: patch its `<lead: …>` placeholders with the wave 5b facts; record g4-plan calls 3 and 4 and the
 >     writer's decisions as D-numbers after wave 5b's; run 6a, then 6b (its LEAD PRE-LAUNCH header).
