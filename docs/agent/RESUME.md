@@ -16,6 +16,9 @@
 >   - reports go to `docs/reports/reviews/g4-wave-6b/`.
 > - Backups: `nohup tools/lead/backup-loop.sh wip/g4-wave-6b "wip: wave 6b in flight"` (pid in tmp/lead/backup-6b.pid;
 >   log tmp/lead/backup-g4-wave-6b.log).
+> - Also running (planning only): the wave 7 task writer `docs/agent/g4-wave-7-tasks.workflow.js.txt`, run `wf_36ce2605-40a`
+>   → `docs/agent/g4-wave-7.tasks.js.txt` with `<lead: …>` placeholders for the 6b facts (writer report in
+>   docs/reports/reviews/g4-wave-7/writer.md). If it died, rerun it; it edits no source file.
 > - If this session dies mid-wave:
 >   1. If `git status` is clean, restore with `git checkout wip/g4-wave-6b -- . && git reset -q`.
 >   2. Read the run's journal (~/.claude/projects/-workspaces-pixelmeba/<session>/subagents/workflows/<run>/journal.jsonl)
