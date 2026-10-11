@@ -3,6 +3,43 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑11 21:15 UTC — RESUMED AFTER A CODESPACE RESTART (≈ 21:04; the session died ≈ 20:40). 6a STILL UNCOMMITTED.**
+> - The tree matched backup `27ba3f6` exactly; new backup `wip/g4-wave-6a` = `10d6bad` (with the two test fixes below).
+> - What the 19:03 runs showed:
+>   - check: one failure only, a TIMEOUT. try-dish-host "the turns kind never alters behaviour" took 123.7 s under the
+>     e2e's load against the 120 s default. Run alone, the file gave 11/11 in 122 s. Fix: an explicit `600_000` timeout
+>     with the comparison tests' comment.
+>   - e2e: 49 of the 51 that ran passed; [51/53] whatif:168 was cut off by the restart. stories.spec.ts:114 failed
+>     because it still expected NO "Save picture" on the story card ("arrives with P4.6"). Fix: it now expects the
+>     button, and a new final step proves Save picture opens the Share sheet on Picture with the card's title as the
+>     question and that Close leaves the dish paused and unchanged.
+> - Running (logs in `tmp/lead/`):
+>   - `e2e-6a-rest.log`: port 4290, desktop stories + whatif :168 :237 :286 + garden, compare, experiments,
+>     sound-settings, keyboard (25), then stories on phone-portrait;
+>   - `check-6a2.log`: `npm run check` at nice 10.
+> - The commit message draft is `tmp/lead/commit-6a.txt` (the EVIDENCE_PLACEHOLDER line is filled once both finish).
+> - Then follow steps 1–5 of the 19:10 block below.
+
+> **Update 2026‑10‑11 19:10 UTC — WAVE 6a INTEGRATED (verify ok); FINAL CHECK + DESKTOP E2E RUNNING; NOT YET COMMITTED.**
+> - Integration run `wf_08608709-2c8` done: `integrate-code-minors-6a.md`, `integrate-docs-a11y-6a.md`,
+>   `integrate-verify1.md` (ok: 1 MINOR + 3 NITs). The lead fixed them (`integrate-lead.md`); D‑0083…D‑0085 updated.
+> - Running (logs in `tmp/lead/`): `npm run check` (check-6a.log) and 53 desktop journeys on port 4290 (e2e-6a.log):
+>   share, try-dish, observe-tools, a11y-screens, whatif, new-dish, observe, keep-dish, save-reload, favorites,
+>   stories, lab-tools, garden-home, goals. Still to run on desktop after them: garden, compare, experiments,
+>   sound-settings, keyboard.
+> - Commit message draft: the scratchpad's commit-6a.txt is lost on a restart. Rebuild it from the 15:00 commit style
+>   and the 6a reports.
+> - Then:
+>   1. commit 6a;
+>   2. tick P4.6 and P4.7;
+>   3. `python3 tools/lead/append-as-built.py docs/agent/g4-wave-6.tasks.js.txt docs/agent/g4-wave-6a-as-built.draft.txt
+>      6A_COMMIT=<sha> "6A_EVIDENCE=<check + e2e>"`;
+>   4. build `docs/agent/g4-wave-6b.run.workflow.js.txt` with tools/lead/build-run-file.py (keys
+>      `observation-notebook,challenge-editor,variants-paired,narration`);
+>   5. free ports 4271‑4277 and 4390‑4397, move the backup loop to `wip/g4-wave-6b`, launch.
+> - If this session dies: the tree is backed up on `wip/g4-wave-6a` every 30 min. Re-run the check and the e2e, then
+>   continue from step 1.
+
 > **Update 2026‑10‑11 17:45 UTC — WAVE 6a BUILT AND VERIFIED (0 BLOCKER/MAJOR after fix round 1); LEAD INTEGRATION RUNNING.**
 > - Wave 6a run `wf_84c01253-c83` (2.7 h): share, try-my-dish and observation-map. Reports:
 >   `docs/reports/reviews/g4-wave-6a/`.
