@@ -3,6 +3,26 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑11 17:45 UTC — WAVE 6a BUILT AND VERIFIED (0 BLOCKER/MAJOR after fix round 1); LEAD INTEGRATION RUNNING.**
+> - Wave 6a run `wf_84c01253-c83` (2.7 h): share, try-my-dish and observation-map. Reports:
+>   `docs/reports/reviews/g4-wave-6a/`.
+> - Tree backup before integration: `wip/g4-wave-6a` = `d5a0c32`.
+> - Running: `docs/agent/g4-wave-6a-integrate.workflow.js.txt`, run `wf_08608709-2c8`.
+>   - code-minors-6a: Share sheet blocks dish keys; one import-refusal toast in UX §5.11 form; map intro copy; share
+>     tests read versions; Try my dish clears `kept` after journal, favorite and goal ops.
+>   - docs-a11y-6a: ARCH §7/§11.2 for 6a; a11y sweep of the 6a screens.
+>   - Then one verifier.
+> - Lead rulings for D‑0083…D‑0085 (being written):
+>   - probe masks survive Undo; their records reset;
+>   - the relationship map's +0.3 ms/tick goes to P4.13 and EXPANSION_RESPONSE;
+>   - the shelf's 10-baseline cap ships with 6b's Storage panel in the same release;
+>   - recipe files need an exact build match (owner item).
+> - If this session dies:
+>   1. If the tree is clean, restore `wip/g4-wave-6a`.
+>   2. Read `integrate-*.md` and rerun only unfinished parts.
+> - Then: check, desktop e2e, commit, tick P4.6 and P4.7, build 6b
+>   (`observation-notebook,challenge-editor,variants-paired,narration`) with a STAGE-1-as-built note, launch.
+
 > **Update 2026‑10‑11 15:00 UTC — WAVE 5b COMMITTED (`c3f214e`), P4.1–P4.4 ticked. WAVE 6a LAUNCHING. START HERE.**
 > - Evidence for 5b:
 >   - check 169 files / 1714 tests;

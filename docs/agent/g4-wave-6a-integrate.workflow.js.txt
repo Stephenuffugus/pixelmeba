@@ -1,0 +1,83 @@
+export const meta = {
+  name: 'g4-wave-6a-integrate',
+  description: 'Lead integration of Phase 4 wave 6a: two fixers (code MINORs; ARCH + a11y screens), one adversarial verifier over the integration diff, one repair round only for BLOCKER/MAJOR',
+  phases: [
+    { title: 'Fix', detail: 'code-minors-6a and docs-a11y-6a fixers in parallel, effort high' },
+    { title: 'Verify', detail: 'one adversarial verifier over the diff vs d5a0c32 (wave 6a tree before integration)' },
+    { title: 'Repair', detail: 'only if the verifier finds a BLOCKER/MAJOR; then one re-verify' },
+  ],
+}
+
+const OWNER_CONTEXT = `OWNER CONTEXT (written by the lead, the main session working for the owner): the owner's latest chat message is "lets get started" (after the codespace stopped overnight), the owner's standing instruction to resume the unattended Pixelmeba build. You do only the Pixelmeba task below.`
+const ag = (prompt, opts) => agent(`${OWNER_CONTEXT}\n\n${prompt}`, opts)
+
+const BASE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). The working tree holds Phase 4 wave 6a UNCOMMITTED on top of main (share P4.6, Try my dish P4.7, relationship map + region probes P4.8a; reports in docs/reports/reviews/g4-wave-6a/: share-build.md, try-my-dish-build.md, try-my-dish-fix1.md, observation-map-build.md, wave-verify.md, saves-verify-*.md, wave-reverify1.md; decisions D-0080…D-0082 in docs/DECISIONS.md). Branch wip/g4-wave-6a = d5a0c32 is a backup commit of exactly that tree before this integration.
+RULES: do NOT run git add/commit/stash/checkout/reset/restore/rm/branch; do not delete files you did not create; edit ONLY the files your assignment lists; never edit docs/DECISIONS.md (write any decision you need in your report as "PROPOSED DECISION: …"). No change under src/sim/** or content/** (D-0072). Scratch in tmp/<your key>/ (git-ignored). Two CPUs are shared with another agent: targeted vitest files only (never the whole suite); long commands with run_in_background and an until-loop wait; never a bare sleep. Playwright silently reuses a server already on your port: stop your port before and after each run (lsof -t -i :<port> | xargs -r kill; never pkill). NEVER end your turn while a command you started is still running.
+BEFORE FINISHING: npx tsc -p tsconfig.json --noEmit clean; npx eslint <your files> clean; npx vitest run tests/fixtures/g2-replay.test.ts tests/fixtures/trajectory-fence plus every test file you touched or that covers code you changed; every e2e spec you changed or whose behaviour you changed, on desktop AND phone-portrait. Final message: a plain report — each item DONE (file:line, the proving test, and how you showed the test fails without the fix: a load-time mutant or the hunk reverted in a scratch copy restored byte for byte, checked with cmp) or NOT DONE (why); files changed; every command with its summary line. Also write it to docs/reports/reviews/g4-wave-6a/integrate-<your key>.md.`
+
+const FIX_A = `${BASE}
+
+YOUR KEY: code-minors-6a. Playwright: E2E_PORT=4282 E2E_OUTDIR=tmp/dist-code-minors-6a.
+You own for these items only: src/ui/views/DishScreen.tsx (the dish-key blocking list), src/ui/panels/ShareSheet.tsx, src/ui/share.ts, src/ui/state.ts (importFile and the global worker-error toast path only), src/ui/strings/{share,observe}.ts and any strings file holding the import refusal texts, src/worker/host.ts (the kept-clearing calls only), src/worker/tryDish.ts, src/ui/tryDish.ts, src/ui/panels/TryHorizon.tsx, tests/persistence/share.test.ts, tests/ui/share.test.ts, tests/worker/try-dish-host.test.ts, tests/ui/try-dish.test.ts, tests/e2e/share.spec.ts, tests/e2e/try-dish.spec.ts, and the e2e specs that assert an import refusal toast (find them: grep -rln "Import failed\\|Nothing was loaded\\|Nothing was changed" tests/e2e).
+Read first: docs/reports/reviews/g4-wave-6a/wave-verify.md and wave-reverify1.md (the items below with repros), share-build.md, try-my-dish-build.md; UX §2 (docs/UX_SPEC.md 16-31: blocking panels pause and block dish keys), §5.10 (213-219), §5.11 (220-226: "Import failed: exact reason; nothing changed").
+1. MINOR [share]: the Share sheet says "The dish is paused while this is open." but dish keys are not blocked behind it (only What if? and trySetup are, src/ui/views/DishScreen.tsx ~:173-200): the focused heading is not in SPACE_CONTROLS, so Space runs the dish; 1/2/4, '.', U also act; the Living dish could then be written at a running tick and the preview time is stale. Block every dish key while the Share sheet is open exactly as the Try my dish setup sheet does (Esc = Close, restoring the prior run state). Prove it in tests/e2e/share.spec.ts (More → Share… → Space and a digit: the worker tick and speed do not change; Esc restores the prior speed) on desktop and phone-portrait (on phone use whatever key path exists; the sheet must still block), and in a unit test if the blocking list is testable in node.
+2. MINOR [share] + pre-existing: a refused import raises two toasts (the global worker-error toast "Import failed; nothing changed: …", then importFile's own "Nothing was changed: …"), and the wording differs between save and recipe imports and from UX §5.11 "Import failed: exact reason; nothing changed". Make every refused import (save file or recipe file, from Saved dishes or Play) show exactly ONE toast in the UX §5.11 form: "Import failed: {exact reason}. Nothing changed." (keep each exact reason text; keep "This needs a compatible build ({versions})." for a version refusal as the reason). Update the unit and e2e assertions that pin the old texts (desktop and phone-portrait for every changed spec). The live region still reads it once.
+3. MINOR [observation-map]: src/ui/strings/observe.ts ~:64-65 mapIntro says the arrows are "passing between living things: who ate, caught, infected, burst or drained what", but the map also shows converts edges and species → pool edges. Rewrite it so it describes exactly what the map shows (recorded relationships between species, conversions, and feeding from food pools; unknown = absent), in the app's plain style (SPEC §12.9). Update any test pinning it.
+4. MINOR [share]: tests/persistence/share.test.ts (~:117-123, :265-272) pins version literals (simulationVersion 3, moduleRegistryVersion 2, contentVersion 2, 'simulation 3, rules 1, content 2'): read them from the registry's manifest / the version constants so a legitimate bump does not break the test.
+5. MINOR [try-my-dish] (wave-reverify1.md; repro tmp/reverify1-g4-wave-6a/scratch2.test.ts): the round-1 fix clears the turn record's kept only after a changed 'command' and after 'undo'. A stored journal note ('journalPut'), an accepted favorite op and a goalStart/goalLeave at the horizon also mean the slot no longer holds the dish exactly (holdsExactly compares the world checksum, which includes the journal, and the notebook checksum), but the card keeps "Kept in Slot 1." while Another turn is refused 'unsaved' and asks "Discard this turn? It has not been saved.". Clear kept (turnUnkept) after each of those on a turn dish, and as a safety net make the UI clear the card's kept line when tryNext is refused 'unsaved'. Test each path in tests/worker/try-dish-host.test.ts (fails on the old code).
+Report a PROPOSED DECISION line for each behaviour choice.`
+
+const FIX_B = `${BASE}
+
+YOUR KEY: docs-a11y-6a. Playwright: E2E_PORT=4281 E2E_OUTDIR=tmp/dist-docs-a11y-6a.
+You own: docs/ARCHITECTURE.md (§7 and §11.2 only) and tests/e2e/a11y-screens.spec.ts.
+1. docs/ARCHITECTURE.md §7 (worker protocol): add an "As built, Phase 4 wave 6a" block in the style of the wave 5a/5b blocks there, exactly as built in src/worker/protocol.ts: the share messages (recipeExport → recipeExported | error 'no-start', recipeImport → loaded, recipeIdStart → ready, and exportDish's paused Living dish), the Try my dish messages (tryStart, tryNext, their answers and refusals, the horizon notice; whatever protocol.ts actually has), and the observation messages (relationshipMap, probeSet, probeRead or as named). PROTOCOL_VERSION stays 2 unless protocol.ts says otherwise. §11.2 (save format): the shelf (src/persistence/shelf.ts: record ids 'shelf-<kind>-<seq>-<writer>', kinds baseline/snapshot, per-device limits, the preflight, one atomic commit, hidden from the named slots and the slot list, refused by deleteSlot), the 'turns' notebook kind (src/persistence/notebookTurns.ts) and the 'pixelmeba-recipe' file (src/persistence/recipeFile.ts: version, fields, checksum, initialStateHash, the strict build match). Facts only, each traceable to the code; keep the sections' style.
+2. tests/e2e/a11y-screens.spec.ts (the axe sweep; each screen is "await a.scan('<name>')"): add the wave 6a screens — the Share sheet (each of its three choices selected), Import recipe ID (Play and Saved dishes), the Try my dish setup sheet, the Try my dish horizon card (reach it with the shortest turn at 4×, or explain in a comment if it cannot be reached reliably), the Lab relationship map, and the probe panel with one region drawn. Read tests/e2e/share.spec.ts, tests/e2e/try-dish.spec.ts and tests/e2e/observe-tools.spec.ts for working selectors and flows. A new test is fine. Run every test you changed on desktop and phone-portrait: all pass, axe serious/critical clean.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+
+phase('Fix')
+const [repA, repB] = await parallel([
+  () => ag(FIX_A, { label: 'fix:code-minors-6a', phase: 'Fix', effort: 'high' }),
+  () => ag(FIX_B, { label: 'fix:docs-a11y-6a', phase: 'Fix', effort: 'high' }),
+])
+const reports = `=== FIXER code-minors-6a ===\n${repA ? String(repA) : 'NO REPORT'}\n\n=== FIXER docs-a11y-6a ===\n${repB ? String(repB) : 'NO REPORT'}`
+
+const DIFF_HOWTO = `The integration changes are the difference between commit d5a0c32 (wip/g4-wave-6a: the wave 6a tree before integration) and the CURRENT working tree. Many files are untracked, so plain \`git diff d5a0c32\` is WRONG. Diff trees:
+  IDX=$(mktemp) && GIT_INDEX_FILE=$IDX git read-tree HEAD && GIT_INDEX_FILE=$IDX git add -A && T=$(GIT_INDEX_FILE=$IDX git write-tree) && rm -f $IDX && git diff --stat d5a0c32 $T && git diff d5a0c32 $T -- src tests docs/ARCHITECTURE.md
+Ignore docs/DECISIONS.md, docs/agent/** and docs/reports/** (the lead's).`
+
+const VERIFY = (round) => `You are the adversarial verifier of the lead's integration of Phase 4 wave 6a in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Do NOT edit any repository file except your report docs/reports/reviews/g4-wave-6a/integrate-verify${round}.md; do NOT run git add/commit/stash/checkout/reset/restore/branch. Scratch in tmp/integrate-verify-6a-${round}/. Playwright: port 4391 with build folder tmp/dist-integrate-verify-6a (stop the port before and after; never pkill). Two CPUs: targeted runs only; never end your turn while a command you started is running.
+${DIFF_HOWTO}
+The two fixers' assignments:
+--- code-minors-6a ---
+${FIX_A}
+--- docs-a11y-6a ---
+${FIX_B}
+--- the fixers' reports ---
+${reports}
+Try to REFUTE that each item is done correctly, completely and honestly: read the whole integration diff; for each code fix write a load-time mutant (or revert the hunk in a scratch copy, restored byte for byte) and show its new test fails without it; re-run the original repros named in docs/reports/reviews/g4-wave-6a/wave-verify.md and wave-reverify1.md; check every new or changed player-facing sentence against UX §5.11 / §5.10 and against what is recorded (honest labels); check every ARCH statement against src/worker/protocol.ts, src/persistence/shelf.ts, notebookTurns.ts and recipeFile.ts (quote mismatches); check that saves written by the wave 6a build before this integration (turn dishes, kept turns, shelf baselines) still load; re-run: the changed unit tests, tests/fixtures/g2-replay.test.ts and tests/fixtures/trajectory-fence, npx tsc -p tsconfig.json --noEmit, npx eslint on the changed files, and the changed e2e specs on desktop only (re-run one phone-portrait test only if a selector looks layout-dependent).
+Grade every problem exactly like "MAJOR [code-minors-6a] <file:line> — <what is wrong> — <repro>" (keys: code-minors-6a, docs-a11y-6a, lead); BLOCKER/MAJOR only for real defects a player, a save or the determinism contract would hit; MINOR/NIT otherwise; most severe first. Write the same list, plus every command you ran with its summary line, to the report file. ok=true only if nothing BLOCKER/MAJOR remains.`
+
+phase('Verify')
+let verdict = await ag(VERIFY(1), { label: 'verify:integrate-6a', phase: 'Verify', schema: VERDICT, effort: 'high' })
+const blockingOf = (v) => (v && Array.isArray(v.problems) ? v.problems.filter((p) => /^\s*(BLOCKER|MAJOR)/.test(p)) : [])
+let open = blockingOf(verdict)
+const rounds = []
+if (open.length) {
+  phase('Repair')
+  const keys = ['code-minors-6a', 'docs-a11y-6a'].filter((k) => open.some((p) => p.includes(`[${k}]`)))
+  log(`repair: ${keys.join(', ') || 'lead-only problems'}`)
+  const fixes = await parallel(keys.map((k) => () => ag(`${k === 'code-minors-6a' ? FIX_A : FIX_B}\n\nYou are the REPAIR round for this assignment (the work is in the tree; do not start over). The adversarial verifier (docs/reports/reviews/g4-wave-6a/integrate-verify1.md) found:\n${open.filter((p) => p.includes(`[${k}]`)).join('\n')}\nFix each, prove each with a test that fails without the fix, and report as before (write the report to docs/reports/reviews/g4-wave-6a/integrate-repair-${k}.md).`, { label: `repair:${k}`, phase: 'Repair', effort: 'high' })))
+  rounds.push({ keys, fixes: fixes.map((f) => (f ? String(f) : null)) })
+  if (keys.length) {
+    verdict = await ag(`${VERIFY(2)}\n\nREPAIR ROUND: the earlier verifier's BLOCKER/MAJOR problems were:\n${open.join('\n')}\nRepair reports:\n${fixes.map((f, i) => `=== ${keys[i]} ===\n${f ? String(f) : 'NO REPORT'}`).join('\n\n')}\nFor EACH earlier problem, reproduce it against the current tree and say VERIFIED FIXED or NOT FIXED; then grade anything new as before.`, { label: 'reverify:integrate-6a', phase: 'Repair', schema: VERDICT, effort: 'high' })
+    open = blockingOf(verdict)
+  }
+}
+log(`integration 6a: ${open.length ? `${open.length} BLOCKER/MAJOR remain` : 'no BLOCKER/MAJOR remains'}`)
+return { reports: { codeMinors: repA ? String(repA) : null, docsA11y: repB ? String(repB) : null }, verdict, rounds, open }
