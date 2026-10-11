@@ -6,12 +6,13 @@
  * Components read only these and snapshots; every change is a 'favorite' request (never a command), and
  * every change autosaves, as a journal note does. Nothing here reads or writes the simulation.
  */
-import { effect, signal } from '@preact/signals';
+import { computed, effect, signal } from '@preact/signals';
 import type { SimClient, NotebookNotice } from '@worker/client';
 import { ID_STRIDE, type FavoriteOp, type FavoriteSlotMark, type SnapshotMsg } from '@worker/protocol';
 import type { FavoritePattern, FavoriteRecord, NotebookRecord } from '@persist/notebook';
 import { autosave, dishInfo, getClient, getRenderer, select, sheet, showToast, toast } from './state';
 import { favoriteDisplayName, removedText, restoredRemovedText } from './strings/favorites';
+import { shownCard } from './notices';
 
 /** The open dish's notebook record (null until the worker answered, or with no dish open). */
 export const notebook = signal<NotebookRecord | null>(null);
@@ -21,8 +22,33 @@ export const favoriteSlots = signal<readonly FavoriteSlotMark[]>([]);
 export const favoriteSheetId = signal<string | null>(null);
 /** The organism the Follow panel is about (opened from the inspector), or null. */
 export const followTarget = signal<{ readonly birthId: number; readonly speciesIdx: number } | null>(null);
-/** A followed family that has no members left: the extinction card (UX §5.8), until closed. */
-export const extinctCard = signal<string | null>(null);
+/**
+ * Followed families that have no members left, oldest first, each waiting for its extinction card (UX §5.8;
+ * D-0076: no card is lost). A FIFO of favorite ids with no duplicates: the card shows the head; closing
+ * it (Close, Look back, Continue exploring, Start a new dish) removes it and the next one shows.
+ */
+export const extinctQueue = signal<readonly string[]>([]);
+/** The favorite id the extinction card is about now: the head of the queue (null: none). */
+export const extinctCard = computed<string | null>(() => extinctQueue.value[0] ?? null);
+
+/** A followed family died: its card joins the queue (once). */
+export function queueExtinctCard(id: string): void {
+  const q = extinctQueue.peek();
+  if (!q.includes(id)) extinctQueue.value = [...q, id];
+}
+
+/** The player closed the card about `id` (the head; any button): it leaves the queue. */
+export function closeExtinctCard(id: string): void {
+  const q = extinctQueue.peek();
+  if (q.includes(id)) extinctQueue.value = q.filter((x) => x !== id);
+}
+
+/** Keep only queued ids whose family is still extinct in `record` (Undo brought it back, or it is gone). */
+function pruneExtinctQueue(record: NotebookRecord): void {
+  const q = extinctQueue.peek();
+  const kept = q.filter((id) => record.favorites.some((f) => f.id === id && f.extinct !== null));
+  if (kept.length !== q.length) extinctQueue.value = kept;
+}
 
 /**
  * Fix round 1: a dropped notebook's message for the dish it belongs to. The worker's 'loaded' answer
@@ -110,14 +136,13 @@ export function onNotebookNotice(n: NotebookNotice): void {
   if (n.dishId !== openDishId()) return;
   notebook.value = n.record;
   if (n.change.kind === 'favoriteExtinct') {
-    extinctCard.value = n.change.id;
+    queueExtinctCard(n.change.id);
     if (n.change.removed) showToast(removedText(n.change.removed), 6000);
     void autosave();
   } else if (n.change.kind === 'favoritesRestored') {
-    // Undo or a rollback: an extinction card whose family is back (or gone from the record) closes.
-    const shown = extinctCard.value;
-    if (shown !== null && !n.record.favorites.some((f) => f.id === shown && f.extinct !== null))
-      extinctCard.value = null;
+    // Undo or a rollback: every queued extinction card whose family is back (or gone from the record)
+    // leaves the queue, the shown one and the waiting ones alike.
+    pruneExtinctQueue(n.record);
     const open = favoriteSheetId.value;
     if (open !== null && !n.record.favorites.some((f) => f.id === open) && sheet.value === 'favorite')
       sheet.value = 'none';
@@ -140,7 +165,7 @@ function followOpenDish(id: string | null): void {
   latestMarks = null;
   favoriteSheetId.value = null;
   followTarget.value = null;
-  extinctCard.value = null;
+  extinctQueue.value = [];
   pendingFind = null;
   if (notebookDroppedFor.peek()?.dishId !== id) notebookDroppedFor.value = null;
   if (id !== null) void refreshNotebook(id);
@@ -188,6 +213,14 @@ export function extinctCardFavorite(): FavoriteRecord | null {
 }
 
 /**
+ * The extinction card's render guard (FavoriteExtinct): the head favorite when the notice place is the
+ * extinction card's (notices.ts shownCard 'extinct'), its family is extinct and a dish is open; else null.
+ */
+export function extinctCardToShow(): FavoriteRecord | null {
+  return shownCard.value === 'extinct' ? extinctCardFavorite() : null;
+}
+
+/**
  * The followed favorite whose family the organism `birthId` belongs to, if any: from the latest
  * snapshot's marks (members born since the record was read included), else the record's members.
  */
@@ -218,6 +251,9 @@ export async function favoriteOp(op: FavoriteOp): Promise<string | null> {
     const r = await getClient().favorite(dishId, op);
     if (openDishId() !== dishId) return null;
     notebook.value = r.record;
+    // A favorite removed from the notebook while its extinction card waits: that card is not left stuck
+    // at the head of the queue.
+    pruneExtinctQueue(r.record);
     if (r.removed) showToast(removedText(r.removed), 6000);
     if (r.refused) return r.refused;
     void autosave();

@@ -1,7 +1,10 @@
 /**
- * Notebook (UX §1, §2): Journal · Experiments. The Journal lists the stamps recorded when an
+ * Notebook (UX §1, §2): Something happened (P4.2 story cards, NotebookStories) · Favorites · Journal ·
+ * Experiments. P2.5's header follows: Journal · Experiments. The Journal lists the stamps recorded when an
  * experiment card's observation gate was reached (P2.8 adds observed relationships); Experiments lists
- * the cards this build ships (SPEC §13.2). Opening the Notebook never pauses or changes a dish.
+ * the cards this build ships (SPEC §13.2). The Notebook itself changes no dish. Leaving the dish screen pauses
+ * the dish (D-0028); a visit that began at a story notice's Open goes back to that dish at its prior speed by
+ * Spotlight or Back (D-0061's pause-and-restore convention; D-0077).
  */
 import { Component, type ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
@@ -10,6 +13,9 @@ import { IconBack } from '../icons';
 import { journal, journalUnseen, type JournalStampEntry } from '../journal';
 import { JournalComposer, ObservationCard } from './NotebookJournal';
 import { NotebookFavorites } from './NotebookFavorites';
+import { NotebookStories } from './NotebookStories';
+import { leaveNotebook, openStoryId, storyReturn, unseenStories, wireStories } from '../stories';
+import { STORY_TEXT } from '../strings/stories';
 import { CONCLUSIONS } from '../panels/CompareText';
 import { experimentCards, experimentCardsError, loadCompareCards, loadExperimentCards, route, type CompareCard } from '../state';
 import { compareCardLine, isListableCard } from '../strings/compareCards';
@@ -17,9 +23,10 @@ import { fmt, fmtDiff, measureLabel } from '../panels/CompareText';
 import { durationText, journalMeasureCells, recordedText } from '../strings/experiments';
 import { clock } from '../panels/CompareText';
 
-type Tab = 'favorites' | 'journal' | 'experiments';
+type Tab = 'stories' | 'favorites' | 'journal' | 'experiments';
 const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
   // P4.1: UX §2 order (Something happened · Favorites · Journal · … · Experiments).
+  { id: 'stories', label: STORY_TEXT.tab },
   { id: 'favorites', label: 'Favorites' },
   { id: 'journal', label: 'Journal' },
   { id: 'experiments', label: 'Experiments' },
@@ -28,7 +35,7 @@ const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
 export function Notebook() {
   const r = route.value;
   const tab: Tab = r.name === 'notebook' ? r.tab : 'experiments';
-  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ favorites: null, journal: null, experiments: null });
+  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ stories: null, favorites: null, journal: null, experiments: null });
 
   useEffect(() => {
     void loadExperimentCards();
@@ -38,6 +45,7 @@ export function Notebook() {
   }, [tab]);
 
   const select = (t: Tab, focus = false) => {
+    if (t === 'stories') openStoryId.value = null; // P4.2: the tab opens on its list
     route.value = { name: 'notebook', tab: t };
     if (focus) tabRefs.current[t]?.focus();
   };
@@ -56,7 +64,14 @@ export function Notebook() {
     <main class="page nb-page" aria-labelledby="nb-title" data-testid="notebook">
       <div class="home-grid">
         <header class="nb-header">
-          <button class="btn ghost nb-back" onClick={() => (route.value = { name: 'home' })} aria-label="Back to Home">
+          <button
+            class="btn ghost nb-back"
+            onClick={() => {
+              // A story visit (the notice's Open) goes back to its dish at the prior speed; else Home.
+              if (!leaveNotebook()) route.value = { name: 'home' };
+            }}
+            aria-label={storyReturn.current !== null ? 'Back to the dish' : 'Back to Home'}
+          >
             <IconBack />
           </button>
           <h1 id="nb-title">Notebook</h1>
@@ -79,16 +94,30 @@ export function Notebook() {
             >
               {t.label}
               {t.id === 'journal' && journalUnseen.value > 0 ? <span class="nb-dot">{journalUnseen.value} new</span> : null}
+              {t.id === 'stories' && unseenStories.value > 0 ? <StoryDot /> : null}
             </button>
           ))}
         </div>
         <section id="nb-panel" role="tabpanel" aria-labelledby={`nb-tab-${tab}`} class="nb-panel">
-          {tab === 'favorites' ? <NotebookFavorites /> : tab === 'journal' ? <JournalTab /> : <ExperimentsTab />}
+          {tab === 'stories' ? <NotebookStories /> : tab === 'favorites' ? <NotebookFavorites /> : tab === 'journal' ? <JournalTab /> : <ExperimentsTab />}
         </section>
       </div>
     </main>
   );
 }
+
+/** P4.2 (UX §5.9): the quiet dot for a story card not opened yet (the same one Home's Notebook button shows). */
+export function StoryDot() {
+  return (
+    <span class="story-dot" data-testid="story-dot">
+      <span aria-hidden="true">●</span>
+      <span class="sr-only"> (a story card not opened yet)</span>
+    </span>
+  );
+}
+
+// P4.2: a story card the worker announces asks for the dish's one notice (src/ui/stories.ts), once per page.
+wireStories();
 
 function stampedIds(): Set<string> {
   return new Set(journal.value.flatMap((e) => (e.kind === 'experimentStamp' ? [e.experimentId] : [])));

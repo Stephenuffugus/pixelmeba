@@ -8,6 +8,8 @@ import { DishThumb } from './DishThumb';
 import { SessionMemory } from './SessionMemory';
 import { slotModesLine, worldModesLine } from '../strings/modes';
 import { journalUnseen } from '../journal';
+import { unseenStories } from '../stories'; // P4.2: the quiet dot for an unseen story card
+import { StoryDot } from './Notebook';
 
 export function Home() {
   const hasDish = dishInfo.value !== null;
@@ -85,9 +87,10 @@ export function Home() {
           <button class="btn" onClick={() => (route.value = { name: 'newDish' })} data-testid="home-new">
             <IconLab /> New dish
           </button>
-          <button class="btn" onClick={() => (route.value = { name: 'notebook', tab: 'experiments' })} data-testid="home-notebook">
+          <button class="btn" onClick={() => (route.value = { name: 'notebook', tab: unseenStories.value > 0 ? 'stories' : 'experiments' })} data-testid="home-notebook">
             <IconNotebook /> Notebook
             {journalUnseen.value > 0 ? <span class="nb-dot">{journalUnseen.value} new</span> : null}
+            {unseenStories.value > 0 ? <StoryDot /> : null}
           </button>
           <button class="btn" onClick={() => (route.value = { name: 'saves' })}>
             <IconSave /> Saved dishes

@@ -826,3 +826,136 @@ Decision:
 Reason: SPEC §10.7 "Duplicate makes an independent named dish"; ARCH §7 `duplicate {dishId} → new dishId`; honest labels (a relationship is recorded only for the dish it showed in).
 Affects: src/worker/host.ts (duplicateDish); tests/worker/duplicate-sharing.test.ts; review docs/reports/reviews/g4-wave-5a/integrate-verify1.md (ok, no BLOCKER/MAJOR).
 Owner review: no.
+
+## D-0076 · 2026-10-11 · P4.1/P4.3 follow-up (wave 5b notice-cards) · The two cards in the notice place
+Context: the wave 5a integration verifier's three MINORs (docs/reports/reviews/g4-wave-5a/integrate-verify1.md items 1-3); built in wave 5b as the notice-cards task (docs/reports/reviews/g4-wave-5b/notice-cards-build.md, wave-verify.md). Rules: D08 lines 150-151 ("never more than one visible notice", "Prefer a favorite-family event"), D09 line 133, CT §12.10.
+Decision: the discovery card and a followed family's extinction card share the notice's place under five rules.
+1. **No preemption.**
+   - A card on screen keeps the place until its own source closes it (notices.ts recompute).
+   - When both cards are asked for together and none is on screen, the extinction card goes first (CARD_ORDER ['extinct', 'discovery']).
+2. **No new discovery card under the extinction card.**
+   - LineageState.showDiscovery refuses a new card while another card holds the place (`cardPlaceHeldByOther('discovery')`), after the lineage answer and before any card or pause.
+   - The pacer keeps those branch ids waiting, starts no 60 s gap and retries after DISCOVERY_RETRY_MS.
+   - The pause-on-discoveries pause happens only when a card really shows. Joining an open card is unchanged.
+3. **One new card notification per 60 s across the two cards.** An extinction card becoming the shown card (each new queue head included) counts as the last card shown for the discovery pacer (`DiscoveryPacer.otherCardShown()`). The extinction card itself waits only while a discovery card is on screen.
+4. **No extinction card is lost.**
+   - Extinct favorites wait in a FIFO queue without duplicates (favorites.ts extinctQueue), and the card shows the head.
+   - Each of its buttons removes the shown id.
+   - 'favoritesRestored' and every answered favorite op drop each queued id whose family is back or gone.
+   - Another dish clears the queue.
+5. **The wiring is testable in node.**
+   - The wiring is src/ui/noticeCards.ts wireNoticeCards(), called once by NoticeHost.
+   - The render guards are the pure extinctCardToShow() and discoveryCardToShow().
+   - tests/ui/notice-cards.test.ts drives them with the real modules and signals.
+Reason: one D8 notification at a time; nothing the player should see is lost; no card is pulled from under the reader (focus would drop to the page).
+Affects: src/ui/{notices,favorites,noticeCards}.ts, src/ui/panels/{FavoriteExtinct,DiscoveryCard,DiscoveryPacer,LineageState}.tsx, src/ui/views/NoticeHost.tsx, tests/ui/{notices,notice-cards,favorites}.test.ts and the pacer test.
+Owner review: no.
+
+## D-0077 · 2026-10-11 · P4.2 · Story cards as built
+Context: wave 5b stories (docs/reports/reviews/g4-wave-5b/stories-build.md, wave-verify.md); the integration fixes (integrate-stories-minors.md, integrate-verify1.md); SPEC §12.7, §12.9; D08 lines 128-155; UX §2, §5.9; D-0070.
+Decision:
+- **The record.**
+  - Story cards are the notebook kind 'stories' (src/persistence/notebookStories.ts), at most 50 per dish.
+  - When full, a new card removes the oldest dismissed card, else the oldest opened, else the oldest, and the tab says one was removed.
+  - A card holds template, key, world and ruleset identity, evidence ids, a summary with every value its captions need, a time range and `imageRefs` (always [] until P4.6).
+  - A card with no evidence, an unknown template, a non-finite value, an unknown or missing summary field, or a species, birth id or time the dish never had drops the whole notebook with the message.
+- **The detector** (src/worker/stories.ts StoryDetector, read-only, in the worker; never in src/sim, never for arms or rollback replays). Four templates:
+  - A first split: the first committed birth per species in this dish, and the first in a followed family.
+  - An enzyme at work: once per whole second with converted carbon. A producer is named only with recorded provenance (D-0051).
+  - A family changed: from 'branchEstablished'.
+  - A place changed: two regional trait samples, before the command and at least 60 s after it, for one quarter, with "Other recorded changes in between: {k}". It describes a sequence and claims no cause.
+- **Pacing** (StoryPacer): at most one notification per 600 dish ticks.
+  - A repeat key within the window joins the waiting card.
+  - Priority: a followed family's card, then a template not yet opened or announced in this dish, then the earliest.
+  - Cards not chosen enter the notebook quietly.
+  - The pacer's clock is not saved: after Undo, rollback or a reload it waits one full window.
+- **Undo and rollback** remove cards whose first evidence the restored dish does not have ('storiesRestored'). A card keeps only the evidence that is still true.
+- **Copies and exports.** Duplicate and an opened checkpoint branch copy no cards (favoritesOnly, D-0073). Cards hold no player text, so "Export without names or notes" keeps them.
+- **The UI.**
+  - The notice "Something happened: {title}" has Open and ✕ and no sound.
+  - The tab "Something happened" comes first, with a quiet dot for an unseen card (Home's Notebook button shows the same dot, D-0079).
+  - The card view shows up to 3 panels with m:ss captions and the badge "Memory, not replay". Spotlight moves the camera only. Save picture waits for P4.6.
+- **The family card** uses the Lineage sheet's own wording: "Inherited difference", then "Game rules", each rule beside its ancestor's value. No line is called a tradeoff, because the lineage record marks no rule as a cost or a gain (SPEC §12.9; integration fix).
+- **Captions** choose "A"/"An" by the name's first letter and use the species plural for any count other than one (integration fix).
+- **Pause and restore** (D08 line 153; the Field Guide's convention, D-0061).
+  - A card opened from the notice on a running dish records the dish and its speed.
+  - During that Notebook visit, Spotlight or the Notebook's Back ("Back to the dish") returns to that dish at that speed, once.
+  - Leaving the Notebook any other way ends the visit, and the dish stays paused (D-0028).
+  - A card opened from the list never changes speed.
+- The detector never alters behaviour: equal stateHash and full trajectory digest with it on and off (Garden plus a sugar deposit, 4×, 3,000 ticks).
+Reason: SPEC §12.7, §12.9; D08 lines 128-155; honest labels; one visible notice.
+Affects: src/worker/{stories,notebookWatch,host,protocol,client}.ts, src/persistence/{notebookStories,notebook}.ts, src/ui/{stories,state}.ts, src/ui/strings/stories.ts, src/ui/views/{NotebookStories,Notebook,Home}.tsx, src/ui/panels/StoryCard.tsx, tests/ui/stories.test.ts, tests/worker/stories-host.test.ts, tests/e2e/stories.spec.ts.
+Owner review: no.
+
+## D-0078 · 2026-10-11 · P4.4 · The objective engine and goals as built
+Context: wave 5b objectives (docs/reports/reviews/g4-wave-5b/objectives-build.md, saves-verify-objectives.md, wave-verify.md); the integration fixes (integrate-objectives-minors.md, integrate-verify1.md); SPEC §13.5; CT §10.5; D09 lines 117-134; D-0071.
+Decision:
+- **The engine.**
+  - The evaluator is src/sim/objectives.ts (ObjectiveWatch). It is pure and read-only like GateWatch, and evaluated after every tick with its own ArmObserver. Nothing in the tick imports it (a test checks).
+  - The runner and the goal state are src/worker/goals.ts (GoalRunner) and the notebook kind 'goals' (D-0070).
+  - Objectives use only the five named predicate types; 'custom' is refused (it stays for experiment gates; PredicateSchema is unchanged).
+  - transferAcrossGate reads through a GateReading, null while no gate exists, so it is never offered before Phase 5.
+- **Content.** ObjectiveSchema gains summary, completedText, endedText? and offerOn. The three CT §10.5 goals ship, phase 4. An objective of a later phase is skipped, not an error.
+- **Ticks.** A completion or end is recorded at the dish tick after the step that showed it (a birth committed during tick m completes at m + 1).
+- **Start.**
+  - Start checks state predicates at once: no Sprinters at Start ends the attempt, and a threshold already met completes it.
+  - Off by default; at most one running goal; at most 20 records per dish.
+  - Records copy the title and predicate at Start.
+- **Settling.**
+  - Completing or ending posts { kind: 'goal' }. The UI shows one dismissible sentence through the notice slot and never changes the speed.
+  - The "shown" flag is saved, so a dismissed sentence never returns.
+  - Leave turns a running goal into 'continuedFreely' ('left').
+  - Continue freely on an ended attempt keeps its end tick and reason. Try again is a new attempt from the current tick.
+- **End reasons** (integration fix: every end names what was recorded):
+  - 'zero': the predicate ended it;
+  - 'undone': Undo;
+  - 'failed': an error rollback, worded like the error toast: "Something went wrong and the dish was paused";
+  - 'cannotResume': a reopened dish could not run it, announced.
+
+  A completed record stays completed even when Undo rewinds before its ticks.
+- **Restores.** After Undo, rollback or Cancel, notebookAfterRestore reports every kind that changed (favoritesRestored, storiesRestored, then one goal change per ended goal), each posted with the final record, so goal changes always autosave.
+- **Resuming after a load.**
+  - A running goal resumes from its saved progress.
+  - An event-ring goal saves `progress.lastEventId` and resumes after it, so a save → load at any moment completes at the same tick as an uninterrupted run (integration fix). A record without it resumes from the load moment.
+  - A transfer goal counts from Start, or from the load tick for a resumed watch. Phase 5 revisits this with the gates.
+- **Import.**
+  - The notebook check refuses a running goal the loaded dish cannot run (its recorded manifest, fields and event ids; loadSaveFile passes goalWorldRefsOf). Such a notebook is dropped whole with the message, and the world loads unchanged.
+  - Records are canonical (progress state matches the record). The validator refuses inconsistent ones and accepts the shapes the wave 5b build wrote.
+  - Known limit (verifier NIT): Cancel of a held Sample lowers nextEventId. A goal never records an event position during a hold, because time is paused and the runner reads only new ticks.
+- **Catalog.** A goal is offered when offerOn includes the dish's recipe or its variant's sourceId, and the recorded manifest has everything the predicate names (D-0079 for the starch goal on variants).
+- Evaluation never alters behaviour: equal stateHash and full trajectory digest with and without a running goal over 3,000 ticks at 4×. Blocked or cancelled division proposals never count (a fixture).
+Reason: SPEC §13.5; CT §10.5; D09 lines 117-134; D-0027 (observers cannot rewind); D-0071; honest labels; saves are sacred.
+Affects: src/sim/objectives.ts, src/sim/content/{schema,registry}.ts, content/objectives/*.json, src/worker/{goals,notebookWatch,host,protocol,client}.ts, src/persistence/{notebookGoals,notebook,saveFile}.ts, src/ui/{goals,state}.ts, src/ui/panels/{GoalChoice,MoreSheet}.tsx, src/ui/views/Play.tsx, src/ui/strings/goals.ts, tests/sim/objectives.test.ts, tests/worker/goals-host.test.ts, tests/content/objectives.test.ts, tests/ui/goal-sentence.test.ts, tests/persistence/notebook.test.ts, tests/e2e/goals.spec.ts.
+Owner review: no.
+
+## D-0079 · 2026-10-11 · P4.2/P4.4 · Notification pacing is per source; one visible notice across all sources
+Context: wave 5b verifier lead MINOR (docs/reports/reviews/g4-wave-5b/wave-verify.md): CT §12.10 "notifications ≤ 1 per 60 s" holds only per source. Also the verifier NITs on Home's Notebook button and the starch goal's offer.
+Decision:
+- **Each notification source keeps its own pace:**
+  - story notices: at most one per 600 dish ticks. D08 line 151 says "per 60 simulated seconds", so at 4× one can come every 15 s of wall time.
+  - the discovery and extinction cards: one wall-clock 60 s pacer between them (D-0076).
+  - a goal sentence: answers the goal the player chose, at most one per attempt.
+  - the Garden prompts: one at a time and player-paced (D-0074).
+- **Across sources:**
+  - one visible notice at a time;
+  - a card hides every notice while it is up;
+  - no card preempts another;
+  - a notice that cannot show waits.
+
+  A story notice may therefore follow a card the player just closed. The pacers are not merged into one cross-source clock, because the canonical texts give them different time bases: simulated seconds for stories, the P2.3 wall clock for discovery cards.
+- **Home's Notebook button** opens "Something happened" while a story card is unseen, the same signal as its quiet dot (UX §5.9). Otherwise it opens the tab it opened before.
+- **The starch goal on What if? variants.** D09 offers WATCH_STARCH_BECOME_FOOD "on Garden"; a What if? variant of the Garden is a Garden dish (its sourceId). The goal is also offered there, and every variant's recipe keeps the starch patch.
+Reason: CT §12.10, D08 lines 150-153, D09 lines 117-134; the canonical time bases differ, and "never more than one visible notice" holds everywhere.
+Affects: src/worker/stories.ts (StoryPacer), src/ui/panels/DiscoveryPacer.tsx, src/ui/notices.ts, src/ui/views/Home.tsx, content/objectives/WATCH_STARCH_BECOME_FOOD.json (unchanged).
+- **Amendment (13:35, first-minute follow-up; docs/reports/reviews/g4-wave-5b/integrate-first-minute.md, first-minute-verify1.md).**
+  - A dish's first story notification comes no sooner than 600 dish ticks after the story watch began on that world. The pacer's window starts closed at the tick the watch (re)bound:
+    - a new dish at tick 0;
+    - a dish opened, loaded, continued, duplicated or branched, at its tick T;
+    - a world restored by Undo or a rollback, or replaced by a reload, at that moment. This now holds whether or not a card was already announced.
+  - Cards found meanwhile are recorded quietly and wait. When the window opens, pickStory chooses one among them; the rest stay quiet.
+  - Following or unfollowing a family does not restart the window.
+  - Implementation: src/worker/stories.ts StoryDetector.bind, `new StoryPacer(world.tick)`.
+  - Reason: UX §3.2 "Arrival: paused garden; one line … No auto-spawning surprises. One optional prompt at a time" and D08 lines 56-64: the first minute belongs to the arrival line and the optional prompts. The lead's desktop e2e showed "Something happened: An enzyme at work" taking the notice place from "Tap a Sprinter." right after Run.
+Owner review: yes.
+- Should one cross-source clock limit all unsolicited notices to one per wall-clock minute?
+- Is the quiet first minute right?

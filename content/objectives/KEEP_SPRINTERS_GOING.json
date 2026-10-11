@@ -1,0 +1,10 @@
+{
+  "id": "KEEP_SPRINTERS_GOING",
+  "title": "Keep Sprinters going",
+  "predicate": { "type": "keepSpeciesAlive", "params": { "species": "B01" }, "durationSeconds": 180 },
+  "summary": "Keep at least one Sprinter alive for 180 seconds of dish time.",
+  "completedText": "Sprinters kept going for 180 seconds.",
+  "endedText": "No Sprinters remain, so this attempt ended at {time}. The dish keeps going.",
+  "offerOn": ["FIRST_DISH_V1"],
+  "phase": 4
+}

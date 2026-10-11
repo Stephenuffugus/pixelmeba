@@ -7,6 +7,8 @@ import { DishThumb } from './DishThumb';
 import { WhatIfHost } from '../panels/WhatIfSheet';
 import { openWhatIf } from '../panels/WhatIfState';
 import { WHATIF_TEXT } from '../strings/whatif';
+import { GoalChoice } from '../panels/GoalChoice';
+import { playGoalChoice } from '../goals';
 
 /**
  * The Garden's own seed, read from the same content record the worker validates (as New Dish reads its
@@ -54,9 +56,11 @@ export function Play() {
               </p>
             </div>
           </div>
-          <button class="btn primary" disabled={busy.value} onClick={() => void startRecipe('FIRST_DISH_V1', 'Little Living Garden')} data-testid="start-garden">
+          <button class="btn primary" disabled={busy.value} onClick={() => void startRecipe('FIRST_DISH_V1', 'Little Living Garden', playGoalChoice.value)} data-testid="start-garden">
             <IconPlay /> Start
           </button>
+          {/* P4.4 (SPEC §13.5): an optional goal, off by default ("No goal" checked); Start starts it at tick 0. */}
+          <GoalChoice recipeId="FIRST_DISH_V1" />
           {/* UX §2.2: a secondary What if? link under Garden opens the sheet (§3.4). */}
           <p class="whatif-link-row">
             <button class="btn whatif-link" onClick={() => openWhatIf('play')} data-testid="whatif-open">

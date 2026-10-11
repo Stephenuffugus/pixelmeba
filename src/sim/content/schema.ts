@@ -411,6 +411,17 @@ export const ObjectiveSchema = z.object({
   title: z.string().min(1),
   predicate: PredicateSchema,
   phase: PhaseSchema,
+  /**
+   * P4.4 (SPEC §13.5; CT §10.5; D09 §6): the goal's player texts. `summary` is the choice line; the
+   * one dismissible sentence is `completedText` on completion and `endedText` when the attempt ends
+   * (required for a predicate that can end, src/sim/objectives.ts). "{time}" is replaced by the dish
+   * time (m:ss) of that moment.
+   */
+  summary: z.string().min(1),
+  completedText: z.string().min(1),
+  endedText: z.string().min(1).optional(),
+  /** Recipe ids whose dishes offer this goal; a What if? variant dish counts through its sourceId. */
+  offerOn: z.array(z.string().min(1)).default([]),
 });
 export type ObjectiveDef = z.infer<typeof ObjectiveSchema>;
 

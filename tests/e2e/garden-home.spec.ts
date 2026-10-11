@@ -9,7 +9,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { PROTOCOL_VERSION } from '../../src/worker/protocol';
-import { chooseSpeed, expectNoSeriousA11yViolations, expectReachable, seedSettings, selectOrganism, simSeconds } from './helpers';
+import { chooseSpeed, dismissStoryNotice, expectNoSeriousA11yViolations, expectReachable, seedSettings, selectOrganism, simSeconds } from './helpers';
 
 async function watchWorker(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -107,18 +107,24 @@ test('Garden card thumbnail, the one optional prompt with Show me, and session m
   await expect(page.getByText('Tap a Sprinter.')).toHaveCount(0);
 
   // Later steps need their evidence (a feeding cue, a division or 120 dish seconds). Dismiss each one that
-  // shows (✕ moves to the next eligible one) until the Feed prompt is offered.
+  // shows (✕ moves to the next eligible one) until the Feed prompt is offered. Past the first 60 dish
+  // seconds a story notice may take the notice place (D-0079; it outranks a prompt, D-0074): it is
+  // dismissed with its own ✕ where it shows and is not one of the prompt lines counted here.
   await chooseSpeed(page, 4);
   const seen: string[] = [];
+  const stories: string[] = [];
   await expect
     .poll(
       async () => {
+        const story = await dismissStoryNotice(page);
+        if (story !== null) stories.push(story);
         // Read the line and press its ✕ in one page task, so the ✕ can only dismiss the line that was read: a
         // read and a later click raced when "A cell split." gave way to the Feed prompt in between (fix round 1).
         // A click event rather than a pointer press: at 4× with several hundred organisms the desktop frames under
         // SwiftShader are too slow for Playwright's "stable" check; the ✕ is checked reachable and uncovered below.
         const text = await page.evaluate((feedPrompt) => {
           const n = document.querySelector('.prompt');
+          if (n?.getAttribute('data-testid') === 'story-notice') return ''; // dismissed by dismissStoryNotice next round
           const t = n?.querySelector('p')?.textContent ?? '';
           if (t !== '' && t !== feedPrompt) n?.querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')?.click();
           return t;
@@ -142,6 +148,23 @@ test('Garden card thumbnail, the one optional prompt with Show me, and session m
   // Pause, then Show me: Feed is highlighted, not pressed — no sheet opens and the world is unchanged.
   await page.getByTestId('run-toggle').click();
   await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
+  // A tick the worker ran before the pause reached it may still post a story notice: dismiss any that shows
+  // until the Feed prompt is back, let in-flight packets settle, and check once more (first-minute verifier MINOR).
+  const feedPromptBack = async (): Promise<void> =>
+    expect
+      .poll(
+        async () => {
+          const late = await dismissStoryNotice(page);
+          if (late !== null) stories.push(late);
+          return (await notice.locator('p').textContent()) ?? '';
+        },
+        { timeout: 15_000, intervals: [250] },
+      )
+      .toBe(FEED_PROMPT);
+  await feedPromptBack();
+  await page.waitForTimeout(500);
+  await feedPromptBack();
+  test.info().annotations.push({ type: 'story notices dismissed (D-0079)', description: stories.join(' | ') || 'none' });
   await expect(notice.locator('p')).toHaveText(FEED_PROMPT);
   const h0 = await workerHash(page);
   const showMe = notice.getByRole('button', { name: 'Show me' });

@@ -11,6 +11,7 @@ import { SPECIMEN_RADIUS, type LineageOp } from '@sim/specimens';
 import type { SnapshotMsg } from '@worker/protocol';
 import { dishInfo, getClient, getRenderer, meta, setSpeed, settings, sheet, showToast } from '../state';
 import { pinnedExtinctText } from '../strings/lineage';
+import { cardPlaceHeldByOther } from '../notices';
 import { DiscoveryPacer } from './DiscoveryPacer';
 
 /** Latest lineage answer for the current dish (null until asked). */
@@ -254,6 +255,9 @@ async function showDiscovery(newIds: readonly number[], newCard: boolean): Promi
     return [];
   }
   if (dishId() !== id) return [];
+  // D-0076: no new card while a followed family's extinction card holds the notice place. Nothing shows
+  // or pauses; the pacer keeps these ids waiting (no 60 s gap) and tries again after DISCOVERY_RETRY_MS.
+  if (newCard && cardPlaceHeldByOther('discovery')) return [];
   // Joining: the card must still be open (dismissed meanwhile → these wait for the next card).
   if (!newCard && discovery.value === null) return [];
   const ids = [...(newCard ? [] : (discovery.value?.branches ?? [])), ...newIds].filter((b, k, a) => a.indexOf(b) === k).sort((a, b) => a - b);
@@ -313,6 +317,15 @@ async function notePinnedExtinctions(branches: readonly number[]): Promise<void>
 export function watchLineage(): () => void {
   ensureDish();
   return getClient().onSnapshot(onSnapshot);
+}
+
+/**
+ * Another card (a followed family's extinction card) took the notice's place: the discovery pacer counts
+ * it as the last card shown, so the next new discovery card waits 60 s from now (D-0076; CT §12.10).
+ * Called by src/ui/noticeCards.ts.
+ */
+export function discoveryOtherCardShown(): void {
+  pacer.otherCardShown();
 }
 
 export function dismissDiscovery(): void {

@@ -4,21 +4,22 @@
  * exploring · Start a new dish. A record, not a resurrection: no sound cue, no alarm styling, no
  * scolding. The family stays in the notebook (marked "No members remain since m:ss").
  *
- * One D8 notification at a time (D09; src/ui/notices.ts): it takes the notice's place, so the one notice
- * waits while it is open, and it waits itself while a discovery card is open, showing when that closes.
+ * One D8 notification at a time (D09; src/ui/notices.ts; D-0076): it takes the notice's place, so the one
+ * notice waits while it is open; it waits itself while a discovery card is on screen, showing when that
+ * closes, and a discovery card never takes its place. Several extinct families queue: this card shows the
+ * oldest, and each button closes it so the next one shows (favorites.ts extinctQueue).
  */
-import { extinctCard, extinctCardFavorite, nameOf, speciesNameOf } from '../favorites';
-import { shownCard } from '../notices';
+import { closeExtinctCard, extinctCardToShow, nameOf, speciesNameOf } from '../favorites';
 import { dishInfo, historyFocus, route, sheet } from '../state';
 import { extinctLastText, extinctTitle, FAVORITE_TEXT } from '../strings/favorites';
 
 export function FavoriteExtinct() {
-  const f = extinctCardFavorite();
+  const f = extinctCardToShow();
   const info = dishInfo.value;
-  if (shownCard.value !== 'extinct' || !f || !f.extinct || !info) return null;
+  if (!f || !f.extinct || !info) return null;
   const x = f.extinct;
   const species = speciesNameOf(f.speciesId);
-  const close = () => (extinctCard.value = null);
+  const close = () => closeExtinctCard(f.id);
   return (
     <section class="card fav-extinct" role="region" aria-labelledby="fav-extinct-title" data-testid="favorite-extinct">
       <h2 id="fav-extinct-title">{extinctTitle(nameOf(f))}</h2>

@@ -11,7 +11,11 @@
  *   with and without a notebook;
  * - a g2 save and the schema 2 fixture load with an empty notebook and keep their recorded hashes, then
  *   re-save with a notebook while the store keeps the original as the predecessor;
- * - exports carry no nickname unless the player opted in; stripNames drops them always.
+ * - exports carry no nickname unless the player opted in; stripNames drops them always;
+ * - goal records (integrate, objectives-minors items 4 and 5): an internally inconsistent record is
+ *   refused while every record shape the wave 5b build wrote in its normal flows still loads; a running
+ *   goal the dish cannot run (its recorded manifest or fields) or whose saved event position the dish
+ *   never reached drops the notebook with NOTEBOOK_DROPPED_TEXT when the refs carry goalWorldRefsOf.
  */
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
@@ -21,6 +25,7 @@ import {
   emptyNotebook,
   NOTEBOOK_DROPPED_TEXT,
   notebookProblem,
+  readNotebook,
   sealNotebook,
   type FavoriteRecord,
   type NotebookRecord,
@@ -41,6 +46,8 @@ import type { World } from '../../src/sim/world';
 import { DishHost } from '../../src/worker/host';
 import type { FromWorker, ToWorker } from '../../src/worker/protocol';
 import { G2_SAVE_FILES, readExpected, readG2SaveText } from '../helpers/g2-saves';
+import { goalWorldRefsOf, type GoalRecord, type GoalWorldRefs } from '../../src/persistence/notebookGoals';
+import { objectiveSupportProblem } from '../../src/sim/objectives';
 import { registry } from '../helpers/world';
 
 const REG = registry();
@@ -428,5 +435,103 @@ describe('exports and nicknames', () => {
       )
     ).text;
     expect(opted).toBe(stored);
+  });
+});
+
+describe('goal records: consistent only, and a running goal the dish can run (objectives-minors items 4, 5)', () => {
+  const KEEP = { type: 'keepSpeciesAlive', params: { species: 'B01' }, durationSeconds: 180 } as const;
+  const SPLIT = { type: 'observeEvent', params: { event: 'birth', species: 'B01' } } as const;
+  const RING = { type: 'observeEvent', params: { event: 'command' } } as const;
+  const goal = (extra: Partial<GoalRecord>): GoalRecord => ({
+    id: 'goal-1',
+    objectiveId: 'KEEP_SPRINTERS_GOING',
+    title: 'Keep Sprinters going',
+    predicate: KEEP,
+    state: 'running',
+    startTick: 0,
+    endTick: null,
+    progress: { startTick: 0, holdSinceTick: 0, state: 'running' },
+    shown: false,
+    ...extra,
+  });
+  const run = (p: Partial<GoalRecord['progress']>) => ({ startTick: 0, holdSinceTick: 0, state: 'running' as const, ...p });
+  const w = garden();
+  const refs = (world: World, extras = true): GoalWorldRefs => ({
+    speciesIds: world.species.map((s) => s.id),
+    nextBirthId: world.counters.nextBirthId,
+    tick: world.tick,
+    ...(extras ? goalWorldRefsOf(world) : {}),
+  });
+  async function problem(goals: GoalRecord[], world: World = w): Promise<string | null> {
+    const nb = await sealNotebook({ ...emptyNotebook(world.worldId), goals });
+    return notebookProblem(nb, world.worldId, refs(world));
+  }
+
+  it('every record shape the wave 5b build wrote in its normal flows still loads', async () => {
+    const wave5b: [string, GoalRecord][] = [
+      ['running keep (hold from Start)', goal({})],
+      ['running split', goal({ objectiveId: 'SEE_SPRINTER_SPLIT', predicate: SPLIT, progress: run({ holdSinceTick: null }) })],
+      ['completed split', goal({ predicate: SPLIT, state: 'completed', endTick: 351, progress: run({ holdSinceTick: null, state: 'completed' }), value: 1, shown: true })],
+      ['completed keep', goal({ state: 'completed', endTick: 1800, progress: run({ state: 'completed' }), value: 4 })],
+      ['ended: no Sprinters', goal({ state: 'ended', endTick: 90, endReason: 'zero', progress: run({ state: 'ended' }), value: 0 })],
+      ['ended: no Sprinters at Start (hold never began)', goal({ state: 'ended', endTick: 0, endReason: 'zero', progress: run({ holdSinceTick: null, state: 'ended' }), value: 0 })],
+      ['continued freely after no Sprinters', goal({ state: 'continuedFreely', endTick: 90, endReason: 'zero', progress: run({ state: 'ended' }), value: 0, shown: true })],
+      // The wave 5b runner left progress.state 'running' after Undo and Leave goal (accepted as written).
+      ['ended by Undo (before its start)', goal({ startTick: 400, state: 'ended', endTick: 300, endReason: 'undone', progress: run({ startTick: 400, holdSinceTick: 400 }) })],
+      ['continued freely after Undo', goal({ state: 'continuedFreely', endTick: 60, endReason: 'undone', progress: run({}), shown: true })],
+      ['left while running', goal({ state: 'continuedFreely', endTick: 40, endReason: 'left', progress: run({}), shown: true })],
+    ];
+    for (const [label, g] of wave5b) expect(await problem([g]), label).toBeNull();
+    // And this build's own records.
+    const now: [string, GoalRecord][] = [
+      ['ended by an error rollback', goal({ state: 'ended', endTick: 50, endReason: 'failed', progress: run({ state: 'ended' }) })],
+      ['ended: could not resume', goal({ state: 'ended', endTick: 0, endReason: 'cannotResume', progress: run({ state: 'ended' }) })],
+      ['left while running (canonical)', goal({ state: 'continuedFreely', endTick: 0, endReason: 'left', progress: run({ state: 'ended' }), shown: true })],
+      ['continued freely after an error', goal({ state: 'continuedFreely', endTick: 0, endReason: 'failed', progress: run({ state: 'ended' }), shown: true })],
+      ['running event-ring goal with its position', goal({ predicate: RING, progress: run({ holdSinceTick: null, lastEventId: w.counters.nextEventId - 1 }) })],
+    ];
+    for (const [label, g] of now) expect(await problem([g]), label).toBeNull();
+  });
+
+  it('an internally inconsistent record is refused (the notebook is dropped, the world loads)', async () => {
+    const bad: [string, GoalRecord, RegExp][] = [
+      ['completed with progress.state running', goal({ predicate: SPLIT, state: 'completed', endTick: 5, progress: run({ holdSinceTick: null }) }), /progress does not match its state/],
+      ['completed with endTick < startTick', goal({ predicate: SPLIT, state: 'completed', startTick: 10, endTick: 3, progress: run({ startTick: 10, holdSinceTick: null, state: 'completed' }) }), /ends before it started/],
+      ['left with endTick < startTick', goal({ startTick: 10, state: 'continuedFreely', endTick: 3, endReason: 'left', progress: run({ startTick: 10, holdSinceTick: 10, state: 'ended' }), shown: true }), /ends before it started/],
+      ['holdSinceTick on an observeEvent goal', goal({ predicate: SPLIT, progress: run({ holdSinceTick: 0 }) }), /duration its predicate does not have/],
+      ['value on a running goal', goal({ value: 3 }), /value without a result/],
+      ['shown on a running goal', goal({ shown: true }), /marked shown/],
+      ['value on an attempt Undo ended', goal({ state: 'ended', endTick: 5, endReason: 'undone', progress: run({ state: 'ended' }), value: 2 }), /value without a result/],
+      ['ended after an error with progress running', goal({ state: 'ended', endTick: 5, endReason: 'failed', progress: run({}) }), /progress does not match its state/],
+      ['continued freely after zero with progress running', goal({ state: 'continuedFreely', endTick: 5, endReason: 'zero', progress: run({}), value: 0, shown: true }), /progress does not match its state/],
+      ['completed with progress ended', goal({ state: 'completed', endTick: 5, progress: run({ state: 'ended' }) }), /progress does not match its state/],
+      ['an event position on a birth goal', goal({ predicate: SPLIT, progress: run({ holdSinceTick: null, lastEventId: 0 }) }), /invalid event position/],
+      ['a negative event position', goal({ predicate: RING, progress: run({ holdSinceTick: null, lastEventId: -1 }) }), /invalid event position/],
+      ['an unknown end reason', goal({ state: 'ended', endTick: 5, endReason: 'rewound' as never, progress: run({ state: 'ended' }) }), /unknown end reason/],
+    ];
+    for (const [label, g, why] of bad) {
+      expect(await problem([g]), label).toMatch(why);
+      const nb = await sealNotebook({ ...emptyNotebook(w.worldId), goals: [g] });
+      const read = await readNotebook(nb, w.worldId, refs(w));
+      expect(read.dropped, label).toBe(NOTEBOOK_DROPPED_TEXT);
+      expect(read.record.goals, label).toBeUndefined();
+    }
+  });
+
+  it('a running goal the dish cannot run, or whose event position it never reached, drops the notebook', async () => {
+    const g2 = (await loadSaveFile(readG2SaveText(G2_SAVE_FILES[0]))).world;
+    const v01 = { type: 'fieldInRange', params: { field: 'v01', min: 0, max: 1 }, durationSeconds: 5 } as const;
+    // The verifier's repro: the g2 dish recorded no viruses system, so it has no v01 field.
+    expect(objectiveSupportProblem(g2, v01)).toMatch(/no v01/);
+    const unsupported = goal({ objectiveId: 'X_GOAL', title: 'Probe', predicate: v01, progress: run({ holdSinceTick: null }) });
+    expect(await problem([unsupported], g2)).toMatch(/cannot run in this dish \(this dish has no v01\)/);
+    const read = await readNotebook(await sealNotebook({ ...emptyNotebook(g2.worldId), goals: [unsupported] }), g2.worldId, refs(g2));
+    expect(read.dropped).toBe(NOTEBOOK_DROPPED_TEXT);
+    // A finished record of that goal is kept like a journal entry (it never runs again).
+    expect(await problem([{ ...unsupported, state: 'ended', endTick: 3000, endReason: 'undone', progress: run({ holdSinceTick: null, state: 'ended' }) }], g2)).toBeNull();
+    // The event position must be in the dish's past.
+    const at = (lastEventId: number) => goal({ predicate: RING, progress: run({ holdSinceTick: null, lastEventId }) });
+    expect(await problem([at(g2.counters.nextEventId - 1)], g2)).toBeNull();
+    expect(await problem([at(g2.counters.nextEventId)], g2)).toMatch(/saw an event this dish never had/);
   });
 });

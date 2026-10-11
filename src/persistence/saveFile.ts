@@ -27,6 +27,7 @@ import { foodObjectsProblem } from '@sim/objects';
 import { savedSampleProblem } from '@sim/sampleSlot';
 import { virusIdOfCode } from '@sim/viruses';
 import { notebookIsEmpty, notebookWithoutNicknames, readNotebook, sealNotebook, type NotebookRecord } from './notebook';
+import { goalWorldRefsOf } from './notebookGoals';
 
 export const SAVE_FORMAT = 'pixelmeba-save';
 export const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
@@ -574,8 +575,9 @@ export async function loadSaveFile(text: string): Promise<{ file: SaveFile; worl
     throw new SaveFileError(`The dish could not be rebuilt: ${(e as Error).message}`, 'integrity');
   }
   const { notebook: raw, ...rest } = file as SaveFile & { notebook?: unknown };
-  // Fix round 1: the record's species, birth ids and extinction ticks are checked against this dish too.
-  const { record, dropped } = await readNotebook(raw, world.worldId, { speciesIds: world.species.map((s) => s.id), nextBirthId: world.counters.nextBirthId, tick: world.tick });
+  // Fix round 1: the record's species, birth ids and extinction ticks are checked against this dish too;
+  // P4.4 (wave 5b integration): and a running goal against what this dish can run (manifest, fields, event ids).
+  const { record, dropped } = await readNotebook(raw, world.worldId, { speciesIds: world.species.map((s) => s.id), nextBirthId: world.counters.nextBirthId, tick: world.tick, ...goalWorldRefsOf(world) });
   // The file as returned carries only a notebook that was read (never the unchecked one).
   return { file: notebookIsEmpty(record) ? rest : { ...rest, notebook: record }, world, notebook: record, notebookDropped: dropped };
 }

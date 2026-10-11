@@ -11,12 +11,11 @@
  *
  * Nothing here changes the world: ✕ and "Show me" never send a command; "Show me" only adds a highlight
  * class to a control for 3 s. While the discovery card or a followed family's extinction card is open
- * nothing shows, and the extinction card waits for the discovery card (notices.ts). Toasts stay with the
+ * nothing shows; the card on screen keeps the place until it closes (notices.ts, noticeCards.ts). Toasts stay with the
  * app's one LiveRegion.
  */
 import { effect, signal } from '@preact/signals';
 import { useEffect, useState } from 'preact/hooks';
-import { discovery } from '../panels/LineageState';
 import { whatIfOpen } from '../panels/WhatIfState';
 import {
   dishInfo,
@@ -31,8 +30,8 @@ import {
   settings,
   sheet,
 } from '../state';
-import { extinctCardFavorite } from '../favorites';
-import { currentNotice, dismissNotice, requestNotice, setCardOpen, withdrawKind, type NoticeRequest } from '../notices';
+import { wireNoticeCards } from '../noticeCards';
+import { currentNotice, dismissNotice, requestNotice, withdrawKind, type NoticeRequest } from '../notices';
 import { highlightControl, initialPrompts, isGardenDish, promptReduce, promptView, type PromptInput, type PromptState } from '../prompts';
 import { PROMPT_UI } from '../strings/home';
 import { labTray } from './LabView';
@@ -116,9 +115,8 @@ function wire(): void {
     feedMachine(info.dishId, { kind: 'select', organism, species });
   });
   // The discovery card and the extinction card sit in the notice's place: nothing shows while either is
-  // asked for, and the extinction card shows only when no discovery card is open (notices.ts shownCard).
-  effect(() => setCardOpen('discovery', discovery.value !== null));
-  effect(() => setCardOpen('extinct', extinctCardFavorite() !== null));
+  // asked for, one card at a time, never displaced (notices.ts shownCard; src/ui/noticeCards.ts; D-0076).
+  wireNoticeCards();
   // The sources → the notice requests (experiment; prompt = the dish's own line, else the optional prompt).
   effect(() => {
     void machineVersion.value;

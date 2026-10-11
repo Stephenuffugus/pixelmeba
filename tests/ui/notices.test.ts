@@ -4,10 +4,22 @@
  * cannot show waits (the latest per kind), a dismissed notice never comes back, and nothing shows while
  * a card is open in the same place: the discovery card or a followed family's extinction card. The cards
  * are a set (one closing never uncovers the notices while the other is open), and they are one at a time
- * too: the extinction card waits for an open discovery card (shownCard).
+ * too (shownCard): a card on screen keeps the place until its own source closes it, and a tie goes to the
+ * extinction card (D-0076; D08 "Prefer a favorite-family event").
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { currentNotice, dismissNotice, requestNotice, resetNoticesForTest, setCardOpen, shownCard, withdrawKind, withdrawNotice } from '../../src/ui/notices';
+import {
+  cardPlaceHeldByOther,
+  currentNotice,
+  dismissNotice,
+  requestNotice,
+  resetNoticesForTest,
+  setCardOpen,
+  setCardsOpen,
+  shownCard,
+  withdrawKind,
+  withdrawNotice,
+} from '../../src/ui/notices';
 
 beforeEach(() => resetNoticesForTest());
 
@@ -136,13 +148,45 @@ describe('one D8 card at a time (D09 "Do not layer this message over another D8 
     expect(shownCard.value).toBe('discovery'); // not layered over the discovery card
     setCardOpen('discovery', false);
     expect(shownCard.value).toBe('extinct'); // it was waiting, not dropped
-    // A discovery card that opens while the extinction card shows takes the place; the extinction card
-    // waits again and comes back.
+    setCardOpen('extinct', false);
+    expect(shownCard.value).toBeNull();
+  });
+
+  it('D-0076 no preemption: a discovery card asked for while the extinction card shows waits, and shows after it closes', () => {
+    setCardOpen('extinct', true);
+    expect(shownCard.value).toBe('extinct');
     setCardOpen('discovery', true);
+    expect(shownCard.value).toBe('extinct'); // it keeps the place the player is reading
+    setCardOpen('discovery', true); // a repeat changes nothing
+    expect(shownCard.value).toBe('extinct');
+    setCardOpen('extinct', false);
+    expect(shownCard.value).toBe('discovery');
+    // And the other way round: the discovery card on screen is not displaced either.
+    setCardOpen('extinct', true);
     expect(shownCard.value).toBe('discovery');
     setCardOpen('discovery', false);
     expect(shownCard.value).toBe('extinct');
-    setCardOpen('extinct', false);
+  });
+
+  it('D-0076 a tie (both asked for together, none on screen) goes to the extinction card', () => {
+    setCardsOpen({ discovery: true, extinct: true });
+    expect(shownCard.value).toBe('extinct');
+    expect(currentNotice.value).toBeNull();
+    setCardsOpen({ discovery: false, extinct: false });
     expect(shownCard.value).toBeNull();
+    setCardsOpen({ extinct: true, discovery: true }); // key order does not matter
+    expect(shownCard.value).toBe('extinct');
+  });
+
+  it('D-0076 cardPlaceHeldByOther: true only while the other card is on screen', () => {
+    expect(cardPlaceHeldByOther('discovery')).toBe(false);
+    setCardOpen('extinct', true);
+    expect(cardPlaceHeldByOther('discovery')).toBe(true);
+    expect(cardPlaceHeldByOther('extinct')).toBe(false);
+    setCardOpen('discovery', true);
+    expect(cardPlaceHeldByOther('discovery')).toBe(true); // asked for, but waiting
+    setCardOpen('extinct', false);
+    expect(cardPlaceHeldByOther('discovery')).toBe(false);
+    expect(cardPlaceHeldByOther('extinct')).toBe(true);
   });
 });

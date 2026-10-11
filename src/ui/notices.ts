@@ -9,10 +9,14 @@
  * - while a card is open in the same place (the discovery card, or a followed family's extinction card;
  *   `setCardOpen`), nothing shows; the waiting notices return when the last card closes. The cards are a
  *   set, so one card closing never uncovers the notices while the other is still open;
- * - the cards themselves are one at a time too: `shownCard` is the one requested card that shows, the
- *   discovery card first; the extinction card waits while a discovery card is open and shows when it
- *   closes (D08 "never more than one visible notice"; D09 "Do not layer this message over another D8
- *   notification");
+ * - the cards themselves are one at a time too (D08 "never more than one visible notice"; D09 "Do not
+ *   layer this message over another D8 notification"; D-0076): `shownCard` is the one requested card that
+ *   shows. A card on screen keeps the place until its own source closes it (no preemption); only then
+ *   does the next requested card show. When both are asked for and none is on screen, the followed
+ *   family's extinction card goes first (D08 "Prefer a favorite-family event"). The discovery card is
+ *   not even created while the extinction card shows (LineageState showDiscovery), and the discovery
+ *   pacer counts the extinction card as the last card shown (CT §12.10 one new card per 60 s; the
+ *   wiring is src/ui/noticeCards.ts);
  * - withdrawing (the source's state ended, e.g. the stamp arrived) removes a request without counting
  *   as a dismissal.
  *
@@ -51,9 +55,13 @@ export const currentNotice = signal<NoticeRequest | null>(null);
 let waiting: Partial<Record<NoticeKind, NoticeRequest>> = {};
 const dismissed = new Set<string>();
 
-/** The cards that sit in the notice's place, in the order they take it (the first requested one shows). */
+/**
+ * The cards that sit in the notice's place. When the place is free, the first requested one in this order
+ * takes it (D08 "Prefer a favorite-family event": the extinction card first); a card already on screen
+ * is never displaced by another (D-0076).
+ */
 export type NoticeCard = 'discovery' | 'extinct';
-const CARD_ORDER: readonly NoticeCard[] = ['discovery', 'extinct'];
+const CARD_ORDER: readonly NoticeCard[] = ['extinct', 'discovery'];
 /** The cards whose sources ask to show now (each source owns its own entry). */
 const cardsOpen = new Set<NoticeCard>();
 
@@ -61,7 +69,9 @@ const cardsOpen = new Set<NoticeCard>();
 export const shownCard = signal<NoticeCard | null>(null);
 
 function recompute(): void {
-  const card = CARD_ORDER.find((c) => cardsOpen.has(c)) ?? null;
+  // No preemption: the card on screen stays while its source still asks for it.
+  const on = shownCard.peek();
+  const card = on !== null && cardsOpen.has(on) ? on : (CARD_ORDER.find((c) => cardsOpen.has(c)) ?? null);
   if (shownCard.peek() !== card) shownCard.value = card;
   if (card !== null) {
     currentNotice.value = null;
@@ -137,10 +147,32 @@ export function withdrawKind(kind: NoticeKind): void {
  * clears another's.
  */
 export function setCardOpen(card: NoticeCard, open: boolean): void {
-  if (cardsOpen.has(card) === open) return;
-  if (open) cardsOpen.add(card);
-  else cardsOpen.delete(card);
-  recompute();
+  setCardsOpen({ [card]: open });
+}
+
+/**
+ * Several cards' requests at once (one recompute): two cards asked for together while none is on screen
+ * is the tie that CARD_ORDER settles (the extinction card first).
+ */
+export function setCardsOpen(open: Partial<Record<NoticeCard, boolean>>): void {
+  let changed = false;
+  for (const card of CARD_ORDER) {
+    const want = open[card];
+    if (want === undefined || cardsOpen.has(card) === want) continue;
+    if (want) cardsOpen.add(card);
+    else cardsOpen.delete(card);
+    changed = true;
+  }
+  if (changed) recompute();
+}
+
+/**
+ * Whether another card holds the notice place now, so a new `card` must not be created (D-0076: the
+ * discovery card is not created while the extinction card is on screen).
+ */
+export function cardPlaceHeldByOther(card: NoticeCard): boolean {
+  const on = shownCard.peek();
+  return on !== null && on !== card;
 }
 
 /** Tests only: forget every request, dismissal and card. */

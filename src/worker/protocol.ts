@@ -16,6 +16,7 @@ import type { EvolutionState, MutationRates } from '@sim/mutation';
 import type { MissingMember, SampleHeldSummary } from '@sim/sample';
 import type { SampleMode } from '@sim/sampleSlot';
 import type { FavoritePattern, NotebookRecord } from '@persist/notebook';
+import type { GoalState } from '@persist/notebookGoals';
 
 /**
  * 2 since Phase 3 wave 2 (D-0036): ENT_STRIDE 12 → 14 (E_CUE2, E_LINKMASK), seven deposit bands (film),
@@ -119,6 +120,20 @@ export type ToWorker =
   | { readonly type: 'notebookGet'; readonly requestId: number; readonly dishId: string; readonly inspect?: number }
   /** P4.1: change the dish's favorites (notebook state: never a command, never touches the world). Answered by 'notebook'. */
   | { readonly type: 'favorite'; readonly requestId: number; readonly dishId: string; readonly op: FavoriteOp }
+  /** P4.2: mark a story card opened ('seen') or dismissed (notebook state: never a command, never touches the world). Answered by 'notebook'. */
+  | { readonly type: 'storyMark'; readonly requestId: number; readonly dishId: string; readonly id: string; readonly mark: 'seen' | 'dismissed' }
+  /** P4.4 (D-0071): start a goal on this dish at its current tick (notebook state; never a command). Answered by 'notebook'. */
+  | { readonly type: 'goalStart'; readonly requestId: number; readonly dishId: string; readonly objectiveId: string }
+  /** P4.4: Leave goal — the running goal (or the latest ended one) continues freely. Answered by 'notebook'. */
+  | { readonly type: 'goalLeave'; readonly requestId: number; readonly dishId: string }
+  /** P4.4: the player dismissed goal `id`'s sentence (it is not offered again). No answer. */
+  | { readonly type: 'goalShown'; readonly dishId: string; readonly id: string }
+  /**
+   * P4.4: the goals offered for dish `targetDishId`, or (null) for recipe `recipeId` before a dish exists
+   * (the Play card). Read-only. Answered by 'goalCatalog'. (Not `dishId`: the host's generic error path
+   * indexes dishes by a message's `dishId`, which must be a string.)
+   */
+  | { readonly type: 'goalCatalog'; readonly requestId: number; readonly targetDishId: string | null; readonly recipeId: string | null }
   /** Read-only lineage panel query (SPEC §8.5, UX §5.5): branches, variation, specimens, and detail for one branch or one organism's branch. */
   | { readonly type: 'lineage'; readonly requestId: number; readonly dishId: string; readonly branch: number | null; readonly birthId: number | null }
   /** Trait overlay and lineage highlight for this dish's snapshots (render-only; never touches the world). */
@@ -542,12 +557,27 @@ export type FavoriteOp =
   | { readonly kind: 'unpin'; readonly id: string }
   | { readonly kind: 'pin'; readonly id: string };
 
+/** P4.4: a goal a dish offers (content texts; "{time}" in the sentences is the dish time m:ss). */
+export interface GoalOffer {
+  readonly id: string;
+  readonly title: string;
+  readonly summary: string;
+  readonly completedText: string;
+  readonly endedText: string | null;
+}
+
 /** P4.1: what changed in a notebook without being asked (stage 2 extends the union). */
 export type NotebookChange =
+  /** P4.4: a goal completed, ended, or was left (src/worker/goals.ts); the record holds the details. */
+  | { readonly kind: 'goal'; readonly id: string; readonly state: GoalState }
   | { readonly kind: 'favoriteExtinct'; readonly id: string; /** An unpinned favorite removed to make room (its display name). */ readonly removed?: string }
   | { readonly kind: 'favoriteRepresentativeGone'; readonly id: string; readonly candidates: readonly number[] }
   /** P4.1 fix round 1: Undo or a rollback restored an earlier dish; the favorites were checked against it (favorites.ts reconcileFavorites). `removed`: display names of favorites whose organisms are not in the restored dish. */
-  | { readonly kind: 'favoritesRestored'; readonly removed: readonly string[]; /** Older unpinned favorites removed to keep 20 (display names). */ readonly unpinnedRemoved?: readonly string[] };
+  | { readonly kind: 'favoritesRestored'; readonly removed: readonly string[]; /** Older unpinned favorites removed to keep 20 (display names). */ readonly unpinnedRemoved?: readonly string[] }
+  /** P4.2: a story card was recorded or joined by later evidence (`notify` false), or chosen for the one notification (`notify` true). */
+  | { readonly kind: 'story'; readonly id: string; readonly notify: boolean }
+  /** P4.2: Undo or a rollback removed story cards recorded in the undone time (`removed` cards). */
+  | { readonly kind: 'storiesRestored'; readonly removed: number };
 
 /** What the lineage view asks the worker to mark: a locus to band, and/or a branch to highlight. */
 export interface LineageView {
@@ -904,6 +934,8 @@ export type FromWorker =
   | { readonly type: 'history'; readonly requestId: number; readonly dishId: string; readonly seconds: unknown; readonly minutes: unknown; readonly compacted: boolean }
   /** P4.3: the answer to 'sessionSummary' (read-only). */
   | { readonly type: 'sessionSummary'; readonly requestId: number; readonly dishId: string; readonly summary: SessionSummary }
+  /** P4.4: the answer to 'goalCatalog' (catalog order). */
+  | { readonly type: 'goalCatalog'; readonly requestId: number; readonly goals: readonly GoalOffer[] }
   /** P2.8: a recorded regional trait series; `available` lists, per species, the loci that have records. */
   | {
       readonly type: 'traitHistory';

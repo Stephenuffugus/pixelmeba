@@ -117,3 +117,21 @@ export async function expectReachable(el: Locator): Promise<void> {
   const box = await el.boundingBox();
   expect(box && Math.min(box.width, box.height)).toBeGreaterThanOrEqual(47.5);
 }
+
+/**
+ * D-0079: a story notice may take the one notice place once the dish has run 60 dish seconds since its
+ * story watch began (it outranks a prompt, D-0074). Dismiss it with its ✕ where it shows, read and pressed
+ * in one page task (no race with a notice that changes in between). Returns the text dismissed, or null
+ * when the notice place holds no story notice.
+ */
+export async function dismissStoryNotice(page: Page): Promise<string | null> {
+  const text = await page.evaluate(() => {
+    const n = document.querySelector('[data-testid="story-notice"]');
+    if (!n) return null;
+    const t = n.querySelector('p')?.textContent ?? '';
+    n.querySelector<HTMLButtonElement>('button[aria-label="Dismiss this notice"]')?.click();
+    return t;
+  });
+  if (text !== null) expect(text).toMatch(/^Something happened: /);
+  return text;
+}

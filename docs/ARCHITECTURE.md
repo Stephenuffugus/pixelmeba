@@ -208,6 +208,28 @@ of living positions) are optional display copies: `SlotSummary.thumb` (from the 
 `NewDishPreview.thumb` (the Play shelf's start) and, in persistence, `SaveRequest.thumb` →
 `SlotInfo.thumb`, read from the saved file's own state and outside its checksum.
 
+As built, Phase 4 wave 5b (P4.2 story cards, P4.4 goals; `PROTOCOL_VERSION` stays 2):
+```
+Main → Worker
+storyMark {requestId, dishId, id, mark: 'seen' | 'dismissed'}   → notebook   (no command, no world change)
+goalStart {requestId, dishId, objectiveId}                       → notebook (refused? when another goal
+                                                                   runs or the dish does not offer it)
+goalLeave {requestId, dishId}                                    → notebook
+goalShown {dishId, id}                                           // the sentence was dismissed; no answer
+goalCatalog {requestId, targetDishId|null, recipeId|null}        → goalCatalog (read-only; the dish's offers,
+                                                                   or the Play card's recipe)
+Worker → Main
+goalCatalog {requestId, goals: GoalOffer[]}   // {id, title, summary, completedText, endedText|null}
+notebookChanged … NotebookChange also =
+                 | story {id, notify}                 // a card recorded or joined; notify = the one notice
+                 | storiesRestored {removed: n}       // after Undo/rollback: cards from the undone time
+                 | goal {id, state}                   // completed, ended or left (the record has details)
+```
+After Undo or an error rollback the worker re-checks the notebook against the restored dish
+(`notebookAfterRestore`) and posts every change that applies, in order (favoritesRestored,
+storiesRestored, then one `goal` per ended attempt: endReason 'undone' after Undo, 'failed' after a
+rollback), each with the final record.
+
 ## 8. Snapshots
 Published ≤ 10/s (adaptive under load). Contents: `renderList` as a packed `Float32Array`
 [entityIndex, speciesIdx, x, y, heading, scale/sizeFactor, stateFlags, cueBits] per living
@@ -340,6 +362,22 @@ the state checksum, so neither the world checksum nor the stateHash changes with
   (`includeNicknames`, "Include family nicknames"; default off, and "without names" always drops
   them). The slot index copies the notebook's checksum (`notebookChecksum`), so a change made only to
   the notebook is still written by the next autosave.
+
+- Wave 5b adds two optional kinds (P4.2, P4.4; a record written before them reads them as `[]`, and
+  an empty notebook is still one with no favorite, story card or goal):
+  - `"stories"` (`src/persistence/notebookStories.ts`, at most 50 per dish): `{ id "story-<n>",
+    template firstSplit|enzymeAtWork|familyChanged|placeChanged, key, worldId, ruleset
+    {simulationVersion, evolutionRulesVersion, moduleRegistryVersion, contentHash}, evidence
+    ["event:<id>" | "reaction:<enzyme>:<second>:<cell>" | "branch:<id>" | "traits:<region>:<second>" |
+    "command:<seq>"]…, summary {the template's fields}, timeRange [from, to], imageRefs [],
+    favoriteId|null, notified, seen, dismissed }`. A card without evidence, or with a value, species,
+    birth id or time the dish never had, is a problem.
+  - `"goals"` (`src/persistence/notebookGoals.ts`, at most 20 per dish, at most one running): `{ id
+    "goal-<n>", objectiveId, title, predicate (copied at Start), state
+    running|completed|ended|continuedFreely, startTick, endTick|null, endReason?
+    zero|undone|failed|cannotResume|left, progress {startTick, holdSinceTick|null, state,
+    lastEventId?}, value?, shown }`. The load check also refuses a running goal the dish cannot run
+    (its recorded manifest, fields and event ids: `goalWorldRefsOf`).
 
 ### 11.3 Migrations
 `src/persistence/migrations/<from>-to-<to>.ts`; each ships with an old‑save fixture in

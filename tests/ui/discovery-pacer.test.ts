@@ -255,3 +255,69 @@ describe('Wave B fix 2: discoveries wait until a card really shows them', () => 
     expect(h.cards).toEqual([{ ids: [0, 1], at: DISCOVERY_BURST_MS + 5000 }]);
   });
 });
+
+describe('D-0076 the pacer and the other card in the notice place (CT §12.10 one new card per 60 s across the cards)', () => {
+  it('otherCardShown counts the extinction card as the last card shown: a discovery card waits 60 s from it', () => {
+    const h = harness();
+    h.advance(5000);
+    h.pacer.otherCardShown(); // the extinction card appears at 5 s
+    h.advance(6000);
+    h.pacer.discovered([0]);
+    h.advance(5000 + DISCOVERY_GAP_MS - 1);
+    expect(h.cards).toHaveLength(0);
+    h.advance(5000 + DISCOVERY_GAP_MS);
+    expect(h.cards).toEqual([{ ids: [0], at: 5000 + DISCOVERY_GAP_MS }]);
+  });
+
+  it('a timer already set when the other card appears re-checks the gap when it fires', () => {
+    const h = harness();
+    h.pacer.discovered([0]); // its burst timer fires at 1.5 s
+    h.advance(1000);
+    h.pacer.otherCardShown();
+    h.advance(1000 + DISCOVERY_GAP_MS - 1);
+    expect(h.cards).toHaveLength(0);
+    h.advance(1000 + DISCOVERY_GAP_MS);
+    expect(h.cards.map((c) => c.at)).toEqual([1000 + DISCOVERY_GAP_MS]);
+  });
+
+  it('a new card refused while the other card shows (deliver → []) keeps its ids waiting, starts no gap and retries', () => {
+    let t = 0;
+    let refuse = true;
+    let timers: { at: number; fn: () => void }[] = [];
+    const calls: { at: number; ids: number[]; newCard: boolean }[] = [];
+    const pacer = new DiscoveryPacer({
+      now: () => t,
+      setTimer: (fn, ms) => {
+        const x = { at: t + ms, fn };
+        timers.push(x);
+        return x;
+      },
+      clearTimer: (x) => (timers = timers.filter((y) => y !== x)),
+      cardOpen: () => false,
+      deliver: (ids, newCard) => {
+        calls.push({ at: t, ids: [...ids], newCard });
+        return refuse ? [] : ids; // LineageState showDiscovery's refusal while the extinction card shows
+      },
+    });
+    const advance = (to: number) => {
+      for (;;) {
+        const due = timers.filter((x) => x.at <= to).sort((a, b) => a.at - b.at)[0];
+        if (!due) break;
+        timers = timers.filter((x) => x !== due);
+        t = due.at;
+        due.fn();
+      }
+      t = to;
+    };
+    pacer.discovered([0]);
+    advance(DISCOVERY_BURST_MS);
+    expect(calls).toEqual([{ at: DISCOVERY_BURST_MS, ids: [0], newCard: true }]);
+    expect(pacer.waiting).toEqual([0]);
+    advance(DISCOVERY_BURST_MS + DISCOVERY_RETRY_MS);
+    expect(calls.map((c) => c.at)).toEqual([DISCOVERY_BURST_MS, DISCOVERY_BURST_MS + DISCOVERY_RETRY_MS]);
+    refuse = false; // the extinction card closed
+    advance(DISCOVERY_BURST_MS + 2 * DISCOVERY_RETRY_MS);
+    expect(calls).toHaveLength(3);
+    expect(pacer.waiting).toEqual([]); // shown at the retry, not 60 s after a refusal
+  });
+});

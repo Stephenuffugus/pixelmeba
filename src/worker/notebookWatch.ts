@@ -12,6 +12,8 @@ import type { World } from '@sim/world';
 import type { NotebookRecord } from '@persist/notebook';
 import type { NotebookChange } from './protocol';
 import { FavoriteTracker, reconcileFavorites, recordExtinction } from './favorites';
+import { StoryDetector, storyDetection, storiesAfterRestore } from './stories';
+import { GoalRunner, goalsAfterRestore, type GoalRestoreCause } from './goals';
 
 /** Where the dish keeps its notebook record (the host's Dish.notebook). */
 export interface NotebookRef {
@@ -23,6 +25,10 @@ export class NotebookWatch {
   /** Read-only stage hook for step() (none yet; stage 2's story detector may add one). */
   readonly hook: ((stage: number, world: World) => void) | undefined = undefined;
   readonly favorites: FavoriteTracker;
+  /** P4.2: the story-card detector (src/worker/stories.ts; null only when a test turns detection off). */
+  readonly stories: StoryDetector | null;
+  /** P4.4: the dish's goal runner (src/worker/goals.ts; idle until the player starts a goal). */
+  readonly goals: GoalRunner;
   private world: World;
 
   constructor(
@@ -31,6 +37,8 @@ export class NotebookWatch {
   ) {
     this.world = world;
     this.favorites = new FavoriteTracker(world, ref.get());
+    this.stories = storyDetection.enabled ? new StoryDetector(world, ref) : null; // P4.2
+    this.goals = new GoalRunner(world, ref); // P4.4
   }
 
   watches(world: World): boolean {
@@ -41,6 +49,8 @@ export class NotebookWatch {
   rebind(world: World): void {
     this.world = world;
     this.favorites.bind(world, this.ref.get());
+    this.stories?.rebind(world); // P4.2: rebuilt only when the world was replaced
+    this.goals.bind(world); // P4.4: resumes the record's running goal (kept as is when nothing changed)
   }
 
   /** The record with every kind's live state written in (members of the followed families). */
@@ -72,6 +82,8 @@ export class NotebookWatch {
       // A family with no members left is no longer followed: the others are rebuilt from their members.
       if (rebuild) this.favorites.bind(world, this.materialize());
     }
+    if (this.stories) changes.push(...this.stories.afterTick(world)); // P4.2
+    changes.push(...this.goals.afterTick(world)); // P4.4
     return changes;
   }
 }
@@ -80,21 +92,28 @@ export class NotebookWatch {
  * P4.1 fix round 1: the notebook after Undo or a rollback restored `world` to an earlier moment. The
  * record is kept (like the journal, D-0031), but each kind is checked against the restored dish so that
  * nothing it says is false there (favorites.ts reconcileFavorites). Stage 2 adds its kinds here, one
- * line each. `change` is null when nothing changed.
+ * line each. `cause` says what restored it (a running goal's end reason names it).
+ *
+ * `changes` lists one change per kind that changed, in this order: favoritesRestored, storiesRestored,
+ * then one { kind: 'goal' } per goal that ended (empty when nothing changed). The host posts each as its
+ * own notebookChanged carrying the final `record`, so every kind's listener sees its own change.
  */
 export function notebookAfterRestore(
   world: World,
   record: NotebookRecord,
-): { record: NotebookRecord; change: NotebookChange | null } {
-  const fav = reconcileFavorites(world, record);
-  return fav.changed
-    ? {
-        record: fav.record,
-        change: {
-          kind: 'favoritesRestored',
-          removed: fav.removed,
-          ...(fav.dropped.length > 0 ? { unpinnedRemoved: fav.dropped } : {}),
-        },
-      }
-    : { record, change: null };
+  cause: GoalRestoreCause,
+): { record: NotebookRecord; changes: NotebookChange[] } {
+  const gl = goalsAfterRestore(world, record, cause); // P4.4: a running goal ends 'undone' or 'failed' (its observer cannot rewind)
+  const fav = reconcileFavorites(world, gl.record);
+  const st = storiesAfterRestore(world, fav.record); // P4.2: cards found in the undone time go
+  const changes: NotebookChange[] = [];
+  if (fav.changed)
+    changes.push({
+      kind: 'favoritesRestored',
+      removed: fav.removed,
+      ...(fav.dropped.length > 0 ? { unpinnedRemoved: fav.dropped } : {}),
+    });
+  if (st.changed) changes.push({ kind: 'storiesRestored', removed: st.removed });
+  for (const g of gl.changed) changes.push({ kind: 'goal', id: g.id, state: g.state }); // P4.4
+  return { record: changes.length > 0 ? st.record : record, changes };
 }

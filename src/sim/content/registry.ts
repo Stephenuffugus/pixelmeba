@@ -35,6 +35,7 @@ import { MODULE_NATIVE_ABILITY, missingModuleParams, moduleSetProblem } from './
 import { MAX_WHAT_IF_CHOICES, variantPatchProblems } from '../variants';
 import { recipeShapeProblems } from '../recipes';
 import { experimentProblems } from '../experiments';
+import { objectivePredicateProblem } from '../objectives';
 import { PAINT_TARGETS, STRUCTURE_RECORD_IDS } from '../grid';
 import { FIELD_DEFS, isFieldId, type SystemFlag } from '../fields';
 import { guideProblems } from './guideRules';
@@ -333,6 +334,15 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
         if (!issues.some((x) => x.file === file && x.path === p.path)) err(file, p.path, p.message);
       }
     }
+  }
+
+  // Objectives (P4.4; SPEC §13.5): typed params, texts and offerOn always; what a shipped objective
+  // (phase ≤ buildPhase) names must be enabled. A later phase's objective is skipped, not an error.
+  for (const id of objectives.ids) {
+    const o = objectives.map[id]!;
+    const ctx = { species: species.map, structures: structures.map, recipes: recipes.map, manifest: manifestRes.success ? manifestRes.data : null };
+    const p = objectivePredicateProblem(o, ctx);
+    if (p) err(objectives.files[id]!, p.path, p.message);
   }
 
   // Manifest ------------------------------------------------------------------------------------

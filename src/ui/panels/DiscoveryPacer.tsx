@@ -7,7 +7,9 @@
  *   • a card dismissed while discoveries wait never lets the next card open before the 60 s gap;
  *   • discoveries wait until a card really shows them: a delivery that shows nothing (the lineage
  *     answer failed or had no rows, or the dish changed meanwhile) keeps them waiting, does not start
- *     the 60 s gap, and is tried again after DISCOVERY_RETRY_MS; another dish drops only its own.
+ *     the 60 s gap, and is tried again after DISCOVERY_RETRY_MS; another dish drops only its own;
+ *   • the 60 s limit is across the cards in the notice's place (D-0076): when another card (a followed
+ *     family's extinction card) takes the place, `otherCardShown()` counts it as the last card shown.
  * UI timing only: it never touches the simulation (timers pace notices, nothing else).
  */
 
@@ -64,6 +66,15 @@ export class DiscoveryPacer {
   /** The open card was dismissed: waiting discoveries get the next card, after the gap. */
   dismissed(): void {
     this.schedule();
+  }
+
+  /**
+   * Another card took the notice's place now (a followed family's extinction card; D-0076, CT §12.10 one
+   * new card notification per 60 s across the cards): the next new discovery card waits the full gap
+   * from now. A timer already set re-checks the gap when it fires.
+   */
+  otherCardShown(): void {
+    this.lastShownAt = this.env.now();
   }
 
   /** Undo rewound the dish to `count` branches: later ids no longer exist. */

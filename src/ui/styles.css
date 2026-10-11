@@ -3279,3 +3279,151 @@ html[data-text-scale='2'] .tab-context {
   align-items: center;
   gap: 0.5rem;
 }
+
+/* ---------------------------------------------------------------- story cards (P4.2; UX §5.9) */
+/* Text ≥ 16 px; buttons keep the 48 px targets of .btn. The dot is quiet: a small mark, no motion. */
+.story-dot {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.35rem;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--focus);
+}
+.story-new {
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+.story-card h2 {
+  font-size: 1.15rem;
+  margin: 0.25rem 0;
+}
+.story-panels {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+.story-panel {
+  min-width: 0;
+  border-left: 4px solid var(--line);
+  padding: 0.25rem 0 0.25rem 0.75rem;
+}
+.story-panel p {
+  margin: 0.15rem 0;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+.story-time {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.story-detail,
+.story-note {
+  color: var(--text-muted);
+  font-size: 1rem;
+}
+.story-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.story-actions .btn {
+  flex: 1 1 10rem;
+}
+.story-back {
+  margin-bottom: 0.5rem;
+}
+.story-item h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* ---------------------------------------------------------------- goals (P4.4; SPEC §13.5) */
+/* The Play card's optional goal and the More sheet's Goal row. Text ≥ 16 px; rows and buttons ≥ 48 px. */
+.goal-choices {
+  border: 0;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.goal-choices legend {
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0;
+  margin-bottom: 0.4rem;
+}
+.goal-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: var(--target);
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 1rem;
+}
+.goal-choice.selected {
+  border: 2px solid var(--text);
+  padding: calc(0.6rem - 1px) calc(0.75rem - 1px);
+}
+.goal-choice input {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  margin: 0;
+  accent-color: var(--primary);
+}
+.goal-choice:focus-within {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.goal-choice-text {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.goal-choice-text span {
+  color: var(--text-muted);
+}
+.goal-row {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.goal-row h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+.goal-status,
+.goal-summary {
+  font-size: 1rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.goal-summary {
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+.goal-offers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.goal-offers .btn {
+  width: 100%;
+}

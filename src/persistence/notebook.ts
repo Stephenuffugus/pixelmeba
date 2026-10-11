@@ -13,6 +13,8 @@
  */
 import { AGENT_CAP, CELL_COUNT } from '@sim/constants';
 import { canonicalJson, sha256Hex } from '@sim/hash';
+import { goalsProblem, goalsWorldProblem, type GoalRecord } from './notebookGoals';
+import { storiesProblem, storiesRefsProblem, type StoryCard } from './notebookStories';
 
 export const NOTEBOOK_FORMAT = 'pixelmeba-notebook';
 export const NOTEBOOK_VERSION = 1;
@@ -70,6 +72,10 @@ export interface NotebookRecord {
   readonly worldId: string;
   readonly favorites: readonly FavoriteRecord[];
   readonly nextFavorite: number;
+  /** P4.4: goal attempts (src/persistence/notebookGoals.ts); absent in records written before them (reads as []). */
+  readonly goals?: readonly GoalRecord[];
+  /** P4.2: story cards (src/persistence/notebookStories.ts); absent in records written before them (reads as []). */
+  readonly stories?: readonly StoryCard[];
   readonly checksum: string;
 }
 
@@ -223,6 +229,10 @@ function worldRefsProblem(raw: Record<string, unknown>, refs: NotebookWorldRefs)
     if (f.extinct && f.extinct.tick > refs.tick)
       return 'a favorite records an extinction after the dish’s time';
   }
+  const goals = goalsWorldProblem(raw, refs); // P4.4
+  if (goals) return goals;
+  const stories = storiesRefsProblem(raw.stories, refs); // P4.2
+  if (stories) return stories;
   return null;
 }
 
@@ -231,6 +241,8 @@ const KIND_PROBLEMS: Readonly<
   Record<string, (raw: unknown, record: Record<string, unknown>) => string | null>
 > = {
   favorites: favoritesProblem,
+  goals: goalsProblem, // P4.4 (notebookGoals.ts)
+  stories: storiesProblem, // P4.2 (notebookStories.ts)
 };
 const ENVELOPE_KEYS = ['format', 'notebookVersion', 'worldId', 'nextFavorite', 'checksum'];
 
@@ -312,7 +324,7 @@ export function notebookWithoutNicknames(record: NotebookRecord): NotebookRecord
 
 /** True when the record holds nothing (no favorite, followed or not). Such a record is not written to a file. */
 export function notebookIsEmpty(record: NotebookRecord): boolean {
-  return record.favorites.length === 0;
+  return record.favorites.length === 0 && (record.goals ?? []).length === 0 && (record.stories ?? []).length === 0;
 }
 
 /** Whether any favorite carries a nickname. */

@@ -48,6 +48,7 @@ import type { SimClient } from '../../src/worker/client';
 import type { DishInfo } from '../../src/worker/protocol';
 import {
   extinctCard,
+  queueExtinctCard,
   favoriteOf,
   findFavoriteAfterChange,
   notebook,
@@ -542,7 +543,8 @@ describe('fix round 1: the UI side of favorites', () => {
   });
 
   it('after Undo (favoritesRestored) the extinction card of a family that is back closes, and removed families are named', () => {
-    extinctCard.value = 'fav-1';
+    queueExtinctCard('fav-1');
+    expect(extinctCard.value).toBe('fav-1');
     onNotebookNotice({
       type: 'notebookChanged',
       dishId: 'x',

@@ -1,0 +1,9 @@
+{
+  "id": "WATCH_STARCH_BECOME_FOOD",
+  "title": "Watch starch become food",
+  "predicate": { "type": "observeEvent", "params": { "event": "conversion", "enzyme": "starch" } },
+  "summary": "Watch for starch being turned into sugar.",
+  "completedText": "Starch became sugar at {time}.",
+  "offerOn": ["FIRST_DISH_V1"],
+  "phase": 4
+}

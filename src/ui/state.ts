@@ -32,6 +32,7 @@ import type { SessionSummary } from '@worker/protocol';
 import { thumbFromSnapshot } from '@worker/thumbnail';
 import { sessionMemoryLine } from './strings/home';
 import { wireFavorites } from './favorites';
+import { startGoal, wireGoals } from './goals';
 
 export type Route =
   | { readonly name: 'home' }
@@ -45,7 +46,7 @@ export type Route =
   /** Paired comparison of two copies of the current dish (SPEC §13.4, UX §5.6). */
   | { readonly name: 'compare' }
   /** Notebook (UX §1): Journal · Experiments (P2.5; the other tabs arrive in later phases). */
-  | { readonly name: 'notebook'; readonly tab: 'journal' | 'experiments' | 'favorites' }
+  | { readonly name: 'notebook'; readonly tab: 'journal' | 'experiments' | 'favorites' | 'stories' }
   /** One experiment card in full, with Start (SPEC §13.2). */
   | { readonly name: 'experiment'; readonly cardId: string }
   /** A paired experiment card's run (the comparison engine with the card's change on B). */
@@ -227,6 +228,7 @@ export function getClient(): SimClient {
     client.onCompare(onCompareState);
     client.onExperiment(onExperimentNotice);
     wireFavorites(client); // P4.1: client.onNotebook (favorite changes, a dropped notebook) and the snapshots' family marks
+    wireGoals(client); // P4.4: goal changes autosave; the open dish's goal offers and its one goal sentence
     // P2.8: automatic checkpoints follow the Settings choice; journal entries of the open dish are kept with it.
     client.onCheckpoint(onCheckpointNotice);
     client.setCheckpointRing(settings.value.checkpointRing === true);
@@ -612,8 +614,10 @@ export async function startCustom(
 export const PLAY_PROMPT = 'Press play and look closely.';
 
 /** The Play shelf's Start (P1.12). D-0033: the open dish is kept first. */
-export async function startRecipe(recipeId: string, name: string): Promise<ReplaceOutcome> {
-  const outcome = await startDish({ kind: 'recipe', recipeId }, name, settings.value.showPrompts ? PLAY_PROMPT : null);
+export async function startRecipe(recipeId: string, name: string, goal: string | null = null): Promise<ReplaceOutcome> {
+  // P4.4: an optional goal (the Play card's choice) starts at the new dish's tick 0; the dish starts paused.
+  const onStarted = goal !== null ? (info: DishInfo) => void startGoal(info.dishId, goal) : undefined;
+  const outcome = await startDish({ kind: 'recipe', recipeId }, name, settings.value.showPrompts ? PLAY_PROMPT : null, onStarted);
   if (outcome.kind === 'refused') showToast(outcome.message, 6000);
   return outcome;
 }

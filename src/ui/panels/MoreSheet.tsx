@@ -23,6 +23,7 @@ import {
 } from '../state';
 import { saveAndLeave } from '../state';
 import { HOME_TEXT } from '../strings/home';
+import { GoalRow } from './GoalChoice';
 
 export function MoreSheet() {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -47,6 +48,8 @@ export function MoreSheet() {
           <button class="btn" onClick={() => (sheet.value = 'history')} data-testid="more-history">
             History and what happened
           </button>
+          {/* P4.4 (SPEC §13.5): the Goal row — the running goal and Leave goal, or Try a goal… */}
+          <GoalRow />
           <button class="btn" onClick={() => (sheet.value = 'evolution')} data-testid="more-evolution">
             Evolution settings (Advanced)
           </button>

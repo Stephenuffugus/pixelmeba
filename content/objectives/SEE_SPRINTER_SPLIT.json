@@ -1,0 +1,9 @@
+{
+  "id": "SEE_SPRINTER_SPLIT",
+  "title": "See a Sprinter split",
+  "predicate": { "type": "observeEvent", "params": { "event": "birth", "species": "B01" } },
+  "summary": "Watch for a Sprinter to divide. Splits that are blocked or cancelled don't count.",
+  "completedText": "A Sprinter split at {time}.",
+  "offerOn": ["FIRST_DISH_V1"],
+  "phase": 4
+}

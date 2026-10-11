@@ -59,6 +59,8 @@ import type { KeepFrom, KeepRefusalCode } from './protocol';
 import { RelationshipWatcher } from './relationships';
 import { emptyNotebook, favoritesOnly, notebookHasNicknames, notebookIsEmpty, notebookWithoutNicknames, sealNotebook, type NotebookRecord } from '@persist/notebook';
 import { notebookAfterRestore, NotebookWatch } from './notebookWatch';
+import { GOAL_REFUSALS, goalCatalog } from './goals';
+import { markStory } from '@persist/notebookStories';
 import { applyFavoriteOp, FAVORITE_REFUSALS, readFavoriteOp, withPatterns } from './favorites';
 import type { FavoriteMarks, NotebookChange } from './protocol';
 import { dishThumb, parseThumb, thumbFromState } from './thumbnail';
@@ -762,7 +764,7 @@ export class DishHost {
         d.speed = 0;
         d.lastEventId = d.world.counters.nextEventId - 1;
         d.lastGeometryVersion = -1;
-        this.restoreNotebook(d); // P4.1 fix round 1: the kept notebook checked against the restored dish
+        this.restoreNotebook(d, 'undo'); // P4.1 fix round 1: the kept notebook checked against the restored dish
         // A card's observer counted the ticks being rewound and cannot rewind with them.
         this.endExperiment(d, 'undone');
         this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: null });
@@ -857,6 +859,18 @@ export class DishHost {
         this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record, ...(inspected !== undefined ? { inspected } : {}) });
         return;
       }
+      case 'storyMark': {
+        // P4.2 (D-0070): notebook state only (a card opened or dismissed). Never a command; the world is not read.
+        const d = this.need(msg.dishId);
+        const list = d.arm ? null : markStory(d.notebook.stories ?? [], msg.id, msg.mark === 'dismissed' ? 'dismissed' : 'seen');
+        if (list === null) {
+          this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: d.notebook, refused: d.arm ? 'Comparison copies keep no story cards.' : 'That story card is not in this dish.' });
+          return;
+        }
+        d.notebook = { ...d.notebook, stories: list };
+        this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: this.notebookOf(d) });
+        return;
+      }
       case 'favorite': {
         // P4.1 (D-0070): notebook state only. Never a CommandPayload; the world is only read.
         const d = this.need(msg.dishId);
@@ -873,6 +887,40 @@ export class DishHost {
         }
         this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: d.notebook, ...(r.refused !== null ? { refused: r.refused } : {}), ...(r.removed !== null ? { removed: r.removed } : {}) });
         this.sendSnapshot(d);
+        return;
+      }
+      case 'goalStart':
+      case 'goalLeave': {
+        // P4.4 (D-0070, D-0071): notebook state only. Never a command, never a speed or pause change.
+        const d = this.need(msg.dishId);
+        const nw = this.watchOf(d);
+        if (!nw) {
+          this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: d.notebook, refused: GOAL_REFUSALS.arm });
+          return;
+        }
+        let r: { refused: string | null; changes: NotebookChange[] };
+        if (msg.type === 'goalLeave') r = nw.goals.leave(d.world);
+        else {
+          const def = this.registry.objectives[msg.objectiveId];
+          const offered = def !== undefined && goalCatalog(this.registry, { world: d.world }).some((g) => g.id === def.id);
+          r = def ? nw.goals.start(d.world, def, offered) : { refused: GOAL_REFUSALS.unknown, changes: [] };
+        }
+        this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: d.notebook, ...(r.refused !== null ? { refused: r.refused } : {}) });
+        this.notebookChanges(d, r.changes);
+        return;
+      }
+      case 'goalShown': {
+        // P4.4: the sentence was dismissed; a flag in the notebook record only.
+        const d = this.dishes[msg.dishId];
+        const nw = d ? this.watchOf(d) : null;
+        nw?.goals.shown(msg.id);
+        return;
+      }
+      case 'goalCatalog': {
+        // P4.4: read-only (content and the dish's recorded manifest).
+        const d = msg.targetDishId !== null ? this.dishes[msg.targetDishId] : undefined;
+        const goals = d ? (d.arm ? [] : goalCatalog(this.registry, { world: d.world })) : goalCatalog(this.registry, { recipeId: msg.recipeId, manifest: this.registry.manifest });
+        this.post({ type: 'goalCatalog', requestId: msg.requestId, goals });
         return;
       }
       case 'family': {
@@ -1267,12 +1315,14 @@ export class DishHost {
   /**
    * P4.1 fix round 1: after Undo or a rollback, the notebook (kept, like the journal) is checked against
    * the restored world (notebookWatch.ts notebookAfterRestore) and the watch rebuilt from the result.
+   * `cause` names what restored it (a running goal ends 'undone' or 'failed'); every kind that changed is
+   * announced as its own notebookChanged, each carrying the final record.
    */
-  private restoreNotebook(d: Dish): void {
-    const r = notebookAfterRestore(d.world, d.notebook);
-    if (r.change) d.notebook = r.record;
+  private restoreNotebook(d: Dish, cause: 'undo' | 'rollback'): void {
+    const r = notebookAfterRestore(d.world, d.notebook, cause);
+    if (r.changes.length > 0) d.notebook = r.record;
     d.notebookWatch?.rebind(d.world);
-    if (r.change) this.notebookChanges(d, [r.change]);
+    this.notebookChanges(d, r.changes);
   }
 
   /** P4.1: the dish's notebook as it stands now (followed families' live members written in). */
@@ -2374,7 +2424,7 @@ export class DishHost {
     d.world = w;
     d.lastEventId = Math.min(d.lastEventId, w.counters.nextEventId - 1);
     d.lastGeometryVersion = -1;
-    this.restoreNotebook(d); // P4.1 fix round 1: the kept notebook checked against the restored dish
+    this.restoreNotebook(d, 'rollback'); // P4.1 fix round 1: the kept notebook checked against the restored dish
   }
 
   pump(): void {

@@ -15,6 +15,7 @@ import type { SessionSummary } from './protocol';
 import type { SampleHeldSummary } from '@sim/sample';
 import type { SampleMode } from '@sim/sampleSlot';
 import type { FavoriteOp } from './protocol';
+import type { GoalOffer } from './protocol';
 import { PROTOCOL_VERSION, stamp, type DishInfo, type DishSource, type Envelope, type FamilyAnswer, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 
 export class WorkerRequestError extends Error {
@@ -181,6 +182,32 @@ export class SimClient {
   /** P4.1: change a dish's favorites (notebook state; never a command). Resolves with the record and any refusal. */
   async favorite(dishId: string, op: FavoriteOp): Promise<NotebookAnswer> {
     return this.request<NotebookAnswer>((requestId) => ({ type: 'favorite', requestId, dishId, op }));
+  }
+
+  /** P4.4: start a goal on a dish at its current tick (notebook state; never a command). Resolves with the record and any refusal. */
+  async goalStart(dishId: string, objectiveId: string): Promise<NotebookAnswer> {
+    return this.request<NotebookAnswer>((requestId) => ({ type: 'goalStart', requestId, dishId, objectiveId }));
+  }
+
+  /** P4.4: Leave goal (the running goal, or the latest ended one, continues freely). */
+  async goalLeave(dishId: string): Promise<NotebookAnswer> {
+    return this.request<NotebookAnswer>((requestId) => ({ type: 'goalLeave', requestId, dishId }));
+  }
+
+  /** P4.4: the player dismissed goal `id`'s sentence (no answer). */
+  goalShown(dishId: string, id: string): void {
+    this.send({ type: 'goalShown', dishId, id });
+  }
+
+  /** P4.4: the goals offered for an open dish, or (dishId null) for a recipe before its dish exists. Read-only. */
+  async goalCatalog(dishId: string | null, recipeId: string | null): Promise<readonly GoalOffer[]> {
+    const msg = await this.request<Extract<FromWorker, { type: 'goalCatalog' }>>((requestId) => ({ type: 'goalCatalog', requestId, targetDishId: dishId, recipeId }));
+    return msg.goals;
+  }
+
+  /** P4.2: mark a story card opened ('seen') or dismissed (notebook state; never a command). Resolves with the record. */
+  async storyMark(dishId: string, id: string, mark: 'seen' | 'dismissed'): Promise<NotebookAnswer> {
+    return this.request<NotebookAnswer>((requestId) => ({ type: 'storyMark', requestId, dishId, id, mark }));
   }
 
   /** Every packet leaves stamped with the protocol version. */
