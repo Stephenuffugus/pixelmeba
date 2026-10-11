@@ -3,6 +3,30 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑11 ≈ 11:40 UTC — WAVE 5b BUILT AND VERIFIED (0 BLOCKER/MAJOR); LEAD INTEGRATION RUNNING. START HERE.**
+> - Wave 5b run `wf_12469c4e-45d`: stories, objectives and notice-cards built.
+>   - Verdicts: the rules verifier and the objectives saves verifier both ok, 7 MINORs for the lead.
+>   - Reports: `docs/reports/reviews/g4-wave-5b/`.
+> - Tree backup before integration: `wip/g4-wave-5b` = `d0c3c69`. Decisions written (uncommitted): D‑0076 (notice cards)
+>   and D‑0079 (pacing per source). D‑0077 (stories) and D‑0078 (objectives) are written after the integration
+>   reports.
+> - Running: `docs/agent/g4-wave-5b-integrate.workflow.js.txt`, run `wf_56005330-618`.
+>   - objectives-minors fixer: rollback reason, restore change list, resumed event id, import support check, canonical
+>     progress.
+>   - stories-minors fixer: pause-and-restore on Open → Spotlight, the family caption wording, articles and plurals.
+>   - Then one verifier, and a repair round only for a BLOCKER/MAJOR.
+> - If this session dies:
+>   1. If `git status` is clean, restore with `git checkout wip/g4-wave-5b -- . && git reset -q`.
+>   2. Read `docs/reports/reviews/g4-wave-5b/integrate-*.md`.
+>   3. Rerun only the unfinished parts of that workflow file.
+> - Then:
+>   1. check, desktop e2e (stories, goals, favorites, garden-home, keep-dish, a11y-screens);
+>   2. commit;
+>   3. tick P4.2 and P4.4;
+>   4. wave 6a pre-launch: patch the 22 `<lead: …>` placeholders, number the decisions in
+>      `docs/agent/g4-wave-6-prelaunch-decisions.draft.md` (D‑0080…);
+>   5. build the 6a run file and launch.
+
 > **Update 2026‑10‑11 09:45 UTC — WAVE 5a COMMITTED (`9b40210`), P4.1 and P4.3 ticked. Wave 5b RUNNING (run `wf_12469c4e-45d`, launched 09:48). START HERE.**
 > - Evidence:
 >   - check 162 files / 1623 tests;

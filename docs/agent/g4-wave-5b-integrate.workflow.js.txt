@@ -1,0 +1,86 @@
+export const meta = {
+  name: 'g4-wave-5b-integrate',
+  description: 'Lead integration of Phase 4 wave 5b: two fixers (objectives MINORs; stories MINORs), one adversarial verifier over the integration diff, one repair round only for BLOCKER/MAJOR',
+  phases: [
+    { title: 'Fix', detail: 'objectives-minors and stories-minors fixers in parallel, effort high' },
+    { title: 'Verify', detail: 'one adversarial verifier over the diff vs d0c3c69 (wave 5b tree before integration)' },
+    { title: 'Repair', detail: 'only if the verifier finds a BLOCKER/MAJOR; then one re-verify' },
+  ],
+}
+
+const OWNER_CONTEXT = `OWNER CONTEXT (written by the lead, the main session working for the owner): the owner's latest chat message is "lets get started" (after the codespace stopped overnight), the owner's standing instruction to resume the unattended Pixelmeba build. You do only the Pixelmeba task below.`
+const ag = (prompt, opts) => agent(`${OWNER_CONTEXT}\n\n${prompt}`, opts)
+
+const BASE = `You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). The working tree holds Phase 4 wave 5b UNCOMMITTED on top of main (stories P4.2, objectives P4.4, notice-cards; reports in docs/reports/reviews/g4-wave-5b/: stories-build.md, objectives-build.md, notice-cards-build.md, wave-verify.md, saves-verify-objectives.md). Branch wip/g4-wave-5b = d0c3c69 is a backup commit of exactly that tree before this integration.
+RULES: do NOT run git add/commit/stash/checkout/reset/restore/rm/branch; do not delete files you did not create; edit ONLY the files your assignment lists; never edit docs/DECISIONS.md (put any decision you need in your report as "PROPOSED DECISION: …"). D-0072: no new sim rule; src/sim/objectives.ts is the read-only goal evaluator (nothing in the tick imports it), so editing it is allowed, but the fence must not move. Scratch in tmp/<your key>/ (git-ignored). Two CPUs are shared with another agent: targeted vitest files only (never the whole suite); long commands with run_in_background and an until-loop wait; never a bare sleep. Playwright silently reuses a server already on your port: stop your port before and after each run (lsof -t -i :<port> | xargs -r kill; never pkill). NEVER end your turn while a command you started is still running.
+BEFORE FINISHING: npx tsc -p tsconfig.json --noEmit clean; npx eslint <your files> clean; npx vitest run tests/fixtures/g2-replay.test.ts tests/fixtures/trajectory-fence plus every test file you touched or that covers code you changed; every e2e spec you changed or whose behaviour you changed, on desktop AND phone-portrait. Final message: a plain report — each item DONE (file:line, the proving test, and how you showed the test fails without the fix: a load-time mutant or the hunk reverted in a scratch copy restored byte for byte, checked with cmp) or NOT DONE (why); files changed; every command you ran with its summary line. Also write that report to docs/reports/reviews/g4-wave-5b/integrate-<your key>.md.`
+
+const FIX_A = `${BASE}
+
+YOUR KEY: objectives-minors. Playwright: E2E_PORT=4282 E2E_OUTDIR=tmp/dist-objectives-minors.
+You own: src/worker/goals.ts, src/persistence/notebookGoals.ts, src/sim/objectives.ts, src/ui/goals.ts, src/ui/strings/goals.ts, src/worker/notebookWatch.ts (notebookAfterRestore only), src/worker/host.ts (restoreNotebook and its callers only), src/worker/protocol.ts (only if a change shape must change), tests/sim/objectives.test.ts, tests/worker/goals-host.test.ts, tests/persistence/notebook.test.ts (additive), tests/e2e/goals.spec.ts (only if its text changes).
+Read first: docs/reports/reviews/g4-wave-5b/wave-verify.md and saves-verify-objectives.md (the items below, with their repros and probes under tmp/verify*), objectives-build.md, and D-0070, D-0071, D-0027 in docs/DECISIONS.md.
+1. MINOR: an ERROR ROLLBACK (host.ts pump → rollback → restoreNotebook → notebookAfterRestore → goalsAfterRestore) ends a running goal with endReason 'undone', so the player reads "{title}: Undo rewound the dish, so this attempt ended." and More shows "… ended when Undo rewound the dish." although no Undo happened. Give the rollback its own end reason (e.g. 'rewound') with honest wording that matches what the player saw (find the rollback's own player-facing message in the UI strings and use the same terms; never claim a cause that was not recorded). Undo keeps 'undone'. The notebook validator accepts the new reason; older records still load.
+2. MINOR: notebookAfterRestore (src/worker/notebookWatch.ts) returns ONE change, so when an Undo ends a running goal and favorites or stories also changed, no {kind:'goal'} change is posted and src/ui/goals.ts onGoalNotice skips its autosave. Make the restore report every kind that changed (e.g. return an array, posted in order as separate notebookChanged messages carrying the final record), and keep the favorites and stories UI behaviour exactly as now. Test: Undo while a goal runs and a story card from the undone time exists → a 'goal' change is posted (and the favorites/stories changes still are).
+3. MINOR: src/sim/objectives.ts (about :370) — a watch resumed after a load starts at lastEventId = nextEventId - 1, so events a COMMAND emits between the last evaluated tick and the save ('command', or 'introduce' from an inoculate) are never counted after the load, while an uninterrupted run counts them at the next tick. Save the id of the last event the watch has seen in the goal's progress (validated: an integer below the world's nextEventId) and resume from it, so a save → load at any moment completes at exactly the same tick as an uninterrupted run for EVERY event type the validator accepts. Test with an event goal fed by a command-emitted event saved between the command and the next tick.
+4. MINOR: goalsWorldProblem (src/worker/goals.ts ~:133 and src/persistence/notebookGoals.ts ~:378) checks only species and ticks, so a running goal that the loaded dish cannot run (a field, enzyme or system its recorded manifest lacks) passes import; at the first bind ObjectiveWatch throws and the runner silently rewrites the record to ended/'undone' with no notebookChanged, and the UI says "Undo rewound the dish" (false). Check the goal's support (objectiveSupportProblem or its manifest/fields part) against the loaded world inside the notebook world-refs check, so such a notebook is dropped whole with NOTEBOOK_DROPPED_TEXT and the world loads (the saves-are-sacred rule). The runner must never silently rewrite a record: if binding still fails for any reason, end it with an honest reason and post the change. Repro: tmp/verify-saves-0/host.probe.ts.
+5. NIT (saves verifier): the progress field is not canonical — the runner leaves progress.state 'running' in ended and continuedFreely records, and the validator accepts inconsistent records (completed with progress.state 'running', completed with endTick < startTick, holdSinceTick on an observeEvent goal, value or shown:true on a running goal). Make the runner write consistent records and the validator refuse the inconsistent ones; records written by the wave 5b build in the normal flows must still load (test them).
+Report a PROPOSED DECISION line for each behaviour choice (the new end reason and its wording; the change list; the saved event id).`
+
+const FIX_B = `${BASE}
+
+YOUR KEY: stories-minors. Playwright: E2E_PORT=4281 E2E_OUTDIR=tmp/dist-stories-minors.
+You own: src/ui/stories.ts, src/ui/strings/stories.ts, src/worker/stories.ts (only if a stored summary field must change; then the card validator in src/persistence/notebookStories.ts too, keeping wave 5b cards loadable), src/ui/state.ts (only the pause-and-restore helper this needs, additive), tests/ui/stories.test.ts, tests/worker/stories-host.test.ts (additive), tests/e2e/stories.spec.ts.
+Read first: docs/reports/reviews/g4-wave-5b/wave-verify.md (items 2 and 3 and the NITs, with repros), stories-build.md, docs/source/D08 lines 128-156, UX §2 (docs/UX_SPEC.md lines 16-31), D-0028 in docs/DECISIONS.md.
+1. MINOR: the story notice's Open routes to the Notebook, and the existing rule that leaving the dish screen pauses it (D-0028; src/ui/state.ts ~:922-931) pauses a running dish; Spotlight then returns to the dish still paused (tests/e2e/stories.spec.ts asserts the 'Run' label). D08 line 153: "Open the notebook without changing the world's history. If it blocks the play surface, use the existing pause-and-restore convention." Find that convention as built (the Field Guide restores the dish's prior speed on Back: grep the Field Guide and state.ts for how it records and restores the speed) and apply the same to a story opened from the notice: returning to the dish through Spotlight, or Back from the Notebook, restores the speed the dish had before Open; opening the Notebook any other way keeps today's behaviour. Nothing else changes speed. Update stories.spec.ts to prove the restored speed (and keep the hash-unchanged check).
+2. MINOR: src/ui/strings/stories.ts familyPanels (~:174-190) — the third caption doubles its labels ("Tradeoff: game rule: …") and is not the Lineage sheet's wording ("Game rules", src/ui/panels/LineageSheet.tsx ~:257); and which line is called "Tradeoff" is just the first line ruleLines returns, which can be the gain side (repro: Garden seed 104729 with the StoryDetector to tick 6898 gives story-8 "Tradeoff: game rule: it can split once it is 13.2 s old (ancestor: 12 s)."). Use the Lineage sheet's own wording and structure for the inherited difference and the rule lines, and call something a tradeoff only where the lineage data marks it as one (SPEC §12.9: no benefit claims; D08: "Name the inherited difference and tradeoff, without claiming it will help"). Unit tests pin the captions for a real family card.
+3. NIT: "A {Species} was growing." gives "A Oilwick was growing." and "A Amoeba was growing."; "Before: 13 Sprinter" and "You added 5 Sprinter" are singular for a count. Use the article and plural forms the app already has for species names (grep src/ui/strings for plural/article helpers; if none exist, add a small helper in stories' strings and use the species' recorded plural if content has one). Tests for the four cases.
+Report a PROPOSED DECISION line for each behaviour choice.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+
+phase('Fix')
+const [repA, repB] = await parallel([
+  () => ag(FIX_A, { label: 'fix:objectives-minors', phase: 'Fix', effort: 'high' }),
+  () => ag(FIX_B, { label: 'fix:stories-minors', phase: 'Fix', effort: 'high' }),
+])
+const reports = `=== FIXER objectives-minors ===\n${repA ? String(repA) : 'NO REPORT'}\n\n=== FIXER stories-minors ===\n${repB ? String(repB) : 'NO REPORT'}`
+
+const DIFF_HOWTO = `The integration changes are the difference between commit d0c3c69 (wip/g4-wave-5b: the wave 5b tree before integration) and the CURRENT working tree. Many files are untracked, so plain \`git diff d0c3c69\` is WRONG. Diff trees:
+  IDX=$(mktemp) && GIT_INDEX_FILE=$IDX git read-tree HEAD && GIT_INDEX_FILE=$IDX git add -A && T=$(GIT_INDEX_FILE=$IDX git write-tree) && rm -f $IDX && git diff --stat d0c3c69 $T && git diff d0c3c69 $T -- src tests content
+Ignore docs/DECISIONS.md, docs/agent/** and docs/reports/** (the lead's).`
+
+const VERIFY = (round) => `You are the adversarial verifier of the lead's integration of Phase 4 wave 5b in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Do NOT edit any repository file except your report docs/reports/reviews/g4-wave-5b/integrate-verify${round}.md; do NOT run git add/commit/stash/checkout/reset/restore/branch. Scratch in tmp/integrate-verify-5b-${round}/. Playwright: port 4391 with build folder tmp/dist-integrate-verify-5b (stop the port before and after; never pkill). Two CPUs: targeted runs only; never end your turn while a command you started is running.
+${DIFF_HOWTO}
+The two fixers' assignments:
+--- objectives-minors ---
+${FIX_A}
+--- stories-minors ---
+${FIX_B}
+--- the fixers' reports ---
+${reports}
+Try to REFUTE that each item is done correctly, completely and honestly: read the whole integration diff; for each code fix write a load-time mutant (or revert the hunk in a scratch copy, restored byte for byte) and show its new test fails without it; re-run the original repros (tmp/verify*/ probes named in docs/reports/reviews/g4-wave-5b/wave-verify.md and saves-verify-objectives.md); check every new player-facing sentence against what was recorded (honest labels: no claimed cause without a record, no benefit claims); check that wave 5b saves written before this integration (goals, stories, favorites) still load, and that malformed records are dropped whole with the world loading; re-run: the changed unit tests, tests/fixtures/g2-replay.test.ts and tests/fixtures/trajectory-fence, tests/fixtures/determinism.test.ts, npx tsc -p tsconfig.json --noEmit, npx eslint on the changed files, and the changed e2e specs on desktop only.
+Grade every problem exactly like "MAJOR [objectives-minors] <file:line> — <what is wrong> — <repro>" (keys: objectives-minors, stories-minors, lead); BLOCKER/MAJOR only for real defects a player, a save or the determinism contract would hit; MINOR/NIT otherwise; most severe first. Write the same list, plus every command you ran with its summary line, to the report file. ok=true only if nothing BLOCKER/MAJOR remains.`
+
+phase('Verify')
+let verdict = await ag(VERIFY(1), { label: 'verify:integrate-5b', phase: 'Verify', schema: VERDICT, effort: 'high' })
+const blockingOf = (v) => (v && Array.isArray(v.problems) ? v.problems.filter((p) => /^\s*(BLOCKER|MAJOR)/.test(p)) : [])
+let open = blockingOf(verdict)
+const rounds = []
+if (open.length) {
+  phase('Repair')
+  const keys = ['objectives-minors', 'stories-minors'].filter((k) => open.some((p) => p.includes(`[${k}]`)))
+  log(`repair: ${keys.join(', ') || 'lead-only problems'}`)
+  const fixes = await parallel(keys.map((k) => () => ag(`${k === 'objectives-minors' ? FIX_A : FIX_B}\n\nYou are the REPAIR round for this assignment (the work is in the tree; do not start over). The adversarial verifier (docs/reports/reviews/g4-wave-5b/integrate-verify1.md) found:\n${open.filter((p) => p.includes(`[${k}]`)).join('\n')}\nFix each, prove each with a test that fails without the fix, and report as before (write the report to docs/reports/reviews/g4-wave-5b/integrate-repair-${k}.md).`, { label: `repair:${k}`, phase: 'Repair', effort: 'high' })))
+  rounds.push({ keys, fixes: fixes.map((f) => (f ? String(f) : null)) })
+  if (keys.length) {
+    verdict = await ag(`${VERIFY(2)}\n\nREPAIR ROUND: the earlier verifier's BLOCKER/MAJOR problems were:\n${open.join('\n')}\nRepair reports:\n${fixes.map((f, i) => `=== ${keys[i]} ===\n${f ? String(f) : 'NO REPORT'}`).join('\n\n')}\nFor EACH earlier problem, reproduce it against the current tree and say VERIFIED FIXED or NOT FIXED; then grade anything new as before.`, { label: 'reverify:integrate-5b', phase: 'Repair', schema: VERDICT, effort: 'high' })
+    open = blockingOf(verdict)
+  }
+}
+log(`integration 5b: ${open.length ? `${open.length} BLOCKER/MAJOR remain` : 'no BLOCKER/MAJOR remains'}`)
+return { reports: { objectivesMinors: repA ? String(repA) : null, storiesMinors: repB ? String(repB) : null }, verdict, rounds, open }
