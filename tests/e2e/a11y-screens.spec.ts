@@ -17,6 +17,7 @@ import { step } from '../../src/sim/tick';
 import { loadRegistryFs, REPO_ROOT } from '../../tools/lib/content-fs';
 import { E_X, E_Y, ENT_STRIDE } from '../../src/worker/protocol';
 import {
+  chooseSpeed,
   expectNoHorizontalOverflow,
   expectReachable,
   seedSettings,
@@ -476,6 +477,138 @@ test('wave 5a: Follow sheet, Family sheet, the followed family\'s slot, Notebook
     'Notebook: favorites (one record)',
     'Play (Garden card with its thumbnail)',
     'Session memory (Saved for later)',
+  ]);
+});
+
+// ------------------------------------------------------------------------------------ Phase 4 wave 6a
+
+// P4.6 share, P4.7 Try my dish and P4.8a observe screens (D-0083…D-0085). Flows and selectors as in
+// tests/e2e/share.spec.ts, try-dish.spec.ts and observe-tools.spec.ts. The horizon card is reached the
+// shortest way the setup offers: a 60 s turn run at 4×.
+test('wave 6a: Share sheet (each choice), Lab relationship map, region probes with one region, Try my dish setup and horizon card, Import recipe ID (Play, Saved dishes)', async ({
+  page,
+}) => {
+  test.setTimeout(600_000);
+  const a = new Audit(page);
+  await startGarden(page);
+
+  // More → Share: the three choices, each selected and settled before its scan.
+  await page.getByTestId('more').click();
+  await page.getByTestId('more-share').click();
+  const share = page.getByTestId('share-sheet');
+  await expect(share).toBeVisible();
+  await expect(share.getByRole('radio', { name: /^Picture/ })).toBeChecked();
+  await expect(page.getByTestId('share-picture-preview')).toBeVisible();
+  await a.scan('Share: Picture');
+  await share.getByRole('radio', { name: /^Starting recipe/ }).check();
+  await expect(page.getByTestId('share-recipe-identity')).toHaveText('FIRST_DISH_V1 / revision 1 / seed 104729');
+  await expect(page.getByTestId('share-recipe-versions')).toBeVisible();
+  await a.scan('Share: Starting recipe');
+  await share.getByRole('radio', { name: /^Living dish/ }).check();
+  await expect(page.getByTestId('share-living-line')).toContainText(/ · [\d.]+ (KB|MB)$/);
+  await a.scan('Share: Living dish');
+  await page.getByTestId('share-close').click();
+  await expect(share).toHaveCount(0);
+
+  // Run 20 dish seconds at 4× so the map has recorded arrows, then pause.
+  await page.getByTestId('run-toggle').click();
+  await chooseSpeed(page, 4);
+  await expect
+    .poll(() => simSeconds(page), { timeout: 240_000, intervals: [500] })
+    .toBeGreaterThanOrEqual(20);
+  await pause(page);
+
+  // Lab → Observe: the relationship map, then one region drawn and its readings.
+  await page.getByTestId('view-toggle').click();
+  await expect(page.getByTestId('dish-screen')).toHaveAttribute('data-view', 'lab');
+  await page.getByRole('button', { name: 'Whole dish' }).click();
+  const observe = async (): Promise<void> => {
+    const cat = page.getByTestId('lab-cat-observe');
+    if ((await cat.getAttribute('aria-expanded')) !== 'true') await cat.click();
+    await expect(page.locator('[data-testid="lab-tray"][data-category="observe"]')).toBeVisible();
+  };
+  await observe();
+  await page.getByTestId('lab-relmap').click();
+  const relmap = page.getByTestId('relmap-sheet');
+  await expect(relmap).toBeVisible();
+  await expect(relmap.locator('tr[data-edge="eats:B01:sugar"]')).toContainText('Sprinter');
+  await a.scan('Lab: relationship map');
+  await page.getByTestId('relmap-close').click();
+  await expect(relmap).toBeHidden();
+  await observe();
+  await page.getByTestId('lab-regions').click();
+  const session = page.getByTestId('probe-session');
+  await expect(session).toBeVisible();
+  const box = (await page.getByTestId('viewport').boundingBox())!;
+  const zoom = Math.min(box.width, box.height) / 124;
+  const cell = (cx: number, cy: number): [number, number] => [
+    box.x + box.width / 2 + (cx - 64) * zoom,
+    box.y + box.height / 2 + (cy - 64) * zoom,
+  ];
+  const [x0, y0] = cell(44, 86);
+  const [x1, y1] = cell(60, 104);
+  await page.mouse.move(x0, y0);
+  await page.mouse.down();
+  await page.mouse.move((x0 + x1) / 2, (y0 + y1) / 2, { steps: 6 });
+  await page.mouse.move(x1, y1, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByTestId('probe-count')).toHaveText('1 of 6 regions');
+  await a.scan('Region probes: drawing, one region');
+  await page.getByTestId('probe-show').click();
+  const probes = page.getByTestId('probe-sheet');
+  await expect(probes).toBeVisible();
+  await expect(probes.getByTestId('probe-region-A')).toContainText('Region A · rectangle');
+  await a.scan('Region probes: panel, one region');
+  await page.getByTestId('probe-close').click();
+  await expect(probes).toBeHidden();
+  await page.getByTestId('view-toggle').click();
+  await expect(page.getByTestId('dish-screen')).toHaveAttribute('data-view', 'explore');
+
+  // More → Try my dish…: the setup sheet; a 60 s turn run at 4× to its horizon card.
+  await page.getByTestId('more').click();
+  await page.getByTestId('more-try').click();
+  await expect(page.getByTestId('try-setup')).toBeVisible();
+  await expect(page.getByRole('radio', { name: /^Free observation/ })).toBeChecked();
+  await a.scan('Try my dish: setup');
+  await page.getByTestId('try-length-60').click();
+  await expect(page.getByRole('radio', { name: /^1:00 of dish time/ })).toBeChecked();
+  await page.getByTestId('try-start').click();
+  await expect(page.getByTestId('try-badge')).toHaveText('Turn 1 · 1:00 left');
+  await page.getByTestId('run-toggle').click();
+  await chooseSpeed(page, 4);
+  await expect(page.getByTestId('try-horizon')).toBeVisible({ timeout: 150_000 });
+  await expect(page.getByTestId('try-reached')).toBeVisible();
+  await a.scan('Try my dish: horizon card');
+  await page.getByTestId('try-finish').click();
+  await expect(page.getByTestId('try-horizon')).toHaveCount(0);
+
+  // Import recipe ID on Play (with its refusal line showing), then in Saved dishes.
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  await page.getByTestId('home-play').click();
+  await expect(page.getByTestId('recipe-id-import')).toBeVisible();
+  await page.getByTestId('recipe-id-input').fill('R-G3 / revision 2 / seed 104729');
+  await page.getByTestId('recipe-id-start').click();
+  await expect(page.getByTestId('recipe-id-message')).toHaveText(
+    'This recipe needs a compatible build (R-G3 / revision 2 / seed 104729).',
+  );
+  await a.scan('Play: Import recipe ID (refused)');
+  await page.getByRole('button', { name: 'Back' }).click();
+  await page.getByRole('button', { name: 'Saved dishes' }).click();
+  await expect(page.getByRole('heading', { name: 'Saved dishes' })).toBeVisible();
+  await expect(page.getByTestId('recipe-id-import')).toBeVisible();
+  await a.scan('Saved dishes: Import recipe ID');
+
+  a.done([
+    'Share: Picture',
+    'Share: Starting recipe',
+    'Share: Living dish',
+    'Lab: relationship map',
+    'Region probes: drawing, one region',
+    'Region probes: panel, one region',
+    'Try my dish: setup',
+    'Try my dish: horizon card',
+    'Play: Import recipe ID (refused)',
+    'Saved dishes: Import recipe ID',
   ]);
 });
 

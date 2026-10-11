@@ -31,8 +31,10 @@ import { audioPrefsOf } from '@audio/mix';
 import type { SessionSummary } from '@worker/protocol';
 import { thumbFromSnapshot } from '@worker/thumbnail';
 import { sessionMemoryLine } from './strings/home';
+import { importFailedText } from './strings/share';
 import { wireFavorites } from './favorites';
 import { startGoal, wireGoals } from './goals';
+import { wireTry } from './tryDish';
 
 export type Route =
   | { readonly name: 'home' }
@@ -105,7 +107,7 @@ export const selection = signal<Selection | null>(null);
 export const inspector = signal<InspectorPayload | null>(null);
 export const candidates = signal<{ x: number; y: number; items: { birthId: number; species: number }[] } | null>(null);
 export const tool = signal<Tool>({ kind: 'look' });
-export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | 'save' | 'history' | 'lineage' | 'evolution' | 'favorite'>('none');
+export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | 'save' | 'history' | 'lineage' | 'evolution' | 'favorite' | 'trySetup' | 'tryHorizon' | 'share' | 'relationshipMap' | 'probes'>('none');
 /** P2.2: the open dish's evolution setting, rates and recorded changes (from its snapshots). */
 export const evolution = signal<EvolutionState | null>(null);
 export const overlay = signal<OverlayId | null>(null);
@@ -215,6 +217,9 @@ export function errorToastText(e: Pick<WorkerErrorNotice, 'message'> & Partial<W
       return `Saving failed; nothing already saved was changed and the dish was not paused: ${e.message}`;
     case 'exportDish':
       return `The export failed; nothing was paused or changed: ${e.message}`;
+    case 'importDish':
+    case 'recipeImport':
+      return importFailedText(e.message); // UX §5.11 (importFile shows it; the global toast skips these)
     default:
       return `Nothing was paused or changed: ${e.message}`;
   }
@@ -224,11 +229,17 @@ export function getClient(): SimClient {
   if (!client) {
     client = SimClient.create();
     client.onSnapshot(onSnapshot);
-    client.onError((e) => showToast(errorToastText(e)));
+    // P4.6: a recipe export the dish cannot make, and a refused recipe ID, are shown in their own panel (no toast).
+    // A refused import (a save or recipe file) is shown once, by importFile (UX §5.11), never twice.
+    client.onError((e) => {
+      if (e.request === 'recipeExport' || e.request === 'recipeIdStart' || e.request === 'importDish' || e.request === 'recipeImport') return;
+      showToast(errorToastText(e));
+    });
     client.onCompare(onCompareState);
     client.onExperiment(onExperimentNotice);
     wireFavorites(client); // P4.1: client.onNotebook (favorite changes, a dropped notebook) and the snapshots' family marks
     wireGoals(client); // P4.4: goal changes autosave; the open dish's goal offers and its one goal sentence
+    wireTry(client); // P4.7: client.onTry (a turn's horizon, a turn record changed) and the open dish's turn
     // P2.8: automatic checkpoints follow the Settings choice; journal entries of the open dish are kept with it.
     client.onCheckpoint(onCheckpointNotice);
     client.setCheckpointRing(settings.value.checkpointRing === true);
@@ -471,9 +482,11 @@ export async function importFile(file: File): Promise<void> {
   try {
     const text = await file.text();
     const c = getClient();
+    // P4.6: a Starting recipe file ('pixelmeba-recipe') opens as a new dish from this build's own content.
+    const recipe = isRecipeFileText(text);
     const outcome = await replaceOpenDish('import', file.name, async (keepFrom) => {
       const old = dishInfo.value;
-      const r = await c.importDishKeeping(text, newDishId(), keepFrom);
+      const r = recipe ? await c.recipeImportKeeping(text, newDishId(), keepFrom) : await c.importDishKeeping(text, newDishId(), keepFrom);
       if (!r.ok) return r;
       if (old && old.dishId !== r.info.dishId) c.dispose(old.dishId);
       enterDish(r.info, null);
@@ -482,10 +495,61 @@ export async function importFile(file: File): Promise<void> {
     });
     if (outcome.kind === 'refused') showToast(outcome.message, 6000);
   } catch (e) {
-    showToast(`Nothing was changed: ${(e as Error).message}`, 5000);
+    showToast(importFailedText((e as Error).message), 6000); // UX §5.11: the one toast for a refused import
   } finally {
     busy.value = false;
   }
+}
+
+/**
+ * P4.6: whether a chosen file is a Starting recipe file (format "pixelmeba-recipe"; ARCH §11.2) rather
+ * than a save. A recipe file is small; a large file is a save and is not parsed twice. Never throws.
+ */
+export function isRecipeFileText(text: string): boolean {
+  if (text.length > 1024 * 1024 && !/"format"\s*:\s*"pixelmeba-recipe"/.test(text.slice(0, 4096))) return false;
+  try {
+    const raw = JSON.parse(text) as { format?: unknown } | null;
+    return typeof raw === 'object' && raw !== null && raw.format === 'pixelmeba-recipe';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * P4.6 Import recipe ID (UX §2; D09): start a bundled recipe or What if? idea by its identifier as a new
+ * paused dish, keeping the open dish first (D-0033). A refusal ('refused') changes nothing; its message is
+ * the worker's exact reason ("This recipe needs a compatible build (…)").
+ */
+export async function startRecipeId(text: string): Promise<ReplaceOutcome> {
+  busy.value = true;
+  try {
+    const c = getClient();
+    return await replaceOpenDish('start', text.trim(), async (keepFrom) => {
+      const old = dishInfo.value;
+      const r = await c.recipeIdStartKeeping(text, newDishId(), keepFrom);
+      if (!r.ok) return r;
+      if (old && old.dishId !== r.info.dishId) c.dispose(old.dishId);
+      enterDish(r.info, null);
+      showToast(withKeptLine(r.kept, `Started “${r.info.name}” — paused.`), r.kept && keptLine(r.kept) ? 6000 : 3000);
+      return { ok: true };
+    });
+  } catch (e) {
+    return { kind: 'refused', message: (e as Error).message };
+  } finally {
+    busy.value = false;
+  }
+}
+
+/**
+ * P4.6 (D-0080): the open dish's latest published snapshot and the latest one that carried its geometry,
+ * for the share picture to COPY (never kept, never changed; the renderer owns no biological state).
+ */
+export function latestDishSnapshots(): { readonly snap: SnapshotMsg; readonly geometry: NonNullable<SnapshotMsg['geometry']> } | null {
+  const info = dishInfo.value;
+  const s = lastSnapshot;
+  const g = lastGeometrySnapshot;
+  if (!info || !s || !g || !g.geometry || s.dishId !== info.dishId || g.dishId !== info.dishId) return null;
+  return { snap: s, geometry: g.geometry };
 }
 
 /** A dish file the player keeps: `text` offered as a download named `filename` (Export; the keep flow's export). */
@@ -750,6 +814,11 @@ async function replaceOpenDish(verb: KeepVerb, waiting: string, attempt: KeepAtt
   }
   resumeKept();
   return { kind: 'refused', message: r.message };
+}
+
+/** P4.7 Try my dish: turn 1 replaces the open dish, which is kept first (D-0033) through the shared keep flow. */
+export async function replaceForTry(waiting: string, attempt: KeepAttempt): Promise<ReplaceOutcome> {
+  return replaceOpenDish('start', waiting, attempt);
 }
 
 /** The player's choice in the Keep sheet: try the waiting action again, keeping the dish that way. */

@@ -57,6 +57,8 @@ import {
 import type { WhatIfAnswer, WhatIfChoice, WhatIfKeep, WhatIfKept, WhatIfPlan, WhatIfRefusalCode } from './protocol';
 import type { KeepFrom, KeepRefusalCode } from './protocol';
 import { RelationshipWatcher } from './relationships';
+import { emptyMap, isMapWindow } from './relationshipMap';
+import { probeSetProblem, ProbeSet } from './probes';
 import { emptyNotebook, favoritesOnly, notebookHasNicknames, notebookIsEmpty, notebookWithoutNicknames, sealNotebook, type NotebookRecord } from '@persist/notebook';
 import { notebookAfterRestore, NotebookWatch } from './notebookWatch';
 import { GOAL_REFUSALS, goalCatalog } from './goals';
@@ -67,6 +69,15 @@ import { dishThumb, parseThumb, thumbFromState } from './thumbnail';
 import type { SessionSummary } from './protocol';
 import { displayBranchName } from '@sim/branches';
 import { SECONDS_PER_SUMMARY } from '@sim/history';
+import { buildRecipeFile, loadRecipeFile, NO_START_TEXT, RecipeFileError } from '@persist/recipeFile';
+import { recipeIdAnswer } from '@persist/recipeId';
+import { gzipText } from '@persist/compress';
+import { parseSaveFile } from '@persist/saveFile';
+import { isShelfSlot } from '@persist/store';
+import { Shelf } from '@persist/shelf';
+import { cleanPrediction, horizonTicksOf, turnOf, withoutTurnNotes, type TurnBaseline, type TurnHorizonTicks, type TurnRecord } from '@persist/notebookTurns';
+import { cloneTurn, goalFitsTurn, TRY_REFUSALS, tryGoalOptions, turnAfterChange, turnAfterTime, turnGoal, turnHoldsTime, turnRecordFor, withTurn } from './tryDish';
+import type { TryRefusalCode } from './protocol';
 
 export interface HostClock {
   now(): number;
@@ -78,7 +89,7 @@ export interface HostClock {
  * D-0033: what an action that replaces the open dish is about to do, for the keep step's refusals. What
  * if? keeps its own wording byte for byte ('whatIf' and 'start' read the same).
  */
-type KeepAction = 'whatIf' | 'start' | 'experiment' | 'open' | 'checkpoint' | 'import' | 'duplicate';
+type KeepAction = 'whatIf' | 'start' | 'experiment' | 'open' | 'checkpoint' | 'import' | 'duplicate' | 'tryDish';
 
 const NOT_DONE: Readonly<Record<KeepAction, string>> = {
   whatIf: 'the new dish was not started',
@@ -88,6 +99,7 @@ const NOT_DONE: Readonly<Record<KeepAction, string>> = {
   checkpoint: 'the checkpoint was not opened',
   import: 'the file was not opened',
   duplicate: 'the copy was not made',
+  tryDish: 'Try my dish did not start', // P4.7
 };
 
 /** A save file as buildSaveFile builds it (text, checksum, file). */
@@ -272,6 +284,8 @@ interface Dish {
   sampleBeginHash?: string | null;
   /** P3.8 (D-0039): relationships first seen while this dish is played (worker state; never saved). */
   relationships?: RelationshipWatcher | null;
+  /** P4.8: the region probes drawn on this dish (session state; never saved, never on a comparison copy). */
+  probes?: ProbeSet | null;
   /**
    * P4.1 (D-0070): the dish's notebook record (favorites), saved beside the world and never in it. Kept by
    * Undo and rollback like the journal; empty for comparison and experiment arms.
@@ -369,6 +383,8 @@ export class DishHost {
   private lastSnapshot = 0;
   /** P2.8: the automatic checkpoint ring (same backend and atomic commit as the slots), off until Settings turns it on. */
   private readonly ring: CheckpointRing | null;
+  /** P4.7 (D-0082): write-once stored snapshots (Try my dish baselines), same backend and atomic commit. */
+  private readonly shelf: Shelf | null;
   private ringEnabled = false;
   private ringBusy = false;
   private ringKept = 0;
@@ -386,6 +402,7 @@ export class DishHost {
   ) {
     this.lastPump = clock.now();
     this.ring = store ? new CheckpointRing(store.backend, storageEstimate) : null;
+    this.shelf = store ? new Shelf(store.backend, storageEstimate) : null;
   }
 
   /** Every packet leaves stamped with the protocol version. */
@@ -406,11 +423,24 @@ export class DishHost {
           const d = this.need(msg.dishId);
           if (!this.store) throw new Error('Saving is unavailable on this device.');
           d.name = msg.name;
-          const savedAt = this.iso();
-          const built = await buildSaveFile(d.world, { name: msg.name, savedAt, recipeId: d.world.content.provenance.recipeId }, this.localSave(d));
-          const info = await this.store.save(this.saveRequest(d, msg.slotId, msg.name, savedAt, built));
+          // P4.7 (SPEC §13.6 "a kept result uses a normal slot"): a turn saved to a named slot at its horizon
+          // is kept there; the record says so in the file it writes (taken back if the write fails).
+          const turn = d.arm ? null : turnOf(d.notebook);
+          const keeps = turn !== null && turn.state === 'atHorizon' && SaveStoreClass.slotIds().includes(msg.slotId);
+          if (keeps) d.notebook = withTurn(d.notebook, { ...turn, kept: { slotId: msg.slotId } });
+          let info: SlotInfo;
+          try {
+            const savedAt = this.iso();
+            const built = await buildSaveFile(d.world, { name: msg.name, savedAt, recipeId: d.world.content.provenance.recipeId }, this.localSave(d));
+            info = await this.store.save(this.saveRequest(d, msg.slotId, msg.name, savedAt, built));
+          } catch (e) {
+            const now = keeps ? turnOf(d.notebook) : null;
+            if (now) d.notebook = withTurn(d.notebook, { ...now, kept: turn!.kept });
+            throw e;
+          }
           this.ownSlots[d.id] = msg.slotId;
           this.post({ type: 'slotSaved', requestId: msg.requestId, slot: this.describeSlot(info), wrote: true });
+          if (keeps) this.post({ type: 'tryTurn', dishId: d.id, turn: turnOf(d.notebook) });
           return;
         }
         case 'autosave': {
@@ -447,7 +477,7 @@ export class DishHost {
           // Duplicate, it gets its own dish identity and a name that says the moment it starts from, so
           // it (and the checkpoints it makes) can be told apart from the dish it came from; it is bound
           // to no named slot. The state (and its hash) is exactly the checkpoint's.
-          const branch = isCheckpointSlot(msg.slotId) ? { fromName: file.meta.name, tick: world.tick } : null;
+          const branch = isCheckpointSlot(msg.slotId) || isShelfSlot(msg.slotId) ? { fromName: file.meta.name, tick: world.tick } : null; // P4.7: a shelf record too
           const opened = branch ? deserializeWorld({ ...file.state, worldId: branchWorldId(world.worldId, msg.newDishId) }) : world;
           // 2. Keep the open dish first, never into the named slot being opened; a refusal opens nothing.
           const kept = await this.keepFirst(msg, { action: branch ? 'checkpoint' : 'open', exclude: excludedBy(msg.slotId), opening: msg.slotId });
@@ -486,7 +516,8 @@ export class DishHost {
           const built = await buildSaveFile(
             d.world,
             { name: d.name, savedAt: this.iso(), recipeId: d.world.content.provenance.recipeId },
-            { stripNames: msg.strip, notebook: this.notebookOf(d), includeNicknames: msg.includeNicknames === true },
+            // P4.7: "without names or notes" also leaves out a turn's prediction note and the baseline's name.
+            { stripNames: msg.strip, notebook: msg.strip ? withoutTurnNotes(this.notebookOf(d)) : this.notebookOf(d), includeNicknames: msg.includeNicknames === true },
           );
           this.post({ type: 'exported', requestId: msg.requestId, text: built.text, filename: `${fileBase(msg.strip ? 'shared-dish' : d.name)}.pixelmeba` });
           return;
@@ -518,6 +549,69 @@ export class DishHost {
           this.post({ type: 'loaded', requestId: msg.requestId, info: this.info(dish), usedPredecessor: false, ...(kept ? { kept } : {}), ...(notebookDropped !== null ? { notebookDropped } : {}) });
           this.sendSnapshot(dish);
           this.experimentReopened(dish);
+          return;
+        }
+        case 'recipeExport': {
+          // P4.6 Share (D-0080): the Starting recipe file from the dish's recorded start only (read-only).
+          const d = this.need(msg.dishId);
+          try {
+            if (d.arm) throw new RecipeFileError(NO_START_TEXT, 'no-start');
+            const p = d.world.content.provenance;
+            const recipe = p.recipeId !== null ? this.registry.recipes[p.recipeId] : undefined;
+            const legacyAuthored = p.createdFrom === 'recipe' && recipe !== undefined && recipeOverridesOf(d.world) === undefined && this.isAuthoredRecipe(d.world, recipe);
+            const r = await buildRecipeFile(this.registry, d.world, { legacyAuthored });
+            const v = r.file.versions;
+            this.post({
+              type: 'recipeExported',
+              requestId: msg.requestId,
+              text: r.text,
+              filename: r.filename,
+              name: r.start.name,
+              question: r.start.question,
+              identity: r.start.identity,
+              versions: { simulationVersion: v.simulationVersion, evolutionRulesVersion: v.evolutionRulesVersion, contentVersion: v.contentVersion, contentHash: v.contentHash },
+            });
+          } catch (e) {
+            if (!(e instanceof RecipeFileError)) throw e;
+            this.post({ type: 'error', dishId: msg.dishId, requestId: msg.requestId, message: e.message, lastValidTick: 0, paused: false, request: msg.type, kind: e.kind });
+          }
+          return;
+        }
+        case 'recipeImport': {
+          // P4.6: the file is checked and its start realized from this build's own content first; a refused
+          // file keeps nothing and changes nothing (D-0033). The dish opens paused at tick 0.
+          if (this.dishes[msg.newDishId]) throw new Error('That new dish id is already in use.');
+          let loaded: Awaited<ReturnType<typeof loadRecipeFile>>;
+          try {
+            loaded = await loadRecipeFile(msg.text, this.registry, msg.newDishId);
+          } catch (e) {
+            if (!(e instanceof RecipeFileError)) throw e;
+            this.post({ type: 'error', dishId: '', requestId: msg.requestId, message: e.message, lastValidTick: 0, paused: false, request: msg.type, kind: e.kind });
+            return;
+          }
+          const kept = await this.keepFirst(msg, { action: 'import', exclude: null, opening: null });
+          if (kept === false) return;
+          const dish = this.addDish(msg.newDishId, loaded.world, loaded.name);
+          this.post({ type: 'loaded', requestId: msg.requestId, info: this.info(dish), usedPredecessor: false, ...(kept ? { kept } : {}) });
+          this.sendSnapshot(dish);
+          return;
+        }
+        case 'recipeIdStart': {
+          // P4.6 Import recipe ID: bundled ids, exact revisions and valid seeds only (never reinterpreted). A
+          // variant realizes as What if? does; a recipe as 'create' with the seed. Built first, then kept (D-0033).
+          const answer = recipeIdAnswer(msg.id, this.registry);
+          if (!answer.ok) throw new RecipeFileError(answer.message, 'content');
+          if (this.dishes[msg.newDishId]) throw new Error('That new dish id is already in use.');
+          const s = answer.start;
+          const world =
+            s.kind === 'variant'
+              ? await realizeVariant(this.registry, s.variantId, { worldId: msg.newDishId })
+              : this.build({ kind: 'recipe', recipeId: s.recipeId, ...(s.seed !== this.registry.recipes[s.recipeId]!.seed ? { seed: s.seed } : {}) }, msg.newDishId);
+          const kept = await this.keepFirst(msg, { action: 'start', exclude: null, opening: null });
+          if (kept === false) return;
+          const dish = this.addDish(msg.newDishId, world, s.title);
+          this.post({ type: 'ready', requestId: msg.requestId, info: this.info(dish), ...(kept ? { kept } : {}) });
+          this.sendSnapshot(dish);
           return;
         }
         case 'create': {
@@ -562,6 +656,19 @@ export class DishHost {
         case 'whatIf':
         case 'whatIfStart':
           await this.handleWhatIf(msg);
+          return;
+        case 'trySetup': {
+          // P4.7: read-only (content, the dish's recorded manifest and the shelf's count).
+          const d = this.need(msg.dishId);
+          const why = this.tryRefusalFor(d) ?? (await this.shelf!.check('baseline'))?.message ?? null;
+          this.post({ type: 'trySetup', requestId: msg.requestId, dishId: d.id, goals: d.arm ? [] : tryGoalOptions(this.registry, d.world), refusal: why });
+          return;
+        }
+        case 'tryStart':
+          await this.tryStart(msg);
+          return;
+        case 'tryNext':
+          await this.tryNext(msg);
           return;
         default:
           this.handle(msg);
@@ -679,6 +786,11 @@ export class DishHost {
         const d = this.need(msg.dishId);
         if (d.failed || d.arm) return; // a comparison arm's time is driven only by the comparison
         if (msg.speed !== 0 && this.refuseWhileHeld(d, 'setSpeed')) return;
+        // P4.7: a turn at its horizon stays paused (the horizon card is offered again).
+        if (msg.speed !== 0 && this.turnHorizon(d, true)) {
+          this.sendSnapshot(d);
+          return;
+        }
         d.speed = msg.speed;
         d.acc = 0;
         this.sendSnapshot(d);
@@ -689,7 +801,11 @@ export class DishHost {
         if (d.failed || d.arm) return;
         if (this.refuseWhileHeld(d, 'step')) return;
         d.speed = 0;
-        this.stepDish(d);
+        // P4.7: a turn never steps past its horizon; reaching it pauses there and offers the horizon card.
+        if (!this.turnHorizon(d, true)) {
+          this.stepDish(d);
+          this.turnHorizon(d);
+        }
         this.sendSnapshot(d);
         return;
       }
@@ -725,6 +841,7 @@ export class DishHost {
         if (msg.payload.kind === 'sampleTake' && changed && d.selection?.kind === 'entity') d.selection = null;
         // P4.1: a command can remove members without a tick (a Sample take): the followed families follow it.
         if (changed && d.notebookWatch) this.notebookChanges(d, d.notebookWatch.afterTick(d.world));
+        if (changed) this.turnUnkept(d); // P4.7 fix round 1: a changed turn is no longer what its slot holds
         this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: cmd.result ?? null });
         this.sendSnapshot(d);
         return;
@@ -765,6 +882,8 @@ export class DishHost {
         d.lastEventId = d.world.counters.nextEventId - 1;
         d.lastGeometryVersion = -1;
         this.restoreNotebook(d, 'undo'); // P4.1 fix round 1: the kept notebook checked against the restored dish
+        this.turnHorizon(d); // P4.7: the turn's clock is the world's tick: below its horizon it runs again
+        this.turnUnkept(d); // P4.7 fix round 1: an Undo at the horizon changes the turn too
         // A card's observer counted the ticks being rewound and cannot rewind with them.
         this.endExperiment(d, 'undone');
         this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: null });
@@ -832,7 +951,9 @@ export class DishHost {
         // P2.8: a Notebook entry kept with the dish (observation record; outside the state hash). A
         // malformed entry is refused with stored false and never pauses the dish.
         const d = this.need(msg.dishId);
+        const mark = this.keptTurnMark(d);
         const stored = putJournalEntry(d.world.history, msg.entry);
+        if (stored) this.turnEdited(d, mark); // P4.7: a note on a kept turn is a change its slot does not hold
         this.post({ type: 'journal', requestId: msg.requestId, dishId: d.id, entries: d.world.history.journal, stored });
         return;
       }
@@ -844,6 +965,31 @@ export class DishHost {
       case 'checkpointRing':
         this.ringEnabled = msg.enabled === true;
         return;
+      case 'relationshipMap': {
+        // P4.8: read-only; the watcher's ledger (empty until the dish has been played this session).
+        const d = this.need(msg.dishId);
+        const w = isMapWindow(msg.windowSeconds) ? msg.windowSeconds : 60;
+        const rw = d.relationships;
+        if (rw && !rw.watches(d.world)) rw.rebind(d.world); // Undo or a rollback replaced the world
+        const map = rw ? rw.ledger.read(d.world.tick, w) : emptyMap(d.world.tick, w);
+        this.post({ type: 'relationshipMap', requestId: msg.requestId, dishId: d.id, map });
+        return;
+      }
+      case 'probeSet':
+      case 'probeRead': {
+        // P4.8: session state for the open dish (never a command; the world is only read).
+        const d = this.need(msg.dishId);
+        const w = isMapWindow(msg.windowSeconds) ? msg.windowSeconds : 60;
+        let refused: string | undefined;
+        if (msg.type === 'probeSet') {
+          const problem = d.arm ? 'Comparison copies keep no regions.' : probeSetProblem(msg.probes);
+          if (problem === null) (d.probes ??= new ProbeSet(d.world)).set(msg.probes, d.world);
+          else refused = problem;
+        }
+        const ps = d.probes ?? new ProbeSet(d.world);
+        this.post({ type: 'probes', requestId: msg.requestId, dishId: d.id, masks: ps.masks, readings: ps.read(d.world, w), ...(refused !== undefined ? { refused } : {}) });
+        return;
+      }
       case 'relationships': {
         // P3.8 (D-0039): read-only; the watcher's first-seen table for this dish (empty until it ran).
         const d = this.need(msg.dishId);
@@ -867,7 +1013,9 @@ export class DishHost {
           this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: d.notebook, refused: d.arm ? 'Comparison copies keep no story cards.' : 'That story card is not in this dish.' });
           return;
         }
+        const mark = this.keptTurnMark(d);
         d.notebook = { ...d.notebook, stories: list };
+        this.turnEdited(d, mark); // P4.7: a story mark on a kept turn is a change its slot does not hold
         this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: this.notebookOf(d) });
         return;
       }
@@ -880,10 +1028,12 @@ export class DishHost {
           this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: d.notebook, refused: nw ? FAVORITE_REFUSALS.badOp : 'Comparison copies keep no favorites.' });
           return;
         }
+        const mark = this.keptTurnMark(d);
         const r = applyFavoriteOp(d.world, nw.materialize(), nw.favorites, op);
         if (r.refused === null) {
           d.notebook = r.record;
           nw.rebind(d.world);
+          this.turnEdited(d, mark); // P4.7: a Follow change on a kept turn is a change its slot does not hold
         }
         this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: d.notebook, ...(r.refused !== null ? { refused: r.refused } : {}), ...(r.removed !== null ? { removed: r.removed } : {}) });
         this.sendSnapshot(d);
@@ -898,6 +1048,7 @@ export class DishHost {
           this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: d.notebook, refused: GOAL_REFUSALS.arm });
           return;
         }
+        const mark = this.keptTurnMark(d);
         let r: { refused: string | null; changes: NotebookChange[] };
         if (msg.type === 'goalLeave') r = nw.goals.leave(d.world);
         else {
@@ -905,6 +1056,7 @@ export class DishHost {
           const offered = def !== undefined && goalCatalog(this.registry, { world: d.world }).some((g) => g.id === def.id);
           r = def ? nw.goals.start(d.world, def, offered) : { refused: GOAL_REFUSALS.unknown, changes: [] };
         }
+        if (r.refused === null) this.turnEdited(d, mark); // P4.7: a goal started or left on a kept turn is a change too
         this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: d.notebook, ...(r.refused !== null ? { refused: r.refused } : {}) });
         this.notebookChanges(d, r.changes);
         return;
@@ -913,7 +1065,8 @@ export class DishHost {
         // P4.4: the sentence was dismissed; a flag in the notebook record only.
         const d = this.dishes[msg.dishId];
         const nw = d ? this.watchOf(d) : null;
-        nw?.goals.shown(msg.id);
+        const mark = d ? this.keptTurnMark(d) : null;
+        if (nw?.goals.shown(msg.id) && d) this.turnEdited(d, mark); // P4.7: the notebook changed (a kept turn's slot no longer holds it)
         return;
       }
       case 'goalCatalog': {
@@ -1060,12 +1213,27 @@ export class DishHost {
       case 'deleteSlot':
       case 'exportDish':
       case 'importDish':
+      case 'recipeExport':
+      case 'recipeImport':
+      case 'recipeIdStart':
       case 'keepPlan':
       case 'exportSave':
       case 'whatIf':
       case 'whatIfStart':
+      case 'trySetup':
+      case 'tryStart':
+      case 'tryNext':
         void this.handleAsync(msg);
         return;
+      case 'tryFinish': {
+        // P4.7: Finish — the turn becomes an ordinary paused dish (nothing is deleted; the baseline stays on the shelf).
+        const d = this.need(msg.dishId);
+        if (!d.arm) this.turnHorizon(d);
+        const t = d.arm ? null : turnOf(d.notebook);
+        if (t && t.state !== 'finished') d.notebook = withTurn(d.notebook, { ...t, state: 'finished' });
+        this.post({ type: 'tryTurn', requestId: msg.requestId, dishId: d.id, turn: d.arm ? null : turnOf(d.notebook) });
+        return;
+      }
       default:
         // An unknown request must fail once, not bounce between handle() and handleAsync() forever.
         throw new Error(`unknown request ${String((msg as { type?: unknown }).type)}`);
@@ -1281,6 +1449,7 @@ export class DishHost {
     const hooks: ((stage: number, w: World) => void)[] = [];
     if (observing) hooks.push(x.obs.hook);
     if (rw) hooks.push(rw.hook);
+    if (!d.arm && d.probes && d.probes.size > 0) hooks.push(d.probes.hook); // P4.8: region probes (read-only)
     if (nw?.hook) hooks.push(nw.hook);
     if (hooks.length === 0) step(d.world);
     else if (hooks.length === 1) step(d.world, { afterStage: hooks[0]! });
@@ -1294,6 +1463,7 @@ export class DishHost {
       }
     }
     rw?.afterTick(d.world);
+    if (!d.arm) d.probes?.afterTick(d.world); // P4.8
     if (nw) this.notebookChanges(d, nw.afterTick(d.world));
     if (x && !x.ended && !x.posted) this.experimentSteps(d);
     this.maybeCheckpoint(d);
@@ -1613,6 +1783,8 @@ export class DishHost {
       // P3.8: a watcher of its own, started fresh (as after a reload: the table is never saved). The
       // spread shared the original's, so what the copy showed was written into the original's record.
       relationships: null,
+      // P4.8: regions are the open dish's session state; the copy starts with none.
+      probes: null,
       // P4.1: the copy follows the same families (favorites only, under its own world id), with its own watch.
       notebook: favoritesOnly(this.notebookOf(d), state.worldId),
       notebookWatch: null,
@@ -2244,6 +2416,195 @@ export class DishHost {
     }
   }
 
+  // -------------------------------------------------------------------------------------------
+  // P4.7 Try my dish (SPEC §13.6; D09 lines 135-139; D-0081 "Try my dish clones, never mutates"; D-0082
+  // the shelf). The baseline is a write-once shelf record of the paused dish's save; every turn is a new
+  // dish cloned from that record's text by the load path under its own world id, opened paused. A turn
+  // never runs past its horizon (the record in its notebook, src/persistence/notebookTurns.ts). Turns are
+  // notebook state: nothing here is a command or reaches the simulation.
+
+  /**
+   * P4.7: hold a turn dish at its horizon. Brings the record's state in line with the world's tick
+   * ('atHorizon' at the horizon; 'running' again below it after Undo or a rollback) and announces a change;
+   * `announce`: also announce a turn already waiting at its horizon (the player asked to run or step it).
+   * True when the dish must not step (it is then paused).
+   */
+  private turnHorizon(d: Dish, announce = false): boolean {
+    if (d.arm || d.transient) return false;
+    const next = turnAfterTime(d.notebook, d.world);
+    if (next) d.notebook = withTurn(d.notebook, next);
+    const holds = turnHoldsTime(d.notebook, d.world);
+    if (holds) {
+      d.speed = 0;
+      d.acc = 0;
+    }
+    if (next || (holds && announce)) this.postTurn(d);
+    return holds;
+  }
+
+  /**
+   * P4.7 fix round 1: a kept turn whose world changed (a command, Undo) is no longer the dish its slot
+   * holds: the record forgets the slot (the card then offers Keep this result again and never says "Kept in
+   * Slot n." for a world the slot does not hold). Announced as the record only (no horizon card is raised).
+   */
+  private turnUnkept(d: Dish): void {
+    if (d.arm || d.transient) return;
+    const next = turnAfterChange(d.notebook);
+    if (!next) return;
+    d.notebook = withTurn(d.notebook, next);
+    this.post({ type: 'tryTurn', dishId: d.id, turn: next });
+  }
+
+  /**
+   * P4.7 (wave 6a integration): what a kept turn's slot holds besides the state, read before a notebook or
+   * journal edit (holdsExactly compares the world file, journal included, and the notebook checksum).
+   * Null when the dish is no kept turn (nothing to compare); '' when it could not be read (treated as changed).
+   */
+  private keptTurnMark(d: Dish): string | null {
+    if (d.arm || d.transient || (turnOf(d.notebook)?.kept ?? null) === null) return null;
+    try {
+      return canonicalJson([d.notebook, d.world.history.journal ?? []]);
+    } catch {
+      return '';
+    }
+  }
+
+  /** P4.7: after an accepted notebook or journal edit, a kept turn whose record or journal changed is no longer kept. */
+  private turnEdited(d: Dish, mark: string | null): void {
+    if (mark === null || (mark !== '' && mark === this.keptTurnMark(d))) return;
+    this.turnUnkept(d);
+  }
+
+  /** P4.7: announce a turn dish's record: the horizon card at its horizon, else the record itself. */
+  private postTurn(d: Dish): void {
+    const t = turnOf(d.notebook);
+    if (!t) return;
+    if (t.state === 'atHorizon') this.post({ type: 'tryHorizon', dishId: d.id, turn: t, elapsedTicks: d.world.tick - t.startTick, goal: turnGoal(this.notebookOf(d)) });
+    else this.post({ type: 'tryTurn', dishId: d.id, turn: t });
+  }
+
+  /** P4.7: why Try my dish cannot start from `d` (null: it can). */
+  private tryRefusalFor(d: Dish): string | null {
+    if (d.arm) return TRY_REFUSALS.arm;
+    if (d.world.sample !== null) return TRY_REFUSALS.sample;
+    if (d.failed) return TRY_REFUSALS.failed;
+    if (!this.shelf) return TRY_REFUSALS.noStore;
+    return null;
+  }
+
+  private tryRefused(requestId: number, code: TryRefusalCode, message: string): void {
+    this.post({ type: 'tryRefused', requestId, code, message });
+  }
+
+  /**
+   * P4.7: open turn `params.turn` cloned from the baseline: the shelf record is read and verified (its
+   * stored checksum, the file's own checks, and the checksum the try recorded), then loaded as a new dish
+   * (tryDish.ts cloneTurn), paused, with the try's goal started at the turn's start tick (a fresh notebook:
+   * progress resets each turn). Null, with nothing changed, when the baseline is missing or changed.
+   */
+  private async openTurn(
+    newDishId: string,
+    baseline: TurnBaseline,
+    params: { readonly tryId: string; readonly turn: number; readonly horizonTicks: TurnHorizonTicks; readonly objectiveId: string | null; readonly prediction: string },
+  ): Promise<{ readonly dish: Dish; readonly turn: TurnRecord } | null> {
+    if (!this.shelf) return null;
+    const got = await this.shelf.get(baseline.shelfId, async (text, slot) => slot.shelfKind === 'baseline' && slot.checksum === baseline.checksum && (await parseSaveFile(text)).checksum === baseline.checksum);
+    if (!got) return null;
+    const c = await cloneTurn(got.text, newDishId, (turnWorldId) => turnRecordFor({ ...params, baseline, turnWorldId }));
+    if (c.world.tick !== baseline.tick) return null;
+    const dish = this.addDish(newDishId, c.world, c.name, c.notebook);
+    if (params.objectiveId !== null) {
+      const def = this.registry.objectives[params.objectiveId];
+      const nw = this.watchOf(dish);
+      if (def && nw) {
+        const offered = tryGoalOptions(this.registry, dish.world).some((o) => o.id === def.id && goalFitsTurn(o, params.horizonTicks / TICKS_PER_SECOND));
+        this.notebookChanges(dish, nw.goals.start(dish.world, def, offered).changes);
+      }
+    }
+    return { dish, turn: turnOf(dish.notebook)! };
+  }
+
+  /**
+   * P4.7 Start (D09 line 136: availability and version checks before accepting the setup): the dish is not
+   * a comparison copy, holds no sample, the turn length and goal fit, and the shelf has room; then the
+   * baseline (the paused dish's save, built at this tick) waits while the open dish is kept first (D-0033;
+   * a refusal starts nothing), goes on the shelf, and turn 1 is cloned from the record just written.
+   */
+  private async tryStart(msg: Extract<ToWorker, { type: 'tryStart' }>): Promise<void> {
+    if (this.dishes[msg.newDishId]) return this.tryRefused(msg.requestId, 'bad-request', TRY_REFUSALS.inUse);
+    const d = this.need(msg.dishId);
+    const why = this.tryRefusalFor(d);
+    if (why) return this.tryRefused(msg.requestId, 'not-here', why);
+    const horizonTicks = horizonTicksOf(msg.horizonSeconds);
+    if (horizonTicks === null) return this.tryRefused(msg.requestId, 'bad-request', TRY_REFUSALS.horizon);
+    if (msg.objectiveId !== null) {
+      const opt = tryGoalOptions(this.registry, d.world).find((o) => o.id === msg.objectiveId);
+      if (!opt || !goalFitsTurn(opt, msg.horizonSeconds)) return this.tryRefused(msg.requestId, 'bad-request', TRY_REFUSALS.goal);
+    }
+    // A blocking panel: the dish is paused (the UI restores its run state when nothing starts).
+    const priorSpeed = d.speed;
+    d.speed = 0;
+    d.acc = 0;
+    const savedAt = this.iso();
+    // Serialized before the first await: the baseline is this paused tick.
+    const built = await buildSaveFile(d.world, { name: d.name, savedAt, recipeId: d.world.content.provenance.recipeId }, this.localSave(d));
+    const shelf = this.shelf!;
+    const full = await shelf.check('baseline', (await gzipText(built.text)).byteLength);
+    if (full) {
+      d.speed = priorSpeed;
+      return this.tryRefused(msg.requestId, 'shelf', full.message);
+    }
+    const kept = await this.keepFirst(msg, { action: 'tryDish', exclude: null, opening: null });
+    if (kept === false) return;
+    const tryId = `try-${await shelf.nextSequence('baseline')}`;
+    const put = await shelf.put('baseline', {
+      text: built.text,
+      checksum: built.checksum,
+      name: built.file.meta.name,
+      worldId: built.file.state.worldId,
+      tick: built.file.tick,
+      savedAt,
+      recipeId: d.world.content.provenance.recipeId,
+      createdFor: tryId,
+      ...slotMetaCopies(built.file),
+    });
+    if (!put.ok) return this.tryRefused(msg.requestId, 'shelf', put.message);
+    const baseline: TurnBaseline = { shelfId: put.slot.slotId, checksum: built.checksum, worldId: built.file.state.worldId, tick: built.file.tick, name: built.file.meta.name };
+    const opened = await this.openTurn(msg.newDishId, baseline, { tryId, turn: 1, horizonTicks, objectiveId: msg.objectiveId, prediction: cleanPrediction(msg.prediction) });
+    if (!opened) return this.tryRefused(msg.requestId, 'baseline-missing', TRY_REFUSALS.baselineMissing);
+    this.post({ type: 'tryStarted', requestId: msg.requestId, info: this.info(opened.dish), turn: opened.turn, ...(kept ? { kept } : {}) });
+    this.sendSnapshot(opened.dish);
+  }
+
+  /**
+   * P4.7 Another turn (D09 line 137 "Temporary turns replace only the prior unsaved turn after an explicit
+   * discard choice"): only from a turn at its horizon; an unkept turn (or one changed since it was kept) needs
+   * the player's Discard. The baseline is verified first (a missing or changed one refuses and the current
+   * turn stays open and unchanged); then turn n + 1 opens and the prior turn is let go WITHOUT the keep flow.
+   */
+  private async tryNext(msg: Extract<ToWorker, { type: 'tryNext' }>): Promise<void> {
+    if (this.dishes[msg.newDishId]) return this.tryRefused(msg.requestId, 'bad-request', TRY_REFUSALS.inUse);
+    const d = this.need(msg.dishId);
+    if (d.arm || !turnOf(d.notebook)) return this.tryRefused(msg.requestId, 'no-turn', TRY_REFUSALS.noTurn);
+    this.turnHorizon(d);
+    const t = turnOf(d.notebook)!;
+    if (t.state !== 'atHorizon') return this.tryRefused(msg.requestId, 'no-turn', TRY_REFUSALS.notAtHorizon);
+    if (!msg.discard && !(t.kept !== null && (await this.holdsExactly(t.kept.slotId, d)))) {
+      // Safety net (wave 6a integration): a record that still names a slot which no longer holds this dish
+      // exactly forgets it, so the card never says "Kept in Slot n." beside "Discard this turn?".
+      if (t.kept !== null) this.turnUnkept(d);
+      return this.tryRefused(msg.requestId, 'unsaved', TRY_REFUSALS.unsaved);
+    }
+    if (!this.shelf) return this.tryRefused(msg.requestId, 'not-here', TRY_REFUSALS.noStore);
+    const opened = await this.openTurn(msg.newDishId, t.baseline, { tryId: t.tryId, turn: t.turn + 1, horizonTicks: t.horizonTicks, objectiveId: t.objectiveId, prediction: t.prediction });
+    if (!opened) return this.tryRefused(msg.requestId, 'baseline-missing', TRY_REFUSALS.baselineMissing);
+    // The prior turn goes: discarded by the player's choice, or already in its slot. Never written here.
+    delete this.dishes[d.id];
+    delete this.ownSlots[d.id];
+    this.post({ type: 'tryStarted', requestId: msg.requestId, info: this.info(opened.dish), turn: opened.turn });
+    this.sendSnapshot(opened.dish);
+  }
+
   private info(d: Dish): DishInfo {
     const w = d.world;
     const m = w.content.manifest;
@@ -2281,6 +2642,8 @@ export class DishHost {
       structureIds: [...(m.enabledStructures ?? [])],
       ...this.whatIfInfo(w),
       registry: this.registryInfo(w.content.manifest, w.content.modules),
+      // P4.7: a Try my dish turn's record (its notebook's), so the UI can show the turn badge after any open.
+      ...(!d.arm && turnOf(d.notebook) ? { turn: turnOf(d.notebook)! } : {}),
     };
   }
 
@@ -2425,6 +2788,7 @@ export class DishHost {
     d.lastEventId = Math.min(d.lastEventId, w.counters.nextEventId - 1);
     d.lastGeometryVersion = -1;
     this.restoreNotebook(d, 'rollback'); // P4.1 fix round 1: the kept notebook checked against the restored dish
+    if (!d.arm) this.turnHorizon(d); // P4.7: the turn's state follows the restored tick
   }
 
   pump(): void {
@@ -2441,6 +2805,7 @@ export class DishHost {
       if (d.acc > MAX_BACKLOG_TICKS) d.acc = MAX_BACKLOG_TICKS;
       const start = this.clock.now();
       while (d.acc >= 1) {
+        if (this.turnHorizon(d)) break; // P4.7: a turn never runs past its horizon
         if (d.world.tick - d.checkpoint.tick >= CHECKPOINT_TICKS) this.checkpoint(d);
         const t0 = d.world.tick;
         try {
@@ -2455,6 +2820,7 @@ export class DishHost {
         }
         d.acc -= 1;
         ran++;
+        if (this.turnHorizon(d)) break; // P4.7: reaching the horizon pauses the turn at once
         if (this.clock.now() - start > MAX_PUMP_MS) {
           d.acc = Math.min(d.acc, 1); // drop backlog: we are behind real time
           break;

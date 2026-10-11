@@ -16,6 +16,10 @@ import type { SampleHeldSummary } from '@sim/sample';
 import type { SampleMode } from '@sim/sampleSlot';
 import type { FavoriteOp } from './protocol';
 import type { GoalOffer } from './protocol';
+import type { TryGoalOption, TryRefusalCode } from './protocol';
+import type { TurnRecord } from '@persist/notebookTurns';
+import type { MapWindow, RelationshipMapData } from './relationshipMap';
+import type { ProbeMask } from './probes';
 import { PROTOCOL_VERSION, stamp, type DishInfo, type DishSource, type Envelope, type FamilyAnswer, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 
 export class WorkerRequestError extends Error {
@@ -68,6 +72,14 @@ export type NotebookNotice = Extract<FromWorker, { type: 'notebookChanged' }> | 
 /** P4.1: the answer to a notebook request (the record; a refusal or a removed favorite, when any). */
 export type NotebookAnswer = Extract<FromWorker, { type: 'notebook' }>;
 
+/** P4.7: Try my dish notices — a turn reached its horizon, or a turn's record changed (kept, Finish, Undo below the horizon). */
+export type TryNotice = Extract<FromWorker, { type: 'tryHorizon' | 'tryTurn' }>;
+
+/** P4.7: the answer to a Try my dish start (turn 1 or the next turn), or why it was refused (nothing changed). */
+export type TryAnswer =
+  | { readonly ok: true; readonly info: DishInfo; readonly turn: TurnRecord; readonly kept: WhatIfKept | null }
+  | { readonly ok: false; readonly code: TryRefusalCode; readonly message: string };
+
 /** Unsolicited experiment packets (P2.5). */
 export type ExperimentNotice = Extract<FromWorker, { type: 'experimentStamp' | 'experimentWaiting' | 'experimentEnded' }>;
 
@@ -97,6 +109,7 @@ export class SimClient {
   private readonly experimentListeners: ((m: ExperimentNotice) => void)[] = [];
   private readonly checkpointListeners: ((m: CheckpointNotice) => void)[] = [];
   private readonly notebookListeners: ((m: NotebookNotice) => void)[] = [];
+  private readonly tryListeners: ((m: TryNotice) => void)[] = [];
 
   constructor(private readonly worker: WorkerLike) {
     worker.onmessage = (ev) => this.receive(ev.data);
@@ -172,6 +185,45 @@ export class SimClient {
       const i = this.notebookListeners.indexOf(fn);
       if (i >= 0) this.notebookListeners.splice(i, 1);
     };
+  }
+
+  /** P4.7: Try my dish notices (a turn's horizon; a turn record changed). Answers to tryFinish are delivered here too. */
+  onTry(fn: (m: TryNotice) => void): () => void {
+    this.tryListeners.push(fn);
+    return () => {
+      const i = this.tryListeners.indexOf(fn);
+      if (i >= 0) this.tryListeners.splice(i, 1);
+    };
+  }
+
+  /** P4.7: the Try my dish setup's choices for a dish (read-only). */
+  async trySetup(dishId: string): Promise<{ readonly goals: readonly TryGoalOption[]; readonly refusal: string | null }> {
+    const msg = await this.request<Extract<FromWorker, { type: 'trySetup' }>>((requestId) => ({ type: 'trySetup', requestId, dishId }));
+    return { goals: msg.goals, refusal: msg.refusal };
+  }
+
+  /** P4.7: store the paused dish as a baseline and open turn 1, keeping the open dish first (D-0033). */
+  async tryStartKeeping(
+    args: { readonly dishId: string; readonly newDishId: string; readonly objectiveId: string | null; readonly horizonSeconds: number; readonly prediction: string },
+    keepFrom: KeepFrom | null,
+  ): Promise<TryAnswer | KeepRefused> {
+    const msg = await this.request<Extract<FromWorker, { type: 'tryStarted' | 'tryRefused' | 'keepRefused' }>>((requestId) => ({ type: 'tryStart', requestId, ...args, ...(keepFrom ? { keepFrom } : {}) }));
+    if (msg.type === 'keepRefused') return keepRefused(msg);
+    if (msg.type === 'tryRefused') return { ok: false, code: msg.code, message: msg.message };
+    return { ok: true, info: msg.info, turn: msg.turn, kept: msg.kept ?? null };
+  }
+
+  /** P4.7: Another turn from the same baseline (`discard`: the player confirmed Discard turn). */
+  async tryNext(dishId: string, newDishId: string, discard: boolean): Promise<TryAnswer> {
+    const msg = await this.request<Extract<FromWorker, { type: 'tryStarted' | 'tryRefused' }>>((requestId) => ({ type: 'tryNext', requestId, dishId, newDishId, discard }));
+    if (msg.type === 'tryRefused') return { ok: false, code: msg.code, message: msg.message };
+    return { ok: true, info: msg.info, turn: msg.turn, kept: null };
+  }
+
+  /** P4.7: Finish — the turn becomes an ordinary paused dish. Resolves with its record. */
+  async tryFinish(dishId: string): Promise<TurnRecord | null> {
+    const msg = await this.request<Extract<FromWorker, { type: 'tryTurn' }>>((requestId) => ({ type: 'tryFinish', requestId, dishId }));
+    return msg.turn;
   }
 
   /** P4.1: a dish's notebook record (with `inspect`, also that living organism's inspector payload). Read-only. */
@@ -259,6 +311,13 @@ export class SimClient {
       for (const fn of this.notebookListeners) fn(msg);
       return;
     }
+    if (msg.type === 'tryHorizon') {
+      // P4.7 (unsolicited): a turn reached its horizon.
+      for (const fn of this.tryListeners) fn(msg);
+      return;
+    }
+    // P4.7: a turn record changed (unsolicited, or the answer to tryFinish, which then resolves as usual).
+    if (msg.type === 'tryTurn') for (const fn of this.tryListeners) fn(msg);
     // P4.1: a loaded dish whose notebook was dropped is announced, then the request resolves as usual.
     if (msg.type === 'loaded' && msg.notebookDropped) for (const fn of this.notebookListeners) fn({ type: 'notebookDropped', dishId: msg.info.dishId, message: msg.notebookDropped });
     if (msg.type === 'compareState') for (const fn of this.compareListeners) fn(msg.state);
@@ -436,6 +495,28 @@ export class SimClient {
     return { ok: true, info: msg.info, kept: msg.kept ?? null };
   }
 
+  /**
+   * P4.6 Share: the dish's Starting recipe file (read-only). Rejects with a WorkerRequestError (kind
+   * 'no-start') and readable text when the dish has no recorded start.
+   */
+  async recipeExport(dishId: string): Promise<Extract<FromWorker, { type: 'recipeExported' }>> {
+    return this.request<Extract<FromWorker, { type: 'recipeExported' }>>((requestId) => ({ type: 'recipeExport', requestId, dishId }));
+  }
+
+  /** P4.6: open a Starting recipe file as a new paused dish, keeping the open dish first (the file is checked before anything is kept). */
+  async recipeImportKeeping(text: string, newDishId: string, keepFrom: KeepFrom | null): Promise<KeptOr<{ readonly info: DishInfo }>> {
+    const msg = await this.request<Extract<FromWorker, { type: 'loaded' | 'keepRefused' }>>((requestId) => ({ type: 'recipeImport', requestId, text, newDishId, ...(keepFrom ? { keepFrom } : {}) }));
+    if (msg.type === 'keepRefused') return keepRefused(msg);
+    return { ok: true, info: msg.info, kept: msg.kept ?? null };
+  }
+
+  /** P4.6 Import recipe ID: start a bundled recipe or What if? idea by its identifier, keeping the open dish first. */
+  async recipeIdStartKeeping(id: string, newDishId: string, keepFrom: KeepFrom | null): Promise<KeptOr<{ readonly info: DishInfo }>> {
+    const msg = await this.request<Extract<FromWorker, { type: 'ready' | 'keepRefused' }>>((requestId) => ({ type: 'recipeIdStart', requestId, id, newDishId, ...(keepFrom ? { keepFrom } : {}) }));
+    if (msg.type === 'keepRefused') return keepRefused(msg);
+    return { ok: true, info: msg.info, kept: msg.kept ?? null };
+  }
+
   /** Start an experiment card (P2.5), keeping the open dish first. */
   async experimentStartKeeping(
     cardId: string,
@@ -469,6 +550,22 @@ export class SimClient {
   async keepPlan(aboutDishId: string | null, opening: string | null = null): Promise<WhatIfPlan> {
     const msg = await this.request<Extract<FromWorker, { type: 'keepPlan' }>>((requestId) => ({ type: 'keepPlan', requestId, aboutDishId, opening }));
     return msg.plan;
+  }
+
+  /** P4.8: the relationship map of the last 60/180/600 dish seconds (read-only; session state). */
+  async relationshipMap(dishId: string, windowSeconds: MapWindow): Promise<RelationshipMapData> {
+    const msg = await this.request<Extract<FromWorker, { type: 'relationshipMap' }>>((requestId) => ({ type: 'relationshipMap', requestId, dishId, windowSeconds }));
+    return msg.map;
+  }
+
+  /** P4.8: replace the open dish's region probes (session state, never a command); answers with masks and readings. */
+  async probeSet(dishId: string, probes: readonly ProbeMask[], windowSeconds: MapWindow): Promise<Extract<FromWorker, { type: 'probes' }>> {
+    return this.request<Extract<FromWorker, { type: 'probes' }>>((requestId) => ({ type: 'probeSet', requestId, dishId, probes, windowSeconds }));
+  }
+
+  /** P4.8: the region probes' readings now (read-only). */
+  async probeRead(dishId: string, windowSeconds: MapWindow): Promise<Extract<FromWorker, { type: 'probes' }>> {
+    return this.request<Extract<FromWorker, { type: 'probes' }>>((requestId) => ({ type: 'probeRead', requestId, dishId, windowSeconds }));
   }
 
   /** P3.8: the relationships first seen in a played dish so far (read-only; never saved). */

@@ -1,0 +1,29 @@
+# g4-wave-6a re-verify round 1 (try-my-dish fixes)
+
+Re-verifier, 2026-10-11. Scope: the three problems the verifier raised against try-my-dish, and the round-1 fixes (src/worker/tryDish.ts, src/worker/host.ts, src/persistence/store.ts, src/ui/tryDish.ts and the three owned test files). No repository file was edited except this report. Scratch work is in tmp/reverify1-g4-wave-6a/: load-time mutants under mut/, run with a vitest config whose resolveId plugin swaps one module, plus two scratch repro tests.
+
+Result: ok = true (no BLOCKER or MAJOR). One new MINOR is left in the same class as the fixed MAJOR.
+
+## Problems
+
+MINOR [try-my-dish] src/worker/host.ts:950-956 ('journalPut'), 1018-1034 ('favorite'), 1036 ('goalStart'/'goalLeave') + src/ui/panels/TryHorizon.tsx:20,47-51,66 — The round-1 fix clears `kept` only after a changed 'command' and after 'undo'. Three other changes at the horizon also make the slot stop holding the dish exactly: a journal note, a Follow/favorite op, and a goal start or leave. The worker's holdsExactly sees this (it compares the world checksum, which includes the journal, and the notebook checksum). The record and the card do not. The card keeps showing "Kept in Slot 1." with Keep this result disabled. Another turn sends discard:false and the worker refuses with 'unsaved', so the card then asks "Discard this turn? It has not been saved." That line contradicts "Kept in Slot 1." on the same card, and the player cannot use Keep to save the note into a slot. Nothing is lost silently, because the Discard question still protects the turn, so this is MINOR, not MAJOR. — Repro (worker, scratch test tmp/reverify1-g4-wave-6a/scratch2.test.ts): tryStart 60 s → sugar → run to horizon → saveSlot slot1 (kept = {slot1}) → journalPut an observation note → turn record still `kept: {"slotId":"slot1"}` → tryNext discard:false → `tryRefused unsaved`. Fix: call turnUnkept after a stored journalPut, an accepted favorite op and a goalStart/goalLeave on a turn dish. Or, in the UI, when tryNext refuses 'unsaved' on a card that shows kept, clear the card's kept so Keep is enabled again and the kept line goes away.
+
+## Re-verification of the three round-1 problems
+
+VERIFIED OK — MAJOR (kept turn rewound below its horizon still says "Kept in Slot n.") is fixed — I read the diff. `turnAfterTime` now returns `kept: null` when a turn leaves 'atHorizon'. `turnAfterChange` and `turnUnkept` clear `kept` after a changed 'command' (host.ts:844) and after 'undo' (host.ts:886); both post 'tryTurn' and raise no new card. UI path: src/ui/tryDish.ts onTryNotice closes the card on a 'running' tryTurn and replaces the card's turn on an atHorizon tryTurn. A re-reached horizon raises a fresh card from the worker's record, so TryHorizon shows no kept line and Keep is enabled. I reproduced the original sequence in tmp/reverify1-g4-wave-6a/scratch.test.ts: keep → Undo → run to the horizon gives a last tryHorizon with `kept: null`. Keeping again goes to the next slot (slot2), slot1's record is byte-identical, kept = {slot2}, and tryNext without discard then starts. Mutant A (turnAfterTime keeps `kept`, turnAfterChange returns null; MUTANT_LOADED confirmed): "fix round 1: a kept turn that is rewound or changed…" FAILS with `expected {…} to match object { state: 'running', kept: null }`. On the real tree it passes.
+
+VERIFIED OK — MINOR ('deleteSlot' can delete a shelf record) is fixed — SaveStore.remove (store.ts:252) throws SHELF_REMOVE_REFUSED for any isShelfSlot id before reading the backend. Its only caller is the host's 'deleteSlot' (host.ts:509; `grep '\.remove('` over src). Shelf.remove does not go through SaveStore.remove, and the shelf test proves it still works. Scratch test: deleteSlot with the shelf id → 'error', the shelf record stays, and a named slot3 still deletes ('done'). Mutant B (guard removed; MUTANT_LOADED confirmed): both "fix round 1" tests FAIL (`promise resolved "undefined" instead of rejecting`; `expected { type: 'done' … } to match object { type: 'error' … }`).
+
+VERIFIED OK — MINOR (after Discard, Continue still holds the discarded turn) is fixed — nextTurn calls `port.autosave()` after `port.enter(...)`. enterStartedDish → enterDish sets dishInfo synchronously, so state.ts autosave writes the new turn. The worker's autosave queue is serial, so an earlier autosave of the old turn lands first. Worker-level scratch test: autosave t1 at its horizon → Continue holds t1's world id → tryNext discard → the worker has written nothing for t1 or t2 (Continue unchanged) → autosave t2 → Continue holds t2's world id at the baseline tick. Mutant C (the autosave line removed; MUTANT_LOADED confirmed): "an unkept turn asks first … Discard sends discard: true" FAILS with `expected +0 to be 1`.
+
+## No regressions
+
+VERIFIED OK — owned tests — `npx vitest run tests/persistence/shelf.test.ts tests/worker/try-dish-host.test.ts tests/ui/try-dish.test.ts`: Test Files 3 passed (3), Tests 24 passed (24).
+
+VERIFIED OK — fence fixtures — `npx vitest run tests/fixtures/g2-replay.test.ts tests/fixtures/trajectory-fence tests/fixtures/conservation-closed-lid.test.ts`: Test Files 6 passed (6), Tests 52 passed (52).
+
+VERIFIED OK — typecheck and lint — `npx tsc -p tsconfig.json --noEmit` exit 0. `npx eslint` on the 7 touched source and test files exit 0.
+
+VERIFIED OK — determinism and saves — the fix touches no src/sim file (git diff --stat), adds no randomness or Date, and does not change the world or save shape. `kept` is notebook state that turnsProblem already validates. The trajectory fence is unchanged.
+
+VERIFIED OK — ownership — the fix edits only owned files (src/worker/tryDish.ts, src/ui/tryDish.ts, the three tests) and stage-owner files (host.ts: the import, two call lines and turnUnkept; store.ts: the constant and the guard). The edits are additive.

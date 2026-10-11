@@ -26,7 +26,7 @@ export const LAB_CATEGORIES: readonly {
   },
   { id: 'habitat', label: 'Habitat', hint: 'Paint water, gel or sediment, shade the light, or close the lid.' },
   { id: 'tools', label: 'Tools', hint: 'Place and erase structures, keep a snapshot, compare, undo.' },
-  { id: 'observe', label: 'Observe', hint: 'Overlays and charts. Looking never changes the dish.' },
+  { id: 'observe', label: 'Observe', hint: 'Overlays, charts, relationships and regions. Looking never changes the dish.' },
 ];
 
 /**

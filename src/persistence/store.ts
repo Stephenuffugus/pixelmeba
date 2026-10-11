@@ -70,6 +70,13 @@ export interface SlotInfo {
    * Optional (indexes written before lack it) and re-validated when read.
    */
   readonly thumb?: string;
+  /**
+   * P4.7 (D-0082): a write-once shelf record (src/persistence/shelf.ts), never a named slot, the autosave
+   * or a checkpoint: 'baseline' (a Try my dish starting point) or 'snapshot' (a snapshot bookmark).
+   */
+  readonly shelfKind?: 'baseline' | 'snapshot';
+  /** P4.7: what the shelf record was written for (a try id 'try-<n>' or a bookmark id). */
+  readonly createdFor?: string;
 }
 
 export interface StoredRecord {
@@ -95,6 +102,17 @@ export const CHECKPOINT_SLOT_PREFIX = 'checkpoint-';
 export function isCheckpointSlot(slotId: string): boolean {
   return slotId.startsWith(CHECKPOINT_SLOT_PREFIX);
 }
+
+/** P4.7 (D-0082): slot ids of write-once shelf records start with this (src/persistence/shelf.ts). */
+export const SHELF_SLOT_PREFIX = 'shelf-';
+
+/** Whether a slot id belongs to the shelf (never a named slot, the autosave or a checkpoint). */
+export function isShelfSlot(slotId: string): boolean {
+  return slotId.startsWith(SHELF_SLOT_PREFIX);
+}
+
+/** P4.7 fix round 1: SaveStore.remove's refusal of a shelf id (shelf records go only through Shelf.remove). */
+export const SHELF_REMOVE_REFUSED = 'That is a Try my dish starting point, not a saved dish; it is removed from the storage panel.';
 
 export interface SaveRequest {
   readonly slotId: string;
@@ -190,9 +208,9 @@ export class SaveStore {
     return Array.from({ length: NAMED_SLOTS }, (_, i) => `slot${i + 1}`);
   }
 
-  /** Named slots and the autosave (automatic checkpoints are listed by the ring, P2.8). */
+  /** Named slots and the autosave (automatic checkpoints are listed by the ring, P2.8; shelf records by the shelf, P4.7). */
   async list(): Promise<SlotInfo[]> {
-    return (await this.backend.listSlots()).filter((s) => !isCheckpointSlot(s.slotId)).sort((a, b) => (a.slotId < b.slotId ? -1 : a.slotId > b.slotId ? 1 : 0));
+    return (await this.backend.listSlots()).filter((s) => !isCheckpointSlot(s.slotId) && !isShelfSlot(s.slotId)).sort((a, b) => (a.slotId < b.slotId ? -1 : a.slotId > b.slotId ? 1 : 0));
   }
 
   async save(req: SaveRequest): Promise<SlotInfo> {
@@ -229,14 +247,17 @@ export class SaveStore {
   }
 
   async remove(slotId: string): Promise<void> {
+    // P4.7 fix round 1: a shelf record (a Try my dish starting point) is removed only through Shelf.remove,
+    // on the player's explicit choice there; deleting a saved dish never reaches one.
+    if (isShelfSlot(slotId)) throw new Error(SHELF_REMOVE_REFUSED);
     const slot = await this.backend.getSlot(slotId);
     if (!slot) return;
     await this.backend.commit({ putRecords: [], putSlots: [], deleteRecords: [slot.current, ...(slot.previous ? [slot.previous] : [])], deleteSlots: [slotId] });
   }
 
-  /** D-0033: a named slot's or the autosave's index record (never a checkpoint), or null when empty. */
+  /** D-0033: a named slot's or the autosave's index record (never a checkpoint or a shelf record), or null when empty. */
   async slot(slotId: string): Promise<SlotInfo | null> {
-    if (isCheckpointSlot(slotId)) return null;
+    if (isCheckpointSlot(slotId) || isShelfSlot(slotId)) return null;
     return this.backend.getSlot(slotId);
   }
 

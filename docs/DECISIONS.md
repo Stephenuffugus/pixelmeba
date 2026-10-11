@@ -1010,3 +1010,94 @@ Affects: every wave 6 task.
 Owner review: yes. Two items:
 - the shelf as the Try my dish "slot" (the alternative is one of the ten named slots, which the player can overwrite);
 - the transfer-preview deferral to Phase 5.
+
+## D-0083 · 2026-10-11 · P4.6 · Share as built
+Context: wave 6a share (docs/reports/reviews/g4-wave-6a/share-build.md, saves-verify-share.md, wave-verify.md); D-0080; SPEC §14.4; UX §5.10, §5.11; D09 lines 140-160.
+Decision:
+- **The Picture** (src/render/picture.ts, from one published snapshot, D-0080):
+  - a 1080 × 1080 PNG on a #14252D surround, with no text chunks;
+  - the whole dish at 7 px per cell (896 px) at (92, 92); one sprite pixel per picture pixel; nearest-neighbour;
+  - the question band at y 48–92;
+  - the bottom band at y 996: the wordmark "Pixelmeba", "· title · Dish at m:ss" and the recipe identifier, right-aligned;
+  - an optional species key in the four corners of the dish square, outside the round dish;
+  - every item ≥ 48 px from the edge.
+  - Hide labels leaves only the dish and the wordmark. Strip metadata drops the dish name and time but keeps the recipe identifier, which is not personal and is part of a picture (D09).
+  - A picture saved from a story card always says "Dish at m:ss" and is never presented as the story's moment; `imageRefs` stay empty.
+- **The Starting recipe file** ('pixelmeba-recipe', recipeFileVersion 1; src/persistence/recipeFile.ts) is also the P4.8 recipe card. It records:
+  - the source, the resolved recipe and habitat;
+  - the modules and the versions;
+  - the expected observations text;
+  - `initialStateHash`.
+- **Strict build match** (owner item).
+  - Export refuses a dish whose recorded content or rule versions differ from this build's.
+  - Import requires equal versions, modules, recipe and habitat, and the realized start's stateHash equal to `initialStateHash`. stateHash covers contentHash, so a recipe file stops importing after any content update.
+  - The alternative is the looser rule What if? "Again" uses (ignore contentHash when the recipe checksums match).
+- **The Living dish** is the existing dish export, at a paused tick. Opening the Share sheet pauses the dish and blocks every dish key (integration fix). Close or Esc restores the prior speed.
+- **Recipe IDs.**
+  - The format is "R-G3 / revision 1 / seed 104729"; "rev" is also accepted.
+  - Variants need their source's seed. Shipped recipes (phase ≤ buildPhase) take any canonical integer seed 0…4294967295.
+  - Ids are case-sensitive; leading zeros are refused.
+  - recipeIdStart realizes a variant through realizeVariant + keepFirst('start'). This is the same world as the What if? start (tested), on a second code path to keep in step.
+- **Sharing.**
+  - The Web Share API is used only when `canShare({files})` is true; otherwise the file downloads.
+  - A cancelled or refused share is a quiet "Not shared. Nothing changed." in the sheet: never a toast, never a fallback download.
+- **Import refusals.** Every refused import (save file or recipe file) shows exactly one toast, "Import failed: {exact reason}. Nothing changed." (UX §5.11; integration fix of a pre-existing double toast).
+  - The reason's own closing "Nothing was loaded." or "Nothing was changed." is dropped from the toast only, so it is not said twice.
+  - The global error toast skips 'importDish' and 'recipeImport'; importFile shows the one toast.
+  - Refusals from keeping the open dish first (all slots full, a failed save) are not file refusals: they keep their own sheet and wording.
+Reason: SPEC §14.4; UX §5.10-§5.11; D09 lines 140-160; D-0080; saves are sacred (a refused import never touches the open dish).
+Affects: src/render/picture.ts, src/persistence/{recipeFile,recipeId}.ts, src/ui/{share,state}.ts, src/ui/panels/{ShareSheet,RecipeIdImport,StoryCard}.tsx, src/ui/views/{DishScreen,Play,Saves}.tsx, src/worker/{host,protocol,client}.ts, tests/persistence/share.test.ts, tests/render/picture.test.ts, tests/ui/share.test.ts, tests/e2e/share.spec.ts.
+Owner review: yes. Should recipe files require an exact build match (strict, as built), or the looser What if? rule?
+
+## D-0084 · 2026-10-11 · P4.7 · Try my dish as built
+Context: wave 6a try-my-dish (docs/reports/reviews/g4-wave-6a/try-my-dish-build.md, try-my-dish-fix1.md, saves-verify-try-my-dish.md, wave-verify.md, wave-reverify1.md); D-0081, D-0082; SPEC §13.6; D09 lines 135-139.
+Decision:
+- **The shelf** (src/persistence/shelf.ts, D-0082).
+  - Records: write-once 'shelf-<kind>-<seq>-<writer>' records, 10 baselines and 20 snapshots per device. They are hidden from the named slots and the slot list, and deleteSlot refuses them (fix round 1).
+  - Order of writes: the preflight runs before the keep step, so a full shelf changes nothing. The baseline is written after the open dish is kept, so a refused keep leaves no orphan.
+  - Opening: a shelf record opened through Saved dishes opens as a new branch, never as a bound slot.
+  - Removal: until the 6b Storage panel exists, a full shelf cannot be emptied. P4.7 and the Storage panel ship in the same release (v1.0); a 6b gate check proves it.
+- **Turns.**
+  - Each turn is a new dish "{baseline name} (turn n)", at most 60 characters, with a branchWorldId. It starts paused at the baseline tick and holds exactly one TurnRecord in its notebook kind 'turns'.
+  - The goal attempt (D-0078) starts at the turn's start tick, so each turn resets its progress.
+  - The horizon is enforced in DishHost.pump and the 'step' case: the dish pauses there and offers Keep this result, Another turn and Finish. The card states the elapsed turn time and the starting point.
+- **Kept.**
+  - A turn is kept by any save to a named slot made at its horizon (Keep this result, or the Save sheet).
+  - Another turn needs no Discard only while that slot still holds the turn exactly (D-0033 holdsExactly).
+  - kept is cleared by Undo, a rollback, a changed command (fix round 1), and by any accepted change to what the slot file holds (integration fix): a stored journal note, a favorite op, a goal start or leave, a goal sentence dismissed, or a story card mark. A no-op (a card marked seen again, a refused op) keeps the slot.
+  - As a safety net, a tryNext refused as unsaved clears kept in the worker's record, and the UI drops the card's "Kept in Slot n." line.
+- **Another turn.** The player confirms "Discard this turn? It has not been saved." (D09 line 137). The new turn is autosaved at once, so Continue never reopens a discarded turn (fix round 1).
+- **Finish.** It ends the turn's horizon; the turn runs on as an ordinary dish. Undo or a rollback during a turn ends its goal attempt ('undone' / 'failed'), and the turn's clock rewinds with the world.
+- **Exports.** "Export without names or notes" also blanks a turn's prediction note and the baseline's name.
+- **Keys.** The setup sheet blocks dish keys; Esc is its Cancel and restores the run state (UX §2).
+Reason: SPEC §13.6; D09 lines 135-139; D-0081 (turns clone, never mutate; nothing kept is overwritten); saves are sacred.
+Affects: src/persistence/{shelf,notebookTurns,store}.ts, src/worker/{tryDish,host,protocol,client,notebookWatch}.ts, src/ui/tryDish.ts, src/ui/panels/{TrySetup,TryHorizon,TryBadge}.tsx, tests/persistence/shelf.test.ts, tests/worker/try-dish-host.test.ts, tests/ui/try-dish.test.ts, tests/e2e/try-dish.spec.ts.
+Owner review: no.
+
+## D-0085 · 2026-10-11 · P4.8a · The relationship map and region probes as built
+Context: wave 6a observation-map (docs/reports/reviews/g4-wave-6a/observation-map-build.md, wave-verify.md); D-0051, D-0061, D-0082; SPEC §12.8.
+Decision:
+- **The relationship map** is worker session state for a played dish, kept per whole dish second for 600 s. It is never saved, hashed or read by the sim, and it is empty after a reload.
+  - Undo or a rollback to tick T drops every second at or after T. A record that restarts mid-second says "Recorded since m:ss".
+  - What each arrow measures:
+    - catches: count and the capture events' carbon;
+    - infects, attaches, bursts, drains: counts, credited as P3.8 credits them;
+    - converts: the carbon converted where producersNear names that species. Two named species each count, never split (D-0051);
+    - eats: seconds seen, because IntakeSeen holds bits only.
+  - Pool nodes carry the carbon that feeding removed (poolTotal before and after stage 6). It is never divided among eaters, and is labelled "net" for sugar, metabolite and CO2.
+  - "resource exchange observed" needs arrows both ways in the window.
+  - The intro text describes exactly these arrows (integration fix): which species caught, infected, attached to, burst or drained another, which turned one food into another, and which fed from a food pool. It never says one species "ate" another: an 'eats' arrow always ends at a food pool.
+- **Region probes.**
+  - Masks: at most 6, lettered A–F, integer cell centres clipped to the dish. A rectangle's corners are the drag's start and end cells; a circle has a whole-cell radius ≤ 64.
+  - Population counts living organisms by the cell under them.
+  - Boundary transfer is measured for sugar and broth, and for O2 and CO2 only in seconds whose every tick had the lid closed. Other fields show "not measured here".
+  - Probes are session state: not saved, reset on reload, empty in a duplicate, never on a comparison copy.
+  - **Lead ruling on D-0082's "reset on reload or Undo":** the measurements reset (seconds after the restored tick are dropped). The masks the player drew stay through Undo, and go on reload.
+  - Drawing: one drag draws one region, and a tap draws nothing (a toast says to drag). There is no keyboard way to draw a region; the readings, Delete and the window choice are keyboard reachable. A keyboard draw can be added at the a11y pass.
+- **Transfer preview** ships with the Phase 5 gate structures (D-0082); no button and no speculative code in v1.0.
+- **Measured cost.**
+  - The map's ledger pool totals run every tick on every played dish: about +0.3 ms per tick on the Garden (wave verifier: watcher ≈ 1.2 → 1.5 ms per tick).
+  - This is recorded for P4.13 (perf pass 2) and EXPANSION_RESPONSE. The fix to try there is summing only after the map is first opened in a session (its windows then say "Recorded since m:ss"), or only active pools.
+Reason: SPEC §12.8 ("observed transfers/attacks with type and measured total; unknown = absent"); D-0051; D-0072 (no new sim rules; gates are Phase 5); measure, don't guess.
+Affects: src/worker/{relationshipMap,probes,relationships,host,protocol,client}.ts, src/ui/observe.ts, src/ui/panels/{RelationshipMap,ProbePanel,ProbeSession}.tsx, src/ui/strings/observe.ts, src/render/renderer.ts, tests/worker/{relationship-map,probes}.test.ts, tests/ui/observe.test.ts, tests/e2e/observe-tools.spec.ts.
+Owner review: no.

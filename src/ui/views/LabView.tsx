@@ -35,6 +35,8 @@ import {
   type LabSessionId,
 } from '../panels/SampleSession';
 import { TOOLS_COPY } from '../strings/tools';
+import { probeDrawing } from '../observe';
+import { endProbeSession, probeStrokeCancel, probeStrokeEnd, probeStrokeMove, probeStrokeStart, probeTap } from '../panels/ProbeSession';
 import {
   candidates,
   dishInfo,
@@ -138,6 +140,7 @@ export function setDishView(v: DishView): void {
   cancelGesture?.();
   clearPreview();
   endSession();
+  endProbeSession(); // P4.8: drawing regions is a Lab session
   batch(() => {
     dishView.value = v;
     candidates.value = null;
@@ -186,6 +189,7 @@ export function selectLabTool(id: LabToolId): void {
   clearPreview();
   cancelGesture?.();
   endSession();
+  endProbeSession();
   labTool.value = id;
   if (id !== 'inspect') candidates.value = null;
 }
@@ -221,7 +225,8 @@ function placingSpecimen(): boolean {
 
 /** Whether one-finger drag paints (true for every brush tool in Lab) instead of panning. */
 export function labPaints(): boolean {
-  return isLab() && !placingSpecimen() && brushRule(activeTool()) !== null;
+  // P4.8: while drawing regions one-finger drag draws a region (two fingers still pan).
+  return isLab() && !placingSpecimen() && (probeDrawing.value || brushRule(activeTool()) !== null);
 }
 
 /** The dose per cell the selected material tool uses (from the world's recorded material). */
@@ -333,7 +338,7 @@ export function clearPreview(): void {
 /** Mouse hover (before pressing): the footprint of a tap here. Touch has no hover. */
 export function labHover(w: readonly [number, number] | null): void {
   if (!isLab() || pending) return;
-  if (!w || placingSpecimen()) {
+  if (!w || placingSpecimen() || probeDrawing.value) {
     clearPreview();
     return;
   }
@@ -372,12 +377,17 @@ export function labHover(w: readonly [number, number] | null): void {
 
 export function labStrokeStart(w: readonly [number, number]): void {
   if (!labPaints()) return;
+  if (probeDrawing.value) {
+    probeStrokeStart(w, viewEpoch);
+    return;
+  }
   pending = { epoch: viewEpoch, tool: activeTool() };
   const p = previewCells([w]);
   if (p) showPreview(p.cells, p.rule);
 }
 
 export function labStrokeMove(points: ReadonlyArray<readonly [number, number]>): void {
+  if (probeDrawing.value) probeStrokeMove(points, viewEpoch);
   if (!pending || pending.epoch !== viewEpoch) return;
   const p = previewCells(points);
   if (p) showPreview(p.cells, p.rule);
@@ -387,6 +397,7 @@ export function labStrokeMove(points: ReadonlyArray<readonly [number, number]>):
 export function labStrokeCancel(): void {
   pending = null;
   clearPreview();
+  probeStrokeCancel();
 }
 
 /**
@@ -399,6 +410,11 @@ export function labStrokeEnd(points: ReadonlyArray<readonly [number, number]>): 
   clearPreview();
   if (s && s.epoch !== viewEpoch) return true; // started in the other view: dropped
   if (!isLab()) return false;
+  // P4.8: one drag = one region (dropped when it began in the other view or before a cancel).
+  if (probeDrawing.value) {
+    probeStrokeEnd(points, viewEpoch);
+    return true;
+  }
   if (!s || s.tool !== activeTool()) return true;
   const payload = payloadFor(s.tool, points);
   if (payload) void sendLabCommand(payload);
@@ -417,6 +433,10 @@ export function labTap(wx: number, wy: number): boolean {
   if (!isLab()) return false;
   // A saved specimen waiting to be placed takes the tap whatever tool is selected (P2.3).
   if (placingSpecimen()) return false;
+  if (probeDrawing.value) {
+    probeTap(); // P4.8: a tap draws nothing while drawing regions
+    return true;
+  }
   const id = activeTool();
   if (id === 'inspect') return false;
   // P3.5: a sampling tap previews; a transfer tap moves the held sample (one command).
@@ -486,6 +506,13 @@ export function handleViewKey(e: KeyboardEvent): boolean {
     }
     if (k === 'l' || k === 'f') {
       openLabTray(k === 'l' ? 'life' : 'food');
+      return true;
+    }
+    if (e.key === 'Escape' && probeDrawing.value) {
+      // P4.8: Escape ends drawing regions (and drops a region still being dragged); nothing else changes.
+      labStrokeCancel();
+      cancelGesture?.();
+      endProbeSession();
       return true;
     }
     if (e.key === 'Escape') {

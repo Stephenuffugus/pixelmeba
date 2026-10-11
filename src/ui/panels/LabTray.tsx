@@ -75,6 +75,9 @@ import { CLEAN_WATER_FRACTIONS, type CleanWaterFraction } from '@sim/tools';
 import { SAMPLE_MODES } from '@sim/sampleSlot';
 import { CLEAN_WATER_LABELS, SAMPLE_MODE_HINTS, SAMPLE_MODE_LABELS, TOOLS_COPY } from '../strings/tools';
 import { OverlayPicker } from './OverlayPicker';
+import { OBSERVE_TEXT } from '../strings/observe';
+import { probeDrawing } from '../observe';
+import { endProbeSession, ShapeIcon, startProbeSession } from './ProbeSession';
 import {
   dietLine,
   dishStructureIds,
@@ -203,6 +206,7 @@ function IconCleanWaterTool() {
 
 /** A Tools-tray session item picked (P3.5): Sample begins (pauses the dish); the others take the next gesture. */
 function pickSession(id: LabSessionId): void {
+  endProbeSession(); // P4.8: one Lab session at a time
   if (id === 'sample') {
     if (labSession.value === 'sample') return;
     endSession();
@@ -608,7 +612,7 @@ function LidToggle() {
 
 function ObserveActions() {
   return (
-    <div class="lab-actions" role="group" aria-label="Charts and family">
+    <div class="lab-actions" role="group" aria-label={OBSERVE_TEXT.observeGroup}>
       <button
         class="btn"
         onClick={() => {
@@ -630,7 +634,41 @@ function ObserveActions() {
       >
         <IconLineage /> {LAB_TEXT.lineage}
       </button>
+      {/* P4.8: the relationship map and region probes (observation only; never a command). */}
+      <button
+        class="btn"
+        onClick={() => {
+          labTray.value = null;
+          sheet.value = 'relationshipMap';
+        }}
+        data-testid="lab-relmap"
+      >
+        <IconRelMap /> {OBSERVE_TEXT.mapButton}
+      </button>
+      <button
+        class="btn"
+        aria-pressed={probeDrawing.value}
+        onClick={() => {
+          labTray.value = null;
+          endSession();
+          startProbeSession();
+        }}
+        data-testid="lab-regions"
+      >
+        <ShapeIcon shape="rect" /> {OBSERVE_TEXT.regionsButton}
+      </button>
     </div>
+  );
+}
+
+function IconRelMap() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="5" cy="6" r="3" />
+      <circle cx="19" cy="6" r="3" />
+      <rect x="9" y="16" width="6" height="5" />
+      <path d="M8 6h7M14 4l2 2-2 2M6.5 8.5l4.5 7M17.5 8.5l-4.5 7" />
+    </svg>
   );
 }
 

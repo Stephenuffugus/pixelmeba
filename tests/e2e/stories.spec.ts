@@ -111,7 +111,7 @@ test('Garden at 4×: quiet first minute, then one card announced once; the card,
   const opened = card.getByTestId('story-panel');
   expect(await opened.count()).toBeGreaterThan(0);
   for (let i = 0; i < (await opened.count()); i++) await expect(opened.nth(i).locator('.story-time')).toHaveText(/\d+:\d\d$/);
-  await expect(card.getByRole('button', { name: 'Save picture' })).toHaveCount(0); // arrives with P4.6
+  await expect(card.getByRole('button', { name: 'Save picture' })).toBeVisible(); // P4.6; proven at the end
   await expectNoHorizontalOverflow(page);
   await expectNoSeriousA11yViolations(page);
 
@@ -170,6 +170,23 @@ test('Garden at 4×: quiet first minute, then one card announced once; the card,
   await expect(page.getByTestId('story-card')).toBeVisible();
   await page.getByTestId('story-dismiss').click();
   await expect(page.locator('.story-dismissed summary')).toContainText('Dismissed cards (1)');
+  expect(await workerHash(page)).toBe(h0);
+
+  // Save picture (P4.6, UX §5.9): back to the dish with the Share sheet on Picture and the card's title as the
+  // question; Close leaves the dish paused (it was paused when the card was opened) and unchanged.
+  const other = page.getByTestId('stories-list').first().locator('[data-testid^="story-open-"]').first();
+  await other.click();
+  const picked = page.getByTestId('story-card');
+  const title = (await picked.getByRole('heading').first().innerText()).trim();
+  await picked.getByTestId('story-save-picture').click();
+  await expect(page.getByTestId('dish-screen')).toBeVisible();
+  const shareSheet = page.getByTestId('share-sheet');
+  await expect(shareSheet).toBeVisible();
+  await expect(shareSheet.getByRole('radio', { name: /^Picture/ })).toBeChecked();
+  await expect(page.getByTestId('share-question')).toHaveValue(title);
+  await page.getByTestId('share-close').click();
+  await expect(shareSheet).toHaveCount(0);
+  await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
   expect(await workerHash(page)).toBe(h0);
   expect(pageErrors).toEqual([]);
 });

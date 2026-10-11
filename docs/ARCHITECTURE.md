@@ -230,6 +230,74 @@ After Undo or an error rollback the worker re-checks the notebook against the re
 storiesRestored, then one `goal` per ended attempt: endReason 'undone' after Undo, 'failed' after a
 rollback), each with the final record.
 
+As built, Phase 4 wave 6a (P4.6 share, P4.7 Try my dish, P4.8a relationship map and region probes;
+`src/worker/protocol.ts`; `PROTOCOL_VERSION` stays 2, every addition is a new message or an optional field):
+```
+Main → Worker
+recipeExport {requestId, dishId}                         → recipeExported | error {request 'recipeExport',
+                                                           kind 'no-start', message} (read-only: only the
+                                                           dish's recorded start is read; a comparison copy,
+                                                           a start not recorded or one made by other
+                                                           content or rules is 'no-start')
+recipeImport {requestId, text, newDishId, keepFrom?}     → loaded | keepRefused | error {request
+                                                           'recipeImport', kind} (the file is checked and
+                                                           realized from this build's content first; a
+                                                           refusal keeps and changes nothing; the dish
+                                                           opens paused at tick 0)
+recipeIdStart {requestId, id, newDishId, keepFrom?}      → ready | keepRefused | error (bundled ids, exact
+                                                           revisions, valid seeds only; built first, then
+                                                           keepFirst action 'start')
+exportDish {…, strip, includeNicknames?}                 // the Share sheet's Living dish: unchanged message,
+                                                          // sent while the open sheet holds the dish paused
+                                                          // (src/ui/share.ts openShare); `strip` also blanks
+                                                          // a turn's prediction note and baseline name
+                                                          // (withoutTurnNotes)
+trySetup {requestId, dishId}                             → trySetup (read-only)
+tryStart {requestId, dishId, newDishId, objectiveId|null, horizonSeconds 60|180|600, prediction, keepFrom?}
+                                                         → tryStarted | tryRefused | keepRefused
+tryNext {requestId, dishId, newDishId, discard}          → tryStarted | tryRefused (no keep flow)
+tryFinish {requestId, dishId}                            → tryTurn
+relationshipMap {requestId, dishId, windowSeconds 60|180|600}   → relationshipMap (read-only)
+probeSet {requestId, dishId, probes: ProbeMask[] (≤ 6), windowSeconds?}   → probes
+probeRead {requestId, dishId, windowSeconds}             → probes (read-only)
+Worker → Main
+recipeExported {requestId, text, filename, name, question|null, identity|null,
+                versions {simulationVersion, evolutionRulesVersion, contentVersion, contentHash}}
+trySetup {requestId, dishId, goals: TryGoalOption[] (GoalOffer + durationSeconds|null), refusal|null}
+tryStarted {requestId, info: DishInfo, turn: TurnRecord, kept?: WhatIfKept}   // kept: tryStart only
+tryRefused {requestId, code: TryRefusalCode, message}    // nothing was changed
+  TryRefusalCode = 'not-here' | 'bad-request' | 'shelf' | 'unsaved' | 'baseline-missing' | 'no-turn'
+tryTurn {requestId?, dishId, turn: TurnRecord|null}      // the answer to tryFinish, or unsolicited
+tryHorizon {dishId, turn, elapsedTicks, goal: GoalRecord|null}   // unsolicited: the horizon card
+relationshipMap {requestId, dishId, map: RelationshipMapData}
+probes {requestId, dishId, masks: ProbeMask[], readings: ProbeReadings, refused?}
+DishInfo.turn?: TurnRecord                               // the dish's turn, when it is a turn dish
+```
+- `error` gained nothing new: a recipe refusal is the existing `error {dishId, requestId, message,
+  lastValidTick 0, paused false, request, kind?}`; a RecipeFileError refusal of `recipeExport` or
+  `recipeImport` carries its kind ('size' | 'json' | 'format' | 'version' | 'content' | 'integrity' |
+  'checksum' | 'no-start'). Any other `recipeImport` failure (a `newDishId` already in use) goes through
+  the generic catch with no kind, and a refused `recipeIdStart` is the readable text (recipeId.ts) with
+  no kind.
+- Try my dish (D-0081, D-0082) is notebook state, never a `CommandPayload`. `tryStart` refuses
+  ('not-here': a comparison copy, a held sample, a failed dish, no storage; 'bad-request': a turn length
+  other than 60/180/600 s, a goal the dish does not offer or whose duration does not fit, a new dish id in
+  use) before anything changes. Then the dish is paused and its save is built at that tick; the shelf's
+  limit and storage preflight ('shelf') are checked before the open dish is kept (keepFirst action
+  'tryDish'); the save then goes on the shelf as a baseline (a failed write is 'shelf') and turn 1 is
+  cloned from the record just written (paused, at the baseline tick, with the try's goal started at that
+  tick). A baseline that is missing or fails its checks is 'baseline-missing'. `tryNext` needs a turn at its horizon ('no-turn' otherwise) and, unless its kept
+  slot still holds it exactly, `discard: true` ('unsaved'); the prior turn dish is let go, never written.
+- A turn never runs past its horizon: `setSpeed` (non-zero) and `step` on a turn at its horizon leave it
+  paused and post `tryHorizon` again; the run loop stops at the horizon tick and posts `tryHorizon`.
+  `tryTurn` is posted when the record changes otherwise (kept, Finish, Undo or a rollback below the
+  horizon, a change that makes a kept turn unkept). `tryFinish` sets the state 'finished'; the dish stays
+  open as an ordinary paused dish.
+- The relationship map and the region probes are worker session state for a played dish (never saved,
+  hashed or read by the simulation; never commands). An unknown window reads as 60. `probeSet` replaces
+  all masks; a refused set (a comparison copy, or `probeSetProblem`) changes nothing and the answer
+  carries `refused` with the current masks and readings.
+
 ## 8. Snapshots
 Published ≤ 10/s (adaptive under load). Contents: `renderList` as a packed `Float32Array`
 [entityIndex, speciesIdx, x, y, heading, scale/sizeFactor, stateFlags, cueBits] per living
@@ -378,6 +446,77 @@ the state checksum, so neither the world checksum nor the stateHash changes with
     zero|undone|failed|cannotResume|left, progress {startTick, holdSinceTick|null, state,
     lastEventId?}, value?, shown }`. The load check also refuses a running goal the dish cannot run
     (its recorded manifest, fields and event ids: `goalWorldRefsOf`).
+
+As built, Phase 4 wave 6a (P4.6, P4.7; D-0081, D-0082):
+- **The shelf** (`src/persistence/shelf.ts`): write-once stored saves kept outside the ten named slots,
+  modelled on the checkpoint ring. A record is a full save file (the same text, checksum and gzip record
+  as a slot) with an index entry (SlotInfo: name, tick, savedAt, recipeId, worldId, bytes, checksum,
+  `automatic: true`, `previous: null`) plus `shelfKind` ('baseline' | 'snapshot') and `createdFor` (the
+  try id 'try-<n>' or a bookmark id).
+  - Slot ids are `shelf-<kind>-<sequence>-<writer>` (SHELF_SLOT_PREFIX 'shelf-'; the sequence is 1 + the
+    highest held of that kind, eight digits; the writer is a per-page random token so two tabs never
+    choose the same id).
+  - Per-device limits (SHELF_LIMITS): 10 'baseline' (Try my dish starting points), 20 'snapshot'.
+  - `put` never overwrites, evicts or deletes: over the kind's limit, or failing the storage preflight
+    (room for this record and one more save of the same compressed size), or when the id is already held,
+    it refuses with readable text and nothing changes. Otherwise it writes the record and its index entry
+    in ONE `backend.commit` (atomic: a failed commit changes nothing). `check` is the same refusal,
+    read-only.
+  - `get` returns a record only when its stored checksum equals the index's, the text decompresses and the
+    caller's verify accepts it (Try my dish: kind 'baseline' and the save's own checksum equal to the
+    turn's recorded one); otherwise null, never a predecessor or another record.
+  - Hidden from the named slots: `SaveStore.list()` (the slot list) and `SaveStore.slot()` ignore shelf
+    ids, `freeSlot()` only ever names slot1…slot10, and `SaveStore.remove()` (the `deleteSlot` request) refuses one with
+    SHELF_REMOVE_REFUSED. Only `Shelf.remove` deletes a record, on an explicit player action. A shelf id
+    sent to `loadSlot` opens as a new branch, as a checkpoint does.
+- **The 'turns' notebook kind** (`src/persistence/notebookTurns.ts`; a record written before it reads it as
+  `[]`, and a notebook holding a turn is not empty): at most one per dish (TURNS_MAX), only in a Try my dish
+  turn dish; a copy of the dish (Duplicate, a checkpoint branch) never carries it (`favoritesOnly`).
+  ```
+  "turns": [ { tryId "try-<n>", baseline { shelfId "shelf-baseline-<seq>-<writer>",
+               checksum "sha256:<64 hex>", worldId, tick, name (≤ 60 characters) },
+               turn (1, 2, …), turnWorldId (= the notebook's worldId), startTick (= baseline.tick),
+               horizonTicks 600|1800|6000, objectiveId|null, prediction (control characters as spaces,
+               trimmed, ≤ 200 characters; '' when none), state running|atHorizon|finished,
+               kept {slotId "slot1"…"slot10"}|null } ]
+  ```
+  Unknown fields are problems. Against the dish the file carries (`turnsWorldProblem`): a turn starting
+  after the dish's tick, or a turn not finished whose dish is past `startTick + horizonTicks`, is a
+  problem. As for every kind, any problem drops the whole notebook with `notebookDropped` and the world
+  still loads. "Without names or notes" exports (`withoutTurnNotes`) write `prediction: ''` and the
+  baseline's name as "Shared dish".
+- **The Starting recipe file** (`src/persistence/recipeFile.ts`; MIME `application/vnd.pixelmeba+json`,
+  file name "<recipe name>-recipe.pixelmeba"): how a dish STARTED, never a later command, descendant,
+  notebook or player name.
+  ```
+  { "format": "pixelmeba-recipe", "recipeFileVersion": 1, "appVersion": "…",
+    "name": "<the recipe's or variant's own name>", "question": "…"|null,
+    "versions": { simulationVersion, evolutionRulesVersion, moduleRegistryVersion,
+                  phenotypeMappingVersion, contentVersion, contentHash },
+    "source": { kind "recipe", recipeId, revision, seed, overrides {seed?, habitatId?, mutationPreset?,
+                founderMode?, empty?} }
+            | { kind "variant", variantId, variantRevision, sourceId, sourceRevision, seed,
+                sourceChecksum, variantChecksum },
+    "recipe": {the resolved recipe as realized}, "habitat": {its habitat preset},
+    "enabledModules": [...], "expectedObservationsText": "…",
+    "initialStateHash": "<stateHash of the realized start at tick 0>",
+    "checksum": "sha256:<hex of the canonical file without checksum>" }
+  ```
+  - Export reads only the dish's recorded start (recorded New Dish choices or the variant record). It
+    refuses ('no-start') a start that was not recorded, or a dish whose recorded contentHash, content,
+    simulation, evolution-rules, module-registry or phenotype-mapping version differs from this build's.
+    It realizes the start again and writes that world's stateHash.
+  - Import (`parseRecipeFile`, `loadRecipeFile`) executes nothing from the file. It checks the size (at
+    most MAX_IMPORT_BYTES, 25 MB), JSON, the envelope and exactly its keys, the file version (a newer
+    one is "needs a compatible build"), finite numbers, the source's shape, a seed 0…4294967295, the
+    recorded choices, every id and revision, and the checksum. Strict build match: the five version
+    numbers and `enabledModules` must equal this build's; the start is then realized from this build's
+    own content, and the realized source, recipe and habitat must equal the file's and its stateHash
+    must equal `initialStateHash` (stateHash covers the contentHash, so any content change refuses).
+    A refusal names its reason: not a recipe file ('format'), not valid JSON ('json'), larger than
+    25 MB ('size'), "This recipe needs a compatible build (simulation n, rules n, content n)." (or "This
+    recipe file needs a newer version of Pixelmeba." when a newer file's versions cannot be read), or a
+    damaged/checksum message. Nothing outside the new world is created or changed.
 
 ### 11.3 Migrations
 `src/persistence/migrations/<from>-to-<to>.ts`; each ships with an old‑save fixture in

@@ -16,7 +16,10 @@ import type { EvolutionState, MutationRates } from '@sim/mutation';
 import type { MissingMember, SampleHeldSummary } from '@sim/sample';
 import type { SampleMode } from '@sim/sampleSlot';
 import type { FavoritePattern, NotebookRecord } from '@persist/notebook';
-import type { GoalState } from '@persist/notebookGoals';
+import type { GoalRecord, GoalState } from '@persist/notebookGoals';
+import type { TurnRecord } from '@persist/notebookTurns';
+import type { MapWindow, RelationshipMapData } from './relationshipMap';
+import type { ProbeMask, ProbeReadings } from './probes';
 
 /**
  * 2 since Phase 3 wave 2 (D-0036): ENT_STRIDE 12 → 14 (E_CUE2, E_LINKMASK), seven deposit bands (film),
@@ -100,6 +103,23 @@ export type ToWorker =
   | { readonly type: 'exportDish'; readonly requestId: number; readonly dishId: string; readonly strip: boolean; /** P4.1: keep the favorites' nicknames (the player's opt-in; default off). */ readonly includeNicknames?: boolean }
   | { readonly type: 'importDish'; readonly requestId: number; readonly text: string; readonly newDishId: string; readonly keepFrom?: KeepFrom }
   /**
+   * P4.6 Share: the dish's Starting recipe file (@persist/recipeFile; read-only: only its recorded start is
+   * read). Answered by 'recipeExported', or 'error' (kind 'no-start' with readable text) when it has none.
+   */
+  | { readonly type: 'recipeExport'; readonly requestId: number; readonly dishId: string }
+  /**
+   * P4.6: open a Starting recipe file as a NEW paused dish realized from this build's own content. The file
+   * is checked and realized first (a refusal is 'error' and changes nothing), then the open dish is kept
+   * (D-0033), then the dish opens: answered by 'loaded' (as an import) or 'keepRefused'.
+   */
+  | { readonly type: 'recipeImport'; readonly requestId: number; readonly text: string; readonly newDishId: string; readonly keepFrom?: KeepFrom }
+  /**
+   * P4.6 Import recipe ID ("R-G3 / revision 1 / seed 104729"; @persist/recipeId): only bundled ids, exact
+   * revisions and valid seeds. A variant realizes as What if? realizes it, a recipe as 'create' with the
+   * seed; built first, then the open dish is kept (D-0033): answered by 'ready', 'keepRefused' or 'error'.
+   */
+  | { readonly type: 'recipeIdStart'; readonly requestId: number; readonly id: string; readonly newDishId: string; readonly keepFrom?: KeepFrom }
+  /**
    * D-0033: how the open dish `aboutDishId` would be kept if an action replaced it now (New Dish, the
    * Saved dishes checkpoint confirmation, an experiment card). With no dish open (null) it is the dish
    * Continue holds (fix round 1: after a relaunch that is the player's dish). `opening` names the save
@@ -112,6 +132,12 @@ export type ToWorker =
   | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly birthId: number }
   /** P3.8 (D-0039): the relationships first seen in this played dish so far (worker state, read-only). */
   | { readonly type: 'relationships'; readonly requestId: number; readonly dishId: string }
+  /** P4.8: the relationship map of the last 60/180/600 dish seconds (worker session state, read-only). */
+  | { readonly type: 'relationshipMap'; readonly requestId: number; readonly dishId: string; readonly windowSeconds: MapWindow }
+  /** P4.8: replace the open dish's region probes (≤ 6; session state, never a command). Answered by 'probes'. */
+  | { readonly type: 'probeSet'; readonly requestId: number; readonly dishId: string; readonly probes: readonly ProbeMask[]; readonly windowSeconds?: MapWindow }
+  /** P4.8: the region probes' readings now, boundary totals over the window (read-only). Answered by 'probes'. */
+  | { readonly type: 'probeRead'; readonly requestId: number; readonly dishId: string; readonly windowSeconds: MapWindow }
   /**
    * P4.1 (D-0070): the dish's notebook record (worker state saved beside the world, never in it). With
    * `inspect`, the answer also carries that living organism's inspector payload (read-only; the Family
@@ -134,6 +160,31 @@ export type ToWorker =
    * indexes dishes by a message's `dishId`, which must be a string.)
    */
   | { readonly type: 'goalCatalog'; readonly requestId: number; readonly targetDishId: string | null; readonly recipeId: string | null }
+  /** P4.7 Try my dish: the setup's choices for dish `dishId` (read-only). Answered by 'trySetup'. */
+  | { readonly type: 'trySetup'; readonly requestId: number; readonly dishId: string }
+  /**
+   * P4.7 (SPEC §13.6; D-0081): store the paused dish as a baseline on the shelf, keep the open dish first
+   * (D-0033), then open turn 1 (`newDishId`) cloned from the baseline, paused, with the goal started at its
+   * start tick. Answered by 'tryStarted', 'tryRefused' (nothing changed) or 'keepRefused'.
+   */
+  | {
+      readonly type: 'tryStart';
+      readonly requestId: number;
+      readonly dishId: string;
+      readonly newDishId: string;
+      readonly objectiveId: string | null;
+      readonly horizonSeconds: number;
+      readonly prediction: string;
+      readonly keepFrom?: KeepFrom;
+    }
+  /**
+   * P4.7: the next turn from the same baseline, replacing turn dish `dishId` WITHOUT the keep flow. `discard`:
+   * the player confirmed "Discard turn" (needed unless the turn's kept slot holds it exactly). Answered by
+   * 'tryStarted' or 'tryRefused' (the current turn stays open and unchanged).
+   */
+  | { readonly type: 'tryNext'; readonly requestId: number; readonly dishId: string; readonly newDishId: string; readonly discard: boolean }
+  /** P4.7: Finish — the turn becomes 'finished'; the dish stays open as an ordinary paused dish. Answered by 'tryTurn'. */
+  | { readonly type: 'tryFinish'; readonly requestId: number; readonly dishId: string }
   /** Read-only lineage panel query (SPEC §8.5, UX §5.5): branches, variation, specimens, and detail for one branch or one organism's branch. */
   | { readonly type: 'lineage'; readonly requestId: number; readonly dishId: string; readonly branch: number | null; readonly birthId: number | null }
   /** Trait overlay and lineage highlight for this dish's snapshots (render-only; never touches the world). */
@@ -472,6 +523,8 @@ export interface DishInfo {
   readonly whatIfSourceId?: string | null;
   /** P2.2: the module registry this world recorded (UX §3.3 label when partial; export metadata). */
   readonly registry?: RegistryInfo;
+  /** P4.7: the dish's Try my dish turn (its notebook's record), when it is a turn dish. */
+  readonly turn?: TurnRecord;
 }
 
 export interface SnapshotMsg {
@@ -936,6 +989,16 @@ export type FromWorker =
   | { readonly type: 'sessionSummary'; readonly requestId: number; readonly dishId: string; readonly summary: SessionSummary }
   /** P4.4: the answer to 'goalCatalog' (catalog order). */
   | { readonly type: 'goalCatalog'; readonly requestId: number; readonly goals: readonly GoalOffer[] }
+  /** P4.7: the answer to 'trySetup': the goals offered (with durations) and why it cannot start here (null: it can). */
+  | { readonly type: 'trySetup'; readonly requestId: number; readonly dishId: string; readonly goals: readonly TryGoalOption[]; readonly refusal: string | null }
+  /** P4.7: a turn opened (paused, at its start tick). `kept`: how the dish open before turn 1 was kept (D-0033). */
+  | { readonly type: 'tryStarted'; readonly requestId: number; readonly info: DishInfo; readonly turn: TurnRecord; readonly kept?: WhatIfKept }
+  /** P4.7: a Try my dish request was refused; nothing was changed. */
+  | { readonly type: 'tryRefused'; readonly requestId: number; readonly code: TryRefusalCode; readonly message: string }
+  /** P4.7: a turn dish's record changed (an answer to 'tryFinish', or unsolicited: kept, or Undo took it below its horizon). */
+  | { readonly type: 'tryTurn'; readonly requestId?: number; readonly dishId: string; readonly turn: TurnRecord | null }
+  /** P4.7 (unsolicited): a turn reached its horizon; the dish was paused. `goal`: this turn's goal attempt (null: free observation). */
+  | { readonly type: 'tryHorizon'; readonly dishId: string; readonly turn: TurnRecord; readonly elapsedTicks: number; readonly goal: GoalRecord | null }
   /** P2.8: a recorded regional trait series; `available` lists, per species, the loci that have records. */
   | {
       readonly type: 'traitHistory';
@@ -997,6 +1060,20 @@ export type FromWorker =
       readonly notebookDropped?: string;
     }
   | { readonly type: 'exported'; readonly requestId: number; readonly text: string; readonly filename: string }
+  /**
+   * P4.6: the answer to 'recipeExport': the file, and what the Share sheet shows of it (the start's own
+   * name, the offline identifier for a bundled start, else null, and the versions it needs).
+   */
+  | {
+      readonly type: 'recipeExported';
+      readonly requestId: number;
+      readonly text: string;
+      readonly filename: string;
+      readonly name: string;
+      readonly question: string | null;
+      readonly identity: string | null;
+      readonly versions: { readonly simulationVersion: number; readonly evolutionRulesVersion: number; readonly contentVersion: number; readonly contentHash: string };
+    }
   | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly family: FamilyAnswer }
   /**
    * P4.1: the dish's notebook record after a 'notebookGet' or 'favorite' request. `refused`: the op was not
@@ -1023,6 +1100,10 @@ export type FromWorker =
       readonly dishName: string;
       readonly entries: readonly RelationshipSeen[];
     }
+  /** P4.8: the relationship map (src/worker/relationshipMap.ts). */
+  | { readonly type: 'relationshipMap'; readonly requestId: number; readonly dishId: string; readonly map: RelationshipMapData }
+  /** P4.8: the region probes' masks and readings (src/worker/probes.ts); `refused` when a probeSet was not taken (nothing changed). */
+  | { readonly type: 'probes'; readonly requestId: number; readonly dishId: string; readonly masks: readonly ProbeMask[]; readonly readings: ProbeReadings; readonly refused?: string }
   | { readonly type: 'lineage'; readonly requestId: number; readonly dishId: string; readonly lineage: LineageAnswer }
   | { readonly type: 'done'; readonly requestId: number }
   /** Comparison status; unsolicited (no requestId) while running and when it completes. */
@@ -1287,3 +1368,16 @@ export interface NewDishPreview {
   /** P4.3: the start's thumbnail (src/worker/thumbnail.ts): the Play shelf's live-state picture. */
   readonly thumb?: string;
 }
+
+/** P4.7: a goal offered for a Try my dish turn, with its predicate's duration (null: none). */
+export interface TryGoalOption extends GoalOffer {
+  readonly durationSeconds: number | null;
+}
+
+/**
+ * P4.7: why a Try my dish request was refused: 'not-here' (a comparison copy, a held sample, a failed dish,
+ * no storage), 'bad-request' (turn length or goal), 'shelf' (the shelf refused the baseline), 'unsaved' (the
+ * turn is not kept and Discard was not confirmed), 'baseline-missing', 'no-turn' (not a turn dish, or not at
+ * its horizon).
+ */
+export type TryRefusalCode = 'not-here' | 'bad-request' | 'shelf' | 'unsaved' | 'baseline-missing' | 'no-turn';

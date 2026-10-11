@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { SlotSummary, WhatIfPlan } from '@worker/protocol';
 import { IconBack } from '../icons';
 import { busy, getClient, importFile, keepPlanNow, loadSlot, route, showToast } from '../state';
+import { RecipeIdImport } from '../panels/RecipeIdImport';
 import { atDishTime, dishClock, dishInfo, meta } from '../state';
 import { savedIdeaLine, slotNumber } from '../strings/whatif';
 import { slotModesLine } from '../strings/modes';
@@ -145,7 +146,7 @@ export function Saves() {
         ) : null}
         <section class="card">
           <h2>Import</h2>
-          <p>Open a .pixelmeba file someone shared with you. A damaged or unsupported file changes nothing.</p>
+          <p>Open a .pixelmeba file someone shared with you: a saved dish or a starting recipe. A damaged or unsupported file changes nothing.</p>
           <button class="btn" onClick={() => fileRef.current?.click()}>
             Choose a file…
           </button>
@@ -165,6 +166,8 @@ export function Saves() {
             }}
           />
         </section>
+        {/* P4.6 (UX §2 "Import file · Import recipe ID"): a bundled recipe by its offline ID. */}
+        <RecipeIdImport idPrefix="saves" />
       </div>
     </main>
   );

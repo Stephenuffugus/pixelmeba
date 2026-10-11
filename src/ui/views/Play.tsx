@@ -9,6 +9,7 @@ import { openWhatIf } from '../panels/WhatIfState';
 import { WHATIF_TEXT } from '../strings/whatif';
 import { GoalChoice } from '../panels/GoalChoice';
 import { playGoalChoice } from '../goals';
+import { RecipeIdImport } from '../panels/RecipeIdImport';
 
 /**
  * The Garden's own seed, read from the same content record the worker validates (as New Dish reads its
@@ -69,6 +70,8 @@ export function Play() {
             <span>{WHATIF_TEXT.linkHint}</span>
           </p>
         </section>
+        {/* P4.6 (UX §2; D09 "an Import recipe ID entry under Play"): a bundled recipe by its offline ID. */}
+        <RecipeIdImport idPrefix="play" />
       </div>
       <WhatIfHost context="play" />
     </main>
