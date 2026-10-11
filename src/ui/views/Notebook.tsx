@@ -9,6 +9,7 @@ import type { ExperimentCardView } from '@sim/experiments';
 import { IconBack } from '../icons';
 import { journal, journalUnseen, type JournalStampEntry } from '../journal';
 import { JournalComposer, ObservationCard } from './NotebookJournal';
+import { NotebookFavorites } from './NotebookFavorites';
 import { CONCLUSIONS } from '../panels/CompareText';
 import { experimentCards, experimentCardsError, loadCompareCards, loadExperimentCards, route, type CompareCard } from '../state';
 import { compareCardLine, isListableCard } from '../strings/compareCards';
@@ -16,8 +17,10 @@ import { fmt, fmtDiff, measureLabel } from '../panels/CompareText';
 import { durationText, journalMeasureCells, recordedText } from '../strings/experiments';
 import { clock } from '../panels/CompareText';
 
-type Tab = 'journal' | 'experiments';
+type Tab = 'favorites' | 'journal' | 'experiments';
 const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
+  // P4.1: UX §2 order (Something happened · Favorites · Journal · … · Experiments).
+  { id: 'favorites', label: 'Favorites' },
   { id: 'journal', label: 'Journal' },
   { id: 'experiments', label: 'Experiments' },
 ];
@@ -25,7 +28,7 @@ const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
 export function Notebook() {
   const r = route.value;
   const tab: Tab = r.name === 'notebook' ? r.tab : 'experiments';
-  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ journal: null, experiments: null });
+  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ favorites: null, journal: null, experiments: null });
 
   useEffect(() => {
     void loadExperimentCards();
@@ -80,7 +83,7 @@ export function Notebook() {
           ))}
         </div>
         <section id="nb-panel" role="tabpanel" aria-labelledby={`nb-tab-${tab}`} class="nb-panel">
-          {tab === 'journal' ? <JournalTab /> : <ExperimentsTab />}
+          {tab === 'favorites' ? <NotebookFavorites /> : tab === 'journal' ? <JournalTab /> : <ExperimentsTab />}
         </section>
       </div>
     </main>

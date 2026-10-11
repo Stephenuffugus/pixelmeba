@@ -21,9 +21,13 @@ import {
   sheet,
   undo,
 } from '../state';
+import { saveAndLeave } from '../state';
+import { HOME_TEXT } from '../strings/home';
 
 export function MoreSheet() {
   const fileRef = useRef<HTMLInputElement>(null);
+  // P4.1 (SPEC §12.6, UX §5.10 "include nickname (off)"): family nicknames leave only by this choice.
+  const [nicknames, setNicknames] = useState(false);
   return (
     <section class="sheet" aria-labelledby="more-title">
       <div class="sheet-scroll">
@@ -85,10 +89,14 @@ export function MoreSheet() {
           <button class="btn" disabled={!meta.value?.undoAvailable} onClick={() => void undo()}>
             <IconUndo /> Undo (rewinds time)
           </button>
-          <button class="btn" onClick={() => void exportCurrent(false)} data-testid="more-export">
+          <label class="fav-share-option">
+            <input type="checkbox" checked={nicknames} onChange={(e) => setNicknames(e.currentTarget.checked)} data-testid="more-include-nicknames" />
+            Include family nicknames
+          </label>
+          <button class="btn" onClick={() => void exportCurrent(false, nicknames)} data-testid="more-export">
             Export living dish file
           </button>
-          <button class="btn" onClick={() => void exportCurrent(true)}>
+          <button class="btn" onClick={() => void exportCurrent(true, nicknames)}>
             Export without names or notes
           </button>
           <button class="btn" onClick={() => fileRef.current?.click()}>
@@ -129,6 +137,8 @@ export function SaveSheet() {
   const [name, setName] = useState(info?.name ?? 'My dish');
   const [target, setTarget] = useState<string | null>(null);
   const [confirmReplace, setConfirmReplace] = useState<string | null>(null);
+  /** P4.3: the pending replacement was asked for by "Save and leave" (then the dish is left after saving). */
+  const [leaveAfter, setLeaveAfter] = useState(false);
   useEffect(() => {
     void getClient()
       .listSlots()
@@ -142,6 +152,10 @@ export function SaveSheet() {
   const free = named.find((id) => !bySlot[id]) ?? null;
   const chosen = target ?? free;
   const save = async (slotId: string) => {
+    if (leaveAfter) {
+      await saveAndLeave(slotId, name); // P4.3 (D08): save (and autosave), then Home with the session memory
+      return;
+    }
     if (await saveToSlot(slotId, name)) sheet.value = 'none';
   };
   return (
@@ -208,7 +222,13 @@ export function SaveSheet() {
               <button class="btn primary" onClick={() => void save(confirmReplace)}>
                 Replace
               </button>
-              <button class="btn" onClick={() => setConfirmReplace(null)}>
+              <button
+                class="btn"
+                onClick={() => {
+                  setConfirmReplace(null);
+                  setLeaveAfter(false);
+                }}
+              >
                 Cancel
               </button>
             </div>
@@ -221,11 +241,29 @@ export function SaveSheet() {
             data-testid="save-confirm"
             onClick={() => {
               if (!chosen) return;
+              setLeaveAfter(false);
               if (bySlot[chosen]) setConfirmReplace(chosen);
               else void save(chosen);
             }}
           >
             Save
+          </button>
+        )}
+        {/* P4.3 (D08 "A satisfying stopping point"): save, then Home shows a small session memory. */}
+        {confirmReplace ? null : (
+          <button
+            class="btn"
+            style={{ width: '100%', marginTop: '0.5rem' }}
+            disabled={!chosen}
+            data-testid="save-leave"
+            onClick={() => {
+              if (!chosen) return;
+              setLeaveAfter(true);
+              if (bySlot[chosen]) setConfirmReplace(chosen);
+              else void saveAndLeave(chosen, name);
+            }}
+          >
+            {HOME_TEXT.saveAndLeave}
           </button>
         )}
       </div>

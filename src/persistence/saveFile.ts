@@ -26,6 +26,7 @@ import { ADHESION_LINK_MAX, ADHESION_SLOT_COLUMNS, FUNGAL_LINK_MAX, FUNGAL_SLOT_
 import { foodObjectsProblem } from '@sim/objects';
 import { savedSampleProblem } from '@sim/sampleSlot';
 import { virusIdOfCode } from '@sim/viruses';
+import { notebookIsEmpty, notebookWithoutNicknames, readNotebook, sealNotebook, type NotebookRecord } from './notebook';
 
 export const SAVE_FORMAT = 'pixelmeba-save';
 export const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
@@ -143,6 +144,12 @@ export interface SaveFile {
   readonly meta: SaveMeta;
   readonly state: WorldState;
   readonly checksum: string;
+  /**
+   * P4.1 (D-0070; ARCH §11.2 "presentation"): the dish's notebook record (favorites; story cards and goals
+   * from stage 2), beside the state and outside its checksum, so neither the world checksum nor the
+   * stateHash ever changes with it. Absent when the notebook is empty and in every file written before.
+   */
+  readonly notebook?: NotebookRecord;
 }
 
 export class SaveFileError extends Error {
@@ -189,8 +196,23 @@ function withoutPlayerNames(world: World, state: WorldState): WorldState {
   return { ...state, commands, branches };
 }
 
-export async function buildSaveFile(world: World, meta: SaveMeta, options: { stripNames?: boolean } = {}): Promise<{ text: string; checksum: string; file: SaveFile }> {
+/**
+ * Options of buildSaveFile. `notebook` (P4.1): the dish's notebook record, written beside the state when
+ * not empty (sealed here). `includeNicknames` (default false): keep the favorites' nicknames; the host
+ * passes true for the device's own saves (named slots, the autosave, keep writes, automatic checkpoints)
+ * and the player's choice for an export. `stripNames` always drops them.
+ */
+export interface BuildSaveOptions {
+  readonly stripNames?: boolean;
+  readonly notebook?: NotebookRecord | null;
+  readonly includeNicknames?: boolean;
+}
+
+export async function buildSaveFile(world: World, meta: SaveMeta, options: BuildSaveOptions = {}): Promise<{ text: string; checksum: string; file: SaveFile }> {
   const serialized = serializeWorld(world);
+  // P4.1: the notebook as it stands now, taken with the state (before the first await).
+  const nb0 = options.notebook && !notebookIsEmpty(options.notebook) ? options.notebook : null;
+  const nbShown = nb0 && (options.stripNames || options.includeNicknames !== true) ? notebookWithoutNicknames(nb0) : nb0;
   // P2.8: "Export without names or notes" carries none of the player's journal entries (their notes,
   // dish names and times; D-0027 put them in the save). The checksum is computed over what is written
   // (SPEC §14.4 "Metadata-stripped export recomputes the hash"); the state hash never reads history.
@@ -202,6 +224,7 @@ export async function buildSaveFile(world: World, meta: SaveMeta, options: { str
   const registry = metaRegistryOf(world);
   const evolution = { mutationPreset: world.settings.mutationPreset, founderMode: world.settings.founderMode };
   const checksum = `sha256:${await sha256Hex(canonicalJson(state))}`;
+  const notebook = nbShown ? await sealNotebook(nbShown) : null;
   const file: SaveFile = {
     format: SAVE_FORMAT,
     schemaVersion: SCHEMA_VERSION,
@@ -214,6 +237,7 @@ export async function buildSaveFile(world: World, meta: SaveMeta, options: { str
     meta: { ...given, name: options.stripNames ? 'Shared dish' : cleanName(meta.name), ...(options.stripNames ? { note: '' } : {}), ...(variant ? { variant } : {}), registry, evolution },
     state,
     checksum,
+    ...(notebook ? { notebook } : {}),
   };
   return { text: JSON.stringify(file), checksum, file };
 }
@@ -535,8 +559,13 @@ function phase3StateProblem(s: WorldState, cols: Record<string, ArrayLike<number
   return null;
 }
 
-/** Validate and build a world. Any failure throws a SaveFileError and builds nothing. */
-export async function loadSaveFile(text: string): Promise<{ file: SaveFile; world: World }> {
+/**
+ * Validate and build a world. Any failure of the world throws a SaveFileError and builds nothing. P4.1
+ * (D-0070): the notebook beside the state never throws: a file without one (every save written before)
+ * loads with an empty notebook; one with any problem (another dish's id included) loads with an empty
+ * notebook and `notebookDropped` says so. The world, its checksum and its stateHash are the same either way.
+ */
+export async function loadSaveFile(text: string): Promise<{ file: SaveFile; world: World; notebook: NotebookRecord; notebookDropped: string | null }> {
   const file = await parseSaveFile(text);
   let world: World;
   try {
@@ -544,5 +573,9 @@ export async function loadSaveFile(text: string): Promise<{ file: SaveFile; worl
   } catch (e) {
     throw new SaveFileError(`The dish could not be rebuilt: ${(e as Error).message}`, 'integrity');
   }
-  return { file, world };
+  const { notebook: raw, ...rest } = file as SaveFile & { notebook?: unknown };
+  // Fix round 1: the record's species, birth ids and extinction ticks are checked against this dish too.
+  const { record, dropped } = await readNotebook(raw, world.worldId, { speciesIds: world.species.map((s) => s.id), nextBirthId: world.counters.nextBirthId, tick: world.tick });
+  // The file as returned carries only a notebook that was read (never the unchecked one).
+  return { file: notebookIsEmpty(record) ? rest : { ...rest, notebook: record }, world, notebook: record, notebookDropped: dropped };
 }

@@ -20,8 +20,6 @@ import {
   attachRenderer,
   candidates,
   dishInfo,
-  dismissExperimentWaiting,
-  experimentWaiting,
   getRenderer,
   meta,
   prompt,
@@ -44,6 +42,10 @@ import { InspectorSheet } from '../panels/Inspector';
 import { MoreSheet, SaveSheet } from '../panels/MoreSheet';
 import { HistorySheet } from '../panels/HistorySheet';
 import { FamilyMarkers } from '../panels/FamilyMarkers';
+import { FavoriteExtinct } from '../panels/FavoriteExtinct';
+import { FavoriteMarkers } from '../panels/FavoriteMarkers';
+import { FavoriteSheet } from '../panels/FavoriteSheet';
+import { FavoriteSlots } from '../panels/FavoriteSlots';
 import { LineageSheet } from '../panels/LineageSheet';
 import { EvolutionSheet } from '../panels/AdvancedEvolution';
 import { WhatIfHost } from '../panels/WhatIfSheet';
@@ -62,6 +64,7 @@ import type { Speed } from '@worker/protocol';
 import { DishSummary } from '../a11y/DishSummary';
 import { CellDescription, CELL_DESCRIPTION_ID } from '../a11y/CellDescription';
 import { lastInputWasKeyboard, restoreFocus } from '../a11y/focus';
+import { NoticeHost } from './NoticeHost';
 
 function formatTime(tick: number): string {
   const s = Math.floor(tick / 10);
@@ -208,8 +211,6 @@ export function DishScreen() {
 
   const running = (m?.speed ?? 0) > 0;
   const t = tool.value;
-  // A single-arm card's stamp waiting for a player step (P2.5): one small notice, in the prompt's place.
-  const waiting = experimentWaiting.value && experimentWaiting.value.dishId === info?.dishId ? experimentWaiting.value : null;
   const behind = running && m && m.effectiveSpeed > 0 && m.effectiveSpeed < m.speed * 0.8;
 
   return (
@@ -271,21 +272,8 @@ export function DishScreen() {
         </p>
         <CellDescription />
         <DishSummary />
-        {waiting ? (
-          <div class="prompt" role="status" data-testid="experiment-waiting">
-            <p>{waiting.text}</p>
-            <button class="btn ghost" onClick={dismissExperimentWaiting} aria-label="Dismiss this notice">
-              ✕
-            </button>
-          </div>
-        ) : prompt.value ? (
-          <div class="prompt" role="status">
-            <p>{prompt.value}</p>
-            <button class="btn ghost" onClick={() => (prompt.value = null)} aria-label="Dismiss">
-              ✕
-            </button>
-          </div>
-        ) : null}
+        {/* P4.3: the one visible notice (goal > experiment > story > prompt; src/ui/notices.ts), in the prompt's old place. */}
+        <NoticeHost />
         <div class="zoom-buttons">
           <button class="btn" aria-label="Whole dish" onClick={() => getRenderer()?.zoomPreset('dish')}>
             <IconZoomDish />
@@ -298,6 +286,8 @@ export function DishScreen() {
           </button>
         </div>
         <FamilyMarkers />
+        <FavoriteMarkers />
+        <FavoriteExtinct />
         <LineageLegend />
         <DiscoveryCard />
         {dishView.value === 'lab' ? <OverlayLegend floating /> : null}
@@ -315,6 +305,7 @@ export function DishScreen() {
         {sheet.value === 'history' ? <HistorySheet /> : null}
         {sheet.value === 'lineage' ? <LineageSheet /> : null}
         {sheet.value === 'evolution' ? <EvolutionSheet /> : null}
+        {sheet.value === 'favorite' ? <FavoriteSheet /> : null}
         <WhatIfHost context="dish" />
       </div>
 
@@ -341,6 +332,7 @@ export function DishScreen() {
             <IconLook /> Look
           </button>
         </div>
+        <FavoriteSlots />
       </nav>
       {dishView.value === 'lab' ? <LabToolbar /> : null}
     </div>

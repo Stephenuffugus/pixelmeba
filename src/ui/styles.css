@@ -572,7 +572,8 @@ textarea {
   pointer-events: none;
   position: absolute;
   left: 0.75rem;
-  right: 0.75rem;
+  /* P4.3: the one notice stays beside the zoom column (right 8 px, 48 px wide), never over its buttons. */
+  right: calc(8px + 48px + 0.5rem);
   top: 0.75rem;
   background: rgba(245, 244, 239, 0.96);
   border-radius: var(--radius-s);
@@ -3002,4 +3003,279 @@ html[data-text-scale='2'] .tab-context {
 }
 .dish-focus:focus-visible .reticle {
   display: block;
+}
+
+/* ---------------------------------------------------------------- P4.3 Home, thumbnails, prompts (UX §2.1, §2.2, §3.2) */
+.dish-thumb {
+  width: 96px;
+  height: 96px;
+  flex: none;
+  border-radius: 50%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.paused-badge,
+.card p.paused-badge {
+  display: inline-block;
+  margin: 0 0 0.25rem;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  background: var(--outside);
+  color: var(--surface);
+  font-weight: 600;
+}
+/* With a side sheet open (landscape ≥ 700 px: the inspector, More, …) the notice stays left of it, so the
+   sheet never covers its buttons (the same width expression as `.sheet` there). */
+@media (orientation: landscape) and (min-width: 700px) {
+  .viewport:has(> .sheet) .prompt {
+    right: calc(0.75rem + min(22.5rem, max(45%, 17.5rem), 100% - 24px) + 0.5rem);
+  }
+}
+/* A narrow notice (a phone) wraps its buttons under the sentence instead of squeezing it. */
+.prompt {
+  flex-wrap: wrap;
+}
+.prompt p {
+  flex: 1 1 10rem;
+}
+.prompt .notice-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+/* "Show me" highlights a control without using it: an outline (the focus colours) and, unless reduced
+   motion, a soft pulse; removed after 3 s (src/ui/prompts.ts highlightControl). */
+.show-me {
+  outline: 3px solid var(--focus) !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px var(--focus-ink) !important;
+  animation: show-me-pulse 1s ease-in-out 3;
+}
+@keyframes show-me-pulse {
+  50% {
+    outline-offset: 6px;
+  }
+}
+
+/* ---------------------------------------------------------------- favorites (P4.1; UX §3.1, §5.8) */
+/* Marker slots at the right edge of the bottom actions; a column on phones (UX §3.1 portrait). */
+.fav-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: none;
+  min-width: 0;
+}
+.fav-slot {
+  min-height: var(--target);
+  min-width: 64px;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: var(--fs-body);
+  justify-content: flex-start;
+}
+.fav-slot-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.fav-slot-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.fav-glyph {
+  flex: none;
+}
+@media (max-width: 480px) {
+  /* The name is in the button's accessible name; the glyph and the count stay visible. */
+  .fav-slot-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+@media (orientation: landscape) and (min-width: 700px) {
+  .fav-slots {
+    width: 100%;
+  }
+  .fav-slot {
+    width: 100%;
+  }
+}
+/* Follow panel and Family sheet. */
+.fav-follow form,
+.fav-edit {
+  display: grid;
+  gap: 0.5rem;
+}
+.fav-field {
+  display: grid;
+  gap: 0.25rem;
+  font-size: var(--fs-body);
+}
+.fav-field input {
+  min-height: var(--target);
+  padding: 0 0.75rem;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+  font-size: var(--fs-body);
+}
+.fav-note {
+  margin: 0;
+}
+.fav-patterns {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0.25rem 0.5rem 0.5rem;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: var(--fs-body);
+}
+.fav-patterns legend {
+  padding: 0 0.25rem;
+}
+.fav-pattern {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: var(--target);
+  min-width: var(--target);
+  padding: 0 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  cursor: pointer;
+}
+.fav-pattern input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+.fav-pattern:has(input:checked) {
+  border: 2px solid var(--text);
+}
+.fav-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.fav-unpin-list {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.fav-unpin-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.fav-unpin-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.fav-candidates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fav-candidates .btn {
+  min-height: 48px;
+  width: 100%;
+  text-align: left;
+}
+.fav-facts {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+  font-size: var(--fs-body);
+}
+.fav-sheet h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.fav-inherited-list {
+  margin: 0.25rem 0 0;
+  font-size: var(--fs-body);
+}
+.fav-inherited-list dt {
+  font-weight: 700;
+  margin-top: 0.4rem;
+}
+.fav-inherited-list dd {
+  margin: 0.1rem 0 0;
+}
+/* Aggregate markers beyond 200 highlighted members (HTML over the dish; static). */
+.fav-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 2;
+}
+.fav-marker {
+  position: absolute;
+  left: -20px;
+  top: -14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(245, 244, 239, 0.95);
+  color: var(--text);
+  border: 2px solid #172c35;
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+/* The extinction card: a calm record (no alarm colour). */
+.fav-extinct {
+  position: absolute;
+  left: 0.75rem;
+  right: calc(8px + 48px + 0.5rem);
+  bottom: 0.75rem;
+  z-index: 4;
+  max-height: calc(100% - 1.5rem);
+  overflow: auto;
+}
+.fav-extinct h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.4rem;
+}
+.fav-extinct p {
+  margin: 0;
+  font-size: var(--fs-body);
+}
+.fav-share-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--target);
+  font-size: var(--fs-body);
+}
+.fav-share-option input {
+  width: 22px;
+  height: 22px;
+}
+.fav-list h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }

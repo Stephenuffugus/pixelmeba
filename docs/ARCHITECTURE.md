@@ -166,6 +166,48 @@ Every packet carries `requestId` where applicable and `stateGeneration`; the mai
 stale packets. Commands are acknowledged with accepted/rejected amounts. Buffers are pooled and
 transferred; the worker never detaches authoritative arrays.
 
+As built (Phase 4 wave 5a, P4.1 favorites and P4.3 garden-home; `src/worker/protocol.ts`;
+`PROTOCOL_VERSION` stays 2, every addition is a new message or an optional field):
+```
+Main → Worker
+notebookGet {requestId, dishId, inspect?: birthId}      → notebook (with `inspect`: that living
+                                                          organism's inspector payload as `inspected`)
+favorite {requestId, dishId, op: FavoriteOp}            → notebook
+  FavoriteOp = follow {birthId, nickname|null, pattern} | rename {id, nickname|null}
+             | pattern {id, pattern} | representative {id, birthId} | unpin {id} | pin {id}
+  pattern = 'circle' | 'triangle' | 'square'
+sessionSummary {requestId, dishId, sinceTick}           → sessionSummary (read-only; unlike `history`
+                                                          it records no experiment player step)
+exportDish {…, strip, includeNicknames?}                 // default off: nicknames are left out
+exportSave {…, slotId, includeNicknames?}                // default off: the stored file's notebook is
+                                                          // re-sealed without nicknames (one that could
+                                                          // not be read goes out as the empty record read
+                                                          // in its place, i.e. left out)
+Worker → Main
+notebook {requestId, dishId, record: NotebookRecord, refused?, removed?, inspected?: EntityInspect|null}
+notebookChanged {dishId, record, change: NotebookChange}   // unsolicited
+  NotebookChange = favoriteExtinct {id, removed?}
+                 | favoriteRepresentativeGone {id, candidates: birthId[]}
+                 | favoritesRestored {removed: name[], unpinnedRemoved?: name[]}   // after Undo/rollback
+sessionSummary {requestId, dishId, summary: {births[], deaths[] (per species index),
+                branches [{id, name, tick}], fromTick, toTick, compacted}}
+loaded {…, notebookDropped?: message}     // the file's notebook could not be read; the dish loaded
+snapshot {…, favorites?: {marks: Uint8Array, member: Uint8Array, slots: FavoriteSlotMark[]}}
+```
+A favorite op is notebook state, never a `CommandPayload`: it is not in the command log, the world
+or its state hash. `notebook.refused` says why an op was not applied; `removed` names an unpinned
+favorite removed to make room. `snapshot.favorites` is absent when no family is followed; per entity
+in `ents` order, `marks` bit k = a highlighted member of active slot k (k = 0…2) and bit 3 + k = that
+slot's representative (highlighting stops at FAVORITE_HIGHLIGHT_MAX members; beyond it a slot's
+`aggregate` gives the members' mean position and count), and `member` bit k = any member of slot k.
+Each `FavoriteSlotMark` carries id, pattern, living `members`, `highlighted`, `aggregate`,
+`representativeEntity` (null when it is not alive in the dish), `representativeHeld` (in the held
+sample), `next` and `candidates` ([birthId, birthTick, speciesIdx] for Follow next) and generation
+`depth`. Thumbnails (`src/worker/thumbnail.ts`, `pt1:<species ids>:<base64 32×32 grid>`, a pure read
+of living positions) are optional display copies: `SlotSummary.thumb` (from the slot index),
+`NewDishPreview.thumb` (the Play shelf's start) and, in persistence, `SaveRequest.thumb` →
+`SlotInfo.thumb`, read from the saved file's own state and outside its checksum.
+
 ## 8. Snapshots
 Published ≤ 10/s (adaptive under load). Contents: `renderList` as a packed `Float32Array`
 [entityIndex, speciesIdx, x, y, heading, scale/sizeFactor, stateFlags, cueBits] per living
@@ -270,6 +312,34 @@ to previous. Settings only in Preferences.
 Canonical payload = `state` serialized with sorted keys and no whitespace. The same schemas
 validate import. `.pixelmeba` export = the save (or recipe) file. Recipe export uses
 `"format": "pixelmeba-recipe"`.
+
+As built, the notebook block (P4.1, D-0070; `src/persistence/notebook.ts`, `saveFile.ts`): the
+"presentation" favorites live in an optional top-level `"notebook"` sibling of `"state"`, outside
+the state checksum, so neither the world checksum nor the stateHash changes with it; nothing in
+`src/sim` imports it.
+```
+"notebook": { "format": "pixelmeba-notebook", "notebookVersion": 1, "worldId": "…",
+  "favorites": [ { id "fav-<n>", rootBirthId, speciesId, nickname|null, pattern, representative,
+                   active, createdTick, members [[birthId, birthTick]…], historyIncomplete,
+                   extinct {tick, lastBirthId, cause, cell}|null } ],
+  "nextFavorite": n,
+  "checksum": "sha256:<hex of the canonical record without checksum>" }
+```
+- It has its own version and checksum. On load (`readNotebook`), the envelope, the version
+  (≤ NOTEBOOK_VERSION), the world id, every favorite (unknown fields are problems; at most 3
+  followed and 20 unpinned), its references against the dish (species, birth ids below
+  `nextBirthId`, no extinction after the dish's tick), the size (canonical JSON at most
+  NOTEBOOK_MAX_BYTES = 1,048,576 characters) and the checksum are checked. A missing kind key reads
+  as `[]`; an unknown key is a problem.
+- Any problem drops the whole record: the world still loads with an empty notebook and the load
+  answer carries `notebookDropped` (NOTEBOOK_DROPPED_TEXT, shown to the player). A file without a
+  notebook (every save written before P4.1), or with `"notebook": null`, loads with an empty one and
+  no message.
+- An empty notebook (no favorite) is not written. Device saves (named slots, the autosave, keep
+  writes, automatic checkpoints) keep nicknames; an export keeps them only by the player's opt-in
+  (`includeNicknames`, "Include family nicknames"; default off, and "without names" always drops
+  them). The slot index copies the notebook's checksum (`notebookChecksum`), so a change made only to
+  the notebook is still written by the next autosave.
 
 ### 11.3 Migrations
 `src/persistence/migrations/<from>-to-<to>.ts`; each ships with an old‑save fixture in

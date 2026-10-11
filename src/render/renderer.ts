@@ -55,6 +55,7 @@ import { speciesRgb } from './speciesColors';
 import { featureFrameKeys, featureLayers, featureMarkScale, type AtlasFeatureLike, type FeatureLayerId, type LayerPick } from './features';
 import { brushCellOutcome, lifeCellOutcome, ST_NONE, ST_STONE, SUB_WATER, type LabBrushRule, type LifeBrush } from '@sim/grid';
 import type { LineageMarks } from '@worker/protocol';
+import type { FavoriteMarks } from '@worker/protocol';
 
 const FLAG_MOVING = 1 << 6;
 
@@ -81,6 +82,8 @@ const TRAIT_RING_PX = 20;
 const TRAIT_RING_EXTRA = 4;
 /** Lineage rings drawn at once (CT §12.10 "descendants highlighted ≤ 200"). */
 const LINEAGE_RINGS_MAX = 200;
+/** P4.1: favorite outlines drawn per followed family at most (CT §12.10 "descendants highlighted ≤ 200"). */
+const FAVORITE_GLYPHS_MAX = 200;
 
 export interface AtlasManifestLike {
   readonly width: number;
@@ -611,6 +614,7 @@ export class DishRenderer {
     this.handleEvents(s.events, now);
     this.cur = s;
     this.lineage = s.lineage ?? null;
+    this.favorites = s.favorites ?? null; // P4.1: followed families' marks (snapshot data only)
     this.aggDirty = true;
   }
 
@@ -1025,6 +1029,62 @@ export class DishRenderer {
       g.rect(x, y, 1, 1).stroke({ width: 2 / cam.zoom, color: 0xf2b84b });
     }
     this.drawLineage(s, alpha);
+    this.drawFavorites(s, alpha);
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Favorite families (P4.1; SPEC §12.6, UX §5.8): each highlighted member of a followed family gets its
+  // slot's outline shape (circle, triangle or square: shape, never colour alone) with the dark companion
+  // stroke drawLineage uses; the representative gets a second, larger outline. Only from the snapshot's
+  // marks, at most FAVORITE_GLYPHS_MAX per slot (the worker already caps highlighting at 200). Static.
+
+  private favorites: FavoriteMarks | null = null;
+  private favoritesG: Graphics | null = null;
+
+  private favoriteShape(g: Graphics, pattern: string, x: number, y: number, r: number): void {
+    if (pattern === 'triangle') g.poly([x, y - r * 1.1, x + r * 0.95, y + r * 0.62, x - r * 0.95, y + r * 0.62]);
+    else if (pattern === 'square') g.rect(x - r * 0.82, y - r * 0.82, r * 1.64, r * 1.64);
+    else g.circle(x, y, r);
+  }
+
+  private drawFavorites(s: SnapshotMsg, alpha: number): void {
+    const fav = this.favorites;
+    if (!this.favoritesG) {
+      if (!fav) return;
+      this.favoritesG = new Graphics();
+      this.world.addChild(this.favoritesG);
+    }
+    const g = this.favoritesG;
+    g.clear();
+    if (!fav || fav.slots.length === 0) return;
+    const cam = this.camera;
+    const lw = 1.2 / cam.zoom;
+    const r = Math.max(1.5, 8 / cam.zoom);
+    const halfW = cam.viewW / (2 * cam.zoom) + 2;
+    const halfH = cam.viewH / (2 * cam.zoom) + 2;
+    const drawn = fav.slots.map(() => 0);
+    for (let k = 0; k < s.count; k++) {
+      const m = fav.marks[k] ?? 0;
+      if (!m) continue;
+      const x = this.prevX[k]! + (this.curX[k]! - this.prevX[k]!) * alpha;
+      const y = this.prevY[k]! + (this.curY[k]! - this.prevY[k]!) * alpha;
+      if (Math.abs(x - cam.cx) > halfW || Math.abs(y - cam.cy) > halfH) continue;
+      for (let j = 0; j < fav.slots.length; j++) {
+        const member = (m & (1 << j)) !== 0;
+        const rep = (m & (1 << (3 + j))) !== 0;
+        if ((!member && !rep) || drawn[j]! >= FAVORITE_GLYPHS_MAX) continue;
+        drawn[j]!++;
+        const pattern = fav.slots[j]!.pattern;
+        // Slots share a body without hiding each other: each sits a little further out.
+        const rr = r + j * 2.2 * lw;
+        for (const size of rep ? [rr, rr + 3 * lw] : [rr]) {
+          this.favoriteShape(g, pattern, x, y, size);
+          g.stroke({ width: lw * 2.4, color: 0x172c35, alpha: 0.9 });
+          this.favoriteShape(g, pattern, x, y, size);
+          g.stroke({ width: lw, color: 0xf5f4ef, alpha: 1 });
+        }
+      }
+    }
   }
 
   /**

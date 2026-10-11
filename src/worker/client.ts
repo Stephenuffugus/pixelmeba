@@ -11,8 +11,10 @@ import type { KeepFrom, KeepRefusalCode } from './protocol';
 import type { ExperimentCardView } from '@sim/experiments';
 import type { NewDishPreview, RecipeOverrides } from './protocol';
 import type { SamplePreview } from './protocol';
+import type { SessionSummary } from './protocol';
 import type { SampleHeldSummary } from '@sim/sample';
 import type { SampleMode } from '@sim/sampleSlot';
+import type { FavoriteOp } from './protocol';
 import { PROTOCOL_VERSION, stamp, type DishInfo, type DishSource, type Envelope, type FamilyAnswer, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 
 export class WorkerRequestError extends Error {
@@ -56,6 +58,15 @@ function keepRefused(msg: Extract<FromWorker, { type: 'keepRefused' }>): KeepRef
 /** Unsolicited automatic checkpoint outcomes (P2.8). */
 export type CheckpointNotice = Extract<FromWorker, { type: 'checkpoint' }>;
 
+/**
+ * P4.1: notebook notices — a change the worker made without being asked (a followed family's
+ * representative or last member left), or a loaded file whose notebook was dropped (the dish loaded).
+ */
+export type NotebookNotice = Extract<FromWorker, { type: 'notebookChanged' }> | { readonly type: 'notebookDropped'; readonly dishId: string; readonly message: string };
+
+/** P4.1: the answer to a notebook request (the record; a refusal or a removed favorite, when any). */
+export type NotebookAnswer = Extract<FromWorker, { type: 'notebook' }>;
+
 /** Unsolicited experiment packets (P2.5). */
 export type ExperimentNotice = Extract<FromWorker, { type: 'experimentStamp' | 'experimentWaiting' | 'experimentEnded' }>;
 
@@ -84,6 +95,7 @@ export class SimClient {
   private readonly compareListeners: ((s: ComparisonState) => void)[] = [];
   private readonly experimentListeners: ((m: ExperimentNotice) => void)[] = [];
   private readonly checkpointListeners: ((m: CheckpointNotice) => void)[] = [];
+  private readonly notebookListeners: ((m: NotebookNotice) => void)[] = [];
 
   constructor(private readonly worker: WorkerLike) {
     worker.onmessage = (ev) => this.receive(ev.data);
@@ -152,6 +164,25 @@ export class SimClient {
     };
   }
 
+  /** P4.1: notebook notices (a followed family's change; a dropped notebook when a dish was loaded). */
+  onNotebook(fn: (m: NotebookNotice) => void): () => void {
+    this.notebookListeners.push(fn);
+    return () => {
+      const i = this.notebookListeners.indexOf(fn);
+      if (i >= 0) this.notebookListeners.splice(i, 1);
+    };
+  }
+
+  /** P4.1: a dish's notebook record (with `inspect`, also that living organism's inspector payload). Read-only. */
+  async notebookGet(dishId: string, inspect?: number): Promise<NotebookAnswer> {
+    return this.request<NotebookAnswer>((requestId) => ({ type: 'notebookGet', requestId, dishId, ...(inspect !== undefined ? { inspect } : {}) }));
+  }
+
+  /** P4.1: change a dish's favorites (notebook state; never a command). Resolves with the record and any refusal. */
+  async favorite(dishId: string, op: FavoriteOp): Promise<NotebookAnswer> {
+    return this.request<NotebookAnswer>((requestId) => ({ type: 'favorite', requestId, dishId, op }));
+  }
+
   /** Every packet leaves stamped with the protocol version. */
   private send(msg: ToWorker): void {
     this.worker.postMessage(stamp(msg));
@@ -197,6 +228,12 @@ export class SimClient {
       for (const fn of this.checkpointListeners) fn(msg);
       return;
     }
+    if (msg.type === 'notebookChanged') {
+      for (const fn of this.notebookListeners) fn(msg);
+      return;
+    }
+    // P4.1: a loaded dish whose notebook was dropped is announced, then the request resolves as usual.
+    if (msg.type === 'loaded' && msg.notebookDropped) for (const fn of this.notebookListeners) fn({ type: 'notebookDropped', dishId: msg.info.dishId, message: msg.notebookDropped });
     if (msg.type === 'compareState') for (const fn of this.compareListeners) fn(msg.state);
     const id = msg.requestId;
     if (id === undefined) return; // unsolicited status (e.g. comparison progress)
@@ -322,14 +359,14 @@ export class SimClient {
     await this.request((requestId) => ({ type: 'deleteSlot', requestId, slotId }));
   }
 
-  async exportDish(dishId: string, strip: boolean): Promise<{ text: string; filename: string }> {
-    const msg = await this.request<Extract<FromWorker, { type: 'exported' }>>((requestId) => ({ type: 'exportDish', requestId, dishId, strip }));
+  async exportDish(dishId: string, strip: boolean, includeNicknames = false): Promise<{ text: string; filename: string }> {
+    const msg = await this.request<Extract<FromWorker, { type: 'exported' }>>((requestId) => ({ type: 'exportDish', requestId, dishId, strip, ...(includeNicknames ? { includeNicknames } : {}) }));
     return { text: msg.text, filename: msg.filename };
   }
 
   /** D-0033: a stored save (the autosave Continue holds) as a .pixelmeba file, exactly as stored. */
-  async exportSave(slotId: string): Promise<{ text: string; filename: string }> {
-    const msg = await this.request<Extract<FromWorker, { type: 'exported' }>>((requestId) => ({ type: 'exportSave', requestId, slotId }));
+  async exportSave(slotId: string, includeNicknames = false): Promise<{ text: string; filename: string }> {
+    const msg = await this.request<Extract<FromWorker, { type: 'exported' }>>((requestId) => ({ type: 'exportSave', requestId, slotId, ...(includeNicknames ? { includeNicknames } : {}) }));
     return { text: msg.text, filename: msg.filename };
   }
 
@@ -413,6 +450,12 @@ export class SimClient {
   }
 
   /** Living relatives of an organism ("Where is its family?"); a read-only query. */
+  /** P4.3 session memory: what the dish recorded since `sinceTick` (read-only; never the History sheet's request). */
+  async sessionSummary(dishId: string, sinceTick: number): Promise<SessionSummary> {
+    const msg = await this.request<Extract<FromWorker, { type: 'sessionSummary' }>>((requestId) => ({ type: 'sessionSummary', requestId, dishId, sinceTick }));
+    return msg.summary;
+  }
+
   async family(dishId: string, birthId: number): Promise<FamilyAnswer> {
     const msg = await this.request<Extract<FromWorker, { type: 'family' }>>((requestId) => ({ type: 'family', requestId, dishId, birthId }));
     return msg.family;

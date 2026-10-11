@@ -1,10 +1,36 @@
+import { useEffect, useState } from 'preact/hooks';
+import type { RecipeDef } from '@sim/content/schema';
 import { IconBack, IconPlay } from '../icons';
-import { busy, route, startRecipe } from '../state';
+import { busy, newDishPreview, route, startRecipe } from '../state';
+import { GARDEN_RECIPE } from '../prompts';
+import { DishThumb } from './DishThumb';
 import { WhatIfHost } from '../panels/WhatIfSheet';
 import { openWhatIf } from '../panels/WhatIfState';
 import { WHATIF_TEXT } from '../strings/whatif';
 
+/**
+ * The Garden's own seed, read from the same content record the worker validates (as New Dish reads its
+ * curated dishes); the worker builds the preview from its own validated copy.
+ */
+const GARDEN_SEED: number | null = (() => {
+  const glob = import.meta.glob<RecipeDef>('../../../content/recipes/FIRST_DISH_V1.json', { eager: true, import: 'default' });
+  return Object.values(glob)[0]?.seed ?? null;
+})();
+
 export function Play() {
+  // P4.3 (UX §2.2 "Square live-state thumbnails"): the Garden card shows the start its Start button makes,
+  // built by the worker (read-only, then discarded); nothing painted is presented as the dish.
+  const [thumb, setThumb] = useState<string | null>(null);
+  useEffect(() => {
+    if (GARDEN_SEED === null) return;
+    let live = true;
+    void newDishPreview(GARDEN_RECIPE, GARDEN_SEED, {})
+      .then((p) => live && setThumb(p.thumb ?? null))
+      .catch(() => live && setThumb(null));
+    return () => {
+      live = false;
+    };
+  }, []);
   return (
     <main class="page" aria-labelledby="play-title">
       <div class="home-grid">
@@ -18,7 +44,7 @@ export function Play() {
         </header>
         <section class="card" aria-labelledby="garden-title">
           <div class="card-row">
-            <GardenThumb />
+            {thumb ? <DishThumb thumb={thumb} name="Little Living Garden" testId="garden-thumb" /> : <div class="card-thumb" aria-hidden="true" />}
             <div>
               <h2 id="garden-title">Little Living Garden</h2>
               <p>Who finds something to eat?</p>
@@ -42,20 +68,5 @@ export function Play() {
       </div>
       <WhatIfHost context="play" />
     </main>
-  );
-}
-
-function GardenThumb() {
-  // A quiet painted thumbnail: the dish with three colored patches (not a live capture).
-  return (
-    <svg class="card-thumb" viewBox="0 0 96 96" aria-hidden="true">
-      <circle cx="48" cy="48" r="46" fill="#D6E7E5" stroke="#2C3F49" stroke-width="3" />
-      <circle cx="32" cy="34" r="7" fill="#6E7B84" />
-      <circle cx="64" cy="63" r="7" fill="#6E7B84" />
-      <circle cx="36" cy="50" r="6" fill="#EF7B6C" opacity="0.85" />
-      <circle cx="51" cy="50" r="5" fill="#C8963E" opacity="0.85" />
-      <circle cx="51" cy="37" r="4" fill="#D6A64D" opacity="0.85" />
-      <circle cx="36" cy="38" r="5" fill="#8CBA4B" opacity="0.85" />
-    </svg>
   );
 }

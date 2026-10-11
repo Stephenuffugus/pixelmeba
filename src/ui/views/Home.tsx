@@ -2,7 +2,10 @@ import { useEffect, useState } from 'preact/hooks';
 import type { SlotSummary } from '@worker/protocol';
 import { IconGuide, IconLab, IconNotebook, IconPlay, IconSave, IconSettings } from '../icons';
 import { continueCardText, dishInfo, getClient, loadSlot, route } from '../state';
-import { evolution } from '../state';
+import { evolution, meta, openDishThumb, sessionMemory } from '../state';
+import { HOME_TEXT } from '../strings/home';
+import { DishThumb } from './DishThumb';
+import { SessionMemory } from './SessionMemory';
 import { slotModesLine, worldModesLine } from '../strings/modes';
 import { journalUnseen } from '../journal';
 
@@ -23,14 +26,27 @@ export function Home() {
           <h1 id="home-title">Pixelmeba</h1>
           <p class="tagline">Grow a tiny living world. Change one thing. See what happens.</p>
         </header>
-        {hasDish ? (
+        {hasDish && sessionMemory.value && sessionMemory.value.dishId === dishInfo.value!.dishId ? (
+          // P4.3 (D08 "A satisfying stopping point"): after Save and leave, this visit's memory takes the Continue card's place.
+          <SessionMemory
+            memory={sessionMemory.value}
+            modes={worldModesLine(evolution.value?.preset ?? dishInfo.value!.mutationPreset, dishInfo.value!.founderMode, dishInfo.value!.registry)}
+          />
+        ) : hasDish ? (
           <section class="card" aria-label="Continue">
             <h2>Continue</h2>
-            <p>{dishInfo.value!.name} — paused where you left it.</p>
-            {/* P2.2: mode labels wherever a world is described (UX §3.3). */}
-            <p class="world-modes" data-testid="home-continue-modes">
-              {worldModesLine(evolution.value?.preset ?? dishInfo.value!.mutationPreset, dishInfo.value!.founderMode, dishInfo.value!.registry)}
-            </p>
+            {/* UX §2.1: name, dish time, thumbnail (the latest snapshot), paused badge. Leaving the dish paused it. */}
+            <div class="card-row">
+              <DishThumb thumb={openDishThumb()} name={dishInfo.value!.name} />
+              <div>
+                <p class="paused-badge">{HOME_TEXT.paused}</p>
+                <p data-testid="home-continue-text">{continueCardText(dishInfo.value!.name, meta.value?.tick ?? dishInfo.value!.tick)}</p>
+                {/* P2.2: mode labels wherever a world is described (UX §3.3). */}
+                <p class="world-modes" data-testid="home-continue-modes">
+                  {worldModesLine(evolution.value?.preset ?? dishInfo.value!.mutationPreset, dishInfo.value!.founderMode, dishInfo.value!.registry)}
+                </p>
+              </div>
+            </div>
             <button class="btn primary" onClick={() => (route.value = { name: 'dish' })}>
               <IconPlay /> Continue
             </button>
@@ -38,13 +54,20 @@ export function Home() {
         ) : auto ? (
           <section class="card" aria-label="Continue">
             <h2>Continue</h2>
-            {/* D-0033 J: the dish clock, as Saved dishes names the same save. */}
-            <p data-testid="home-continue-text">{continueCardText(auto.name, auto.tick)}</p>
-            {slotModesLine(auto.modes) ? (
-              <p class="world-modes" data-testid="home-continue-modes">
-                {slotModesLine(auto.modes)}
-              </p>
-            ) : null}
+            <div class="card-row">
+              {/* P4.3: the autosave's own picture (its slot index copy), never painted. */}
+              <DishThumb thumb={auto.thumb} name={auto.name} />
+              <div>
+                <p class="paused-badge">{HOME_TEXT.paused}</p>
+                {/* D-0033 J: the dish clock, as Saved dishes names the same save. */}
+                <p data-testid="home-continue-text">{continueCardText(auto.name, auto.tick)}</p>
+                {slotModesLine(auto.modes) ? (
+                  <p class="world-modes" data-testid="home-continue-modes">
+                    {slotModesLine(auto.modes)}
+                  </p>
+                ) : null}
+              </div>
+            </div>
             {/* Continue opens the autosave only while no dish is open (then there is nothing to keep, D-0033). */}
             <button class="btn primary" onClick={() => void loadSlot('autosave', auto.name)} data-testid="home-continue">
               <IconPlay /> Continue

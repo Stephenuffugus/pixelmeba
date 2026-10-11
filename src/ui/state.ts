@@ -28,6 +28,10 @@ import type { KeepStep } from './panels/KeepChoice';
 import { mountKeepHost } from './panels/KeepSheet';
 import { divisionAudible, eventCues, placementCue, playCue, setAudioPrefs } from '@audio/cues';
 import { audioPrefsOf } from '@audio/mix';
+import type { SessionSummary } from '@worker/protocol';
+import { thumbFromSnapshot } from '@worker/thumbnail';
+import { sessionMemoryLine } from './strings/home';
+import { wireFavorites } from './favorites';
 
 export type Route =
   | { readonly name: 'home' }
@@ -41,7 +45,7 @@ export type Route =
   /** Paired comparison of two copies of the current dish (SPEC §13.4, UX §5.6). */
   | { readonly name: 'compare' }
   /** Notebook (UX §1): Journal · Experiments (P2.5; the other tabs arrive in later phases). */
-  | { readonly name: 'notebook'; readonly tab: 'journal' | 'experiments' }
+  | { readonly name: 'notebook'; readonly tab: 'journal' | 'experiments' | 'favorites' }
   /** One experiment card in full, with Start (SPEC §13.2). */
   | { readonly name: 'experiment'; readonly cardId: string }
   /** A paired experiment card's run (the comparison engine with the card's change on B). */
@@ -100,7 +104,7 @@ export const selection = signal<Selection | null>(null);
 export const inspector = signal<InspectorPayload | null>(null);
 export const candidates = signal<{ x: number; y: number; items: { birthId: number; species: number }[] } | null>(null);
 export const tool = signal<Tool>({ kind: 'look' });
-export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | 'save' | 'history' | 'lineage' | 'evolution'>('none');
+export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | 'save' | 'history' | 'lineage' | 'evolution' | 'favorite'>('none');
 /** P2.2: the open dish's evolution setting, rates and recorded changes (from its snapshots). */
 export const evolution = signal<EvolutionState | null>(null);
 export const overlay = signal<OverlayId | null>(null);
@@ -222,6 +226,7 @@ export function getClient(): SimClient {
     client.onError((e) => showToast(errorToastText(e)));
     client.onCompare(onCompareState);
     client.onExperiment(onExperimentNotice);
+    wireFavorites(client); // P4.1: client.onNotebook (favorite changes, a dropped notebook) and the snapshots' family marks
     // P2.8: automatic checkpoints follow the Settings choice; journal entries of the open dish are kept with it.
     client.onCheckpoint(onCheckpointNotice);
     client.setCheckpointRing(settings.value.checkpointRing === true);
@@ -261,6 +266,7 @@ function onSnapshot(s: SnapshotMsg): void {
   if (dishInfo.value && s.dishId !== dishInfo.value.dishId) return;
   if (s.geometry) lastGeometrySnapshot = s;
   lastSnapshot = s;
+  for (const fn of dishSnapshotListeners.slice()) fn(s); // P4.3: the prompt machine reads published snapshots only
   renderer?.applySnapshot(s);
   if (dishInfo.value) pushFeed(s.events, dishInfo.value.speciesNames, moduleNamesOf(dishInfo.value));
   if (dishInfo.value) eventCues(s.events, divisionAudible(dishInfo.value.speciesCategories)); // P3.10: non-bacterial births → division (≤ 1 per 5 s), wakes → wake
@@ -341,6 +347,9 @@ function newDishId(): string {
  * Continue itself is not written again until it changes (the worker decides: see autosave).
  */
 function enterDish(info: DishInfo, promptText: string | null): void {
+  // P4.3: the session memory counts what this dish records from the moment it is opened.
+  sessionOpened = { dishId: info.dishId, tick: info.tick };
+  sessionMemory.value = null;
   clearFeed();
   evolution.value = null;
   batch(() => {
@@ -490,9 +499,13 @@ export function saveTextFile(text: string, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
-/** Export a dish as a file the player keeps (no toast); resolves the file name. */
-export async function exportDishFile(dishId: string): Promise<string> {
-  const { text, filename } = await getClient().exportDish(dishId, false);
+/**
+ * Export a dish as a file the player keeps (no toast); resolves the file name. P4.1 fix round 1: a kept
+ * file is the player's own copy of the dish (the keep flow, D-0033), so it keeps family nicknames as the
+ * device saves do; More → Export is where a file to share leaves them out by default.
+ */
+export async function exportDishFile(dishId: string, includeNicknames = true): Promise<string> {
+  const { text, filename } = await getClient().exportDish(dishId, false, includeNicknames);
   saveTextFile(text, filename);
   return filename;
 }
@@ -501,8 +514,8 @@ export async function exportDishFile(dishId: string): Promise<string> {
  * Export the dish Continue holds, exactly as stored (the keep flow while no dish is open; D-0033 fix
  * round 1); resolves the file name.
  */
-export async function exportContinueFile(): Promise<string> {
-  const { text, filename } = await getClient().exportSave('autosave');
+export async function exportContinueFile(includeNicknames = true): Promise<string> {
+  const { text, filename } = await getClient().exportSave('autosave', includeNicknames);
   saveTextFile(text, filename);
   return filename;
 }
@@ -513,11 +526,11 @@ export async function namedSlots(): Promise<readonly SlotSummary[]> {
   return slots.filter((s) => s.slotId !== 'autosave' && !s.automatic);
 }
 
-export async function exportCurrent(strip: boolean): Promise<void> {
+export async function exportCurrent(strip: boolean, includeNicknames = false): Promise<void> {
   const info = dishInfo.value;
   if (!info) return;
   try {
-    const { text, filename } = await getClient().exportDish(info.dishId, strip);
+    const { text, filename } = await getClient().exportDish(info.dishId, strip, includeNicknames);
     saveTextFile(text, filename);
     showToast(`Exported ${filename}.`);
   } catch (e) {
@@ -596,7 +609,7 @@ export async function startCustom(
 }
 
 /** The start prompt of a Play shelf dish (cleared when the dish first runs). */
-const PLAY_PROMPT = 'Press play and look closely.';
+export const PLAY_PROMPT = 'Press play and look closely.';
 
 /** The Play shelf's Start (P1.12). D-0033: the open dish is kept first. */
 export async function startRecipe(recipeId: string, name: string): Promise<ReplaceOutcome> {
@@ -962,6 +975,7 @@ export async function sendCommand(payload: CommandPayload, undoable = true): Pro
   const id = `ui-${++commandCounter}`;
   const res = await getClient().command(info.dishId, id, payload, undoable);
   reportCommand(info, payload, res, renderer);
+  if (res) for (const fn of dishCommandListeners.slice()) fn(info.dishId, payload, res); // P4.3: the prompt machine
 }
 
 /** The player-facing outcome of a placement command (toast + placement ring on the dish it went to). */
@@ -1648,3 +1662,88 @@ export async function syncDishJournal(dishId: string): Promise<void> {
       7000,
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// P4.3: listeners for the prompt machine (src/ui/views/NoticeHost.tsx), live thumbnails and session memory.
+
+const dishSnapshotListeners: ((s: SnapshotMsg) => void)[] = [];
+const dishCommandListeners: ((dishId: string, payload: CommandPayload, res: CommandResult) => void)[] = [];
+
+function listen<T>(list: T[], fn: T): () => void {
+  list.push(fn);
+  return () => {
+    const i = list.indexOf(fn);
+    if (i >= 0) list.splice(i, 1);
+  };
+}
+
+/** Every published snapshot of the open dish (read-only; never comparison arms). Returns the unsubscribe. */
+export function onDishSnapshot(fn: (s: SnapshotMsg) => void): () => void {
+  return listen(dishSnapshotListeners, fn);
+}
+
+/** Every answered command the open dish's controls sent (the worker's result). Returns the unsubscribe. */
+export function onDishCommand(fn: (dishId: string, payload: CommandPayload, res: CommandResult) => void): () => void {
+  return listen(dishCommandListeners, fn);
+}
+
+/** The open dish's live thumbnail, from its latest published snapshot (null before one arrived). */
+export function openDishThumb(): string | null {
+  const info = dishInfo.value;
+  const s = lastSnapshot;
+  if (!info || !s || s.dishId !== info.dishId) return null;
+  return thumbFromSnapshot(s, info.speciesIds);
+}
+
+/** The moment the open dish was opened in this visit (its session memory counts from here). */
+let sessionOpened: { readonly dishId: string; readonly tick: number } | null = null;
+
+/** Home's session memory after "Save and leave" (D08 "A satisfying stopping point"). */
+export interface SessionMemory {
+  readonly dishId: string;
+  readonly name: string;
+  readonly tick: number;
+  readonly thumb: string | null;
+  /** One recorded change since the dish was opened, or null when nothing notable was recorded. */
+  readonly line: string | null;
+}
+
+export const sessionMemory = signal<SessionMemory | null>(null);
+
+/**
+ * SaveSheet → "Save and leave": save to the slot (which also autosaves, so Continue holds the same
+ * moment), then go Home, where the session memory names the dish, shows its picture and dish time and at
+ * most one recorded change since it was opened (the worker's read-only 'sessionSummary', never the History
+ * request). Leaving the dish screen pauses it; Continue resumes paused at the same moment.
+ */
+export async function saveAndLeave(slotId: string, name: string): Promise<boolean> {
+  const info = dishInfo.value;
+  if (!info) return false;
+  if (!(await saveToSlot(slotId, name))) return false;
+  const opened = sessionOpened && sessionOpened.dishId === info.dishId ? sessionOpened.tick : info.tick;
+  let summary: SessionSummary | null = null;
+  try {
+    summary = await getClient().sessionSummary(info.dishId, opened);
+  } catch {
+    summary = null; // no line rather than a guessed one
+  }
+  const now = dishInfo.value;
+  if (!now || now.dishId !== info.dishId) return true;
+  batch(() => {
+    sessionMemory.value = {
+      dishId: info.dishId,
+      name: now.name,
+      tick: summary?.toTick ?? meta.value?.tick ?? info.tick,
+      thumb: openDishThumb(),
+      line: summary ? sessionMemoryLine(summary) : null,
+    };
+    sheet.value = 'none';
+    route.value = { name: 'home' };
+  });
+  return true;
+}
+
+// Returning to the dish ends that visit's memory.
+effect(() => {
+  if (route.value.name === 'dish' && untracked(() => sessionMemory.value) !== null) sessionMemory.value = null;
+});

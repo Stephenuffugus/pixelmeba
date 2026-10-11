@@ -28,6 +28,9 @@ import { ReactionLedger } from './ReactionLedger';
 import { paintName, structureName } from './LabTrayNames';
 import { dishView } from '../views/LabView';
 import { PAINT_TARGETS, PLACEABLE_STRUCTURES, type PaintTarget, type PlaceableStructure } from '@sim/grid';
+import { favoriteOf, followTarget, nameOf, openFavoriteSheet } from '../favorites';
+import { FAVORITE_TEXT, followingText } from '../strings/favorites';
+import { FavoriteFollow } from './FavoriteFollow';
 
 /** The cell's ground in content words ("Impermeable wall", "Gel"), never the simulation's codes. */
 function groundName(substrate: string, structure: string): string {
@@ -302,6 +305,8 @@ function EntityView({ e }: { e: EntityInspect }) {
   const stop = stopAnswer(e);
   const fam = familyView.value;
   const family = fam && fam.birthId === e.birthId ? fam : null;
+  // P4.1: the followed family this organism belongs to, if any (from the notebook record).
+  const followed = favoriteOf(e.birthId);
 
   // A different organism: its answers start closed (family rings stay until hidden or deselected).
   useEffect(() => setAnswer(null), [e.birthId]);
@@ -430,6 +435,21 @@ function EntityView({ e }: { e: EntityInspect }) {
             >
               Where is its family?
             </button>
+            {/* P4.1 (UX §5.8): follow this organism's family (notebook state; never a command). */}
+            {followed ? (
+              <button class="btn" data-testid="follow-family" onClick={() => openFavoriteSheet(followed.id)}>
+                {followingText(nameOf(followed))}
+              </button>
+            ) : (
+              <button
+                class="btn"
+                aria-expanded={followTarget.value?.birthId === e.birthId}
+                data-testid="follow-family"
+                onClick={() => (followTarget.value = followTarget.value?.birthId === e.birthId ? null : { birthId: e.birthId, speciesIdx: e.speciesIdx })}
+              >
+                {FAVORITE_TEXT.follow}
+              </button>
+            )}
             <button
               class="btn"
               data-testid="shortcut-changed"
@@ -438,6 +458,7 @@ function EntityView({ e }: { e: EntityInspect }) {
               What changed?
             </button>
           </div>
+          {followTarget.value?.birthId === e.birthId && !followed ? <FavoriteFollow birthId={e.birthId} speciesName={name} /> : null}
           {answer ? (
             <div
               class="answer"

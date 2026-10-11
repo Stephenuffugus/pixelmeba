@@ -20,6 +20,7 @@ import {
   expectNoHorizontalOverflow,
   expectReachable,
   seedSettings,
+  selectOrganism,
   simSeconds,
   startGarden,
 } from './helpers';
@@ -390,6 +391,91 @@ test('dish: Explore sheets, candidate list, every inspector depth, the cell insp
     'Sample session: aim',
     'Sample session: preview',
     'Saved dishes (a named slot and checkpoints)',
+  ]);
+});
+
+// ------------------------------------------------------------------------------------ Phase 4 wave 5a
+
+// P4.1 favorites and P4.3 garden-home screens (D-0070, D-0071). The Family sheet's extinction card is not
+// scanned: it needs a followed family whose every member has died, which no short journey reaches (the
+// Garden's families outlive any test run), and a hand-made save would show a state the dish never recorded.
+// Saved dishes shows no thumbnail (the slot's index copy feeds Home's Continue card), so the thumbnails are
+// scanned where they are drawn: the Play shelf's Garden card, Home's Continue card and the session memory.
+test('wave 5a: Follow sheet, Family sheet, the followed family\'s slot, Notebook Favorites, Home and Play with dish thumbnails, session memory', async ({
+  page,
+}) => {
+  test.setTimeout(480_000);
+  const a = new Audit(page);
+  await startGarden(page);
+  await selectOrganism(page, [48.5, 48.5]); // the Sunbead founders stay put
+
+  // Follow this family → the Follow sheet.
+  const follow = page.getByTestId('follow-family');
+  await follow.scrollIntoViewIfNeeded();
+  await follow.click();
+  const panel = page.getByTestId('favorite-follow');
+  await expect(panel).toBeVisible();
+  await a.scan('Follow sheet');
+  await page.getByTestId('favorite-nickname').fill('Mango');
+  await panel.getByRole('radio', { name: 'Triangle' }).check();
+  await page.getByTestId('favorite-confirm').click();
+  await expect(panel).toHaveCount(0);
+
+  // The dish with the followed family's slot.
+  const slot = page.getByTestId('favorite-slot-fav-1');
+  await expect(slot).toHaveAccessibleName(/^Find the Mango family: \d+ members?$/);
+  await a.scan("Dish with a followed family's slot");
+
+  // The Family sheet, from the inspector's "Following the Mango family".
+  await follow.scrollIntoViewIfNeeded();
+  await expect(follow).toHaveText('Following the Mango family');
+  await follow.click();
+  const sheet = page.getByTestId('favorite-sheet');
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByRole('heading', { level: 2 })).toContainText('Mango');
+  await a.scan('Family sheet');
+  await sheet.getByRole('button', { name: 'Close' }).click();
+  await expect(sheet).toHaveCount(0);
+
+  // Home: the Continue card shows the open dish's picture.
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  const continueCard = page.getByRole('region', { name: 'Continue' });
+  await expect(continueCard.getByTestId('dish-thumb')).toHaveAccessibleName('Picture of Little Living Garden');
+  await a.scan('Home (Continue card with its thumbnail)');
+
+  // Notebook → Favorites with the followed family's record.
+  await page.getByTestId('home-notebook').click();
+  await page.getByTestId('notebook-tab-favorites').click();
+  await expect(page.getByTestId('notebook-tab-favorites')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('favorites-list')).toContainText('Mango');
+  await a.scan('Notebook: favorites (one record)');
+
+  // Play shelf: the Garden card's thumbnail.
+  await page.goto('/');
+  await page.getByTestId('home-play').click();
+  await expect(page.getByTestId('garden-thumb')).toHaveAccessibleName('Picture of Little Living Garden');
+  await a.scan('Play (Garden card with its thumbnail)');
+
+  // Save and leave → the session memory card ("Saved for later").
+  await page.getByTestId('start-garden').click();
+  await expect(page.getByTestId('sim-time')).toContainText('56 alive');
+  await page.getByTestId('more').click();
+  await page.getByTestId('more-save').click();
+  await page.getByTestId('save-leave').click();
+  const memory = page.getByTestId('session-memory');
+  await expect(memory).toBeVisible();
+  await expect(memory).toContainText('Saved for later');
+  await expect(memory.getByTestId('session-memory-thumb')).toHaveAccessibleName('Picture of Little Living Garden');
+  await a.scan('Session memory (Saved for later)');
+
+  a.done([
+    'Follow sheet',
+    "Dish with a followed family's slot",
+    'Family sheet',
+    'Home (Continue card with its thumbnail)',
+    'Notebook: favorites (one record)',
+    'Play (Garden card with its thumbnail)',
+    'Session memory (Saved for later)',
   ]);
 });
 

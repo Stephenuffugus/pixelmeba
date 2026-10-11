@@ -24,7 +24,7 @@ import type { ExperimentStampMsg } from './protocol';
 import { captureBaseline, PairedRun, realizeArm, type CompareSpeed, type CompareStatus, type ComparisonResults, type ComparisonState, type Intervention } from './comparison';
 import type { ComparisonExperiment } from './comparison';
 import { experimentCardView, experimentCatalog, experimentOf, GateWatch, inspectedOxygenReading, inspectShowsFoodUse, inspectShowsInfection, PlayerSteps, realizeExperimentArms, stepSpecies, type PlayerStep } from '@sim/experiments';
-import { PAIRED_RUN_LABEL, SINGLE_RUN_LABEL, stepObserved, type ArmObserver } from '@sim/pairedRun';
+import { PAIRED_RUN_LABEL, SINGLE_RUN_LABEL, type ArmObserver } from '@sim/pairedRun';
 import { TICKS_PER_SECOND } from '@sim/constants';
 import { isIntervention } from '@sim/specimens';
 import { evolutionState, isMutationPreset, ratesFor } from '@sim/mutation';
@@ -57,6 +57,14 @@ import {
 import type { WhatIfAnswer, WhatIfChoice, WhatIfKeep, WhatIfKept, WhatIfPlan, WhatIfRefusalCode } from './protocol';
 import type { KeepFrom, KeepRefusalCode } from './protocol';
 import { RelationshipWatcher } from './relationships';
+import { emptyNotebook, favoritesOnly, notebookHasNicknames, notebookIsEmpty, notebookWithoutNicknames, sealNotebook, type NotebookRecord } from '@persist/notebook';
+import { notebookAfterRestore, NotebookWatch } from './notebookWatch';
+import { applyFavoriteOp, FAVORITE_REFUSALS, readFavoriteOp, withPatterns } from './favorites';
+import type { FavoriteMarks, NotebookChange } from './protocol';
+import { dishThumb, parseThumb, thumbFromState } from './thumbnail';
+import type { SessionSummary } from './protocol';
+import { displayBranchName } from '@sim/branches';
+import { SECONDS_PER_SUMMARY } from '@sim/history';
 
 export interface HostClock {
   now(): number;
@@ -107,6 +115,26 @@ function fileBase(name: string): string {
   return name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'dish';
 }
 
+/**
+ * P4.1: a stored save's text as 'exportSave' sends it. Without the player's opt-in, a notebook carrying a
+ * nickname (or one that could not be read) is replaced by the read record without nicknames, sealed
+ * again (left out when empty); everything else, the state and its checksum included, is as stored.
+ */
+async function exportedSaveText(text: string, read: { readonly notebook: NotebookRecord; readonly dropped: boolean } | null, includeNicknames: boolean): Promise<string> {
+  if (includeNicknames || read === null || (!read.dropped && !notebookHasNicknames(read.notebook))) return text;
+  const file = JSON.parse(text) as Record<string, unknown>;
+  if (!('notebook' in file)) return text;
+  const clean = notebookWithoutNicknames(read.notebook);
+  if (notebookIsEmpty(clean)) delete file.notebook;
+  else file.notebook = await sealNotebook(clean);
+  return JSON.stringify(file);
+}
+
+/** P4.1: two slot index records describe the same notebook (both none, or the same checksum). */
+function sameNotebook(a: SlotInfo, b: SlotInfo): boolean {
+  return (a.notebookChecksum ?? null) === (b.notebookChecksum ?? null);
+}
+
 /** Id prefix of the dish Continue holds, loaded only to be kept (never registered, never run). */
 const CONTINUE_DISH = 'continue:';
 let continueDishes = 0;
@@ -131,7 +159,47 @@ function checkpointSummary(s: SlotInfo, catalogSize: number): SlotSummary {
 function summary(s: SlotInfo): SlotSummary {
   // The slot index is stored data: its variant copy is re-validated like a file's meta (a bad one is dropped).
   const variant = saveMetaVariant(s);
-  return { slotId: s.slotId, name: s.name, tick: s.tick, savedAt: s.savedAt, recipeId: s.recipeId, bytes: s.bytes, ...(variant ? { variant } : {}) };
+  return { slotId: s.slotId, name: s.name, tick: s.tick, savedAt: s.savedAt, recipeId: s.recipeId, bytes: s.bytes, ...(variant ? { variant } : {}), ...(parseThumb(s.thumb) ? { thumb: s.thumb } : {}) };
+}
+
+/**
+ * P4.3 session memory (D08 "a satisfying stopping point"): what the dish recorded after `sinceTick`, from
+ * its history samples (per-second births and deaths; whole one-minute summaries where the span was
+ * compacted) and its branch records. Read-only.
+ *
+ * Tick arithmetic (src/sim/tick.ts, publish.ts): the step that starts at world tick T records into the sample
+ * with second ⌊T/10⌋ + 1 and stamps a branch it establishes with establishedTick T. A dish opened at world
+ * tick `fromTick` has run exactly the steps T ≥ fromTick since, so a sample (or minute summary) counts only
+ * when every step it covers starts at or after `fromTick`; one that straddles the opening cannot be split:
+ * it is left out and the answer is flagged `compacted` (the counts are then a lower bound, "At least …").
+ * A branch counts when establishedTick ≥ fromTick (established in the first step after opening or later).
+ */
+export function sessionSummaryOf(world: World, sinceTick: number): SessionSummary {
+  const h = world.history;
+  const fromTick = Math.max(0, Math.min(Math.floor(sinceTick), world.tick));
+  const n = world.species.length;
+  const births = new Array<number>(n).fill(0);
+  const deaths = new Array<number>(n).fill(0);
+  let compacted = false;
+  const add = (smp: (typeof h.seconds)[number]) => {
+    for (let j = 0; j < n; j++) {
+      births[j]! += smp.births[j] ?? 0;
+      deaths[j]! += smp.deaths[j] ?? 0;
+    }
+  };
+  // A record with second S spanning `span` seconds covers the steps starting at ticks (S − span)·10 … S·10 − 1.
+  const take = (smp: (typeof h.seconds)[number], span: number) => {
+    if (smp.second * TICKS_PER_SECOND <= fromTick) return; // wholly before the opening
+    // Straddles the opening: left out, and the answer says so, so no count claims births from before.
+    if ((smp.second - span) * TICKS_PER_SECOND < fromTick) compacted = true;
+    else add(smp);
+  };
+  for (const m of h.minutes) take(m, SECONDS_PER_SUMMARY);
+  for (const smp of h.seconds) take(smp, 1);
+  const branches = world.branches.branches
+    .filter((b) => b.establishedTick >= fromTick)
+    .map((b) => ({ id: b.id, name: displayBranchName(world, b), tick: b.establishedTick }));
+  return { births, deaths, branches, fromTick, toTick: world.tick, compacted };
 }
 
 /**
@@ -202,6 +270,13 @@ interface Dish {
   sampleBeginHash?: string | null;
   /** P3.8 (D-0039): relationships first seen while this dish is played (worker state; never saved). */
   relationships?: RelationshipWatcher | null;
+  /**
+   * P4.1 (D-0070): the dish's notebook record (favorites), saved beside the world and never in it. Kept by
+   * Undo and rollback like the journal; empty for comparison and experiment arms.
+   */
+  notebook: NotebookRecord;
+  /** P4.1: the notebook's watch on this played dish (never an arm, never a rollback replay). */
+  notebookWatch?: NotebookWatch | null;
   /**
    * D-0033 fix round 1: the dish Continue holds, loaded only so a replacing action can keep it while no
    * dish is open. Never registered, never run. The autosave is written for it only to bind it to the
@@ -330,7 +405,7 @@ export class DishHost {
           if (!this.store) throw new Error('Saving is unavailable on this device.');
           d.name = msg.name;
           const savedAt = this.iso();
-          const built = await buildSaveFile(d.world, { name: msg.name, savedAt, recipeId: d.world.content.provenance.recipeId });
+          const built = await buildSaveFile(d.world, { name: msg.name, savedAt, recipeId: d.world.content.provenance.recipeId }, this.localSave(d));
           const info = await this.store.save(this.saveRequest(d, msg.slotId, msg.name, savedAt, built));
           this.ownSlots[d.id] = msg.slotId;
           this.post({ type: 'slotSaved', requestId: msg.requestId, slot: this.describeSlot(info), wrote: true });
@@ -365,7 +440,7 @@ export class DishHost {
             return true;
           });
           if (!res) throw new SaveFileError('That save could not be read, and no earlier copy was usable.', 'integrity');
-          const { file, world } = await loadSaveFile(res.text);
+          const { file, world, notebook, notebookDropped } = await loadSaveFile(res.text);
           // P2.8: an automatic checkpoint opens as a new branch from a stored state (SPEC §10.7): like
           // Duplicate, it gets its own dish identity and a name that says the moment it starts from, so
           // it (and the checkpoints it makes) can be told apart from the dish it came from; it is bound
@@ -382,9 +457,18 @@ export class DishHost {
           // index describes the damaged record, and a save newer than this copy may be in that slot.
           const olderContinue = msg.slotId === AUTOSAVE_SLOT && res.usedPredecessor;
           const bindTo = branch || olderContinue ? null : await this.bindingOf(msg.slotId, world.worldId);
-          const dish = this.addDish(msg.newDishId, opened, branch ? branchName(file.meta.name, branch.tick) : file.meta.name);
+          // P4.1: the file's notebook comes along (a checkpoint branch, like Duplicate, keeps the favorites only, under its new world id).
+          const dish = this.addDish(msg.newDishId, opened, branch ? branchName(file.meta.name, branch.tick) : file.meta.name, branch ? favoritesOnly(notebook, opened.worldId) : notebook);
           if (bindTo !== null) this.ownSlots[dish.id] = bindTo;
-          this.post({ type: 'loaded', requestId: msg.requestId, info: this.info(dish), usedPredecessor: res.usedPredecessor, ...(branch ? { branch } : {}), ...(kept ? { kept } : {}) });
+          this.post({
+            type: 'loaded',
+            requestId: msg.requestId,
+            info: this.info(dish),
+            usedPredecessor: res.usedPredecessor,
+            ...(branch ? { branch } : {}),
+            ...(kept ? { kept } : {}),
+            ...(notebookDropped !== null ? { notebookDropped } : {}),
+          });
           this.sendSnapshot(dish);
           this.experimentReopened(dish);
           return;
@@ -396,7 +480,12 @@ export class DishHost {
         }
         case 'exportDish': {
           const d = this.need(msg.dishId);
-          const built = await buildSaveFile(d.world, { name: d.name, savedAt: this.iso(), recipeId: d.world.content.provenance.recipeId }, { stripNames: msg.strip });
+          // P4.1: the notebook goes along without nicknames unless the player opted in; stripNames drops them always.
+          const built = await buildSaveFile(
+            d.world,
+            { name: d.name, savedAt: this.iso(), recipeId: d.world.content.provenance.recipeId },
+            { stripNames: msg.strip, notebook: this.notebookOf(d), includeNicknames: msg.includeNicknames === true },
+          );
           this.post({ type: 'exported', requestId: msg.requestId, text: built.text, filename: `${fileBase(msg.strip ? 'shared-dish' : d.name)}.pixelmeba` });
           return;
         }
@@ -405,21 +494,26 @@ export class DishHost {
           // dish is open). It is read and checked like any save being opened; nothing is written.
           if (!this.store) throw new Error('Saving is unavailable on this device.');
           let name = 'dish';
+          let read: { readonly notebook: NotebookRecord; readonly dropped: boolean } | null = null;
           const res = await this.store.load(msg.slotId, async (text) => {
-            name = (await loadSaveFile(text)).file.meta.name;
+            const got = await loadSaveFile(text);
+            name = got.file.meta.name;
+            read = { notebook: got.notebook, dropped: got.notebookDropped !== null };
             return true;
           });
           if (!res) throw new SaveFileError('That save could not be read, and no earlier copy was usable.', 'integrity');
-          this.post({ type: 'exported', requestId: msg.requestId, text: res.text, filename: `${fileBase(name)}.pixelmeba` });
+          // P4.1: nicknames leave only by the player's choice. Only the file's notebook is replaced (sealed
+          // again, without nicknames; left out when it could not be read); the state and its checksum stay as stored.
+          this.post({ type: 'exported', requestId: msg.requestId, text: await exportedSaveText(res.text, read, msg.includeNicknames === true), filename: `${fileBase(name)}.pixelmeba` });
           return;
         }
         case 'importDish': {
           // The file is checked first: a refused file keeps nothing and changes nothing (D-0033).
-          const { file, world } = await loadSaveFile(msg.text);
+          const { file, world, notebook, notebookDropped } = await loadSaveFile(msg.text);
           const kept = await this.keepFirst(msg, { action: 'import', exclude: null, opening: null });
           if (kept === false) return;
-          const dish = this.addDish(msg.newDishId, world, file.meta.name);
-          this.post({ type: 'loaded', requestId: msg.requestId, info: this.info(dish), usedPredecessor: false, ...(kept ? { kept } : {}) });
+          const dish = this.addDish(msg.newDishId, world, file.meta.name, notebook);
+          this.post({ type: 'loaded', requestId: msg.requestId, info: this.info(dish), usedPredecessor: false, ...(kept ? { kept } : {}), ...(notebookDropped !== null ? { notebookDropped } : {}) });
           this.sendSnapshot(dish);
           this.experimentReopened(dish);
           return;
@@ -485,8 +579,9 @@ export class DishHost {
     }
   }
 
-  private addDish(id: string, world: World, name: string): Dish {
+  private addDish(id: string, world: World, name: string, notebook?: NotebookRecord): Dish {
     const dish = this.makeDish(id, world, name, serializeWorld(world));
+    if (notebook) dish.notebook = notebook;
     this.dishes[id] = dish;
     this.active = id;
     return dish;
@@ -511,6 +606,7 @@ export class DishHost {
       effectiveSpeed: 0,
       failed: false,
       arm: null,
+      notebook: emptyNotebook(world.worldId),
     };
   }
 
@@ -625,6 +721,8 @@ export class DishHost {
         d.replay.push({ tick, commandId: msg.commandId, payload: msg.payload });
         // P3.5: a selected organism lifted into the sample is no longer in the dish (it is not dead either).
         if (msg.payload.kind === 'sampleTake' && changed && d.selection?.kind === 'entity') d.selection = null;
+        // P4.1: a command can remove members without a tick (a Sample take): the followed families follow it.
+        if (changed && d.notebookWatch) this.notebookChanges(d, d.notebookWatch.afterTick(d.world));
         this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: cmd.result ?? null });
         this.sendSnapshot(d);
         return;
@@ -648,6 +746,7 @@ export class DishHost {
         }
         // P2.8: the player's journal entries are notes about the dish, not part of the undone change: keep them.
         const journal = d.world.history.journal;
+        this.notebookOf(d); // P4.1: the notebook is kept too, its members written in before the world goes
         d.world = deserializeWorld(d.undo);
         d.world.history.journal = journal;
         d.checkpoint = d.undo;
@@ -663,6 +762,7 @@ export class DishHost {
         d.speed = 0;
         d.lastEventId = d.world.counters.nextEventId - 1;
         d.lastGeometryVersion = -1;
+        this.restoreNotebook(d); // P4.1 fix round 1: the kept notebook checked against the restored dish
         // A card's observer counted the ticks being rewound and cannot rewind with them.
         this.endExperiment(d, 'undone');
         this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: null });
@@ -705,6 +805,12 @@ export class DishHost {
         this.experimentHistoryOpened(d);
         return;
       }
+      case 'sessionSummary': {
+        // P4.3: read-only (history samples and branch records). Never calls experimentHistoryOpened: this is not the History sheet.
+        const d = this.need(msg.dishId);
+        this.post({ type: 'sessionSummary', requestId: msg.requestId, dishId: d.id, summary: sessionSummaryOf(d.world, msg.sinceTick) });
+        return;
+      }
       case 'traitHistory': {
         // Read-only (P2.8): the recorded regional series of one species' locus; never touches the world.
         const d = this.need(msg.dishId);
@@ -741,6 +847,32 @@ export class DishHost {
         const d = this.need(msg.dishId);
         const entries = d.relationships?.entries.slice() ?? [];
         this.post({ type: 'relationships', requestId: msg.requestId, dishId: d.id, worldId: d.world.worldId, dishName: d.name, entries });
+        return;
+      }
+      case 'notebookGet': {
+        // P4.1: read-only. The record with the followed families' members as they are now.
+        const d = this.need(msg.dishId);
+        const record = this.notebookOf(d);
+        const inspected = msg.inspect !== undefined ? (buildInspector(d.world, { kind: 'entity', birthId: msg.inspect }).entity ?? null) : undefined;
+        this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record, ...(inspected !== undefined ? { inspected } : {}) });
+        return;
+      }
+      case 'favorite': {
+        // P4.1 (D-0070): notebook state only. Never a CommandPayload; the world is only read.
+        const d = this.need(msg.dishId);
+        const nw = this.watchOf(d);
+        const op = readFavoriteOp(msg.op);
+        if (!nw || !op) {
+          this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: d.notebook, refused: nw ? FAVORITE_REFUSALS.badOp : 'Comparison copies keep no favorites.' });
+          return;
+        }
+        const r = applyFavoriteOp(d.world, nw.materialize(), nw.favorites, op);
+        if (r.refused === null) {
+          d.notebook = r.record;
+          nw.rebind(d.world);
+        }
+        this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: d.notebook, ...(r.refused !== null ? { refused: r.refused } : {}), ...(r.removed !== null ? { removed: r.removed } : {}) });
+        this.sendSnapshot(d);
         return;
       }
       case 'family': {
@@ -1094,16 +1226,19 @@ export class DishHost {
     // P3.8: the relationship watcher rides along on a played dish (never a comparison copy; read-only).
     const rw = d.arm ? null : (d.relationships ??= new RelationshipWatcher(d.world));
     if (rw && !rw.watches(d.world)) rw.rebind(d.world); // undo, rollback or a reload replaced the world
-    if (!x || x.ended || x.watch.reached) {
-      if (rw) step(d.world, { afterStage: rw.hook });
-      else step(d.world);
-    } else {
-      if (rw) {
-        // stepObserved with both read-only stage hooks (src/sim/pairedRun.ts).
-        const obs = x.obs;
-        step(d.world, { afterStage: (stage, w) => (obs.hook(stage, w), rw.hook(stage, w)) });
-        obs.afterTick(d.world);
-      } else stepObserved(d.world, x.obs);
+    // P4.1: the notebook's watch rides along too (read-only; rebinds after undo, rollback or reload).
+    const nw = this.watchOf(d);
+    const observing = !!x && !x.ended && !x.watch.reached;
+    // One list of the read-only stage hooks (a running card's observer first, as stepObserved does), one step.
+    const hooks: ((stage: number, w: World) => void)[] = [];
+    if (observing) hooks.push(x.obs.hook);
+    if (rw) hooks.push(rw.hook);
+    if (nw?.hook) hooks.push(nw.hook);
+    if (hooks.length === 0) step(d.world);
+    else if (hooks.length === 1) step(d.world, { afterStage: hooks[0]! });
+    else step(d.world, { afterStage: (stage, w) => hooks.forEach((h) => h(stage, w)) });
+    if (observing) {
+      x.obs.afterTick(d.world);
       const stamp = x.watch.afterTick({ world: d.world, obs: x.obs }, null);
       if (stamp) {
         const measured = x.watch.measured({ world: d.world, obs: x.obs }, null);
@@ -1111,8 +1246,50 @@ export class DishHost {
       }
     }
     rw?.afterTick(d.world);
+    if (nw) this.notebookChanges(d, nw.afterTick(d.world));
     if (x && !x.ended && !x.posted) this.experimentSteps(d);
     this.maybeCheckpoint(d);
+  }
+
+  /**
+   * P4.1: the notebook's watch on a played dish, bound to its current world (created on first use; null
+   * for a comparison arm or the transient Continue copy). After undo, rollback or reload it rebuilds from
+   * the saved record.
+   */
+  private watchOf(d: Dish): NotebookWatch | null {
+    if (d.arm || d.transient) return null;
+    if (!d.notebookWatch) {
+      d.notebookWatch = new NotebookWatch(d.world, { get: () => d.notebook, set: (r) => (d.notebook = r) });
+    } else if (!d.notebookWatch.watches(d.world)) d.notebookWatch.rebind(d.world);
+    return d.notebookWatch;
+  }
+
+  /**
+   * P4.1 fix round 1: after Undo or a rollback, the notebook (kept, like the journal) is checked against
+   * the restored world (notebookWatch.ts notebookAfterRestore) and the watch rebuilt from the result.
+   */
+  private restoreNotebook(d: Dish): void {
+    const r = notebookAfterRestore(d.world, d.notebook);
+    if (r.change) d.notebook = r.record;
+    d.notebookWatch?.rebind(d.world);
+    if (r.change) this.notebookChanges(d, [r.change]);
+  }
+
+  /** P4.1: the dish's notebook as it stands now (followed families' live members written in). */
+  private notebookOf(d: Dish): NotebookRecord {
+    const nw = d.notebookWatch;
+    if (nw && nw.watches(d.world)) return nw.materialize();
+    return d.notebook;
+  }
+
+  /** P4.1: announce what the watch changed (the record is already updated). */
+  private notebookChanges(d: Dish, changes: readonly NotebookChange[]): void {
+    for (const change of changes) this.post({ type: 'notebookChanged', dishId: d.id, record: d.notebook, change });
+  }
+
+  /** P4.1: the build options every device save of `d` uses (its notebook, nicknames kept: local files keep them). */
+  private localSave(d: Dish): { notebook: NotebookRecord; includeNicknames: true } {
+    return { notebook: this.notebookOf(d), includeNicknames: true };
   }
 
   /**
@@ -1136,7 +1313,7 @@ export class DishHost {
     const name = d.name;
     const worldId = d.world.worldId;
     // buildSaveFile serializes the world before its first await, so the checkpoint holds exactly this tick.
-    void buildSaveFile(d.world, { name, savedAt, recipeId })
+    void buildSaveFile(d.world, { name, savedAt, recipeId }, this.localSave(d))
       .then((b) => ring.write({ text: b.text, checksum: b.checksum, name, worldId, tick, savedAt, recipeId, ...slotMetaCopies(b.file) }))
       .then(async (r) => {
         this.ringKept = r.ok ? (await ring.list()).length : r.kept;
@@ -1371,6 +1548,8 @@ export class DishHost {
       name: `${d.name} (copy)`,
       speed: 0,
       undo: null,
+      // No undo point, so no labels to re-apply; an array of its own so neither dish can push into the other's.
+      undoLabels: [],
       checkpoint: state,
       replay: [],
       failed: false,
@@ -1379,6 +1558,14 @@ export class DishHost {
       selection: null,
       arm: null,
       experiment: null,
+      // P3.5: the original's Sample Begin hash is not the copy's (as after a reload: null).
+      sampleBeginHash: null,
+      // P3.8: a watcher of its own, started fresh (as after a reload: the table is never saved). The
+      // spread shared the original's, so what the copy showed was written into the original's record.
+      relationships: null,
+      // P4.1: the copy follows the same families (favorites only, under its own world id), with its own watch.
+      notebook: favoritesOnly(this.notebookOf(d), state.worldId),
+      notebookWatch: null,
     };
     this.dishes[newDishId] = copy;
     return copy;
@@ -1558,6 +1745,8 @@ export class DishHost {
    */
   private async rebuildsExactly(d: Dish): Promise<boolean> {
     if (d.world.tick !== 0) return false;
+    // P4.1: a followed family is the player's own record, never rebuilt from the start: such a dish is kept.
+    if (!notebookIsEmpty(this.notebookOf(d))) return false;
     let fresh: World | null;
     try {
       fresh = await this.freshStart(d.world);
@@ -1700,17 +1889,18 @@ export class DishHost {
     const bound = await this.bindingOf(AUTOSAVE_SLOT, auto.worldId ?? null);
     if (quick && bound !== null) {
       const held = await this.store.slot(bound);
-      if (held && held.checksum === auto.checksum && held.name === auto.name) return { kind: 'saved', held, name: auto.name };
+      if (held && held.checksum === auto.checksum && held.name === auto.name && sameNotebook(held, auto)) return { kind: 'saved', held, name: auto.name };
     }
     if (planOnly && auto.tick !== 0) return { kind: 'index', bound, name: auto.name };
-    const got: { v: { file: SaveFile; world: World } | null } = { v: null };
+    const got: { v: { file: SaveFile; world: World; notebook: NotebookRecord } | null } = { v: null };
     const res = await this.store.load(AUTOSAVE_SLOT, async (text) => {
       got.v = await loadSaveFile(text);
       return true;
     });
     if (!res || !got.v) return null;
-    const { file, world } = got.v;
-    const dish: Dish = { ...this.makeDish(`${CONTINUE_DISH}${++continueDishes}`, world, file.meta.name, file.state), transient: true };
+    const { file, world, notebook } = got.v;
+    // P4.1: the notebook Continue holds is kept with it.
+    const dish: Dish = { ...this.makeDish(`${CONTINUE_DISH}${++continueDishes}`, world, file.meta.name, file.state), transient: true, notebook };
     // An older copy (the latest autosave was damaged) is bound to nothing: it never replaces a newer save.
     if (bound !== null && !res.usedPredecessor) this.ownSlots[dish.id] = bound;
     return { kind: 'dish', dish };
@@ -1718,7 +1908,7 @@ export class DishHost {
 
   /** The save file of `d` as a keep would write it now (serialized before the first await: one moment). */
   private buildFor(d: Dish, savedAt: string): ReturnType<typeof buildSaveFile> {
-    return buildSaveFile(d.world, { name: d.name, savedAt, recipeId: d.world.content.provenance.recipeId });
+    return buildSaveFile(d.world, { name: d.name, savedAt, recipeId: d.world.content.provenance.recipeId }, this.localSave(d));
   }
 
   /**
@@ -1733,7 +1923,8 @@ export class DishHost {
     const held = this.store ? await this.store.slot(slotId) : null;
     if (held === null || held.name !== d.name || held.tick !== d.world.tick) return false;
     const file = built ?? (await this.buildFor(d, this.iso()));
-    return held.checksum === file.checksum;
+    // P4.1: the notebook beside the state counts too (a Follow made since that save is a change).
+    return held.checksum === file.checksum && (held.notebookChecksum ?? null) === (file.file.notebook?.checksum ?? null);
   }
 
   /**
@@ -1772,7 +1963,7 @@ export class DishHost {
    */
   private async exactCopies(s: SlotInfo): Promise<string[]> {
     const index = this.store ? await this.store.list() : [];
-    return SaveStoreClass.slotIds().filter((id) => index.some((x) => x.slotId === id && x.checksum === s.checksum && x.name === s.name));
+    return SaveStoreClass.slotIds().filter((id) => index.some((x) => x.slotId === id && x.checksum === s.checksum && x.name === s.name && sameNotebook(x, s)));
   }
 
   /**
@@ -1876,7 +2067,11 @@ export class DishHost {
       ...(variant ? { variant } : {}),
       ...slotMetaCopies(built.file),
       worldId: built.file.state.worldId,
+      // P4.3: the saved moment's thumbnail, read from the file's own state (outside its checksum).
+      thumb: thumbFromState(built.file.state),
       ...(binding ? { activeSlot: binding.slot, activeRecord: binding.record } : {}),
+      // P4.1: the notebook beside the state, so holdsSave sees a notebook-only change.
+      ...(built.file.notebook ? { notebookChecksum: built.file.notebook.checksum } : {}),
     };
   }
 
@@ -1906,7 +2101,7 @@ export class DishHost {
     // a newer save in the slot. Read first: the file below is serialized after it, never before.
     const own = this.ownSlots[d.id];
     const ownRecord = own !== undefined ? (await this.store.slot(own))?.current : undefined;
-    const built = await buildSaveFile(d.world, { name, savedAt, recipeId: d.world.content.provenance.recipeId });
+    const built = await buildSaveFile(d.world, { name, savedAt, recipeId: d.world.content.provenance.recipeId }, this.localSave(d));
     const req = this.saveRequest(d, AUTOSAVE_SLOT, name, savedAt, built, own !== undefined && ownRecord !== undefined ? { slot: own, record: ownRecord } : undefined);
     const held = await this.store.slot(AUTOSAVE_SLOT);
     if (held !== null && holdsSave(held, req)) {
@@ -2108,6 +2303,8 @@ export class DishHost {
         total: { c: total.c, n: total.n, m: total.m },
       },
       registry: this.registryInfo(w.content.manifest, w.content.modules),
+      // P4.3: the Play shelf's live-state picture of this start (the same world the dish would start as).
+      thumb: dishThumb(w),
     };
   }
 
@@ -2141,6 +2338,8 @@ export class DishHost {
     d.acc = 0;
     d.sampleBeginHash = null;
     d.lastEventId = d.world.counters.nextEventId - 1;
+    // P4.1 fix round 1: the members back from the sample are in place again (read-only, as after a command).
+    if (d.notebookWatch) this.notebookChanges(d, d.notebookWatch.afterTick(d.world));
   }
 
   private checkpoint(d: Dish): void {
@@ -2154,6 +2353,7 @@ export class DishHost {
    * fails, the checkpoint alone is kept.
    */
   private rollback(d: Dish, tick: number): void {
+    this.notebookOf(d); // P4.1: kept like the journal; the watch rebuilds against the restored world
     let w = deserializeWorld(d.checkpoint);
     try {
       let k = 0;
@@ -2174,6 +2374,7 @@ export class DishHost {
     d.world = w;
     d.lastEventId = Math.min(d.lastEventId, w.counters.nextEventId - 1);
     d.lastGeometryVersion = -1;
+    this.restoreNotebook(d); // P4.1 fix round 1: the kept notebook checked against the restored dish
   }
 
   pump(): void {
@@ -2231,6 +2432,10 @@ export class DishHost {
     const events = visualEvents(w.events.ring, d.lastEventId, w.content.modules, lociOfBirth(w));
     const lv = d.lineageView;
     const lineage: LineageMarks | null = lv ? { locus: lv.locus, branch: lv.branch, ...packLineageMarks(w, lv.locus, lv.branch) } : null;
+    // P4.1: the followed families' marks, from the watch and entity columns only (none for an arm).
+    const nw = d.notebookWatch || d.notebook.favorites.some((f) => f.active) ? this.watchOf(d) : null;
+    const favMarks = nw ? nw.favorites.marks(w) : null;
+    const favorites: FavoriteMarks | null = favMarks ? withPatterns(favMarks, d.notebook) : null;
     d.lastEventId = w.counters.nextEventId - 1;
     let geometry: SnapshotMsg['geometry'] = null;
     if (d.lastGeometryVersion !== w.grid.geometryVersion) {
@@ -2270,10 +2475,12 @@ export class DishHost {
       lid: w.settings.lid,
       // P3.5: the held sample (the UI offers Transfer, Cancel and Discard while it is held).
       sample: heldSummary(w),
+      ...(favorites ? { favorites } : {}),
     };
     const transfer: Transferable[] = [packed.ents.buffer, packed.ids.buffer, deposits.buffer, links.buffer];
     if (overlay) transfer.push(overlay.data.buffer);
     if (lineage) transfer.push(lineage.marks.buffer as ArrayBuffer);
+    if (favorites) transfer.push(favorites.marks.buffer as ArrayBuffer, favorites.member.buffer as ArrayBuffer);
     if (geometry) transfer.push(geometry.substrate.buffer, geometry.structure.buffer, geometry.shade.buffer);
     this.post(msg, transfer);
   }

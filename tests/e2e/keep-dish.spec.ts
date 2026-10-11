@@ -559,8 +559,11 @@ test('with prompts on, the kept line leads the new dish prompt (no toast over it
   await page.getByTestId('home-play').click();
   await page.getByTestId('start-garden').click();
   await expect(page.locator('.prompt p')).toHaveText('Press play and look closely.');
-  await runFor(page, 1); // Run clears the prompt
-  await expect(page.locator('.prompt')).toHaveCount(0);
+  await runFor(page, 1); // Run clears the start line
+  // garden-home (P4.3, src/ui/prompts.ts): once the start line clears, the Garden's step 1 prompt is the one prompt.
+  await expect(page.getByText('Press play and look closely.')).toHaveCount(0);
+  await expect(page.locator('.prompt')).toHaveCount(1);
+  await expect(page.getByTestId('guide-prompt').locator('p')).toHaveText('Tap a Sprinter.');
 
   const mark = (await toasts(page)).length;
   await startGardenFromPlay(page);
@@ -569,7 +572,11 @@ test('with prompts on, the kept line leads the new dish prompt (no toast over it
   expect((await toasts(page)).slice(mark).filter((x) => x.includes('first'))).toEqual([]); // not a toast as well
   await expectTextAtLeast16px(page, '.prompt');
   await runFor(page, 1);
-  await expect(page.locator('.prompt')).toHaveCount(0);
+  // The kept line is gone with the start line, and the new dish's own step 1 prompt follows (its machine began at tick 0).
+  await expect(page.getByText('Saved “Little Living Garden” to Slot 1 first.', { exact: false })).toHaveCount(0);
+  await expect(page.locator('.prompt')).toHaveCount(1);
+  await expect(page.getByTestId('guide-prompt').locator('p')).toHaveText('Tap a Sprinter.');
+  expect((await toasts(page)).slice(mark).filter((x) => x.includes('first'))).toEqual([]); // the kept line never became a toast
 
   // The experiment card: what happens first, from the worker's plan (D-0027's "kept in Continue" is gone).
   await page.getByRole('button', { name: 'Home' }).click();

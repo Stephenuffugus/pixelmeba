@@ -15,6 +15,7 @@ import type { FounderOrigin } from '@sim/founders';
 import type { EvolutionState, MutationRates } from '@sim/mutation';
 import type { MissingMember, SampleHeldSummary } from '@sim/sample';
 import type { SampleMode } from '@sim/sampleSlot';
+import type { FavoritePattern, NotebookRecord } from '@persist/notebook';
 
 /**
  * 2 since Phase 3 wave 2 (D-0036): ENT_STRIDE 12 → 14 (E_CUE2, E_LINKMASK), seven deposit bands (film),
@@ -77,6 +78,12 @@ export type ToWorker =
   | { readonly type: 'history'; readonly requestId: number; readonly dishId: string; /** Only the most recent N per-second samples. */ readonly lastSeconds?: number }
   /** P2.8: the recorded regional series of one species' locus (whole dish and four quarters), read from history only. */
   | { readonly type: 'traitHistory'; readonly requestId: number; readonly dishId: string; readonly species: number; readonly locus: number }
+  /**
+   * P4.3 session memory (D08 "a satisfying stopping point"): what the dish recorded since `sinceTick`, read
+   * from history samples and branch records only. Read-only: unlike 'history', it records no experiment
+   * player step.
+   */
+  | { readonly type: 'sessionSummary'; readonly requestId: number; readonly dishId: string; readonly sinceTick: number }
   /** P2.8: keep a Notebook entry with this dish (saved, checksummed and exported with it; never in the state hash). */
   | { readonly type: 'journalPut'; readonly requestId: number; readonly dishId: string; readonly entry: unknown }
   /** P2.8: the Notebook entries kept with this dish (read-only). */
@@ -89,7 +96,7 @@ export type ToWorker =
   | { readonly type: 'listSlots'; readonly requestId: number }
   | { readonly type: 'loadSlot'; readonly requestId: number; readonly slotId: string; readonly newDishId: string; readonly keepFrom?: KeepFrom }
   | { readonly type: 'deleteSlot'; readonly requestId: number; readonly slotId: string }
-  | { readonly type: 'exportDish'; readonly requestId: number; readonly dishId: string; readonly strip: boolean }
+  | { readonly type: 'exportDish'; readonly requestId: number; readonly dishId: string; readonly strip: boolean; /** P4.1: keep the favorites' nicknames (the player's opt-in; default off). */ readonly includeNicknames?: boolean }
   | { readonly type: 'importDish'; readonly requestId: number; readonly text: string; readonly newDishId: string; readonly keepFrom?: KeepFrom }
   /**
    * D-0033: how the open dish `aboutDishId` would be kept if an action replaced it now (New Dish, the
@@ -99,11 +106,19 @@ export type ToWorker =
    */
   | { readonly type: 'keepPlan'; readonly requestId: number; readonly aboutDishId: string | null; readonly opening?: string | null }
   /** D-0033: a stored save (the autosave that Continue holds) as a .pixelmeba file, exactly as stored; answered by 'exported'. */
-  | { readonly type: 'exportSave'; readonly requestId: number; readonly slotId: string }
+  | { readonly type: 'exportSave'; readonly requestId: number; readonly slotId: string; /** P4.1: keep the favorites' nicknames (default off: the file's notebook goes without them). */ readonly includeNicknames?: boolean }
   /** Read-only family query for the inspector's "Where is its family?" shortcut (SPEC §12.1, UX §5.3). */
   | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly birthId: number }
   /** P3.8 (D-0039): the relationships first seen in this played dish so far (worker state, read-only). */
   | { readonly type: 'relationships'; readonly requestId: number; readonly dishId: string }
+  /**
+   * P4.1 (D-0070): the dish's notebook record (worker state saved beside the world, never in it). With
+   * `inspect`, the answer also carries that living organism's inspector payload (read-only; the Family
+   * sheet's inherited differences). Answered by 'notebook'.
+   */
+  | { readonly type: 'notebookGet'; readonly requestId: number; readonly dishId: string; readonly inspect?: number }
+  /** P4.1: change the dish's favorites (notebook state: never a command, never touches the world). Answered by 'notebook'. */
+  | { readonly type: 'favorite'; readonly requestId: number; readonly dishId: string; readonly op: FavoriteOp }
   /** Read-only lineage panel query (SPEC §8.5, UX §5.5): branches, variation, specimens, and detail for one branch or one organism's branch. */
   | { readonly type: 'lineage'; readonly requestId: number; readonly dishId: string; readonly branch: number | null; readonly birthId: number | null }
   /** Trait overlay and lineage highlight for this dish's snapshots (render-only; never touches the world). */
@@ -221,6 +236,26 @@ export interface SlotSummary {
    * file's meta. Absent for slots written before the index kept it. A display copy only.
    */
   readonly modes?: SlotModes;
+  /**
+   * P4.3 (UX §2 "live thumbnail"): the saved moment's thumbnail (src/worker/thumbnail.ts), copied into the
+   * slot index when it was written; outside the save checksum. Absent for slots written before. A display copy only.
+   */
+  readonly thumb?: string;
+}
+
+/**
+ * P4.3 session memory: what a dish recorded between `fromTick` and `toTick` (history samples and branch
+ * records). `births`/`deaths` are per species index. `compacted`: part of the span is held only as a
+ * one-minute summary that began before `fromTick`; it cannot be split, so it is left out of the counts
+ * (they are then a lower bound).
+ */
+export interface SessionSummary {
+  readonly births: readonly number[];
+  readonly deaths: readonly number[];
+  readonly branches: readonly { readonly id: number; readonly name: string; readonly tick: number }[];
+  readonly fromTick: number;
+  readonly toTick: number;
+  readonly compacted: boolean;
 }
 
 /** A saved dish's mode labels (P2.2): what Saved dishes and Continue say about the world in a slot. */
@@ -457,7 +492,62 @@ export interface SnapshotMsg {
   readonly lid?: 'open' | 'closed';
   /** P3.5: the held sample (SPEC §10.5), or null; while held the dish refuses Run, Step and other changes. */
   readonly sample?: SampleHeldSummary | null;
+  /** P4.1: the followed families' marks and slot summaries (absent when no family is followed). */
+  readonly favorites?: FavoriteMarks;
 }
+
+/**
+ * P4.1 (src/worker/favorites.ts): per-entity marks in `ents` order — bit k: a highlighted member of
+ * active favorite slot k (k = 0…2, the active favorites in the record's order); bit 3 + k: that slot's
+ * representative — and one summary per active slot. Highlighting stops at FAVORITE_HIGHLIGHT_MAX members
+ * (the first by birth tick, then birth id); beyond it `aggregate` is the mean position and count of all
+ * members (CT §12.10 "descendants highlighted ≤ 200").
+ */
+export interface FavoriteMarks {
+  readonly marks: Uint8Array;
+  /**
+   * Fix round 1: per entity in `ents` order, bit k = a member of active slot k, highlighted or not (the
+   * marks stop at FAVORITE_HIGHLIGHT_MAX; the inspector's "Follow this family" needs every member).
+   */
+  readonly member: Uint8Array;
+  readonly slots: readonly FavoriteSlotMark[];
+}
+
+export interface FavoriteSlotMark {
+  readonly id: string;
+  readonly pattern: FavoritePattern;
+  /** Living members now. */
+  readonly members: number;
+  /** Members carrying the slot bit (at most FAVORITE_HIGHLIGHT_MAX). */
+  readonly highlighted: number;
+  readonly aggregate: { readonly x: number; readonly y: number; readonly count: number } | null;
+  /** The representative's entity id while it is alive in the dish, else null (Find then offers Follow next). */
+  readonly representativeEntity: number | null;
+  /** The representative is in the held sample (a member, but not in the dish until Transfer or Cancel). */
+  readonly representativeHeld: boolean;
+  /** When the representative is gone: the first Follow next candidate [birthId, birthTick, speciesIdx], else null. */
+  readonly next: readonly [number, number, number] | null;
+  /** Fix round 1: the first Follow next candidates (at most FAVORITE_CANDIDATES_SHOWN, `next` first) in the same order and form; [] while the representative is a member. */
+  readonly candidates: readonly (readonly [number, number, number])[];
+  /** Generation depth: the highest generation among living members minus the root's (null when the root's record is not kept). */
+  readonly depth: number | null;
+}
+
+/** P4.1: a change to a dish's favorites (notebook state; never a CommandPayload). */
+export type FavoriteOp =
+  | { readonly kind: 'follow'; readonly birthId: number; readonly nickname: string | null; readonly pattern: FavoritePattern }
+  | { readonly kind: 'rename'; readonly id: string; readonly nickname: string | null }
+  | { readonly kind: 'pattern'; readonly id: string; readonly pattern: FavoritePattern }
+  | { readonly kind: 'representative'; readonly id: string; readonly birthId: number }
+  | { readonly kind: 'unpin'; readonly id: string }
+  | { readonly kind: 'pin'; readonly id: string };
+
+/** P4.1: what changed in a notebook without being asked (stage 2 extends the union). */
+export type NotebookChange =
+  | { readonly kind: 'favoriteExtinct'; readonly id: string; /** An unpinned favorite removed to make room (its display name). */ readonly removed?: string }
+  | { readonly kind: 'favoriteRepresentativeGone'; readonly id: string; readonly candidates: readonly number[] }
+  /** P4.1 fix round 1: Undo or a rollback restored an earlier dish; the favorites were checked against it (favorites.ts reconcileFavorites). `removed`: display names of favorites whose organisms are not in the restored dish. */
+  | { readonly kind: 'favoritesRestored'; readonly removed: readonly string[]; /** Older unpinned favorites removed to keep 20 (display names). */ readonly unpinnedRemoved?: readonly string[] };
 
 /** What the lineage view asks the worker to mark: a locus to band, and/or a branch to highlight. */
 export interface LineageView {
@@ -812,6 +902,8 @@ export type FromWorker =
   | { readonly type: 'saved'; readonly requestId: number; readonly dishId: string; readonly json: string; readonly hash: string; readonly tick: number }
   | { readonly type: 'hash'; readonly requestId: number; readonly dishId: string; readonly hash: string; readonly tick: number }
   | { readonly type: 'history'; readonly requestId: number; readonly dishId: string; readonly seconds: unknown; readonly minutes: unknown; readonly compacted: boolean }
+  /** P4.3: the answer to 'sessionSummary' (read-only). */
+  | { readonly type: 'sessionSummary'; readonly requestId: number; readonly dishId: string; readonly summary: SessionSummary }
   /** P2.8: a recorded regional trait series; `available` lists, per species, the loci that have records. */
   | {
       readonly type: 'traitHistory';
@@ -869,9 +961,27 @@ export type FromWorker =
       readonly branch?: { readonly fromName: string; readonly tick: number };
       /** D-0033: how the dish that was open was kept first, when the request carried keepFrom. */
       readonly kept?: WhatIfKept;
+      /** P4.1 (D-0070): the file's notebook could not be read and was left out (the dish loaded). */
+      readonly notebookDropped?: string;
     }
   | { readonly type: 'exported'; readonly requestId: number; readonly text: string; readonly filename: string }
   | { readonly type: 'family'; readonly requestId: number; readonly dishId: string; readonly family: FamilyAnswer }
+  /**
+   * P4.1: the dish's notebook record after a 'notebookGet' or 'favorite' request. `refused`: the op was not
+   * applied (readable). `removed`: an unpinned favorite removed to make room (its display name).
+   * `inspected`: the organism 'notebookGet' asked about, when alive.
+   */
+  | {
+      readonly type: 'notebook';
+      readonly requestId: number;
+      readonly dishId: string;
+      readonly record: NotebookRecord;
+      readonly refused?: string;
+      readonly removed?: string;
+      readonly inspected?: EntityInspect | null;
+    }
+  /** P4.1: unsolicited — a followed family's representative left, or its last member did. */
+  | { readonly type: 'notebookChanged'; readonly dishId: string; readonly record: NotebookRecord; readonly change: NotebookChange }
   /** P3.8: every relationship the dish's watcher has seen since the dish was opened in this session. */
   | {
       readonly type: 'relationships';
@@ -1142,4 +1252,6 @@ export interface NewDishPreview {
     readonly total: { readonly c: number; readonly n: number; readonly m: number };
   };
   readonly registry: RegistryInfo;
+  /** P4.3: the start's thumbnail (src/worker/thumbnail.ts): the Play shelf's live-state picture. */
+  readonly thumb?: string;
 }

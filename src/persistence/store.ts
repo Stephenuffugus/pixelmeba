@@ -58,6 +58,18 @@ export interface SlotInfo {
    */
   readonly evolution?: SaveMetaEvolution;
   readonly registry?: SaveMetaRegistry;
+  /**
+   * P4.1 (D-0070): the checksum of the notebook record written beside the state (absent when the file
+   * carries none), so `holdsSave` sees a change made only to the notebook (a Follow, a rename) and the
+   * next autosave writes it.
+   */
+  readonly notebookChecksum?: string;
+  /**
+   * P4.3: the saved moment's thumbnail (src/worker/thumbnail.ts), a display copy outside the save
+   * checksum; the same world gives the same string, so holdsSave still holds for an unchanged dish.
+   * Optional (indexes written before lack it) and re-validated when read.
+   */
+  readonly thumb?: string;
 }
 
 export interface StoredRecord {
@@ -102,6 +114,10 @@ export interface SaveRequest {
   readonly activeSlot?: string;
   /** D-0033 fix round 1 (autosave only): the bound slot's current record id when the state was taken. */
   readonly activeRecord?: string;
+  /** P4.1: the checksum of the file's notebook record, when it has one (copied into the slot index). */
+  readonly notebookChecksum?: string;
+  /** P4.3: the file's thumbnail (copied into the slot index; outside the checksum). */
+  readonly thumb?: string;
 }
 
 let recordCounter = 0;
@@ -139,6 +155,8 @@ export function slotRecordFor(req: SaveRequest, book: SlotBookkeeping): SlotInfo
     ...(req.worldId !== undefined ? { worldId: req.worldId } : {}),
     ...(req.activeSlot !== undefined && req.slotId === AUTOSAVE_SLOT ? { activeSlot: req.activeSlot } : {}),
     ...(req.activeRecord !== undefined && req.activeSlot !== undefined && req.slotId === AUTOSAVE_SLOT ? { activeRecord: req.activeRecord } : {}),
+    ...(req.notebookChecksum !== undefined ? { notebookChecksum: req.notebookChecksum } : {}),
+    ...(req.thumb !== undefined ? { thumb: req.thumb } : {}),
   };
 }
 
