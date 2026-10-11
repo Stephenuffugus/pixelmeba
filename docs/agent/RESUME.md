@@ -3,7 +3,7 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
-> **Update 2026‑10‑11 22:35 UTC — WAVE 6a COMMITTED (`ca8c184`), P4.6 and P4.7 ticked. WAVE 6b LAUNCHING. START HERE.**
+> **Update 2026‑10‑11 22:25 UTC — WAVE 6a COMMITTED (`ca8c184`), P4.6 and P4.7 ticked. WAVE 6b RUNNING (run `wf_0527b70e-8ef`, launched 22:24 from session 78f75dc7). START HERE.**
 > - Evidence (commit message): check 1785/1786 with the one failure a timeout under load (goals-host, 121 s vs 120 s;
 >   15/15 alone; its limit is now 600 s, re-run 26/26 with try-dish-host); all 74 desktop journeys of the touched specs
 >   pass, stories on phone-portrait too.
