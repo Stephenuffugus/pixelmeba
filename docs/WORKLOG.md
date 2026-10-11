@@ -63,9 +63,9 @@ with the next task).
 
 ## Phase 4 — Wonder, Replay, Android → v1.0.0-rc1
 - [x] (9b40210; D-0073, D-0075) P4.1 Favorite families
-- [ ] P4.2 Story cards (4 templates) + notification limits + notebook tab
+- [x] (c3f214e; D-0076, D-0077, D-0079) P4.2 Story cards (4 templates) + notification limits + notebook tab
 - [x] (9b40210; D-0074; prompt progress per page session is an owner item) P4.3 Garden card, session memory, optional prompts
-- [ ] P4.4 Objective engine (5 types) + 3 goals
+- [x] (c3f214e; D-0078) P4.4 Objective engine (5 types) + 3 goals
 - [ ] P4.5 Paired Garden variants (R2)
 - [ ] P4.6 Share (Picture 1080², Starting recipe, Living dish, recipe IDs, stripped export)
 - [ ] P4.7 Try my dish (R4)

@@ -3,6 +3,29 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑11 15:00 UTC — WAVE 5b COMMITTED (`c3f214e`), P4.1–P4.4 ticked. WAVE 6a LAUNCHING. START HERE.**
+> - Evidence for 5b:
+>   - check 169 files / 1714 tests;
+>   - the three re-run journeys 6/6 on desktop and phone-portrait;
+>   - verifiers ok.
+>   - D‑0076…D‑0079, including the D‑0079 first-minute amendment.
+> - Wave 6 pre-launch done in this commit:
+>   - the 28 placeholders patched (tools/lead/patch-wave6-placeholders.py);
+>   - D‑0080 (share picture from a snapshot), D‑0081 (Try my dish clones), D‑0082 (scope calls: shelf, transfer preview
+>     → Phase 5, recipe card = Starting recipe file, …);
+>   - `docs/agent/g4-wave-6a.run.workflow.js.txt` (share 4271, try-my-dish 4272, observation-map 4273).
+> - Reports go to `docs/reports/reviews/g4-wave-6a/`. Backups: `wip/g4-wave-6a` every 30 min.
+> - If this session dies mid-wave:
+>   1. If the tree is clean, restore from `wip/g4-wave-6a`.
+>   2. Read the reports.
+>   3. Rerun only unfinished builders: set `A.only` and give each a `finish` note.
+> - After 6a:
+>   1. integrate (MINORs, D‑0083+, check, desktop e2e, ARCH §7/§11.2);
+>   2. commit;
+>   3. tick P4.6 and P4.7;
+>   4. build 6b with the same tool: keys `observation-notebook,challenge-editor,variants-paired,narration`, stages 2
+>      then 3.
+
 > **Update 2026‑10‑11 13:35 UTC — 5b INTEGRATED except ONE follow-up (running). START HERE.**
 > - Integration fixers and verifier done (`integrate-*.md`, verify ok). The lead's own fixes:
 >   - the saveFile import refs plus a host test;
