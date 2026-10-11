@@ -16,9 +16,11 @@
 >   - reports go to `docs/reports/reviews/g4-wave-6b/`.
 > - Backups: `nohup tools/lead/backup-loop.sh wip/g4-wave-6b "wip: wave 6b in flight"` (pid in tmp/lead/backup-6b.pid;
 >   log tmp/lead/backup-g4-wave-6b.log).
-> - Also running (planning only): the wave 7 task writer `docs/agent/g4-wave-7-tasks.workflow.js.txt`, run `wf_36ce2605-40a`
->   → `docs/agent/g4-wave-7.tasks.js.txt` with `<lead: …>` placeholders for the 6b facts (writer report in
->   docs/reports/reviews/g4-wave-7/writer.md). If it died, rerun it; it edits no source file.
+> - Wave 7 task file WRITTEN and REVIEWED (`docs/agent/g4-wave-7.tasks.js.txt`, commit 0c75dd3; writer report
+>   docs/reports/reviews/g4-wave-7/writer.md): 7a = android (4281, critical) + perf2-polish (4282, critical: it edits src/sim
+>   hash-neutrally); 7b = web-arcade (4283) + store (4284). Lead review at 22:45: every PROPOSED DECISION accepted, including
+>   Filesystem saves on the native app (canonical; IndexedDB stays the web store; flipping back is one line; owner device
+>   test). Before 7a: patch its `<lead: …>` placeholders with the 6b facts (LEAD PRE-LAUNCH 1a–1f), record D-<n>/D-<n+1>.
 > - If this session dies mid-wave:
 >   1. If `git status` is clean, restore with `git checkout wip/g4-wave-6b -- . && git reset -q`.
 >   2. Read the run's journal (~/.claude/projects/-workspaces-pixelmeba/<session>/subagents/workflows/<run>/journal.jsonl)
