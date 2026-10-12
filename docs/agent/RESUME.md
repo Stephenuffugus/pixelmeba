@@ -3,6 +3,16 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑12 17:20 UTC — WAVE 7a DONE: fixes committed `ed374ba` (D‑0096; check 208 files / 2027 tests;
+> desktop e2e batch 2 52/53 + whatif:237 rerun green after expectReachable re-scrolls; android-storage phone 2/2).
+> P4.10 + P4.13 ticked; WAVE 7a AS BUILT in docs/agent/g4-wave-7.tasks.js.txt STATE. 7b run file
+> docs/agent/g4-wave-7b.run.workflow.js.txt built (keys web-arcade, store). START HERE.**
+> - Next: backup loop → wip/g4-wave-7b (tools/lead/backup-loop.sh), launch 7b with the Workflow tool (copy the run file
+>   to the scratchpad as .js; scriptPath). Then integrate (MINORs, decisions, check, touched journeys desktop), commit,
+>   tick P4.11 + P4.12 → P4.14 v1.0 gate (full three-project e2e, EXPANSION_RESPONSE, tag v1.0.0-rc1).
+> - If the session died mid-7b: restore the tree from wip/g4-wave-7b if `git status` is clean, read
+>   docs/reports/reviews/g4-wave-7b/, rerun only unfinished tasks (A.only + finish notes).
+
 > **Update 2026‑10‑12 14:05 UTC — THE VERIFIER FIXES ARE MADE BUT NOT COMMITTED (D‑0096; both MAJORs, the MINORs,
 > the docs, the damaged-save line 6 s + the android-storage wait). Targeted evidence: tsc clean, eslint clean on the 13
 > changed files, `npx vitest run tests/platform tests/ui tests/render/phase3.test.ts` 38 files / 283 passed, two
