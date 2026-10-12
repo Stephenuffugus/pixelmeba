@@ -14,6 +14,9 @@ import { journal, journalUnseen, type JournalStampEntry } from '../journal';
 import { JournalComposer, ObservationCard } from './NotebookJournal';
 import { NotebookFavorites } from './NotebookFavorites';
 import { NotebookStories } from './NotebookStories';
+import { NotebookBookmarks } from './NotebookBookmarks';
+import { NotebookGallery } from './NotebookGallery';
+import { BOOKMARK_UI, GALLERY_UI } from '../strings/notebookTools';
 import { leaveNotebook, openStoryId, storyReturn, unseenStories, wireStories } from '../stories';
 import { STORY_TEXT } from '../strings/stories';
 import { CONCLUSIONS } from '../panels/CompareText';
@@ -23,19 +26,22 @@ import { fmt, fmtDiff, measureLabel } from '../panels/CompareText';
 import { durationText, journalMeasureCells, recordedText } from '../strings/experiments';
 import { clock } from '../panels/CompareText';
 
-type Tab = 'stories' | 'favorites' | 'journal' | 'experiments';
+type Tab = 'stories' | 'favorites' | 'journal' | 'bookmarks' | 'gallery' | 'experiments';
 const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
   // P4.1: UX §2 order (Something happened · Favorites · Journal · … · Experiments).
   { id: 'stories', label: STORY_TEXT.tab },
   { id: 'favorites', label: 'Favorites' },
   { id: 'journal', label: 'Journal' },
+  // P4.8b: UX §2 order (… Journal · Bookmarks · Gallery · Experiments).
+  { id: 'bookmarks', label: BOOKMARK_UI.tab },
+  { id: 'gallery', label: GALLERY_UI.tab },
   { id: 'experiments', label: 'Experiments' },
 ];
 
 export function Notebook() {
   const r = route.value;
   const tab: Tab = r.name === 'notebook' ? r.tab : 'experiments';
-  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ stories: null, favorites: null, journal: null, experiments: null });
+  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ stories: null, favorites: null, journal: null, bookmarks: null, gallery: null, experiments: null });
 
   useEffect(() => {
     void loadExperimentCards();
@@ -99,7 +105,7 @@ export function Notebook() {
           ))}
         </div>
         <section id="nb-panel" role="tabpanel" aria-labelledby={`nb-tab-${tab}`} class="nb-panel">
-          {tab === 'stories' ? <NotebookStories /> : tab === 'favorites' ? <NotebookFavorites /> : tab === 'journal' ? <JournalTab /> : <ExperimentsTab />}
+          {tab === 'stories' ? <NotebookStories /> : tab === 'favorites' ? <NotebookFavorites /> : tab === 'journal' ? <JournalTab /> : tab === 'bookmarks' ? <NotebookBookmarks /> : tab === 'gallery' ? <NotebookGallery /> : <ExperimentsTab />}
         </section>
       </div>
     </main>

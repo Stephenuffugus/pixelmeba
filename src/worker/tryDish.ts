@@ -20,7 +20,7 @@ import type { World } from '@sim/world';
 import { loadSaveFile } from '@persist/saveFile';
 import { branchWorldId } from '@persist/checkpoints';
 import { favoritesOnly, type NotebookRecord } from '@persist/notebook';
-import { turnEndTick, turnOf, type TurnHorizonTicks, type TurnRecord } from '@persist/notebookTurns';
+import { turnEndTick, turnOf, type TurnChallenge, type TurnHorizonTicks, type TurnRecord } from '@persist/notebookTurns';
 export { turnGoal } from '@persist/notebookTurns';
 import { goalCatalog } from './goals';
 import type { TryGoalOption } from './protocol';
@@ -71,6 +71,8 @@ export function turnRecordFor(args: {
   readonly horizonTicks: TurnHorizonTicks;
   readonly objectiveId: string | null;
   readonly prediction: string;
+  /** P4.8c: the custom challenge the turn plays (its objective id is then the challenge's). */
+  readonly challenge?: TurnChallenge;
 }): TurnRecord {
   return {
     tryId: args.tryId,
@@ -83,6 +85,7 @@ export function turnRecordFor(args: {
     prediction: args.prediction,
     state: 'running',
     kept: null,
+    ...(args.challenge ? { challenge: args.challenge } : {}),
   };
 }
 
@@ -91,11 +94,11 @@ export function turnRecordFor(args: {
  * world), then the state again under the turn's own world id. The notebook carries the baseline's favorites
  * only (as Duplicate does) plus `turn`. The world, its tick and its stateHash are the baseline's.
  */
-export async function cloneTurn(text: string, newDishId: string, turn: (turnWorldId: string) => TurnRecord): Promise<{ readonly world: World; readonly notebook: NotebookRecord; readonly name: string }> {
+export async function cloneTurn(text: string, newDishId: string, turn: (turnWorldId: string, world: World) => TurnRecord): Promise<{ readonly world: World; readonly notebook: NotebookRecord; readonly name: string }> {
   const loaded = await loadSaveFile(text);
   const worldId = branchWorldId(loaded.world.worldId, newDishId);
   const world = deserializeWorld({ ...loaded.file.state, worldId });
-  const record = turn(worldId);
+  const record = turn(worldId, world); // P4.8c: the world too (a challenge turn records its start sequence number)
   return { world, notebook: { ...favoritesOnly(loaded.notebook, worldId), turns: [record] }, name: turnName(record.baseline.name, record.turn) };
 }
 

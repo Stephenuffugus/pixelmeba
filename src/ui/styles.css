@@ -771,15 +771,25 @@ textarea {
   font-size: var(--fs-small);
 }
 
+/* Reduced motion (UX §7.4, audited at P4.9): no CSS animation or transition anywhere, pseudo-elements
+   included, and no smooth scrolling; the device setting until Settings chooses, then the .reduced-motion
+   class on <html> (src/ui/state.ts applyDisplaySettings). The only CSS animation in the app is the
+   "Show me" pulse (.show-me below): its outline stays, the pulse goes. */
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
     transition: none !important;
     animation: none !important;
+    scroll-behavior: auto !important;
   }
 }
-.reduced-motion * {
+.reduced-motion *,
+.reduced-motion *::before,
+.reduced-motion *::after {
   transition: none !important;
   animation: none !important;
+  scroll-behavior: auto !important;
 }
 
 /* ---------------------------------------------------------------- comparison (UX §5.6) */
@@ -3711,4 +3721,112 @@ html[data-text-scale='2'] .tab-context {
     clip: rect(0 0 0 0);
     white-space: nowrap;
   }
+}
+
+/* ---------------------------------------------------------------- custom challenges (P4.8c; SPEC §13.5) */
+/* The editor, the start sheet and Leave challenge (src/ui/panels/{ChallengeEditor,ChallengeStart}.tsx). Text ≥ 16 px; controls ≥ 48 px. */
+.ch-fields {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.ch-field {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.ch-field input,
+.ch-field select {
+  font: inherit;
+  font-weight: 400;
+  font-size: 1rem;
+  min-height: var(--target);
+  padding: 0 0.75rem;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  width: 100%;
+  box-sizing: border-box;
+}
+.ch-disabled {
+  cursor: not-allowed;
+  color: var(--text-muted);
+}
+.ch-summary {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 4px solid var(--line);
+}
+.ch-summary h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------- bookmarks, gallery, storage (P4.8b) */
+.nb-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.nb-actions > p {
+  flex: 1 1 100%;
+  margin: 0;
+}
+.bookmark-text-only {
+  font-weight: 600;
+  font-size: var(--fs-body);
+}
+.gallery-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+.gallery-card > div {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.gallery-picture {
+  width: min(224px, 100%);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  image-rendering: pixelated;
+  border-radius: 8px;
+  background: #14252d;
+}
+.gallery-summary {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+  font-size: var(--fs-body);
+}
+.storage-panel h3 {
+  margin: 1rem 0 0.25rem;
+  font-size: 1.125rem;
+}
+.storage-rows {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.storage-rows > li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.storage-confirm {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: var(--fs-body);
+}
+.history-bookmark {
+  margin-left: auto;
+  flex: 0 0 auto;
 }

@@ -89,8 +89,12 @@ export interface PictureOptions {
   readonly legend: boolean;
   readonly hideLabels: boolean;
   readonly includeNicknames?: boolean;
-  /** A square of `cells` cells from (x0, y0), drawn at the largest integer scale (the gallery's specimens). */
-  readonly crop?: { readonly x0: number; readonly y0: number; readonly cells: number };
+  /**
+   * A square of `cells` cells from (x0, y0), drawn at the largest integer scale (the gallery's specimens).
+   * P4.8b: `cellPx` draws it at that many pixels per cell instead; `bare` returns the crop alone (a list of
+   * cells × cellPx square, no surround, no labels: the gallery's own small picture).
+   */
+  readonly crop?: { readonly x0: number; readonly y0: number; readonly cells: number; readonly cellPx?: number; readonly bare?: boolean };
 }
 
 export type TextRole = 'question' | 'wordmark' | 'identity' | 'caption' | 'legend';
@@ -374,10 +378,12 @@ export function composePicture(
   const cells = crop ? Math.max(1, Math.min(GRID_W, Math.floor(crop.cells))) : GRID_W;
   const gx0 = crop ? Math.floor(crop.x0) : 0;
   const gy0 = crop ? Math.floor(crop.y0) : 0;
-  const cellPx = Math.floor(PICTURE_DISH_PX / cells);
+  const bare = crop?.bare === true;
+  const cellPx = crop?.cellPx !== undefined && Number.isInteger(crop.cellPx) && crop.cellPx >= 1 ? Math.min(crop.cellPx, Math.floor(PICTURE_DISH_PX / cells)) : Math.floor(PICTURE_DISH_PX / cells);
   const viewPx = cells * cellPx;
-  const vx = PICTURE_DISH_X + Math.floor((PICTURE_DISH_PX - viewPx) / 2);
-  const vy = PICTURE_DISH_Y + Math.floor((PICTURE_DISH_PX - viewPx) / 2);
+  const vx = bare ? 0 : PICTURE_DISH_X + Math.floor((PICTURE_DISH_PX - viewPx) / 2);
+  const vy = bare ? 0 : PICTURE_DISH_Y + Math.floor((PICTURE_DISH_PX - viewPx) / 2);
+  if (bare) items[0] = { kind: 'fill', x: 0, y: 0, w: viewPx, h: viewPx, color: BG };
   const s = Math.max(1, Math.floor(cellPx / PICTURE_CELL_PX));
   items.push({
     kind: 'pixels',
@@ -466,6 +472,8 @@ export function composePicture(
     }
   }
 
+  // P4.8b: a bare crop (the gallery's picture) has no surround and no labels.
+  if (bare) return { width: viewPx, height: viewPx, cellPx, spriteScale: s, items };
   // Labels. The wordmark always; everything else only without Hide labels.
   const bandY = PICTURE_DISH_Y + PICTURE_DISH_PX + 8;
   const inner = PICTURE_PX - 2 * PICTURE_MARGIN;

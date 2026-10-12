@@ -4,7 +4,7 @@
  * extinction card neither scolds nor alarms.
  */
 import { FAVORITE_REFUSALS, defaultFavoriteName } from '@worker/favorites';
-import type { FavoritePattern, FavoriteRecord } from '@persist/notebook';
+import { NOTEBOOK_DROPPED_TEXT, type FavoritePattern, type FavoriteRecord } from '@persist/notebook';
 import { reasonText } from './reasons';
 
 export { FAVORITE_REFUSALS, defaultFavoriteName };
@@ -35,8 +35,8 @@ export const FAVORITE_TEXT = {
   inheritedTitle: 'Confirmed inherited differences',
   inheritedLoading: 'Reading its recorded inheritance…',
   representativeGone: 'The organism you were following is no longer in the dish.',
-  dropped:
-    "This dish's notebook (favorites, story cards and goals) could not be read, so it was left out. The dish itself loaded.",
+  /** The worker's own words (one constant: what a dropped notebook loses). */
+  dropped: NOTEBOOK_DROPPED_TEXT,
 } as const;
 
 export const PATTERN_NAMES: Readonly<Record<FavoritePattern, string>> = {

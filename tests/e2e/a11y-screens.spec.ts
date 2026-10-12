@@ -5,6 +5,17 @@
  * and fails once at the end, so one run lists everything. A last test checks 200 % text at the three
  * acceptance sizes (360×800, 800×360, 1440×900): primary controls reachable as 48 px targets and no
  * sideways scrolling.
+ *
+ * Phase 4 wave 6b screens and the spec that axe-scans each (serious/critical fail everywhere; the builders'
+ * specs use helpers.ts expectNoSeriousA11yViolations), so the a11y gate's coverage is in one place:
+ *   - Notebook Bookmarks tab, Notebook Gallery tab, Storage panel (listing, and after a removal):
+ *     bookmarks-gallery.spec.ts
+ *   - Challenge editor, Start challenge sheet: challenge.spec.ts
+ *   - Paired Garden variant setup and results: variants-paired.spec.ts
+ *   - Settings → Sound with the Narration control: narration.spec.ts
+ *   - What if? with an idea chosen ("Compare with Garden"), the Bookmark sheet (More → Bookmark), the
+ *     gallery's Delete confirmation, a Storage "Remove…" confirmation, Leave challenge: this file, test
+ *     "wave 6b".
  */
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
@@ -609,6 +620,111 @@ test('wave 6a: Share sheet (each choice), Lab relationship map, region probes wi
     'Try my dish: horizon card',
     'Play: Import recipe ID (refused)',
     'Saved dishes: Import recipe ID',
+  ]);
+});
+
+// P4.5, P4.8b and P4.8c screens no builder spec scans (the header lists which spec scans the others). Flows
+// and selectors as in tests/e2e/variants-paired.spec.ts, bookmarks-gallery.spec.ts and challenge.spec.ts.
+test('wave 6b: What if? with Compare with Garden, Bookmark sheet, gallery Delete confirmation, Storage Remove… confirmation, Leave challenge', async ({
+  page,
+}) => {
+  test.setTimeout(360_000);
+  const a = new Audit(page);
+  await seedSettings(page, { showPrompts: false });
+  await page.goto('/');
+
+  // Play → What if? → an idea chosen: "Compare with Garden (180 s)" shows (nothing is started).
+  await page.getByTestId('home-play').click();
+  await page.getByTestId('whatif-open').click();
+  await expect(page.getByTestId('whatif-sheet')).toBeVisible();
+  await page.getByTestId('whatif-choice-R-G1').click();
+  await expect(page.getByTestId('whatif-pair')).toHaveText('Compare with Garden (180 s)');
+  await a.scan('What if?: an idea with Compare with Garden');
+  await page.getByTestId('whatif-close').click();
+  await expect(page.getByTestId('whatif-sheet')).toHaveCount(0);
+  await page.getByTestId('start-garden').click();
+  await expect(page.getByTestId('dish-screen')).toBeVisible();
+  await expect(page.getByTestId('sim-time')).toContainText('56 alive');
+
+  // More → Bookmark this moment: the sheet, then saved with a snapshot (a shelf record for Storage below).
+  await page.getByTestId('more').click();
+  await page.getByTestId('bookmark-now').click();
+  await expect(page.getByTestId('bookmark-sheet')).toBeVisible();
+  await expect(page.getByTestId('bookmark-title')).toHaveValue(/^Little Living Garden at /);
+  await a.scan('Bookmark sheet');
+  await page.getByTestId('bookmark-snapshot').check();
+  await page.getByTestId('bookmark-save').click();
+  await expect(page.getByTestId('bookmark-sheet')).toHaveCount(0);
+  await expect(page.locator('.toast')).toContainText('Bookmarked with a snapshot.');
+
+  // One specimen in the gallery.
+  await selectOrganism(page);
+  await page.getByTestId('gallery-save').click();
+  await expect(page.locator('.toast')).toContainText('Saved to the gallery.');
+  await closeSheet(page, 'inspector');
+
+  // More → Make a challenge… → Save (its baseline goes on the shelf).
+  await page.getByTestId('more').click();
+  await page.getByTestId('more-challenge').click();
+  await expect(page.getByTestId('challenge-editor')).toBeVisible();
+  await page.getByTestId('ch-name').fill('Keep Sprinters going');
+  await page.getByTestId('ch-species').selectOption('B01');
+  await page.getByTestId('ch-duration').fill('60');
+  await page.getByTestId('ch-save').click();
+  await expect(page.getByTestId('challenge-editor')).toHaveCount(0);
+  await expect(page.getByRole('status').filter({ hasText: 'Challenge “Keep Sprinters going” saved.' })).toBeVisible();
+
+  // Notebook → Gallery → Delete…: the confirmation (Keep answers it; nothing is deleted).
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  await page.getByTestId('home-notebook').click();
+  await page.getByTestId('notebook-tab-gallery').click();
+  await expect(page.getByTestId('gallery-entry')).toHaveCount(1);
+  await page.getByTestId('gallery-delete').click();
+  await expect(page.getByTestId('gallery-delete-confirm')).toBeVisible();
+  await a.scan('Notebook: gallery, Delete confirmation');
+  await page.getByTestId('gallery-keep').click();
+  await expect(page.getByTestId('gallery-entry')).toHaveCount(1);
+  await page.getByRole('button', { name: /^Back/ }).first().click();
+  await expect(page.getByTestId('home-play')).toBeVisible();
+
+  // Saved dishes → Storage → Remove… on the snapshot: the confirmation (Cancel answers it; nothing is removed).
+  await page.getByRole('button', { name: 'Saved dishes' }).click();
+  await page.getByTestId('saves-storage').click();
+  const panel = page.getByTestId('storage-panel');
+  await expect(panel).toBeVisible();
+  const snap = panel.locator('[data-testid="storage-row"][data-kind="snapshot"]');
+  await expect(snap).toHaveCount(1);
+  await snap.getByTestId('storage-remove').click();
+  await expect(snap.getByTestId('storage-confirm-text')).toHaveText('Remove this snapshot? The bookmark text stays in its dish.');
+  await a.scan('Storage: Remove… confirmation');
+  await snap.getByTestId('storage-remove-cancel').click();
+  await expect(snap.getByTestId('storage-confirm-text')).toHaveCount(0);
+  await expect(snap).toHaveCount(1);
+  await page.getByRole('button', { name: 'Back' }).click();
+
+  // Continue → More → Start challenge → Start: a challenge turn; More → Leave challenge…: its sheet.
+  await page.getByRole('region', { name: 'Continue' }).getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByTestId('dish-screen')).toBeVisible();
+  await page.getByTestId('more').click();
+  await page.getByTestId('more-challenge-start').click();
+  await expect(page.getByTestId('challenge-start')).toBeVisible();
+  await page.getByTestId('ch-start').click();
+  await expect(page.getByTestId('challenge-start')).toHaveCount(0);
+  await expect(page.getByTestId('try-badge')).toHaveText('Challenge · Turn 1 · 3:00 left');
+  await page.getByTestId('more').click();
+  await page.getByTestId('more-challenge-leave').click();
+  await expect(page.getByTestId('challenge-leave')).toBeVisible();
+  await expect(page.getByTestId('ch-open-copy')).toBeEnabled();
+  await a.scan('Leave challenge');
+  await page.getByTestId('ch-cancel').click();
+  await expect(page.getByTestId('challenge-leave')).toHaveCount(0);
+
+  a.done([
+    'What if?: an idea with Compare with Garden',
+    'Bookmark sheet',
+    'Notebook: gallery, Delete confirmation',
+    'Storage: Remove… confirmation',
+    'Leave challenge',
   ]);
 });
 

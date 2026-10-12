@@ -298,6 +298,99 @@ DishInfo.turn?: TurnRecord                               // the dish's turn, whe
   all masks; a refused set (a comparison copy, or `probeSetProblem`) changes nothing and the answer
   carries `refused` with the current masks and readings.
 
+As built, Phase 4 wave 6b (P4.5 paired Garden variants, P4.8b bookmarks, gallery and storage, P4.8c custom
+challenges; `src/worker/protocol.ts`; `PROTOCOL_VERSION` stays 2, every addition is a new message or an
+optional field):
+```
+Main → Worker
+bookmarkAdd {requestId, dishId, title, snapshot, event: BookmarkEventRef|null}
+                                                         → notebook (refused?: nothing was added)
+  BookmarkEventRef = {tick, type, species, cause|null, text}   // a History "What happened" row; text only
+bookmarkDelete {requestId, dishId, id}                   → notebook (refused?) // its snapshot stays on the shelf
+bookmarkOpen {requestId, dishId, id, newDishId, keepFrom?}
+                                                         → loaded {…, branch} | keepRefused | bookmarkGone
+galleryAdd {requestId, dishId, entry: GalleryEntryInput} → notebook (refused?) // GalleryEntry without its id
+galleryDelete {requestId, dishId, id}                    → notebook (refused?)
+storageInfo {requestId}                                  → storageInfo (read-only)
+storageRemove {requestId, slotId}                        → storageInfo {…, removed} | error
+challengeSave {requestId, dishId, challenge: ChallengeInput}
+                                                         → challengeSaved | challengeRefused
+challengeExport {requestId, dishId, challengeId}         → challengeExported | challengeRefused (read-only)
+challengeStart {requestId, dishId, challengeId, newDishId, keepFrom?, check?}
+                                                         → challengeStarted | challengeRefused | keepRefused
+                                                           (with check: challengeChecked; nothing is kept,
+                                                           written or opened)
+variantPairStart {requestId, variantId, newDishId, compare {compareId, aDishId, bDishId}, sequential,
+                  keepFrom?}                             → variantPairStarted | whatIfRefused | keepRefused
+Worker → Main
+storageInfo {requestId, storage: StorageInfo, removed?}  // StorageInfo = {estimate {usage, quota}|null,
+                                                          // slots[], checkpoints[], shelf[]} of StorageRow
+                                                          // {slotId, kind 'slot'|'autosave'|'checkpoint'|
+                                                          // 'baseline'|'snapshot', name, tick, savedAt, bytes,
+                                                          // previousBytes, checksum, createdFor|null}
+bookmarkGone {requestId, id, message}                    // the stored moment is gone or unreadable; nothing changed
+challengeSaved {requestId, dishId, record: NotebookRecord, challenge: ChallengeRecord}
+challengeExported {requestId, text, filename}
+challengeChecked {requestId, dishId, refusal|null}       // null: it can start
+challengeStarted {requestId, info: DishInfo, turn: TurnRecord, kept?: WhatIfKept}
+challengeRefused {requestId, message}                    // nothing was changed
+challengeBlocked {dishId, message}                       // unsolicited, posted right after the refused
+                                                          // command's ack {result null, error: message}
+variantPairStarted {requestId, info: DishInfo, compare: ComparisonState, kept?: WhatIfKept}
+ComparisonState.variantPair?: ComparisonVariantPair      // {variantId, revision, title, question, identity,
+                                                          // baseIdentity, change, changeShort, sequential,
+                                                          // phase 'A'|'B'|null, targetTicks, sugarStart {a, b},
+                                                          // sugarEnd {a, b}|null}
+TurnRecord.challenge?: TurnChallenge                     // see §11.2
+```
+- Bookmarks and the gallery are notebook state, never a `CommandPayload`; the world is only read
+  (`src/worker/storage.ts` momentSummary, eventBookmark). `bookmarkAdd` refuses (in `notebook.refused`;
+  nothing added) on a comparison copy or the transient Continue copy, at BOOKMARKS_MAX, for `snapshot`
+  with an `event` (past moments have no stored state), for `snapshot` without a store, and for an event not
+  in the dish's record. With `snapshot` the dish's full save at this tick goes on the shelf (kind 'snapshot',
+  `createdFor` the new bookmark's id) BEFORE the bookmark is added; a refused or failed write adds nothing,
+  and if the dish closed or its bookmarks filled during the write that record is removed again. An empty
+  `title` becomes "<dish name> at <m:ss>". `galleryAdd` checks the entry's own fields
+  (`galleryEntryProblem`), a species this dish has and a birth id and tick it has had; it never spawns.
+  `bookmarkDelete`, `galleryAdd` and `galleryDelete` on a comparison copy or the transient Continue copy
+  answer `notebook.refused`.
+- `bookmarkOpen` reads and verifies the shelf record first (kind 'snapshot', the index checksum and the
+  file's own checksum equal to the bookmark's); a text-only bookmark or a missing or changed record answers
+  `bookmarkGone`. It then opens a NEW branch exactly as a checkpoint opens (branchWorldId, branchName,
+  favorites only), the open dish kept first (keepFirst action 'bookmark'). An unknown bookmark or a
+  `newDishId` in use is the generic `error`.
+- `storageRemove` takes only an automatic checkpoint or a shelf record (`storageRemovable`); a named slot or
+  the autosave is refused with the generic `error` and nothing changes. A shelf id goes through
+  `Shelf.remove`, a checkpoint through `SaveStore.remove`. `storageInfo` with no store is the generic `error`.
+- Custom challenges (`src/worker/challenge.ts`; D-0071: the objective is only evaluated). `challengeSave` and
+  `challengeStart` refuse a comparison copy, a held sample, a failed dish and a device without a store;
+  `challengeSave` also refuses at CHALLENGES_MAX and any `challengeSaveProblem` (typed values, the engine's
+  predicate check, whether this dish can run it). Save pauses the dish and stores its save as a 'baseline'
+  shelf record (`createdFor` the new 'ch-<n>'), unless a challenge's own baseline ('ch-' `createdFor`) with
+  the same state checksum is already on the shelf (challenges made at the same paused moment share one; a
+  Try my dish record is never shared, D-0090), then adds the record. Export answers the
+  baseline save from the shelf, or the open dish while its state checksum still equals the baseline's, with a
+  notebook holding only that challenge. Start finds that baseline (else stores the open dish as one when its
+  checksum still matches, after the shelf's preflight), keeps the open dish first (keepFirst action
+  'tryDish') and opens a Try my dish turn 1 from it, paused at the baseline tick, objective id
+  'CHALLENGE_<n>', prediction '', the turn's `challenge` set and the dish's notebook holding `challenges:
+  [that record]`. `tryNext` on a challenge turn plays the same challenge.
+- In a challenge turn not yet finished, the host's `command` case asks `challengeRefusal` before `applyNow`:
+  a tool group the challenge does not allow, or a counted command once the action budget is used, is refused
+  (`ack` with `error`, then `challengeBlocked`); the world is unchanged and takes no sequence number.
+- `tryFinish` on a turn that plays an active challenge whose goal is running also leaves that goal
+  (`challengeGoalEndsOnFinish`; GoalRunner.leave: 'continuedFreely', endReason 'left'): `tryTurn` is posted,
+  then `notebookChanged` with `goal`.
+- `variantPairStart` (`src/worker/variantPair.ts`; SPEC §13.3–§13.4): `variantId` must be a What if? idea of
+  the Garden (R-G1…R-G3), never R-G0; the comparison is that idea against the unchanged Garden (R-G0) for
+  the fixed 180 s (VARIANT_PAIR_TICKS 1800). Before anything is kept, no other comparison may be open and
+  the three new dish ids must be distinct and unused; both arms are realized from content (a refusal is
+  `whatIfRefused` with the VariantError code or 'failed', and nothing changes). Then the open dish is kept
+  first (keepFirst action 'whatIf'), the checks run again, and a NEW paused dish `newDishId` holding the
+  idea's start opens (it never runs during the comparison) with the comparison in 'setup'. `sequential` runs
+  A to the horizon, then B (B's view shows the idea's start until then); Stop in sequential B refuses.
+  `compareRun` with any other horizon, `compareReset`, and any command on an arm are refused.
+
 ## 8. Snapshots
 Published ≤ 10/s (adaptive under load). Contents: `renderList` as a packed `Float32Array`
 [entityIndex, speciesIdx, x, y, heading, scale/sizeFactor, stateFlags, cueBits] per living
@@ -372,6 +465,41 @@ controllable. Music/effects/voice volumes; mute; pause on suspension. Cue IDs ar
 recorded assets can replace patches later. Narration: `SpeechSynthesis` with the fixed 16‑phrase
 set, feature‑detected, off by default, text equivalents always present.
 
+As built, the narrator (P4.9; `src/audio/narration.ts`, `src/ui/narration.ts`):
+- **Phrase ids only.** `PHRASES` holds the 16 UX §8.3 phrases under stable ids (pressPlay, pause, addLife,
+  addFood, lookClosely, eatingSugar, needsMoreFood, needsRoom, resting, cellSplit, followFamily,
+  feederEmpty, lightOn, lightOff, saved, undoRewinds). `speak(id)` looks the text up there and refuses
+  anything else, so no free text, number, dish name or nickname reaches SpeechSynthesis. Each utterance is
+  `lang 'en'`, rate 1.
+- **Off by default.** Settings → Sound → "Narration (speak short phrases)" stores `narration` (AudioPrefs;
+  AUDIO_DEFAULTS false; a stored setting without it reads as off). Volume is the voice bus
+  (`narrationVolume` = `busGains(p).voice`, 0 when muted); at 0 nothing is spoken and what is speaking stops.
+  Without `speechSynthesis` and `SpeechSynthesisUtterance` nothing is spoken and nothing fails; Settings
+  says so.
+- **When it may speak.** Nothing before the first user gesture (`initAudio` calls `narrator.gesture()`), and
+  nothing while audio is held (`suspendAudio`: page hidden or the arcade host's pause): holding cancels the
+  current utterance and drops the queue, so nothing old is spoken later.
+- **One at a time.** A new phrase waits behind the current one (it cancels nothing); at most
+  NARRATION_QUEUE_MAX = 2 wait and a request beyond that is dropped. A phrase already speaking or waiting is
+  not queued again. If the device never reports an utterance's end, the next starts after
+  UTTERANCE_TIMEOUT_MS = 5 s.
+- **Repeat rule.** The same phrase is not spoken again within NARRATION_REPEAT_MS = 10 s of the last time it
+  was accepted.
+- **Evidence per phrase** (`src/ui/narration.ts` RULES: one pure rule over the previous and next UI view;
+  it reads UI state only, never the world, and sends no command; the matching text is always on screen):
+  pressPlay — a new dish prompt notice ending in the play prompt while the dish is paused; pause — the
+  player's Pause (button or Space, within PAUSE_GESTURE_MS = 3 s) and the same dish's reported speed going
+  from running to 0; addLife — an answered `inoculate` with accepted > 0; addFood — an answered `deposit` or
+  `placeObject` with accepted > 0; lookClosely — the player chose Look (Explore) or Inspect (Lab) while
+  another tool was chosen; eatingSugar / needsMoreFood / needsRoom / resting — the inspected organism's
+  payload newly shows sugar as its only food with intake in the last second (a kind that neither makes its
+  own food, hunts nor digests film), or a lead reason of low food access (a kind that does not make its own
+  food) or no compatible food, blocked division (placement or crowding), or resting (food scarce or dry); cellSplit —
+  the inspected organism's record says it divided, or a snapshot's committed births include a member of a
+  followed family; followFamily — a new guide notice whose id ends in ':follow'; saved — a new "Saved “…”"
+  toast; undoRewinds — the accepted Undo toast. feederEmpty, lightOn and lightOff have no evidence in a
+  v1.0 dish (equipment is Phase 6) and are never spoken.
+
 ## 11. Persistence
 
 ### 11.1 Adapter
@@ -419,8 +547,10 @@ the state checksum, so neither the world checksum nor the stateHash changes with
   (≤ NOTEBOOK_VERSION), the world id, every favorite (unknown fields are problems; at most 3
   followed and 20 unpinned), its references against the dish (species, birth ids below
   `nextBirthId`, no extinction after the dish's tick), the size (canonical JSON at most
-  NOTEBOOK_MAX_BYTES = 1,048,576 characters) and the checksum are checked. A missing kind key reads
-  as `[]`; an unknown key is a problem.
+  NOTEBOOK_MAX_BYTES = 2,097,152 characters, D-0090: every kind at its limit measures about 1.29 M
+  (61 %) with the generator's texts and 1.65 M (79 %) with story texts at the validator's bounds;
+  nothing checks the size at write time, so the cap keeps that room) and the checksum are checked. A
+  missing kind key reads as `[]`; an unknown key is a problem.
 - Any problem drops the whole record: the world still loads with an empty notebook and the load
   answer carries `notebookDropped` (NOTEBOOK_DROPPED_TEXT, shown to the player). A file without a
   notebook (every save written before P4.1), or with `"notebook": null`, loads with an empty one and
@@ -517,6 +647,100 @@ As built, Phase 4 wave 6a (P4.6, P4.7; D-0081, D-0082):
     25 MB ('size'), "This recipe needs a compatible build (simulation n, rules n, content n)." (or "This
     recipe file needs a newer version of Pixelmeba." when a newer file's versions cannot be read), or a
     damaged/checksum message. Nothing outside the new world is created or changed.
+
+As built, Phase 4 wave 6b (P4.8b bookmarks, gallery and storage; P4.8c custom challenges):
+- **Three more optional notebook kinds** (`src/persistence/notebook.ts` KIND_PROBLEMS and
+  worldRefsProblem). A record written before them reads each as `[]`; a notebook holding any of them is not
+  empty (`notebookIsEmpty`). Unknown fields are problems, and any problem drops the whole notebook with
+  `notebookDropped` while the world still loads. None is in the world state, its checksum or its stateHash;
+  nothing in `src/sim` imports them.
+  - `"bookmarks"` (`src/persistence/notebookBookmarks.ts`; at most BOOKMARKS_MAX = 50 per dish, text and
+    snapshot together; the 51st is refused, never a silent removal):
+    ```
+    { id "bm-<n>" (one more than the highest held), tick (the moment: an event's tick or when it was made),
+      title (control characters as spaces, trimmed, 1…60 characters), summary (≤ 200 characters, generated
+      words: a recorded event or what the dish held), eventId (≥ 1)|null,
+      snapshot { shelfId "shelf-snapshot-<seq>-<writer>", checksum "sha256:<64 hex>", bytes (≥ 1) }|null,
+      createdTick }
+    ```
+    Two bookmarks may not share an id or a snapshot. Ticks are never checked against the dish's time
+    (bookmarks survive Undo and a rollback like journal notes). The save itself is never in the notebook:
+    `snapshot` refers to a shelf record; a bookmark with `snapshot: null` is text only ("Text only — not
+    replayable").
+  - `"gallery"` (`src/persistence/notebookGallery.ts`; at most GALLERY_MAX = 100 per dish; the 101st is
+    refused): a picture, the species, the birth id and the inspector lines as shown; no genome, organism
+    data or command.
+    ```
+    { id "gal-<n>", tick, speciesId, birthId (≥ 1), summary [≤ 4 lines, each 1…120 characters, cleaned],
+      crop { x0, y0 (whole cells, 0…112), cells 16, sprites [≤ 200 × [species index 0…255, x, y (0 ≤ v < 16,
+             0.1-cell steps), heading 0…3]], substrate (base64 of 256 bytes, one per cell: bits 0–1 substrate,
+             2–4 structure (4: outside the dish), 5 shaded) } }
+    ```
+    Ids are unique. Against the dish the file carries (`galleryWorldProblem`): `speciesId` must be one of its
+    species and every sprite's species index below its species count; ticks and birth ids are not checked
+    (entries survive Undo and a rollback). The worker's `galleryAdd` also requires a birth id and a tick the
+    dish has had.
+  - `"challenges"` (`src/persistence/notebookChallenges.ts`; at most CHALLENGES_MAX = 20 per dish; the 21st
+    is refused): data only, no scripts or expressions.
+    ```
+    { id "ch-<n>" (one more than the highest held; records are never removed, so an id is never reused),
+      name (cleaned, 1…60 characters; only displayed),
+      objective { type (one of the five named predicate types; never 'custom'), params {name: finite number
+                  | id [A-Za-z][A-Za-z0-9_]{0,63}} (never a region), durationSeconds? (≤ horizonSeconds) },
+      allowedTools [distinct of addLife, feed, habitat, sample, cleanWater, lid, evolution],
+      commandBudget 1…99|null, horizonSeconds 60|180|600,
+      region {kind 'dish'} | {kind 'quarter', id topLeft|topRight|bottomLeft|bottomRight} (a quarter only for
+             fieldInRange),
+      baseline { worldId, tick, checksum "sha256:<64 hex>" (the baseline save's state checksum) } }
+    ```
+    The objective (with the region added for fieldInRange, `challengePredicate`) must pass the engine's
+    `typedPredicate`. Against the dish the file carries (`challengesWorldProblem`): a named species must be
+    one of its species, and with the recorded manifest and fields, `objectiveRefsProblem` must accept it.
+- **What copies do with them.** Undo and an error rollback (`notebookAfterRestore`) leave bookmarks, gallery
+  and challenges as they are. A copy of the dish (Duplicate, a checkpoint branch, a snapshot bookmark opened
+  as a branch) carries favorites only (`favoritesOnly`), so none of the three. A challenge turn dish holds
+  `challenges: [the challenge it plays]`; Another turn of a challenge turn copies the prior turn dish's
+  challenges.
+- **"Export without names or notes"** (`exportDish` with `strip`; host.ts writes
+  `withoutBookmarkNotes(withoutTurnNotes(notebook))`): each bookmark's title becomes "Bookmark at <m:ss>" and
+  its `snapshot` becomes null (a shelf record is this device's storage; summaries stay); every challenge's
+  name, and a turn's `challenge.name`, becomes "Shared challenge" (`withoutChallengeNames`); the gallery is
+  written unchanged (its lines are generated: `src/ui/gallery.ts` gallerySummaryLines writes the species
+  name and birth id, the inspector chips and the constraint line). The ordinary export, the challenge file and device saves keep all three as they are.
+- **`TurnRecord.challenge`** (`src/persistence/notebookTurns.ts`; absent on an ordinary Try my dish turn):
+  ```
+  "challenge": { id "ch-<n>", name, allowedTools [...], commandBudget 1…99|null,
+                 startSeq (the turn world's next command sequence number at its start),
+                 predicate { type, params, durationSeconds? } }
+  ```
+  The turn's `objectiveId` must be "CHALLENGE_<n>" of that id, and the predicate must pass `typedPredicate`.
+  The budget counts the accepted commands of counted kinds logged at or after `startSeq`, so Undo gives an
+  action back with the world (`src/worker/challenge.ts` challengeUsed); Lid and Evolution settings are never
+  counted. The limits apply only while the turn is not finished; the field stays as history after Finish.
+  "Without names or notes" writes its name as "Shared challenge".
+- **The challenge file** (`challengeExportText`): the baseline save text with its notebook replaced by one
+  holding only that challenge (no favorites, nicknames, stories, goals or turns), sealed; the state and its
+  checksum are untouched, so the file's checksum is the challenge's `baseline.checksum`. File name from the
+  challenge's name (`challengeFileName`). It imports as an ordinary dish file.
+- **Shelf records of wave 6b** (`src/persistence/shelf.ts`: writes serialized per page, SHELF_TEXT names both
+  uses of a baseline): a snapshot bookmark writes kind
+  'snapshot' with `createdFor` the bookmark id and `name` the bookmark title (the per-device limit of 20
+  applies; deleting the bookmark leaves the record). A challenge's Save writes kind 'baseline' with
+  `createdFor` 'ch-<n>', unless a challenge's own baseline with the same state checksum is already held
+  (challenges made at the same paused moment share it; a Try my dish record is never shared, D-0090). Start
+  and Export look the baseline up by that checksum, newest first, among all baselines. Start without one
+  stores the open dish as the baseline when its checksum still matches; Start that finds only a Try my dish
+  record stores the challenge's own copy of it when the shelf has room.
+  SHELF_REMOVE_REFUSED now names both kinds and points to Saved dishes → Storage.
+- **The Storage panel** (`src/worker/storage.ts`; Saved dishes → Storage): `readStorage` lists, read-only,
+  the named slots and the autosave with their kept previous copies' sizes, the automatic checkpoints (newest
+  first) and the shelf records (baselines, then snapshots, oldest first), each with its stored size, and the
+  browser's own estimate when it gives one. Removal (`storageRemovable`) is limited to automatic checkpoints
+  and shelf records, one at a time after a confirmation that names what goes and what stays; a named slot or
+  the autosave (Continue) is never removable there (named saves go only through Saved dishes' own Delete…).
+  A removed snapshot leaves its bookmark's text: opening it answers `bookmarkGone`. A removed challenge
+  baseline leaves the challenges in their dishes; Start and Export then work from another baseline holding
+  that moment, else only from an open dish still at that moment (or the imported challenge file).
 
 ### 11.3 Migrations
 `src/persistence/migrations/<from>-to-<to>.ts`; each ships with an old‑save fixture in

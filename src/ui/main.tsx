@@ -3,10 +3,13 @@ import './styles.css';
 import { App } from './app/App';
 import { autosave, compareState, dishInfo, initDisplaySettings, meta, setSpeed } from './state';
 import { initAudio, resumeAudio, suspendAudio } from '@audio/cues';
+import { wireNarration } from './narration';
 
 initDisplaySettings();
 const root = document.getElementById('app');
 if (root) render(<App />, root);
+// P4.9: narration listens to the UI state and speaks a fixed phrase only with its evidence (off by default).
+wireNarration();
 
 // P3.10 (autoplay): no sound before the first user gesture. The audio graph is created lazily on the
 // first tap, click or key press; later gestures also resume audio an arcade host's pause suspended.

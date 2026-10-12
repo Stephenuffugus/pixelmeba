@@ -313,18 +313,38 @@ Camera never jumps on its own; notifications never seize it.
 environment → shared structures/film → deposits/objects → bodies → feature rims → status marks →
 links → selection → HTML UI.
 
-### 7.4 Reduced motion (fill in during P4.9)
-| Effect | Reduced‑motion alternative |
-|--------|----------------------------|
-| eating pulse | static "feeding" mark |
-| division flash | static split frame for 1 s |
-| link/transfer pulse | static link with dot |
-| handling arc | static ring with progress ticks |
-| glow halo | static bright center |
-| camera easing | instant |
-| particles | none |
-| unfolding (wake) | state swap |
-| trails (E07, P07) | none |
+### 7.4 Reduced motion (filled in at P4.9)
+Reduced motion follows the device until chosen in Settings (D‑0065). Every row below is an effect in the
+code; "As built" names the file and symbol that make the choice (tests/render/reduced-motion.test.ts checks
+each with reduced motion on and off). Locomotion is never removed: it is real velocity (§7.1).
+
+| Effect | Reduced‑motion alternative | As built (file: symbol) |
+|--------|----------------------------|-------------------------|
+| eating pulse | static "feeding" mark: the feeding pose's still frame, slightly brighter tint | `src/render/features.ts: bodyFrameIndex`; `src/render/renderer.ts: CUE_FEEDING` |
+| body animation (move, idle, stress) | the animation's still frame (`reducedMotionFrame`) | `src/render/features.ts: bodyFrameIndex` |
+| division flash | static split frame for 1 s (a still ring with a bar across it) | `src/render/features.ts: effectForEvent, effectLook, SPLIT_STATIC_MS` |
+| newborn fade‑in | none (drawn at full opacity at once) | `src/render/features.ts: newbornAlpha` |
+| death dissolve | the dissolve's still frame for 0.6 s, then removed | `src/render/features.ts: ghostDurationMs, ghostFrameIndex, DEATH_STATIC_MS` |
+| fungal segment decay | the decaying tile held still for 0.6 s, then removed | `src/render/features.ts: decayTileAlpha, ghostDurationMs` |
+| link/transfer pulse (F02) | static link with dot (pulse frame 0) | `src/render/world3.ts: fungalPick` |
+| granule pulse (E08), release marks (E09) | static bright granule; static release notches | `src/render/features.ts: featurePulseOn, featureLayers` |
+| trails (E07) | none | `src/render/features.ts: featureLayers` |
+| trails (P07) | none — not in v1.0 (Phase 5 species) | `content/manifest.json: enabledSpecies` |
+| handling arc | static ring with progress ticks — not in v1.0 (Phase 5 species) | `content/manifest.json: enabledSpecies` |
+| trap loop | not in v1.0 (Phase 5 species) | `content/manifest.json: enabledSpecies` |
+| glow halo | static bright center — not in v1.0 (Phase 5 species) | `content/manifest.json: enabledSpecies` |
+| particles | none (no resource particles are built in any mode) | `src/render/renderer.ts: spawnEffect` |
+| camera easing | instant (the camera has no easing in any mode: presets, Find and follow set the view at once) | `src/render/camera.ts: centerOn, fit, zoomAt` |
+| unfolding (wake) | state swap: Preparing/Resting/Waking hold a still folded pose and a seam frame per state | `src/render/features.ts: bodyFrameIndex, featureLayers` |
+| deposit/placement ring | a still ring at full radius for 1 s (no growth or fade) | `src/render/features.ts: placementEffect, effectLook, PLACEMENT_STATIC_MS` |
+| food‑object stain | held still at its first opacity, removed after 6 s (no fade) | `src/render/features.ts: stainAlphaAt` |
+| favorite glyphs | unchanged: static outlines in both modes | `src/render/renderer.ts: drawFavorites` |
+| probe outlines | unchanged: static dashed outlines in both modes | `src/render/renderer.ts: drawProbes` |
+| selection ring, lineage marks, adhesion links, infection glyph, brush preview | unchanged: static in both modes | `src/render/renderer.ts: selectionG, drawLineage, drawLinks, infectionGlyphShown, setBrushPreview` |
+| share picture | always the reduced‑motion frames (a still picture) | `src/render/picture.ts: composePicture` |
+| tray and guide sprite icons | a single still frame in both modes | `src/ui/atlas.ts: drawFrame` |
+| prompt "Show me" highlight | the outline stays; the pulse is removed | `src/ui/styles.css: show-me-pulse, reduced-motion` |
+| notices and sheets | none: no CSS transition or animation exists; the global rule removes any (pseudo‑elements and smooth scrolling included) | `src/ui/styles.css: prefers-reduced-motion, reduced-motion` |
 
 ## 8. Sound and narration
 

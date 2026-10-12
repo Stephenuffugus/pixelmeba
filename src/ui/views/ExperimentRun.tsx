@@ -278,7 +278,7 @@ function ExperimentSetup({ card, x }: { card: ExperimentCardView; x: ComparisonE
       <button class="btn primary compare-go" onClick={() => void runExperimentPair()} data-testid="experiment-run">
         {schedule ? `Accept the schedule and run both for ${duration}` : `Run A and B for ${duration}`}
       </button>
-      <p class="xp-note">Closing discards the two copies. The experiment's dish and your saves are never changed by them.</p>
+      <p class="xp-note">Closing discards the two copies. The experiment's dish is never changed by them.</p>
     </div>
   );
 }

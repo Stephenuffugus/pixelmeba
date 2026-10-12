@@ -516,6 +516,46 @@ describe('Try my dish through DishHost', () => {
     expect(h.shelfRecords()).toHaveLength(1); // nothing deleted
   });
 
+  it('wave 6b integration: Finish on a kept turn clears kept (D-0084); Finish on an unkept turn changes nothing else', async () => {
+    const h = new Driver();
+    h.create('d1');
+    h.host.handle({ type: 'setSpeed', dishId: 'd1', speed: 0 });
+    started(await h.tryStart('d1', 't1'));
+    playTurn(h, 't1');
+    expect(h.turn('t1')!.state).toBe('atHorizon');
+    expect((await h.sendAsync({ type: 'saveSlot', requestId: h.id(), dishId: 't1', slotId: 'slot1', name: 'Kept turn' })).type).toBe('slotSaved');
+    expect(h.turn('t1')!.kept).toEqual({ slotId: 'slot1' });
+    const plan = async () => {
+      const r = await h.sendAsync({ type: 'keepPlan', requestId: h.id(), aboutDishId: 't1' });
+      if (r.type !== 'keepPlan') throw new Error(JSON.stringify(r));
+      return r.plan;
+    };
+    expect(await plan()).toMatchObject({ kind: 'saved', slotId: 'slot1' }); // the slot holds it exactly
+    const store = h.storeSnapshot();
+    const fin = h.send({ type: 'tryFinish', requestId: h.id(), dishId: 't1' }, 'tryTurn');
+    // The answer and the record: finished, and no longer kept (slot1 holds the turn at its horizon).
+    expect(fin.turn).toMatchObject({ state: 'finished', kept: null });
+    expect(h.turn('t1')).toMatchObject({ state: 'finished', kept: null });
+    expect(h.storeSnapshot()).toBe(store); // nothing was written: slot1 still holds the turn at its horizon
+    // Leaving now offers to keep it again: the slot no longer holds the dish exactly.
+    expect(await plan()).toMatchObject({ kind: 'slot', slotId: 'slot1', own: true });
+
+    // An unkept turn at its horizon: Finish changes the state only (no other message, no write).
+    started(await h.tryStart('d1', 't2'));
+    playTurn(h, 't2');
+    const before = h.notebook('t2');
+    const t = turnOf(before)!;
+    expect(t).toMatchObject({ state: 'atHorizon', kept: null });
+    const store2 = h.storeSnapshot();
+    const n0 = h.out.length;
+    const fin2 = h.send({ type: 'tryFinish', requestId: h.id(), dishId: 't2' }, 'tryTurn');
+    expect(fin2.turn).toEqual({ ...t, state: 'finished' });
+    expect(h.out.slice(n0).map((m) => m.type)).toEqual(['tryTurn']);
+    const after = h.notebook('t2');
+    expect(after).toEqual({ ...before, turns: [{ ...t, state: 'finished' }] });
+    expect(h.storeSnapshot()).toBe(store2);
+  });
+
   it('Start refusals change nothing: a comparison copy, a held sample, a full shelf', async () => {
     const h = new Driver();
     h.create('d1');
@@ -543,7 +583,7 @@ describe('Try my dish through DishHost', () => {
     const full = h.storeSnapshot();
     const r11 = await h.tryStart('d1', 't11');
     expect(r11).toMatchObject({ type: 'tryRefused', code: 'shelf' });
-    expect((r11 as { message: string }).message).toMatch(/already keeps 10 Try my dish starting points/);
+    expect((r11 as { message: string }).message).toMatch(/already keeps 10 starting points for Try my dish and challenges\. Remove one you no longer need in Saved dishes → Storage/);
     expect(h.storeSnapshot()).toBe(full);
     expect(h.host.world('t11')).toBeNull();
   });

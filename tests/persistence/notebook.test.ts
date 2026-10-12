@@ -212,7 +212,7 @@ describe('a malformed notebook is dropped with a message; the world loads unchan
   const cases: [string, (nb: Record<string, unknown>, w: World) => Promise<Record<string, unknown>>][] = [
     ['a bad checksum', (nb) => Promise.resolve({ ...nb, checksum: `sha256:${'0'.repeat(64)}` })],
     ['another world id', async (nb) => reseal({ ...nb, worldId: 'someone-else' })],
-    ['an unknown kind key', async (nb) => reseal({ ...nb, gallery: [] })],
+    ['an unknown kind key', async (nb) => reseal({ ...nb, sketches: [] })], // P4.8b: 'gallery' is a kind now
     [
       'four followed families',
       async (nb, w) =>
@@ -285,8 +285,10 @@ describe('a malformed notebook is dropped with a message; the world loads unchan
       const loaded = await loadSaveFile(JSON.stringify(bad));
       expect(loaded.notebookDropped).toBe(NOTEBOOK_DROPPED_TEXT);
       expect(loaded.notebookDropped).toBe(
-        "This dish's notebook (favorites, story cards and goals) could not be read, so it was left out. The dish itself loaded.",
+        "This dish's notebook (favorites, story cards, goals, bookmarks, gallery, challenges and its Try my dish turn) could not be read, so it was left out. The dish itself loaded.",
       );
+      // It names what a dropped record loses: one word per notebook kind (favorites … turns).
+      for (const word of ['favorites', 'story cards', 'goals', 'bookmarks', 'gallery', 'challenges', 'Try my dish turn']) expect(NOTEBOOK_DROPPED_TEXT).toContain(word);
       expect(loaded.notebook).toEqual(emptyNotebook(w.worldId));
       expect(loaded.file.notebook).toBeUndefined();
       expect(stateHash(loaded.world)).toBe(stateHash((await loadSaveFile(plain.text)).world));

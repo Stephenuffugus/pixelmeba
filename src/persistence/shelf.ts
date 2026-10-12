@@ -30,14 +30,26 @@ export const SHELF_KINDS: readonly ShelfKind[] = ['baseline', 'snapshot'];
  */
 export const SHELF_LIMITS: Readonly<Record<ShelfKind, number>> = { baseline: 10, snapshot: 20 };
 
-/** Readable refusals (the caller shows them as they are; nothing was changed). */
+/**
+ * What a kind's records are called in a refusal. Baselines are written for Try my dish (createdFor 'try-<n>')
+ * and for custom challenges ('ch-<n>', src/worker/host.ts challengeSave / challengeStart), and they share one
+ * limit, so the words name both.
+ */
+const SHELF_KIND_WORDS: Readonly<Record<ShelfKind, { readonly many: string; readonly one: string }>> = {
+  baseline: { many: 'starting points for Try my dish and challenges', one: 'starting point' },
+  snapshot: { many: 'snapshot bookmarks', one: 'snapshot' },
+};
+
+/**
+ * Readable refusals (the caller shows them as they are; nothing was changed). Where to remove one is the
+ * Storage panel (Saved dishes → Storage → Remove…, src/ui/views/Saves.tsx and StoragePanel.tsx). The detail
+ * stays in the one pair of parentheses: the bookmark caller reads it back (host.ts bookmarkAdd).
+ */
 export const SHELF_TEXT = {
   full: (kind: ShelfKind, limit: number) =>
-    kind === 'baseline'
-      ? `This device already keeps ${limit} Try my dish starting points. Remove one you no longer need, then try again. Nothing was changed.`
-      : `This device already keeps ${limit} snapshot bookmarks. Remove one you no longer need, then try again. Nothing was changed.`,
-  storageFull: (detail: string) => `There is not enough storage space for this starting point (${detail}). Nothing was changed.`,
-  writeFailed: (detail: string) => `The starting point could not be stored (${detail}). Nothing was changed.`,
+    `This device already keeps ${limit} ${SHELF_KIND_WORDS[kind].many}. Remove one you no longer need in Saved dishes → Storage, then try again. Nothing was changed.`,
+  storageFull: (kind: ShelfKind, detail: string) => `There is not enough storage space for this ${SHELF_KIND_WORDS[kind].one} (${detail}). Nothing was changed.`,
+  writeFailed: (kind: ShelfKind, detail: string) => `The ${SHELF_KIND_WORDS[kind].one} could not be stored (${detail}). Nothing was changed.`,
 } as const;
 
 export interface ShelfRequest {
@@ -98,6 +110,12 @@ let recordCounter = 0;
 
 export class Shelf {
   private readonly writer: string;
+  /**
+   * Every write of this instance runs after the previous one settles (one chain per Shelf): `put` reads the
+   * kind's index and sequence and commits later, so two puts in flight together could otherwise pick the same
+   * sequence number and the second would orphan the first record. A failed write never blocks the next.
+   */
+  private writes: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly backend: StorageBackend,
@@ -143,16 +161,30 @@ export class Shelf {
       const space = await this.space();
       // Room for this record and one more save of the same size afterwards (the next named save).
       if (space && bytes > 0 && space.used + 2 * bytes > space.quota) {
-        return { ok: false, reason: 'storage-full', message: SHELF_TEXT.storageFull(`about ${Math.round(space.used / 1024)} KB of ${Math.round(space.quota / 1024)} KB used`) };
+        return { ok: false, reason: 'storage-full', message: SHELF_TEXT.storageFull(kind, `about ${Math.round(space.used / 1024)} KB of ${Math.round(space.quota / 1024)} KB used`) };
       }
       return null;
     } catch (e) {
-      return { ok: false, reason: 'write-failed', message: SHELF_TEXT.writeFailed(e instanceof Error ? e.message : String(e)) };
+      return { ok: false, reason: 'write-failed', message: SHELF_TEXT.writeFailed(kind, e instanceof Error ? e.message : String(e)) };
     }
   }
 
-  /** Write one record of `kind` (write-once: never overwrites, evicts or deletes anything). Never throws. */
-  async put(kind: ShelfKind, req: ShelfRequest): Promise<ShelfResult> {
+  /** Run `write` after every earlier write of this Shelf has settled (resolved or failed). */
+  private serial<T>(write: () => Promise<T>): Promise<T> {
+    const run = this.writes.then(write, write);
+    this.writes = run.catch(() => undefined);
+    return run;
+  }
+
+  /**
+   * Write one record of `kind` (write-once: never overwrites, evicts or deletes anything). Never throws.
+   * Serialized with this Shelf's other writes (see `writes`).
+   */
+  put(kind: ShelfKind, req: ShelfRequest): Promise<ShelfResult> {
+    return this.serial(() => this.putNow(kind, req));
+  }
+
+  private async putNow(kind: ShelfKind, req: ShelfRequest): Promise<ShelfResult> {
     try {
       const data = await gzipText(req.text);
       const refused = await this.check(kind, data.byteLength);
@@ -160,7 +192,7 @@ export class Shelf {
       const seq = await this.nextSequence(kind);
       const slotId = `${SHELF_SLOT_PREFIX}${kind}-${String(seq).padStart(8, '0')}-${this.writer}`;
       // Write-once: an id already held (another tab's write at the same moment cannot share the writer) is never replaced.
-      if (await this.backend.getSlot(slotId)) return { ok: false, reason: 'write-failed', message: SHELF_TEXT.writeFailed('that place on the shelf is taken') };
+      if (await this.backend.getSlot(slotId)) return { ok: false, reason: 'write-failed', message: SHELF_TEXT.writeFailed(kind, 'that place on the shelf is taken') };
       const recordId = `${slotId}:${req.savedAt}:${(++recordCounter).toString(36)}`;
       const slot: SlotInfo = {
         slotId,
@@ -183,7 +215,7 @@ export class Shelf {
       return { ok: true, slot };
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
-      return isStorageFull(e) ? { ok: false, reason: 'storage-full', message: SHELF_TEXT.storageFull(detail) } : { ok: false, reason: 'write-failed', message: SHELF_TEXT.writeFailed(detail) };
+      return isStorageFull(e) ? { ok: false, reason: 'storage-full', message: SHELF_TEXT.storageFull(kind, detail) } : { ok: false, reason: 'write-failed', message: SHELF_TEXT.writeFailed(kind, detail) };
     }
   }
 
@@ -205,8 +237,15 @@ export class Shelf {
     }
   }
 
-  /** Remove shelf record `slotId` (only on an explicit player action). False when it is not a shelf record. */
-  async remove(slotId: string): Promise<boolean> {
+  /**
+   * Remove shelf record `slotId` (only on an explicit player action). False when it is not a shelf record.
+   * Serialized with this Shelf's other writes.
+   */
+  remove(slotId: string): Promise<boolean> {
+    return this.serial(() => this.removeNow(slotId));
+  }
+
+  private async removeNow(slotId: string): Promise<boolean> {
     if (shelfKindOf(slotId) === null) return false;
     const slot = await this.backend.getSlot(slotId);
     if (!slot) return false;

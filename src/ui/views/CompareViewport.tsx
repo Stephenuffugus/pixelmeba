@@ -9,6 +9,7 @@ import { loadAtlas } from '../atlas';
 import { attachGestures } from '../gestures';
 import { attachCompareRenderer, compareArmMeta, compareState, leadCamera, queueOnB, setTool, showToast, tool, type CompareArm } from '../state';
 import { clock } from '../panels/CompareText';
+import { VARIANT_PAIR_UI } from '../strings/variantPair';
 
 export function CompareViewport({ arm }: { arm: CompareArm }) {
   const host = useRef<HTMLDivElement>(null);
@@ -51,10 +52,19 @@ export function CompareViewport({ arm }: { arm: CompareArm }) {
     };
   }, [arm]);
 
-  const title = arm === 'A' ? 'A · baseline' : 'B · with your change';
+  // P4.5: a variant pair has no change of the player's: its views use the toggle's words (CompareScreen).
+  const pair = c?.variantPair ?? null;
+  const title = pair ? (arm === 'A' ? VARIANT_PAIR_UI.armA : VARIANT_PAIR_UI.armB(pair.title)) : arm === 'A' ? 'A · baseline' : 'B · with your change';
+  const aria = pair
+    ? arm === 'A'
+      ? VARIANT_PAIR_UI.armAAria
+      : VARIANT_PAIR_UI.armBAria(pair.title)
+    : arm === 'A'
+      ? 'Dish A: the baseline, left unchanged'
+      : 'Dish B: the copy that gets your change';
   const ticks = m && c ? m.tick - c.baselineTick : 0;
   return (
-    <section class={`cv cv-${arm}`} aria-label={arm === 'A' ? 'Dish A: the baseline, left unchanged' : 'Dish B: the copy that gets your change'} data-testid={`compare-view-${arm}`}>
+    <section class={`cv cv-${arm}`} aria-label={aria} data-testid={`compare-view-${arm}`}>
       <div class="cv-host" ref={host} data-testid={`compare-canvas-${arm}`} />
       {!ready ? <p class="cv-loading">Preparing {arm}…</p> : null}
       <p class="cv-label" data-testid={`compare-label-${arm}`}>
