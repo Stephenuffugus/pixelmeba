@@ -1101,3 +1101,129 @@ Decision:
 Reason: SPEC §12.8 ("observed transfers/attacks with type and measured total; unknown = absent"); D-0051; D-0072 (no new sim rules; gates are Phase 5); measure, don't guess.
 Affects: src/worker/{relationshipMap,probes,relationships,host,protocol,client}.ts, src/ui/observe.ts, src/ui/panels/{RelationshipMap,ProbePanel,ProbeSession}.tsx, src/ui/strings/observe.ts, src/render/renderer.ts, tests/worker/{relationship-map,probes}.test.ts, tests/ui/observe.test.ts, tests/e2e/observe-tools.spec.ts.
 Owner review: no.
+
+## D-0086 · 2026-10-12 · P4.8b · Bookmarks, the specimen gallery and the Storage panel as built
+Context: wave 6b observation-notebook (docs/reports/reviews/g4-wave-6b/observation-notebook-build.md, saves-verify-observation-notebook.md, wave-verify-1.md, integrate-*.md); SPEC §12.8 and the limits at SPEC line 79 (bookmarks 50, snapshot bookmarks 20, gallery 100); D-0070, D-0082, D-0084.
+Decision:
+- **Bookmarks** (notebook kind 'bookmarks'; src/persistence/notebookBookmarks.ts).
+  - Limits: 50 per dish. A snapshot bookmark's snapshot is a shelf record of kind 'snapshot', 20 per device across all dishes (D02: "Snapshot bookmarks count against storage limits").
+  - The snapshot is written to the shelf before the bookmark is added; a refused or failed write adds nothing.
+  - Opening a snapshot bookmark keeps the open dish first (D-0033), then opens the snapshot as a new branch (branchWorldId, favorites only), as a checkpoint does. A missing or changed snapshot answers that it is gone, and the bookmark then reads "Text only — not replayable". A read never rewrites the notebook.
+  - Deleting a bookmark keeps its snapshot, because other copies of the dish's save may still name it; the confirmation says so, and Storage removes snapshots.
+  - The Bookmark sheet pauses the dish, blocks dish keys and restores the prior speed on Close or Esc.
+  - A History row's Bookmark button makes a text-only bookmark; it records the event id only while the event ring still holds that event.
+- **The specimen gallery** (kind 'gallery'; src/persistence/notebookGallery.ts).
+  - 100 entries per dish. The picture is a 16 × 16-cell crop stored as sprite rows (≤ 200 sprites, one ground byte per cell), re-drawn at 14 px per cell through composePicture's additive crop option. Up to 4 summary lines come from the inspector answer on screen. The entry's time is the picture's; while the dish runs the summary can be a few ticks older.
+  - It never spawns: the gallery code imports no command path, and its only action is Delete.
+  - On load only the species are checked against the dish's recorded table, because Undo can legitimately rewind past an entry's tick or birth id. The worker checks birth id and tick when the entry is saved.
+- **Both kinds are notebook state** (D-0070). They survive Undo and rollback; Duplicate and branches copy neither; every device save and export writes them. "Export without names or notes" replaces bookmark titles with "Bookmark at m:ss" and drops snapshot references; generated summaries stay. A bad record drops the notebook, never the world.
+- **The Storage panel** (Saved dishes → Storage; src/worker/storage.ts).
+  - Five groups with sizes; a named slot's size includes its previous copy.
+  - Remove… exists only for checkpoints and shelf records and always asks once. The worker refuses named slots and Continue.
+  - D-0084's release condition holds: full baseline and snapshot shelves are emptied through the panel's own Remove path, after which Try my dish and snapshot bookmarks work again (tests/worker/bookmarks-host.test.ts).
+- **Integration** (docs/reports/reviews/g4-wave-6b/integrate-*.md):
+  - challenge starting points have their own label and confirmation in Storage;
+  - the shelf's "full" message is true for Try my dish and challenges and says where to remove one;
+  - shelf writes are serialized per page, so two writes of one kind can never share a sequence number;
+  - the dropped-notebook message names every kind a notebook holds;
+  - one test fills every notebook kind to its limit and measures the record against the 1 MB cap;
+  - g2, wave 5 and stage 1 saves load with every newer kind empty.
+Reason: SPEC §12.8 ("bookmarks (timestamp + summary ± snapshot; text‑only labelled non‑replayable)", "specimen gallery (image + species + inspector summary; never spawns)"); SPEC limits; D-0070; D-0084; saves are sacred.
+Affects: src/persistence/{notebookBookmarks,notebookGallery,notebook,store,shelf}.ts, src/worker/{storage,host,protocol,client}.ts, src/render/picture.ts, src/ui/{bookmarks,gallery,storage}.ts, src/ui/strings/notebookTools.ts, src/ui/views/{NotebookBookmarks,NotebookGallery,StoragePanel,Notebook,Saves}.tsx, src/ui/panels/{BookmarkSheet,Inspector,LabTray,MoreSheet,HistorySheet}.tsx, tests/persistence/bookmarks.test.ts, tests/worker/bookmarks-host.test.ts, tests/ui/{gallery,storage}.test.ts, tests/e2e/bookmarks-gallery.spec.ts.
+Owner review: no (the per-device snapshot limit is listed in EXPANSION_RESPONSE §8 for visibility).
+
+## D-0087 · 2026-10-12 · P4.8c · The custom challenge editor as built
+Context: wave 6b challenge-editor (docs/reports/reviews/g4-wave-6b/challenge-editor-build.md, challenge-editor-fix1.md, challenge-editor-fix2.md, wave-verify-1.md, wave-reverify1.md, wave-reverify2.md); SPEC §13.5; D07 line 107; D09 line 134; D-0071, D-0078, D-0084.
+Decision:
+- **The record** (notebook kind 'challenges', ≤ 20 per dish; src/persistence/notebookChallenges.ts):
+  - a name, the baseline {worldId, tick, checksum}, the allowed tool groups, an optional budget of 1–99 actions and a turn length of 60, 180 or 600 s (180 by default);
+  - one objective of the five typed predicate types (never 'custom'), with finite numbers above 0;
+  - a region is the dish or one quarter, and a quarter only for a field-range goal. There are no free masks until the engine measures them.
+  - transferAcrossGate is unavailable without a gate ("This dish has no gate to measure.").
+- **Tool groups:**
+  - Add Life: inoculate, and lineage spawnSpecimen because it introduces organisms;
+  - Feed: deposit, placeObject;
+  - Habitat: paintSubstrate, paintShade, placeStructure, eraseStructure;
+  - Sample, Clean water, Lid, Evolution.
+  - Every other lineage op and every read-only request is free.
+- **The budget.**
+  - It counts accepted (accepted > 0) Add Life, Feed, Habitat, Sample Take and Clean water commands whose seq is at or after the turn's start sequence number, read from the world's own command log. So Undo gives an action back, and a placement that placed nothing is free.
+  - Lid and Evolution settings are configuration: they never count, but a challenge can disallow them.
+  - **Owner review.** D07 counts "successful placements and external loads … Configure and inspect are free". As built, Habitat edits are read as placements and Clean water as an external load (a logged material export). The narrowest reading, inoculate, deposit and placeObject only, is a one-line change in countsAgainstBudget plus the editor hint.
+  - Known limit: the command log keeps 10,000 entries, so more than 10,000 free commands in one turn could let early counted entries fall off.
+- **Baselines:** challenges saved at one paused moment share one shelf baseline (createdFor 'ch-n'), matched by state checksum.
+- **Start.**
+  - It keeps the open dish first (D-0033) and opens a Try my dish turn whose TurnRecord carries the challenge (startSeq, predicate).
+  - The restrictions summary is shown before Start (D09 line 134).
+  - The challenge's goal is its own ObjectiveDef (CHALLENGE_n, titled with the challenge name; "Shared challenge" in a stripped export), started with the turn.
+  - Another turn keeps the limits with a fresh budget.
+- **Restrictions are enforced by the host.**
+  - A refused command is answered before applyNow (no seq, no state change), with "This challenge doesn't allow {tool}. The limit applies only inside this challenge." or "This challenge's {n} actions are used."
+  - Comparison arms and the transient Continue copy are never restricted.
+  - Leave challenge → "Open an unrestricted copy". Duplicate copies no turn and no challenges.
+- **Finish leaves the challenge.**
+  - A finished challenge turn is an ordinary dish with no limits (fix round 1).
+  - Finish ends the running challenge goal as 'continuedFreely' / 'left' at the Finish tick, so nothing measured after the limits are lifted can be recorded as the challenge's completion. Try again on that goal is refused after Finish (fix round 2).
+  - Undo during a challenge ends its goal attempt ('undone', D-0078), as it does for every goal (owner review: keeping a challenge goal through Undo needs a rewindable observer).
+- **Export and import.**
+  - The file is the dish at the baseline, with a notebook holding only that challenge; its checksum equals the baseline's.
+  - Import offers "Start challenge: {name}". A dish that ran on is refused: "This dish has changed since the challenge was made. Import the challenge file again to start it."
+Reason: SPEC §13.5 ("restrictions apply only inside that challenge"; "numeric targets"; "exported with stable IDs, region"); D07 line 107; D09 line 134; honest labels.
+Affects: src/persistence/{notebookChallenges,notebookTurns,notebook}.ts, src/worker/{challenge,tryDish,host,protocol,client}.ts, src/ui/challenge.ts, src/ui/tryDish.ts, src/ui/strings/{challenge,tryDish}.ts, src/ui/panels/{ChallengeEditor,ChallengeStart,TryBadge,MoreSheet}.tsx, tests/worker/challenge-host.test.ts, tests/ui/challenge.test.ts, tests/persistence/challenge-export.test.ts, tests/e2e/challenge.spec.ts.
+Owner review: yes (what the budget counts; whether a challenge goal should survive Undo).
+
+## D-0088 · 2026-10-12 · P4.5 · Paired Garden variants as built
+Context: wave 6b variants-paired (docs/reports/reviews/g4-wave-6b/variants-paired-build.md, wave-verify-2.md); SPEC §13.3–§13.4; CT §9.4; D09 line 115; D-0033, D-0078, D-0079.
+Decision:
+- **Starting a pair.** What if? offers "Compare with Garden (180 s)" for Garden ideas only, never R-G0.
+  - It realizes both arms from content (R-G0 and the idea), keeps the open dish first (D-0033), and opens a new paused dish holding the idea's start, plus arm A (the Garden) and arm B (the idea).
+  - Refusals use What if?'s own refusal (one toast), and a refusal keeps nothing.
+- **The horizon is fixed at 1,800 ticks** (D09: "the existing 180-simulation-second paired comparison").
+  - Any other horizon is refused. Stop ends both arms at the same tick, and the results say how long they ran.
+  - No command reaches either arm, and the change cannot be cleared (D09: "no extra commands by default").
+- **Sequential mode** runs when navigator.deviceMemory is a number ≤ 2; unknown memory runs paired.
+  - A runs to the target and is let go (its world, observer and dish entry). Then B is realized from its stored start and runs to exactly A's tick.
+  - Stop is refused while B runs.
+  - The results are deep-equal to the paired run's (fixture-proven for R-G1, R-G2 and R-G3).
+- **The results, in order:**
+  - "{idea} vs Garden", the question and the change statement;
+  - "this paired run", then "One paired run is an illustration, not a general rule.";
+  - both counts (living organisms of each kind in A and B);
+  - "Sugar left in the dish" (measured dissolved sugar, with the start totals);
+  - then the existing measures, prediction note and conclusion picker.
+- **Closing.**
+  - Close opens the idea's dish at 0:00 (it never ran).
+  - The comparison writes no named slot. Its completion autosave writes Continue with the dish the player is on, as an experiment's paired run does. Lead ruling at integration: the autosave is kept, and the close note no longer claims that saves are unchanged.
+  - The two views read "A · Garden" and "B · {idea}" (integration).
+- **Goals** on Garden variants come only through the goal catalog (sourceId); content/variants/* stays without objectiveId.
+Reason: SPEC §13.3–§13.4 ("never unequal simulated time"; "sequentially if memory requires"; "this paired run"); D09 line 115; CT §9.4.
+Affects: src/worker/{variantPair,host,protocol,client,comparison}.ts, src/ui/state.ts, src/ui/strings/variantPair.ts, src/ui/panels/{WhatIfSheet,WhatIfState,CompareSetup,CompareResults}.tsx, src/ui/views/{CompareScreen,CompareViewport}.tsx, tests/fixtures/variants-paired.test.ts, tests/worker/variants-paired-host.test.ts, tests/e2e/variants-paired.spec.ts.
+Owner review: no.
+
+## D-0089 · 2026-10-12 · P4.9 · Narration, sound polish and the reduced-motion audit as built
+Context: wave 6b narration (docs/reports/reviews/g4-wave-6b/narration-build.md, wave-verify-2.md); UX §7.4, §8.3; D08; D-0064.
+Decision:
+- **Narration is a Settings toggle, off by default.** D08 allows a toggle or an on-request button; v1.0 has the toggle only.
+- **What reaches SpeechSynthesis:**
+  - only the 16 UX §8.3 phrase ids, never free text, numbers or names;
+  - at the voice-bus volume, and nothing when muted or at 0;
+  - never before the first gesture, and never while audio is held (hidden page, arcade pause);
+  - one utterance at a time, with at most 2 waiting (more are dropped);
+  - the same phrase not again within 10 s;
+  - lang 'en' at rate 1, with a 5 s fallback when a device never reports the end of a phrase.
+- **Each phrase has one evidence rule** over the UI's own state (src/ui/narration.ts). For example:
+  - "Pause" only for the player's own Pause followed by a paused snapshot within 3 s; app pauses are never narrated.
+  - "Eating sugar" only for a sugar-only eater with intake in the last second.
+  - "A cell split" only for the inspected organism's own committed division or a followed family member's birth; each division is spoken at most once (integration).
+  - "Add food" for an accepted deposit or food object, including the Lab's (integration).
+  - The equipment phrases ("The feeder is empty", "The light is on", "The light is off") have no evidence until Phase 6 and are never spoken.
+  - What a phrase says is always shown on screen too (UX §8.3).
+- **Sound polish:** drop, division and discovery differ by source, start pitch and length. World cues are capped at 4 per second, and divisions coalesce for 5 s. Nothing was retuned.
+- **Reduced motion** (the UX §7.4 table, filled with "As built" symbols):
+  - the placement ring becomes a still ring for 1 s;
+  - a committed birth draws a static split frame for 1 s;
+  - the food-object stain is held still for its 6 s;
+  - the CSS covers ::before and ::after, and the only keyframe animation is show-me-pulse.
+Reason: UX §8.3 ("off by default"; "text always shown"); UX §7.4; D08; honest labels.
+Affects: src/audio/{narration,cues,mix}.ts, src/ui/narration.ts, src/ui/strings/narration.ts, src/ui/panels/SoundSettings.tsx, src/ui/main.tsx, src/render/{features,renderer}.ts, src/ui/styles.css, docs/UX_SPEC.md §7.4, tests/audio/narration.test.ts, tests/ui/narration-evidence.test.ts, tests/render/reduced-motion.test.ts, tests/e2e/narration.spec.ts.
+Owner review: no (listening to the phrases on a device is an owner item, EXPANSION_RESPONSE §8).

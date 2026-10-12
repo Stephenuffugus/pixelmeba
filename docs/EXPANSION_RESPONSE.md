@@ -538,4 +538,16 @@ Headless runner: `npm run sim:run -- --recipe FIRST_DISH_V1 --seed 104729 --tick
       (62 cells) while the inspector sheet is open, and the dish stays lifted after Close until the player taps
       Whole dish (seen in the G3 phage e2e trace; cosmetic camera state only, no outcome changes). Decide whether
       Close should restore the camera, then fix in P4.13.
+  29. **D‑0087 (1)** what a challenge's action budget counts. Built: accepted Add Life, Feed, Habitat, Sample Take and Clean
+      water count; Lid and Evolution settings never count but can be disallowed. The narrowest reading of D07 line 107
+      (inoculate, deposit and placeObject only) is a one-line change in `countsAgainstBudget` plus the editor hint.
+  30. **D‑0087 (2)** Undo during a challenge ends its goal attempt ('undone'), as for every goal (D‑0078). Keeping a challenge
+      goal through Undo needs a rewindable observer.
+  31. **D‑0089** listen to the 16 narration phrases on a device (Settings → Sound → Narration): SpeechSynthesis voices vary.
+  32. **D‑0086** snapshot bookmarks are limited per device (20 across all dishes), bookmarks per dish (50).
+  33. **D‑0082/D‑0085** the transfer preview ships with the Phase 5 gate structures, not in v1.0.
+  34. **D‑0083 (1)** recipe files require an exact build match (strict, as built), or the looser What if? "Again" rule
+      (ignore contentHash when the recipe checksums match)?
+  35. **D‑0083 (2)** the Share picture layout: 1080 × 1080, the whole dish at 7 px per cell, a question band, and a band with
+      the wordmark, title, dish time and recipe identifier; Hide labels and Strip metadata as D‑0083 lists.
 - **Next gate:** Phase 4, Wonder, Replay, Android → `v1.0.0-rc1` (docs/agent Phase 4 runner edition).
