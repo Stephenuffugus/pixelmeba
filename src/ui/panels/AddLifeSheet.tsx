@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { uiDemoScope } from '@platform/web'; // P4.11
 import type { JSX } from 'preact';
 import { drawFrame, loadAtlas } from '../atlas';
 import { IconClose } from '../icons';
@@ -54,7 +55,10 @@ export function AddLifeSheet() {
   const info = dishInfo.value;
   const [count, setCount] = useState(5);
   if (!info) return null;
-  const phages = info.speciesIds.filter((id) => isPhage(info, id));
+  // P4.11 DEMO_MODE: only the demo's five organisms are offered (the worker refuses a dish holding any other).
+  const scope = uiDemoScope();
+  const offered = (id: string): boolean => scope === null || scope.species.includes(id);
+  const phages = info.speciesIds.filter((id) => offered(id) && isPhage(info, id));
   return (
     <section class="sheet" aria-labelledby="addlife-title">
       <div class="sheet-scroll">
@@ -82,6 +86,7 @@ export function AddLifeSheet() {
         ))}
         <div class="species-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(9.5rem, 1fr))' }}>
           {info.speciesIds.map((id, i) => {
+            if (!offered(id)) return null;
             const diet = dietLine(info, id);
             const phage = isPhage(info, id);
             return (

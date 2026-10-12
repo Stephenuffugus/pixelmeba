@@ -1,5 +1,19 @@
 apply plugin: 'com.android.application'
 
+// The version has ONE source, package.json "version" (docs/ANDROID_SETUP.md §7, P4.12):
+// versionName = that semantic version, versionCode = major*10000 + minor*100 + patch (1.0.0 -> 10000).
+def appPackageJson = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json'))
+def appVersionMatch = (appPackageJson.version as String) =~ /^(\d+)\.(\d+)\.(\d+)$/
+if (!appVersionMatch.matches()) {
+    throw new GradleException("package.json version '${appPackageJson.version}' is not major.minor.patch (docs/ANDROID_SETUP.md §7)")
+}
+def appVersionParts = [appVersionMatch.group(1), appVersionMatch.group(2), appVersionMatch.group(3)].collect { Integer.parseInt(it) }
+if (appVersionParts[1] > 99 || appVersionParts[2] > 99) {
+    throw new GradleException("package.json version ${appPackageJson.version}: minor and patch must be 0-99 for versionCode = major*10000 + minor*100 + patch (docs/ANDROID_SETUP.md §7)")
+}
+def appVersionName = appPackageJson.version as String
+def appVersionCode = appVersionParts[0] * 10000 + appVersionParts[1] * 100 + appVersionParts[2]
+
 // Release signing (docs/ANDROID_SETUP.md). The owner keeps android/keystore.properties and the
 // upload keystore outside version control (both are gitignored). Without keystore.properties,
 // release builds are produced unsigned and debug builds are unaffected.
@@ -16,8 +30,8 @@ android {
         applicationId "com.lucidwinds.pixelmeba"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName appVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

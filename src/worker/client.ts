@@ -101,6 +101,8 @@ export interface WorkerErrorNotice {
   readonly message: string;
   readonly paused: boolean;
   readonly request: ToWorker['type'] | null;
+  /** The error's kind when the worker gave one (e.g. P4.11 DEMO_REFUSAL_KIND); absent otherwise. */
+  readonly kind?: string;
 }
 
 /**
@@ -396,7 +398,7 @@ export class SimClient {
       return;
     }
     if (msg.type === 'error') {
-      for (const fn of this.errorListeners) fn({ dishId: msg.dishId, message: msg.message, paused: msg.paused === true, request: msg.request ?? null });
+      for (const fn of this.errorListeners) fn({ dishId: msg.dishId, message: msg.message, paused: msg.paused === true, request: msg.request ?? null, ...(msg.kind !== undefined ? { kind: msg.kind } : {}) });
       if (msg.requestId !== undefined) {
         this.pending[msg.requestId]?.reject(new WorkerRequestError(msg.message, msg.kind));
         delete this.pending[msg.requestId];

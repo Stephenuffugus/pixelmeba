@@ -7,6 +7,7 @@
  * (this page's own key handler, active only while the guide is shown). "Seen in your dishes" and the
  * cosmetic badges come only from the device record (src/ui/badges.ts); they change nothing anywhere.
  */
+import { uiDemoScope } from '@platform/web'; // P4.11
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { JSX } from 'preact';
 import { IconBack } from '../icons';
@@ -123,7 +124,10 @@ export function FieldGuide() {
 }
 
 function tabEntries(m: GuideModel): Record<GuideTab, readonly GuideEntry[]> {
-  return { species: [...m.species, ...m.modules], materials: m.materials, tools: m.equipment, glossary: [] };
+  // P4.11 DEMO_MODE: the Species tab lists the demo's five organisms (other entries are unchanged).
+  const scope = uiDemoScope();
+  const species = scope === null ? m.species : m.species.filter((e) => scope.species.includes(e.id));
+  return { species: [...species, ...m.modules], materials: m.materials, tools: m.equipment, glossary: [] };
 }
 
 function EntryList({ entries, q, records, nameOf }: { entries: readonly GuideEntry[]; q: string; records: readonly RelationshipRecord[]; nameOf: (id: string) => string }) {

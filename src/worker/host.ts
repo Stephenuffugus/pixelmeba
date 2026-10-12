@@ -87,6 +87,8 @@ import { challengeExportText, challengeFileName, challengeGoalEndsOnFinish, CHAL
 import { challengeObjectiveId, challengePredicate, challengesOf, CHALLENGES_MAX, nextChallengeId, type ChallengeRecord } from '@persist/notebookChallenges';
 import { shelfSequenceOf } from '@persist/shelf';
 import { objectiveSupportProblem } from '@sim/objectives';
+import { demoCommandProblem, demoCommandReason, demoProblem, demoReason, type DemoScope } from '@platform/demoScope'; // P4.11 DEMO_MODE
+import { DEMO_REFUSAL_KIND } from './protocol';
 
 export interface HostClock {
   now(): number;
@@ -172,6 +174,20 @@ class WhatIfRefusal extends Error {
     super(message);
     this.name = 'WhatIfRefusal';
   }
+}
+
+/** P4.11 DEMO_MODE: a world outside the demo scope (the message is demoReason's capability sentence). */
+class DemoRefusal extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DemoRefusal';
+  }
+}
+
+/** P4.11: build options after the six positional constructor arguments (never reordered). */
+export interface DishHostOptions {
+  /** DEMO_MODE's scope (src/platform/demoScope.ts); null or absent: the full game. */
+  readonly demo?: DemoScope | null;
 }
 
 /** P2.8: an automatic checkpoint as the Saved dishes list shows it (labelled automatic, like "(autosave)"). */
@@ -422,6 +438,8 @@ export class DishHost {
   private ringKept = 0;
   /** The autosave being handled (D-0033 fix round 3): autosaves run one after another. */
   private autosaveTail: Promise<void> = Promise.resolve();
+  /** P4.11 DEMO_MODE: the demo scope (null: the full game). Worlds outside it are refused before anything is kept. */
+  private readonly demo: DemoScope | null;
 
   constructor(
     private readonly registry: ContentRegistry,
@@ -431,7 +449,10 @@ export class DishHost {
     private readonly persistent = false,
     /** P2.8: the platform's storage estimate, checked before each automatic checkpoint. */
     storageEstimate?: () => Promise<StorageEstimate | undefined>,
+    /** P4.11: build options (sim.worker.ts sets them from import.meta.env; tests pass them directly). */
+    options: DishHostOptions = {},
   ) {
+    this.demo = options.demo ?? null;
     this.lastPump = clock.now();
     this.ring = store ? new CheckpointRing(store.backend, storageEstimate) : null;
     this.shelf = store ? new Shelf(store.backend, storageEstimate) : null;
@@ -512,6 +533,7 @@ export class DishHost {
           // to no named slot. The state (and its hash) is exactly the checkpoint's.
           const branch = isCheckpointSlot(msg.slotId) || isShelfSlot(msg.slotId) ? { fromName: file.meta.name, tick: world.tick } : null; // P4.7: a shelf record too
           const opened = branch ? deserializeWorld({ ...file.state, worldId: branchWorldId(world.worldId, msg.newDishId) }) : world;
+          this.demoCheck(opened); // P4.11: refused before anything is kept
           // 2. Keep the open dish first, never into the named slot being opened; a refusal opens nothing.
           const kept = await this.keepFirst(msg, { action: branch ? 'checkpoint' : 'open', exclude: excludedBy(msg.slotId), opening: msg.slotId });
           if (kept === false) return;
@@ -576,6 +598,7 @@ export class DishHost {
         case 'importDish': {
           // The file is checked first: a refused file keeps nothing and changes nothing (D-0033).
           const { file, world, notebook, notebookDropped } = await loadSaveFile(msg.text);
+          this.demoCheck(world); // P4.11: refused before anything is kept
           const kept = await this.keepFirst(msg, { action: 'import', exclude: null, opening: null });
           if (kept === false) return;
           const dish = this.addDish(msg.newDishId, world, file.meta.name, notebook);
@@ -622,6 +645,7 @@ export class DishHost {
             this.post({ type: 'error', dishId: '', requestId: msg.requestId, message: e.message, lastValidTick: 0, paused: false, request: msg.type, kind: e.kind });
             return;
           }
+          this.demoCheck(loaded.world); // P4.11: refused before anything is kept
           const kept = await this.keepFirst(msg, { action: 'import', exclude: null, opening: null });
           if (kept === false) return;
           const dish = this.addDish(msg.newDishId, loaded.world, loaded.name);
@@ -640,6 +664,7 @@ export class DishHost {
             s.kind === 'variant'
               ? await realizeVariant(this.registry, s.variantId, { worldId: msg.newDishId })
               : this.build({ kind: 'recipe', recipeId: s.recipeId, ...(s.seed !== this.registry.recipes[s.recipeId]!.seed ? { seed: s.seed } : {}) }, msg.newDishId);
+          this.demoCheck(world); // P4.11: refused before anything is kept
           const kept = await this.keepFirst(msg, { action: 'start', exclude: null, opening: null });
           if (kept === false) return;
           const dish = this.addDish(msg.newDishId, world, s.title);
@@ -654,6 +679,7 @@ export class DishHost {
             return;
           }
           const world = this.build(msg.source, msg.dishId);
+          this.demoCheck(world); // P4.11: refused before anything is kept
           const kept = await this.keepFirst(msg, { action: 'start', exclude: null, opening: null });
           if (kept === false) return;
           const dish = this.addDish(msg.dishId, world, msg.name ?? world.content.provenance.recipeId ?? 'Dish');
@@ -738,9 +764,19 @@ export class DishHost {
         lastValidTick: 0,
         paused: false,
         request: msg.type,
-        ...(e instanceof SaveFileError ? { kind: e.kind } : {}),
+        ...(e instanceof SaveFileError ? { kind: e.kind } : e instanceof DemoRefusal ? { kind: DEMO_REFUSAL_KIND } : {}),
       } as FromWorker);
     }
+  }
+
+  /**
+   * P4.11 DEMO_MODE (D09 line 211): a world the demo cannot hold whole is refused — called on the PREPARED world,
+   * BEFORE keepFirst, so a refusal writes no slot and leaves the open dish and its run state as they were.
+   */
+  private demoCheck(world: World): void {
+    if (!this.demo) return;
+    const problem = demoProblem(world, this.demo, this.registry);
+    if (problem) throw new DemoRefusal(demoReason(problem));
   }
 
   private addDish(id: string, world: World, name: string, notebook?: NotebookRecord): Dish {
@@ -819,6 +855,7 @@ export class DishHost {
           return;
         }
         const world = this.build(msg.source, msg.dishId);
+        this.demoCheck(world); // P4.11 (a refused create opened nothing and paused nothing)
         const dish = this.addDish(msg.dishId, world, msg.name ?? world.content.provenance.recipeId ?? 'Dish');
         this.post({ type: 'ready', requestId: msg.requestId, info: this.info(dish) });
         this.sendSnapshot(dish);
@@ -866,6 +903,12 @@ export class DishHost {
       }
       case 'command': {
         const d = this.need(msg.dishId);
+        // P4.11 fix round 1: the demo never brings a species outside its scope into a dish or a comparison copy (refused before applyNow).
+        const demoNo = this.demo ? demoCommandProblem(d.world, msg.payload, this.demo, this.registry) : null;
+        if (demoNo) {
+          this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: null, error: demoCommandReason(demoNo) });
+          return;
+        }
         if (d.arm) {
           this.armCommand(d, msg);
           return;
@@ -1376,6 +1419,8 @@ export class DishHost {
   private prepareExperiment(msg: Extract<ToWorker, { type: 'experimentStart' }>) {
     const def = this.registry.experiments[msg.cardId];
     if (!def || def.phase > this.registry.manifest.buildPhase) throw new Error(`There is no experiment "${msg.cardId}" in this version of Pixelmeba.`);
+    // P4.11 DEMO_MODE: the demo has no experiment cards (D09 §10); refused before anything is built or kept.
+    if (this.demo) throw new DemoRefusal(demoReason({ ids: [def.id], names: [def.title] }));
     this.checkExperimentIds(msg, def.paired);
     const ids = msg.compare;
     const recipe = this.registry.recipes[def.recipeId]!;
@@ -1690,6 +1735,8 @@ export class DishHost {
   }
 
   private compareStart(msg: Extract<ToWorker, { type: 'compareStart' }>): void {
+    // The demo has no Compare (its UI offers none); refusing here keeps a crafted request from building arm B.
+    if (this.demo) throw new DemoRefusal('Compare needs the full version of Pixelmeba. Nothing changed.');
     if (this.comparison) throw new Error('A comparison is already open; finish or delete it first.');
     const src = this.need(msg.sourceDishId);
     if (src.arm) throw new Error('A comparison copy cannot start another comparison.');
@@ -2554,6 +2601,11 @@ export class DishHost {
         if (nextId === null) throw new WhatIfRefusal('unknown-variant', `There is no other idea for "${record.title}" in this version of Pixelmeba. Your dish is unchanged.`);
         world = await realizeVariant(this.registry, nextId, { worldId });
       }
+    }
+    // P4.11: a world the demo cannot hold is refused before anything is kept.
+    if (this.demo) {
+      const problem = demoProblem(world, this.demo, this.registry);
+      if (problem) throw new WhatIfRefusal('failed', `Couldn't start: ${demoReason(problem)}. Nothing changed.`);
     }
     // 2. Keep the current dish (with none open, the dish Continue holds: D-0033 fix round 1) through the
     // save flow; a refusal or failed write starts nothing.

@@ -10,6 +10,7 @@ import { WHATIF_TEXT } from '../strings/whatif';
 import { GoalChoice } from '../panels/GoalChoice';
 import { playGoalChoice } from '../goals';
 import { RecipeIdImport } from '../panels/RecipeIdImport';
+import { DEMO_MODE } from '@platform/web'; // P4.11
 
 /**
  * The Garden's own seed, read from the same content record the worker validates (as New Dish reads its
@@ -61,7 +62,8 @@ export function Play() {
             <IconPlay /> Start
           </button>
           {/* P4.4 (SPEC §13.5): an optional goal, off by default ("No goal" checked); Start starts it at tick 0. */}
-          <GoalChoice recipeId="FIRST_DISH_V1" />
+          {/* P4.11 DEMO_MODE: the shelf holds the Garden and its What if? link only (no goals). */}
+          {DEMO_MODE ? null : <GoalChoice recipeId="FIRST_DISH_V1" />}
           {/* UX §2.2: a secondary What if? link under Garden opens the sheet (§3.4). */}
           <p class="whatif-link-row">
             <button class="btn whatif-link" onClick={() => openWhatIf('play')} data-testid="whatif-open">
@@ -71,7 +73,7 @@ export function Play() {
           </p>
         </section>
         {/* P4.6 (UX §2; D09 "an Import recipe ID entry under Play"): a bundled recipe by its offline ID. */}
-        <RecipeIdImport idPrefix="play" />
+        {DEMO_MODE ? null : <RecipeIdImport idPrefix="play" />}
       </div>
       <WhatIfHost context="play" />
     </main>

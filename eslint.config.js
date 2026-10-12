@@ -3,12 +3,21 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import globals from 'globals';
 
+// P4.11 (ARCH §14): the app is iframe-safe — it never reaches outside its own frame (the arcade host speaks only
+// through postMessage). tests/platform/iframe-safe.test.ts scans src/ for the same tokens as a second guard.
+const FRAME_NAMES = ['top', 'parent', 'opener', 'frameElement'];
+const IFRAME_GLOBALS = FRAME_NAMES.map((name) => ({ name, message: 'ARCH §14: iframe-safe — never reach outside the frame (the host speaks through postMessage).' }));
+const IFRAME_PROPERTIES = ['window', 'self', 'globalThis'].flatMap((object) =>
+  FRAME_NAMES.map((property) => ({ object, property, message: 'ARCH §14: iframe-safe — never reach outside the frame (the host speaks through postMessage).' })),
+);
+
 const SIM_DETERMINISM = {
   'no-restricted-properties': [
     'error',
     { object: 'Math', property: 'random', message: 'Simulation randomness must come from det()/detFloat() in src/sim/rng.' },
     { object: 'performance', property: 'now', message: 'Wall-clock time is forbidden inside the simulation.' },
     { object: 'Date', property: 'now', message: 'Wall-clock time is forbidden inside the simulation.' },
+    ...IFRAME_PROPERTIES,
   ],
   'no-restricted-globals': [
     'error',
@@ -17,6 +26,7 @@ const SIM_DETERMINISM = {
     { name: 'window', message: 'The simulation has no DOM.' },
     { name: 'document', message: 'The simulation has no DOM.' },
     { name: 'fetch', message: 'The simulation has no network.' },
+    ...IFRAME_GLOBALS,
   ],
   'no-restricted-syntax': [
     'error',
@@ -33,6 +43,7 @@ export default tseslint.config(
   {
     ignores: [
       'dist/**',
+      'dist-demo/**',
       'node_modules/**',
       'android/**',
       'coverage/**',
@@ -63,6 +74,14 @@ export default tseslint.config(
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true, allowBoolean: true }],
       '@typescript-eslint/no-non-null-assertion': 'off',
       eqeqeq: ['error', 'always'],
+    },
+  },
+  {
+    // P4.11 (ARCH §14): iframe-safe everywhere in src/ (src/sim repeats these inside SIM_DETERMINISM, which replaces them there).
+    files: ['src/**/*.ts', 'src/**/*.tsx'],
+    rules: {
+      'no-restricted-globals': ['error', ...IFRAME_GLOBALS],
+      'no-restricted-properties': ['error', ...IFRAME_PROPERTIES],
     },
   },
   {

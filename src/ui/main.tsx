@@ -6,6 +6,7 @@ import { initAudio, resumeAudio, suspendAudio } from '@audio/cues';
 import { wireNarration } from './narration';
 import { Lifecycle, pauseDishForBackground, visibilityChanged, wireNativeLifecycle } from '@platform/lifecycle';
 import { isNativePlatform } from '@platform/capacitor';
+import { hostMessage, registerServiceWorker } from '@platform/web';
 
 initDisplaySettings();
 const root = document.getElementById('app');
@@ -18,8 +19,11 @@ wireNarration();
 const GESTURES = ['pointerdown', 'keydown', 'touchend'] as const;
 /** An arcade host paused us: audio stays suspended until the player's next gesture here. */
 let hostPaused = false;
+/** P4.11: the player has tapped, clicked or pressed a key here (a host's resume never starts sound before that). */
+let gestured = false;
 function onGesture(): void {
   if (document.visibilityState === 'hidden') return;
+  gestured = true;
   if (hostPaused) {
     hostPaused = false;
     resumeAudio();
@@ -62,13 +66,23 @@ document.addEventListener('visibilitychange', () => {
   visibilityChanged(lifecycle, document.visibilityState === 'hidden');
 });
 
-// Arcade host hooks (ARCH §14): a parent page may pause/resume.
+// Arcade host hooks (ARCH §14): a parent page may pause/resume. Any origin may send them, but only the two exact
+// shapes { type: 'pixelmeba:pause' } and { type: 'pixelmeba:resume' } act (src/platform/web.ts hostMessage).
 window.addEventListener('message', (e: MessageEvent<unknown>) => {
-  const d = e.data as { type?: string } | null;
-  if (!d || typeof d !== 'object') return;
-  if (d.type === 'pixelmeba:pause') {
+  const m = hostMessage(e.data);
+  if (m === 'pause') {
     setSpeed(0);
     hostPaused = true;
     suspendAudio(); // P3.10: silent until the player's next gesture here
+  } else if (m === 'resume') {
+    // P4.11 (SPEC §14.2 "paused, with Resume"): the host's pause ends, but the dish stays paused until the
+    // player presses Run; sound comes back only if the player had already made a gesture here.
+    if (!hostPaused) return;
+    hostPaused = false;
+    if (gestured && document.visibilityState !== 'hidden') resumeAudio();
   }
 });
+
+// P4.11: offline web play (a precache service worker) — production web builds only; never in the native app,
+// on an insecure origin, or under a <base> that moves the page's directory (the arcade's stamped layout).
+window.addEventListener('load', () => void registerServiceWorker(), { once: true });

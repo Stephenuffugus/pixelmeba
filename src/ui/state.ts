@@ -5,6 +5,7 @@
 import { batch, effect, signal, untracked } from '@preact/signals';
 import type { CommandPayload, CommandResult } from '@sim/commands';
 import { SimClient } from '@worker/client';
+import { DEMO_REFUSAL_KIND } from '@worker/protocol'; // P4.11 DEMO_MODE
 import type { CompareSpeed, ComparisonState } from '@worker/comparison';
 import type { DishInfo, FamilyAnswer, InspectorPayload, OverlayId, Selection, SnapshotMsg, Speed } from '@worker/protocol';
 import type { NewDishPreview, RecipeOverrides } from '@worker/protocol';
@@ -253,6 +254,8 @@ export function getClient(): SimClient {
     // A refused import (a save or recipe file) is shown once, by importFile (UX §5.11), never twice.
     client.onError((e) => {
       if (e.request === 'recipeExport' || e.request === 'recipeIdStart' || e.request === 'importDish' || e.request === 'recipeImport') return;
+      // P4.11: a save the demo cannot open is shown once, by loadSlot ("Couldn't open: …").
+      if (e.request === 'loadSlot' && e.kind === DEMO_REFUSAL_KIND) return;
       showToast(errorToastText(e));
     });
     client.onCompare(onCompareState);
@@ -492,7 +495,7 @@ export async function loadSlot(slotId: string, label = 'the saved dish'): Promis
     if (outcome.kind === 'refused') showToast(outcome.message, 6000);
     return outcome;
   } catch (e) {
-    const message = `That save could not be opened: ${(e as Error).message}`;
+    const message = demoRefused(e) ? `Couldn't open: ${(e as Error).message}. Nothing changed.` : `That save could not be opened: ${(e as Error).message}`;
     showToast(message, 5000);
     return { kind: 'refused', message };
   } finally {
@@ -523,6 +526,11 @@ export async function importFile(file: File): Promise<void> {
   } finally {
     busy.value = false;
   }
+}
+
+/** P4.11 DEMO_MODE: the worker refused a world the demo cannot hold (its message is the capability reason). */
+function demoRefused(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { kind?: unknown }).kind === DEMO_REFUSAL_KIND;
 }
 
 /**
@@ -558,7 +566,8 @@ export async function startRecipeId(text: string): Promise<ReplaceOutcome> {
       return { ok: true };
     });
   } catch (e) {
-    return { kind: 'refused', message: (e as Error).message };
+    // P4.11: an id the demo cannot start is refused in the panel's words for it.
+    return { kind: 'refused', message: demoRefused(e) ? `Couldn't start: ${(e as Error).message}. Nothing changed.` : (e as Error).message };
   } finally {
     busy.value = false;
   }
