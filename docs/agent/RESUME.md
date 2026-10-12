@@ -3,6 +3,17 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑12 06:20 UTC — INTEGRATION VERIFIED (integrate-verify1 ok: 3 MINOR + 3 NIT, all fixed by the lead,
+> integrate-lead-6b.md); `npm run check` GREEN (191 files / 1910 tests, 2719 s, tmp/lead/check-6b.log). DESKTOP E2E RUNNING
+> (all 38 specs, port 4290, tmp/lead/e2e-6b-desktop.log). START HERE.**
+> - Commit message draft: tmp/lead/commit-6b.txt (fill EVIDENCE_PLACEHOLDER with the check + e2e lines). D‑0091/D‑0092
+>   drafts for 7a: tmp/lead/d0091-92.md (append to DECISIONS after the 6b commit).
+> - If this session dies: tree is on wip/g4-wave-6b (backup loop); re-run only the e2e (check is done on this tree unless
+>   the tree changed: compare with the backup), then commit 6b, tick P4.5/P4.8/P4.9, then 7a pre-launch: replace
+>   `<lead: 6b commit sha>` / `<lead: npm run check …>` and D-<n>/D-<n+1> (→ D-0091/D-0092) in g4-wave-7.tasks.js.txt,
+>   build the 7a run file with tools/lead/build-run-file.py (keys android,perf2-polish), free ports, backup loop on
+>   wip/g4-wave-7a, launch.
+
 > **Update 2026‑10‑12 05:05 UTC — RESUMED ("lets get started"). Lead items a–d DONE (D‑0090); integration VERIFIER
 > RUNNING: run `wf_f5f03585-9db` (session 79887b47), script `docs/agent/g4-wave-6b-integrate-verify.workflow.js.txt`
 > (its SOURCES now list the lead items). START HERE.**
