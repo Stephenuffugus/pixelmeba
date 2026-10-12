@@ -32,6 +32,7 @@ import { openShare } from '../share';
 import { openBookmarkSheet } from '../bookmarks';
 import { BOOKMARK_UI } from '../strings/notebookTools';
 import { IconShare } from './ShareSheet';
+import { DEMO_MODE } from '@platform/web'; // P4.11
 
 export function MoreSheet() {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -61,7 +62,7 @@ export function MoreSheet() {
             {BOOKMARK_UI.moreRow}
           </button>
           {/* P4.4 (SPEC §13.5): the Goal row — the running goal and Leave goal, or Try a goal… */}
-          <GoalRow />
+          {DEMO_MODE ? null : <GoalRow />}
           <button class="btn" onClick={() => (sheet.value = 'evolution')} data-testid="more-evolution">
             Evolution settings (Advanced)
           </button>
@@ -91,20 +92,23 @@ export function MoreSheet() {
             </button>
           ) : null}
           {/* P4.7 (SPEC §13.6): Try my dish… (a turn at its horizon: its result card again). */}
-          <TryMoreRow />
+          {/* P4.11 DEMO_MODE (D09 §10): no Try my dish, challenges, goals or Compare in the demo. */}
+          {DEMO_MODE ? null : <TryMoreRow />}
           {/* P4.8c (SPEC §13.5): Make a challenge…, Start challenge: {name}, Export challenge, Leave challenge…. */}
-          <ChallengeMoreRows />
+          {DEMO_MODE ? null : <ChallengeMoreRows />}
           {/* UX §2.4: Compare lives in More (and in the Lab Tools tray from P2.7). */}
-          <button
-            class="btn"
-            onClick={() => {
-              sheet.value = 'none';
-              void openCompare();
-            }}
-            data-testid="action-compare"
-          >
-            <IconCompare /> Compare: copy this dish and change one thing
-          </button>
+          {DEMO_MODE ? null : (
+            <button
+              class="btn"
+              onClick={() => {
+                sheet.value = 'none';
+                void openCompare();
+              }}
+              data-testid="action-compare"
+            >
+              <IconCompare /> Compare: copy this dish and change one thing
+            </button>
+          )}
           <button class="btn" disabled={!meta.value?.undoAvailable} onClick={() => void undo()}>
             <IconUndo /> Undo (rewinds time)
           </button>

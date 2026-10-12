@@ -23,3 +23,14 @@ export function aboutLines(m: typeof manifest = manifest, app: string = APP_VERS
     { term: 'Build phase', value: String(m.buildPhase) },
   ];
 }
+
+/**
+ * P4.12 (PLAY_STORE_CHECKLIST §A "Accessibility statement in About"; PRIVACY_POLICY.md): the two statements
+ * About shows under its description (the description itself is the About route's body in App.tsx; where saves
+ * live is said here, once). Each names only what the build has (UX §9; Settings).
+ */
+export const ABOUT_TEXT = {
+  accessibility:
+    'Accessibility: every control works with a keyboard; the dish has a screen-reader summary and a selected-cell description; Reduced motion, Quiet audio, Simplified overlay colours and text up to 200 % are in Settings.',
+  privacy: 'Privacy: Pixelmeba collects no data. Saves stay on this device (your phone\'s own backup may copy them). Files leave it only when you choose Share or Export.',
+} as const;

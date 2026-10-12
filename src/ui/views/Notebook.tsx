@@ -25,9 +25,10 @@ import { compareCardLine, isListableCard } from '../strings/compareCards';
 import { fmt, fmtDiff, measureLabel } from '../panels/CompareText';
 import { durationText, journalMeasureCells, recordedText } from '../strings/experiments';
 import { clock } from '../panels/CompareText';
+import { DEMO_MODE } from '@platform/web';
 
 type Tab = 'stories' | 'favorites' | 'journal' | 'bookmarks' | 'gallery' | 'experiments';
-const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
+const ALL_TABS: readonly { readonly id: Tab; readonly label: string }[] = [
   // P4.1: UX §2 order (Something happened · Favorites · Journal · … · Experiments).
   { id: 'stories', label: STORY_TEXT.tab },
   { id: 'favorites', label: 'Favorites' },
@@ -37,10 +38,12 @@ const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
   { id: 'gallery', label: GALLERY_UI.tab },
   { id: 'experiments', label: 'Experiments' },
 ];
+// The demo has no experiments (D09 §10 demo scope; the worker refuses their Start).
+const TABS = ALL_TABS.filter((t) => !DEMO_MODE || t.id !== 'experiments');
 
 export function Notebook() {
   const r = route.value;
-  const tab: Tab = r.name === 'notebook' ? r.tab : 'experiments';
+  const tab: Tab = r.name === 'notebook' && (!DEMO_MODE || r.tab !== 'experiments') ? r.tab : DEMO_MODE ? 'stories' : 'experiments';
   const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ stories: null, favorites: null, journal: null, bookmarks: null, gallery: null, experiments: null });
 
   useEffect(() => {

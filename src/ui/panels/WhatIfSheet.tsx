@@ -23,6 +23,7 @@ import { IconAgain, IconAnother, WhatIfIcon } from './WhatIfIcons';
 import { pairOffered, VARIANT_PAIR_UI } from '../strings/variantPair';
 import { amountScale, WhatIfPreview } from './WhatIfPreview';
 import { inertOutside, KeepChoicePanel } from './KeepChoice';
+import { DEMO_MODE } from '@platform/web';
 import {
   cancelFullStep,
   chooseReplacement,
@@ -243,7 +244,7 @@ function Selected(props: { readonly answer: WhatIfAnswer; readonly choice: WhatI
       </button>
       <p class="whatif-note">{WHATIF_TEXT.startNote}</p>
       {/* P4.5: an idea of the Garden can also run beside the unchanged Garden (D09 line 115). */}
-      {pairOffered(p, PLAY_SOURCE) ? (
+      {!DEMO_MODE && pairOffered(p, PLAY_SOURCE) ? (
         <>
           <button
             class="btn whatif-wide"

@@ -3,7 +3,7 @@ import { PauseOnDiscoveriesToggle } from '../panels/DiscoverySetting';
 import { SoundSettings } from '../panels/SoundSettings';
 import { reducedMotionFollowsDevice, route, settings, TEXT_SCALES, updateSettings } from '../state';
 import { checkpointSettingText, lastCheckpoint } from '../state';
-import { aboutLines } from '../strings/about';
+import { ABOUT_TEXT, aboutLines } from '../strings/about';
 
 export function SimplePage({ title, body, settings: showSettings, about }: { title: string; body: string; settings?: boolean; about?: boolean }) {
   const s = settings.value;
@@ -20,6 +20,17 @@ export function SimplePage({ title, body, settings: showSettings, about }: { tit
         </header>
         <section class="card">
           <p>{body}</p>
+          {/* P4.12 (PLAY_STORE_CHECKLIST §A): the accessibility statement and the privacy line. */}
+          {about ? (
+            <>
+              <p class="about-statement" data-testid="about-accessibility">
+                {ABOUT_TEXT.accessibility}
+              </p>
+              <p class="about-statement" data-testid="about-privacy">
+                {ABOUT_TEXT.privacy}
+              </p>
+            </>
+          ) : null}
           {about ? (
             <dl class="kv about-versions" data-testid="about-versions">
               {aboutLines().map((l) => (

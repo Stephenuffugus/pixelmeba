@@ -16,6 +16,9 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     trace: 'retain-on-failure',
+    // P4.11: the production build registers a precache service worker; journeys keep their Worker init scripts
+    // and need none (tests/e2e/web-arcade.spec.ts opts in with test.use({ serviceWorkers: 'allow' })).
+    serviceWorkers: 'block',
     launchOptions: { args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'] },
   },
   webServer: {

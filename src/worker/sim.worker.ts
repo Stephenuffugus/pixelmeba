@@ -10,6 +10,7 @@ import { IdbBackend } from '@persist/idb';
 import { MemoryBackend, SaveStore } from '@persist/store';
 import type { StorageEstimate } from '@persist/checkpoints';
 import { chooseStore, filesystemEstimate, openFilesystemStore, type StoreChoice } from './boot';
+import { demoScope } from '@platform/demoScope';
 
 const scope = self as unknown as {
   postMessage(msg: FromWorker & Envelope, transfer?: Transferable[]): void;
@@ -17,6 +18,8 @@ const scope = self as unknown as {
 };
 
 const registry = buildRegistry(loadRawPacksVite());
+/** P4.11 DEMO_MODE (VITE_DEMO_MODE=1, npm run build:demo): the same content, a narrower scope; default off. */
+const demo = import.meta.env.VITE_DEMO_MODE === '1' ? demoScope(registry) : null;
 const queued: ToWorker[] = [];
 let host: DishHost | null = null;
 /** P4.10: the worker boots on the client's first message ('platform' picks the save store; D-0092). */
@@ -69,7 +72,7 @@ async function boot(choice: StoreChoice): Promise<void> {
     persistent = false;
     estimate = undefined;
   }
-  host = new DishHost(registry, (msg, transfer) => scope.postMessage(msg, transfer ?? []), { now: () => performance.now(), iso: () => new Date().toISOString() }, store, persistent, estimate);
+  host = new DishHost(registry, (msg, transfer) => scope.postMessage(msg, transfer ?? []), { now: () => performance.now(), iso: () => new Date().toISOString() }, store, persistent, estimate, { demo });
   for (const m of queued.splice(0)) host.handle(m);
   loop();
 }

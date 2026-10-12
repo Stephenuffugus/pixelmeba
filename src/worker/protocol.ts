@@ -1300,6 +1300,9 @@ export interface ExperimentStampMsg {
  * has no ideas ('not-variant'); the new dish id is taken ('in-use'); or the variant itself was refused
  * (the codes of @sim/variants VariantError: 'unknown-variant', 'changed', 'invalid-patch', …).
  */
+/** P4.11 DEMO_MODE: the error kind of a world the demo cannot hold (its message is the capability reason). */
+export const DEMO_REFUSAL_KIND = 'demo';
+
 export type WhatIfRefusalCode = 'slots-full' | 'save-failed' | 'save-unavailable' | 'not-variant' | 'in-use' | 'failed' | VariantErrorCode;
 
 /** Which variant to start: a chosen one, the same one again, or the next in catalog order. */

@@ -9,6 +9,7 @@ import { useEffect } from 'preact/hooks';
 import { dishInfo } from '../state';
 import { heldLine, SAMPLE_MODE_LABELS, TOOLS_COPY, units } from '../strings/tools';
 import { isLab, setDishView } from '../views/LabView';
+import { DEMO_MODE } from '@platform/web';
 import {
   cancelSampling,
   confirmSample,
@@ -115,7 +116,8 @@ export function SamplePanel() {
           <button class="btn" onClick={() => endSession()} data-testid="sample-transfer-back">
             Back
           </button>
-        ) : (
+        ) : DEMO_MODE ? null : (
+          // The demo has no Lab, where Transfer happens: Cancel or Discard there.
           <button
             class="btn primary"
             onClick={() => {

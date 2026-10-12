@@ -1,0 +1,551 @@
+{
+  "about": "Provenance of every store image made from the production build by npm run store:assets (tools/store-assets.ts, tools/lib/storeShots.ts): real play only, no staged state, no text overlay on a screenshot. tick and stateHash are read from the simulation worker at capture.",
+  "generatedAt": "2026-10-12T19:07:52.202Z",
+  "feature": {
+    "file": "store/feature-1024x500.png",
+    "size": [
+      1024,
+      500
+    ],
+    "buildCommit": "33a2a62+dirty",
+    "recipe": "FIRST_DISH_V1",
+    "seed": 104729,
+    "tick": 1549,
+    "stateHash": "5526b56ed7b4acda",
+    "picture": {
+      "file": "store/feature-source-picture.png",
+      "size": [
+        1080,
+        1080
+      ],
+      "sha256": "1cf22a65966b6f26970e9def2be32c0a1bd58251692898f9dbc4bed399b23cc8",
+      "crop": {
+        "x": 324,
+        "y": 317,
+        "w": 280,
+        "h": 250
+      },
+      "scale": 2
+    },
+    "text": [
+      "Pixelmeba",
+      "Grow a tiny living world.",
+      "Change one thing.",
+      "See what happens."
+    ],
+    "steps": [
+      "Home → Play → Little Living Garden (FIRST_DISH_V1); 0:00 · 56 alive",
+      "dismissed the story notice “Something happened: An enzyme at work”",
+      "speed 4×, Run until the clock passed 2:00, Pause (tick 1549)",
+      "More → Share… → Picture, Hide labels → Share: saved pixelmeba-picture.png (the D-0080 picture of this snapshot)",
+      "composed: the surround #14252D; the picture's pixels (324, 317) 280 × 250, centred on the busiest 16-cell square's organisms (cell 53.1, 50.0), drawn at ×2 (nearest neighbour) at (464, 0); a #2C3F49 edge; the wordmark and the promise line"
+    ],
+    "sha256": "64ae4641d53a4075219ca14782a91257cd09bf08c5e26cfd5d7203db7102e487"
+  },
+  "shots": [
+    {
+      "topic": "01 living-dish",
+      "file": "store/screenshots/phone/01-living-dish.png",
+      "size": [
+        1080,
+        1920
+      ],
+      "viewport": {
+        "width": 360,
+        "height": 640
+      },
+      "deviceScaleFactor": 3,
+      "deviceClass": "phone",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "FIRST_DISH_V1",
+      "saveFile": null,
+      "seed": 104729,
+      "tick": 1239,
+      "stateHash": "bc9257347d748139",
+      "shows": "The Little Living Garden after about 1:30 of dish time at 4×, paused, the whole dish in view (Look).",
+      "steps": [
+        "Home → Play → Little Living Garden (FIRST_DISH_V1); 0:00 · 56 alive",
+        "dismissed the story notice “Something happened: An enzyme at work”",
+        "speed 4×, Run until the clock passed 1:30, Pause (tick 1239); Look; Whole dish; dragged the busiest 16-cell square (cell 53.2, 50.3) to the centre; Zoom in twice (×2.56)"
+      ],
+      "sha256": "64bb3e8042eb09e5216008d1339b42a9c3477276ae8bb378258ab7ab4f56a532"
+    },
+    {
+      "topic": "02 simple-actions",
+      "file": "store/screenshots/phone/02-simple-actions.png",
+      "size": [
+        1080,
+        1920
+      ],
+      "viewport": {
+        "width": 360,
+        "height": 640
+      },
+      "deviceScaleFactor": 3,
+      "deviceClass": "phone",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "FIRST_DISH_V1",
+      "saveFile": null,
+      "seed": 104729,
+      "tick": 2072,
+      "stateHash": null,
+      "shows": "The Feed tray open over the running Garden: choose a food, a dose, then tap the dish.",
+      "steps": [
+        "Home → Play → Little Living Garden (FIRST_DISH_V1); 0:00 · 56 alive",
+        "dismissed the story notice “Something happened: An enzyme at work”",
+        "speed 4×, Run until the clock passed 1:30, Pause (tick 1239); Look; Whole dish; dragged the busiest 16-cell square (cell 53.2, 50.3) to the centre; Zoom in twice (×2.56)",
+        "Run at 4×, Feed: the tray opened over the running dish; captured while running (the snapshot on screen at about tick 2072; a running dish has no single hash)",
+        "Feed again to close the tray; Pause (tick 2576)"
+      ],
+      "sha256": "dc3ca30b71731caa2e608030f7523c31cb9ee10cdd0c272ae97e9ff4991beb30"
+    },
+    {
+      "topic": "03 what-if",
+      "file": "store/screenshots/phone/03-what-if.png",
+      "size": [
+        1080,
+        1920
+      ],
+      "viewport": {
+        "width": 360,
+        "height": 640
+      },
+      "deviceScaleFactor": 3,
+      "deviceClass": "phone",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "FIRST_DISH_V1",
+      "saveFile": null,
+      "seed": 104729,
+      "tick": 1003,
+      "stateHash": "cb2f65b3060e8885",
+      "shows": "What if? with “Dinner farther away” (R-G3) chosen: one change, shown before and after.",
+      "steps": [
+        "Home → Play → Little Living Garden (FIRST_DISH_V1); 0:00 · 56 alive",
+        "dismissed the story notice “Something happened: An enzyme at work”",
+        "speed 4×, Run until the clock passed 1:30, Pause (tick 1003); Look; Whole dish; dragged the busiest 16-cell square (cell 53.6, 50.9) to the centre; Zoom in twice (×2.56)",
+        "More → What if? → “Dinner farther away” (R-G3) chosen (not started); its before/after preview"
+      ],
+      "sha256": "f762984448a2e5ab60958e3edbc447e2838b36449d9ae7207e68938267c8245c"
+    },
+    {
+      "topic": "04 inspection",
+      "file": "store/screenshots/phone/04-inspection.png",
+      "size": [
+        1080,
+        1920
+      ],
+      "viewport": {
+        "width": 360,
+        "height": 640
+      },
+      "deviceScaleFactor": 3,
+      "deviceClass": "phone",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "FIRST_DISH_V1",
+      "saveFile": null,
+      "seed": 104729,
+      "tick": 1003,
+      "stateHash": "cb2f65b3060e8885",
+      "shows": "An organism’s inspector: what it is doing and what limits it right now (the constraint line).",
+      "steps": [
+        "Home → Play → Little Living Garden (FIRST_DISH_V1); 0:00 · 56 alive",
+        "dismissed the story notice “Something happened: An enzyme at work”",
+        "speed 4×, Run until the clock passed 1:30, Pause (tick 1003); Look; Whole dish; dragged the busiest 16-cell square (cell 53.6, 50.9) to the centre; Zoom in twice (×2.56)",
+        "Whole dish; dragged the active organism farthest from its neighbours within 40 cells of the centre, at (43.3, 58.7), to the centre; Zoom in twice (×2.56); tapped it: “Sprinter #24” (the inspector keeps it in view above itself); its constraint line shown"
+      ],
+      "sha256": "e3c0316ad1300912181b6171688b737fca07b0a8645ab9239559ddc46f7f7fc2"
+    },
+    {
+      "topic": "05 inherited-change",
+      "file": "store/screenshots/phone/05-inherited-change.png",
+      "size": [
+        1080,
+        1920
+      ],
+      "viewport": {
+        "width": 360,
+        "height": 640
+      },
+      "deviceScaleFactor": 3,
+      "deviceClass": "phone",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "FIRST_DISH_V1",
+      "saveFile": "tests/fixtures/saves/first-dish-accelerated-varied-t6000.pixelmeba.gz",
+      "seed": 104729,
+      "tick": 6000,
+      "stateHash": "ee073c6c27155294",
+      "shows": "The family tree on a branch established in a recorded run, compared with its ancestor.",
+      "steps": [
+        "the saved run tests/fixtures/saves/first-dish-accelerated-varied-t6000.pixelmeba.gz (FIRST_DISH_V1, Accelerated evolution, varied founders, seed 104729, tick 6000); branch 29A established at tick 5272 (5 qualifying members alive, 3 generations beyond its root), trait {\"kind\":\"module\",\"module\":\"E05\",\"gained\":true}, 7 alive in the save",
+        "Home → Saved dishes → Import a dish file (the save, un-gzipped): the dish opens paused",
+        "More → Save… → Name “Accelerated Garden” → Slot 1 → Save",
+        "Whole dish; dragged a member of 29A, at (62.3, 40.4), to the centre; Zoom in three times (×4.10); tapped it: “Sunbead #1737”; Family → Family tree (opens on its branch “Sunbead · Reserve chamber · 29A”, Branch established) → Compare with ancestor"
+      ],
+      "sha256": "3aaeb7e1f6bf8f3967d827eee49354e1b206161e7db4d7ab693430acfac3f53e"
+    },
+    {
+      "topic": "06 experiment",
+      "file": "store/screenshots/phone/06-experiment.png",
+      "size": [
+        1080,
+        1920
+      ],
+      "viewport": {
+        "width": 360,
+        "height": 640
+      },
+      "deviceScaleFactor": 3,
+      "deviceClass": "phone",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "STARCH_UNLOCK_V1",
+      "saveFile": null,
+      "seed": 104729,
+      "tick": 1800,
+      "stateHash": null,
+      "shows": "Experiment A (What unlocks starch): the results of its paired run.",
+      "steps": [
+        "Home → Notebook → Experiments → EXP_A “What unlocks starch” → Start → “Run A and B for 3 min” (no prediction written)",
+        "the fastest pace",
+        "A (the copy as written) shown",
+        "both copies ran to their stopping point (snapshot ticks by dish: {\"dish-mv5m7dxv-31vy-xp-A\":1800,\"dish-mv5m7dxv-31vy-xp-B\":1800,\"dish-mv5m7dxv-31vy\":0}); the results scrolled into view"
+      ],
+      "sha256": "4d8024ca59c8b4716950971f5dcc2b7ee32763c91a23277b6cbaa784ecc5d10a"
+    },
+    {
+      "topic": "01 living-dish",
+      "file": "store/screenshots/tablet10/01-living-dish.png",
+      "size": [
+        1440,
+        2560
+      ],
+      "viewport": {
+        "width": 720,
+        "height": 1280
+      },
+      "deviceScaleFactor": 2,
+      "deviceClass": "tablet10",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "FIRST_DISH_V1",
+      "saveFile": null,
+      "seed": 104729,
+      "tick": 1468,
+      "stateHash": "245bdb1a648984e4",
+      "shows": "The Little Living Garden after about 1:30 of dish time at 4×, paused, the whole dish in view (Look).",
+      "steps": [
+        "Home → Play → Little Living Garden (FIRST_DISH_V1); 0:00 · 56 alive",
+        "dismissed the story notice “Something happened: An enzyme at work”",
+        "speed 4×, Run until the clock passed 1:30, Pause (tick 1468); Look; Whole dish; dragged the busiest 16-cell square (cell 53.1, 50.0) to the centre; Zoom in twice (×2.56)"
+      ],
+      "sha256": "930a39d83c1ab58a89a86384d9288a159c02fba75159d2906c64cedb925fca88"
+    },
+    {
+      "topic": "02 simple-actions",
+      "file": "store/screenshots/tablet10/02-simple-actions.png",
+      "size": [
+        1440,
+        2560
+      ],
+      "viewport": {
+        "width": 720,
+        "height": 1280
+      },
+      "deviceScaleFactor": 2,
+      "deviceClass": "tablet10",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "FIRST_DISH_V1",
+      "saveFile": null,
+      "seed": 104729,
+      "tick": 2647,
+      "stateHash": null,
+      "shows": "The Feed tray open over the running Garden: choose a food, a dose, then tap the dish.",
+      "steps": [
+        "Home → Play → Little Living Garden (FIRST_DISH_V1); 0:00 · 56 alive",
+        "dismissed the story notice “Something happened: An enzyme at work”",
+        "speed 4×, Run until the clock passed 1:30, Pause (tick 1468); Look; Whole dish; dragged the busiest 16-cell square (cell 53.1, 50.0) to the centre; Zoom in twice (×2.56)",
+        "Run at 4×, Feed: the tray opened over the running dish; captured while running (the snapshot on screen at about tick 2647; a running dish has no single hash)",
+        "Feed again to close the tray; Pause (tick 3424)"
+      ],
+      "sha256": "abf9267eff21ac55c9249301e50da8d1ab7df07d507764a25f6838fb62ca4a84"
+    },
+    {
+      "topic": "03 what-if",
+      "file": "store/screenshots/tablet10/03-what-if.png",
+      "size": [
+        1440,
+        2560
+      ],
+      "viewport": {
+        "width": 720,
+        "height": 1280
+      },
+      "deviceScaleFactor": 2,
+      "deviceClass": "tablet10",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "FIRST_DISH_V1",
+      "saveFile": null,
+      "seed": 104729,
+      "tick": 1273,
+      "stateHash": "89af9d57c5e691db",
+      "shows": "What if? with “Dinner farther away” (R-G3) chosen: one change, shown before and after.",
+      "steps": [
+        "Home → Play → Little Living Garden (FIRST_DISH_V1); 0:00 · 56 alive",
+        "dismissed the story notice “Something happened: An enzyme at work”",
+        "speed 4×, Run until the clock passed 1:30, Pause (tick 1273); Look; Whole dish; dragged the busiest 16-cell square (cell 53.2, 50.3) to the centre; Zoom in twice (×2.56)",
+        "More → What if? → “Dinner farther away” (R-G3) chosen (not started); its before/after preview"
+      ],
+      "sha256": "27529cf2ca268327e9987bb62800d573924abbfc4eb5b8fb9a2538a92b914caa"
+    },
+    {
+      "topic": "04 inspection",
+      "file": "store/screenshots/tablet10/04-inspection.png",
+      "size": [
+        1440,
+        2560
+      ],
+      "viewport": {
+        "width": 720,
+        "height": 1280
+      },
+      "deviceScaleFactor": 2,
+      "deviceClass": "tablet10",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "FIRST_DISH_V1",
+      "saveFile": null,
+      "seed": 104729,
+      "tick": 1273,
+      "stateHash": "89af9d57c5e691db",
+      "shows": "An organism’s inspector: what it is doing and what limits it right now (the constraint line).",
+      "steps": [
+        "Home → Play → Little Living Garden (FIRST_DISH_V1); 0:00 · 56 alive",
+        "dismissed the story notice “Something happened: An enzyme at work”",
+        "speed 4×, Run until the clock passed 1:30, Pause (tick 1273); Look; Whole dish; dragged the busiest 16-cell square (cell 53.2, 50.3) to the centre; Zoom in twice (×2.56)",
+        "Whole dish; dragged the active organism farthest from its neighbours within 40 cells of the centre, at (65.5, 59.0), to the centre; Zoom in twice (×2.56); tapped it: “Crumbsmith #29” (the inspector keeps it in view above itself); its constraint line shown"
+      ],
+      "sha256": "7823f2fdb8987c31e3d7ca3f09917059e085782d9ed4025274aed2b26a9e2581"
+    },
+    {
+      "topic": "05 inherited-change",
+      "file": "store/screenshots/tablet10/05-inherited-change.png",
+      "size": [
+        1440,
+        2560
+      ],
+      "viewport": {
+        "width": 720,
+        "height": 1280
+      },
+      "deviceScaleFactor": 2,
+      "deviceClass": "tablet10",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "FIRST_DISH_V1",
+      "saveFile": "tests/fixtures/saves/first-dish-accelerated-varied-t6000.pixelmeba.gz",
+      "seed": 104729,
+      "tick": 6000,
+      "stateHash": "ee073c6c27155294",
+      "shows": "The family tree on a branch established in a recorded run, compared with its ancestor.",
+      "steps": [
+        "the saved run tests/fixtures/saves/first-dish-accelerated-varied-t6000.pixelmeba.gz (FIRST_DISH_V1, Accelerated evolution, varied founders, seed 104729, tick 6000); branch 29A established at tick 5272 (5 qualifying members alive, 3 generations beyond its root), trait {\"kind\":\"module\",\"module\":\"E05\",\"gained\":true}, 7 alive in the save",
+        "Home → Saved dishes → Import a dish file (the save, un-gzipped): the dish opens paused",
+        "More → Save… → Name “Accelerated Garden” → Slot 1 → Save",
+        "Whole dish; dragged a member of 29A, at (62.3, 40.4), to the centre; Zoom in three times (×4.10); tapped it: “Sunbead #1737”; Family → Family tree (opens on its branch “Sunbead · Reserve chamber · 29A”, Branch established) → Compare with ancestor"
+      ],
+      "sha256": "b03edecf586a0e42d89014d1560b8d1032a9ce32af46c5135f4b501b4d47dffd"
+    },
+    {
+      "topic": "06 experiment",
+      "file": "store/screenshots/tablet10/06-experiment.png",
+      "size": [
+        1440,
+        2560
+      ],
+      "viewport": {
+        "width": 720,
+        "height": 1280
+      },
+      "deviceScaleFactor": 2,
+      "deviceClass": "tablet10",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "STARCH_UNLOCK_V1",
+      "saveFile": null,
+      "seed": 104729,
+      "tick": 1800,
+      "stateHash": null,
+      "shows": "Experiment A (What unlocks starch): the results of its paired run.",
+      "steps": [
+        "Home → Notebook → Experiments → EXP_A “What unlocks starch” → Start → “Run A and B for 3 min” (no prediction written)",
+        "the fastest pace",
+        "A (the copy as written) shown",
+        "both copies ran to their stopping point (snapshot ticks by dish: {\"dish-mv5micl5-5fhe-xp-A\":1800,\"dish-mv5micl5-5fhe-xp-B\":1800,\"dish-mv5micl5-5fhe\":0}); the results scrolled into view"
+      ],
+      "sha256": "80bffced5d492a91a4a4732b84328e04d97564bce512aa37426f9fffd388fe0a"
+    },
+    {
+      "topic": "01 living-dish",
+      "file": "store/screenshots/tablet7/01-living-dish.png",
+      "size": [
+        1152,
+        2048
+      ],
+      "viewport": {
+        "width": 576,
+        "height": 1024
+      },
+      "deviceScaleFactor": 2,
+      "deviceClass": "tablet7",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "FIRST_DISH_V1",
+      "saveFile": null,
+      "seed": 104729,
+      "tick": 1425,
+      "stateHash": "0c5e07b48f6cbd7a",
+      "shows": "The Little Living Garden after about 1:30 of dish time at 4×, paused, the whole dish in view (Look).",
+      "steps": [
+        "Home → Play → Little Living Garden (FIRST_DISH_V1); 0:00 · 56 alive",
+        "dismissed the story notice “Something happened: An enzyme at work”",
+        "speed 4×, Run until the clock passed 1:30, Pause (tick 1425); Look; Whole dish; dragged the busiest 16-cell square (cell 53.2, 50.2) to the centre; Zoom in twice (×2.56)"
+      ],
+      "sha256": "a84a1a687cb20f10077c40d4cddce46c827c3cd65f0a2290b5e9df37d0291188"
+    },
+    {
+      "topic": "02 simple-actions",
+      "file": "store/screenshots/tablet7/02-simple-actions.png",
+      "size": [
+        1152,
+        2048
+      ],
+      "viewport": {
+        "width": 576,
+        "height": 1024
+      },
+      "deviceScaleFactor": 2,
+      "deviceClass": "tablet7",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "FIRST_DISH_V1",
+      "saveFile": null,
+      "seed": 104729,
+      "tick": 3025,
+      "stateHash": null,
+      "shows": "The Feed tray open over the running Garden: choose a food, a dose, then tap the dish.",
+      "steps": [
+        "Home → Play → Little Living Garden (FIRST_DISH_V1); 0:00 · 56 alive",
+        "dismissed the story notice “Something happened: An enzyme at work”",
+        "speed 4×, Run until the clock passed 1:30, Pause (tick 1425); Look; Whole dish; dragged the busiest 16-cell square (cell 53.2, 50.2) to the centre; Zoom in twice (×2.56)",
+        "Run at 4×, Feed: the tray opened over the running dish; captured while running (the snapshot on screen at about tick 3025; a running dish has no single hash)",
+        "Feed again to close the tray; Pause (tick 4029)"
+      ],
+      "sha256": "bcfd2e8fb6892341c256dab11a24a9b91d8a48ebe4a6f1e02f9952d8ec48341f"
+    },
+    {
+      "topic": "03 what-if",
+      "file": "store/screenshots/tablet7/03-what-if.png",
+      "size": [
+        1152,
+        2048
+      ],
+      "viewport": {
+        "width": 576,
+        "height": 1024
+      },
+      "deviceScaleFactor": 2,
+      "deviceClass": "tablet7",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "FIRST_DISH_V1",
+      "saveFile": null,
+      "seed": 104729,
+      "tick": 1138,
+      "stateHash": "596bf52d2af77e1c",
+      "shows": "What if? with “Dinner farther away” (R-G3) chosen: one change, shown before and after.",
+      "steps": [
+        "Home → Play → Little Living Garden (FIRST_DISH_V1); 0:00 · 56 alive",
+        "dismissed the story notice “Something happened: An enzyme at work”",
+        "speed 4×, Run until the clock passed 1:30, Pause (tick 1138); Look; Whole dish; dragged the busiest 16-cell square (cell 53.6, 50.3) to the centre; Zoom in twice (×2.56)",
+        "More → What if? → “Dinner farther away” (R-G3) chosen (not started); its before/after preview"
+      ],
+      "sha256": "c7dfba817dedaa44098c185e844c1c630d3ee7215f5a668a23ab34d9a456dc91"
+    },
+    {
+      "topic": "04 inspection",
+      "file": "store/screenshots/tablet7/04-inspection.png",
+      "size": [
+        1152,
+        2048
+      ],
+      "viewport": {
+        "width": 576,
+        "height": 1024
+      },
+      "deviceScaleFactor": 2,
+      "deviceClass": "tablet7",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "FIRST_DISH_V1",
+      "saveFile": null,
+      "seed": 104729,
+      "tick": 1138,
+      "stateHash": "596bf52d2af77e1c",
+      "shows": "An organism’s inspector: what it is doing and what limits it right now (the constraint line).",
+      "steps": [
+        "Home → Play → Little Living Garden (FIRST_DISH_V1); 0:00 · 56 alive",
+        "dismissed the story notice “Something happened: An enzyme at work”",
+        "speed 4×, Run until the clock passed 1:30, Pause (tick 1138); Look; Whole dish; dragged the busiest 16-cell square (cell 53.6, 50.3) to the centre; Zoom in twice (×2.56)",
+        "Whole dish; dragged the active organism farthest from its neighbours within 40 cells of the centre, at (67.9, 61.3), to the centre; Zoom in twice (×2.56); tapped it: “Crumbsmith #29” (the inspector keeps it in view above itself); its constraint line shown"
+      ],
+      "sha256": "c790c2d35e858f9ddb1011eabd4f9d9dbafce4e8134b2f420de65d4e14228077"
+    },
+    {
+      "topic": "05 inherited-change",
+      "file": "store/screenshots/tablet7/05-inherited-change.png",
+      "size": [
+        1152,
+        2048
+      ],
+      "viewport": {
+        "width": 576,
+        "height": 1024
+      },
+      "deviceScaleFactor": 2,
+      "deviceClass": "tablet7",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "FIRST_DISH_V1",
+      "saveFile": "tests/fixtures/saves/first-dish-accelerated-varied-t6000.pixelmeba.gz",
+      "seed": 104729,
+      "tick": 6000,
+      "stateHash": "ee073c6c27155294",
+      "shows": "The family tree on a branch established in a recorded run, compared with its ancestor.",
+      "steps": [
+        "the saved run tests/fixtures/saves/first-dish-accelerated-varied-t6000.pixelmeba.gz (FIRST_DISH_V1, Accelerated evolution, varied founders, seed 104729, tick 6000); branch 29A established at tick 5272 (5 qualifying members alive, 3 generations beyond its root), trait {\"kind\":\"module\",\"module\":\"E05\",\"gained\":true}, 7 alive in the save",
+        "Home → Saved dishes → Import a dish file (the save, un-gzipped): the dish opens paused",
+        "More → Save… → Name “Accelerated Garden” → Slot 1 → Save",
+        "Whole dish; dragged a member of 29A, at (62.3, 40.4), to the centre; Zoom in three times (×4.10); tapped it: “Sunbead #1737”; Family → Family tree (opens on its branch “Sunbead · Reserve chamber · 29A”, Branch established) → Compare with ancestor"
+      ],
+      "sha256": "c376b1a6535c623567fb2a7cc07a6e770bf8b0457b517e0abe28a13e5bdcb2ef"
+    },
+    {
+      "topic": "06 experiment",
+      "file": "store/screenshots/tablet7/06-experiment.png",
+      "size": [
+        1152,
+        2048
+      ],
+      "viewport": {
+        "width": 576,
+        "height": 1024
+      },
+      "deviceScaleFactor": 2,
+      "deviceClass": "tablet7",
+      "buildCommit": "33a2a62+dirty",
+      "recipe": "STARCH_UNLOCK_V1",
+      "saveFile": null,
+      "seed": 104729,
+      "tick": 1800,
+      "stateHash": null,
+      "shows": "Experiment A (What unlocks starch): the results of its paired run.",
+      "steps": [
+        "Home → Notebook → Experiments → EXP_A “What unlocks starch” → Start → “Run A and B for 3 min” (no prediction written)",
+        "the fastest pace",
+        "A (the copy as written) shown",
+        "both copies ran to their stopping point (snapshot ticks by dish: {\"dish-mv5mbnlh-jk62-xp-A\":1800,\"dish-mv5mbnlh-jk62-xp-B\":1800,\"dish-mv5mbnlh-jk62\":0}); the results scrolled into view"
+      ],
+      "sha256": "b8d8200c2f802dba15f050d90ec2709d3db11c25bfb3df2a4c82bd474d44771c"
+    }
+  ]
+}

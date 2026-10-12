@@ -156,6 +156,13 @@ textarea {
   color: #c9d6d8;
   margin: 0 0 1.5rem;
 }
+/* P4.11 DEMO_MODE: the Home line that says what the demo holds. */
+.page .demo-line {
+  color: #c9d6d8;
+  font-size: var(--fs-body);
+  margin: -1rem 0 1.5rem;
+  overflow-wrap: break-word;
+}
 .home-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -3864,4 +3871,10 @@ html[data-text-scale='2'] .tab-context {
 .history-bookmark {
   margin-left: auto;
   flex: 0 0 auto;
+}
+/* P4.12: About's accessibility statement and privacy line, at body size, wrapping at 200 % text. */
+.about-statement {
+  font-size: var(--fs-body);
+  margin-top: 0.75rem;
+  overflow-wrap: break-word;
 }

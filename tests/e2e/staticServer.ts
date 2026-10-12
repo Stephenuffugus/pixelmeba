@@ -31,13 +31,22 @@ export interface StaticServer {
   close(): Promise<void>;
 }
 
-/** Serve `root` at `mount` (e.g. '/') on 127.0.0.1:`port`. */
-export function serveStatic(opts: { readonly root: string; readonly mount?: string; readonly port: number }): Promise<StaticServer> {
+/**
+ * Serve `root` at `mount` (e.g. '/') on 127.0.0.1:`port`. P4.11: `pages` (optional) adds fixed HTML pages at
+ * exact paths outside the build (e.g. an arcade host page that frames the game); without it nothing changes.
+ */
+export function serveStatic(opts: { readonly root: string; readonly mount?: string; readonly port: number; readonly pages?: Readonly<Record<string, string>> }): Promise<StaticServer> {
   const root = resolve(opts.root);
   const mount = (opts.mount ?? '/').replace(/\/?$/u, '/');
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     let path = decodeURIComponent(url.pathname);
+    const page = opts.pages?.[path];
+    if (page !== undefined) {
+      res.writeHead(200, { 'Content-Type': TYPES['.html']!, 'Cache-Control': 'no-store' });
+      res.end(page);
+      return;
+    }
     if (!path.startsWith(mount)) {
       res.writeHead(404).end('not found');
       return;

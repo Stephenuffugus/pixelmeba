@@ -10,6 +10,8 @@ import { slotModesLine, worldModesLine } from '../strings/modes';
 import { journalUnseen } from '../journal';
 import { unseenStories } from '../stories'; // P4.2: the quiet dot for an unseen story card
 import { StoryDot } from './Notebook';
+import { DEMO_MODE } from '@platform/web'; // P4.11
+import { DEMO_HOME_LINE } from '@platform/demoScope';
 
 export function Home() {
   const hasDish = dishInfo.value !== null;
@@ -27,6 +29,12 @@ export function Home() {
         <header>
           <h1 id="home-title">Pixelmeba</h1>
           <p class="tagline">Grow a tiny living world. Change one thing. See what happens.</p>
+          {/* P4.11 DEMO_MODE (D09 §10): what the demo holds; no store link until the owner gives one. */}
+          {DEMO_MODE ? (
+            <p class="demo-line" data-testid="demo-line">
+              {DEMO_HOME_LINE}
+            </p>
+          ) : null}
         </header>
         {hasDish && sessionMemory.value && sessionMemory.value.dishId === dishInfo.value!.dishId ? (
           // P4.3 (D08 "A satisfying stopping point"): after Save and leave, this visit's memory takes the Continue card's place.
@@ -87,7 +95,7 @@ export function Home() {
           <button class="btn" onClick={() => (route.value = { name: 'newDish' })} data-testid="home-new">
             <IconLab /> New dish
           </button>
-          <button class="btn" onClick={() => (route.value = { name: 'notebook', tab: unseenStories.value > 0 ? 'stories' : 'experiments' })} data-testid="home-notebook">
+          <button class="btn" onClick={() => (route.value = { name: 'notebook', tab: unseenStories.value > 0 || DEMO_MODE ? 'stories' : 'experiments' })} data-testid="home-notebook">
             <IconNotebook /> Notebook
             {journalUnseen.value > 0 ? <span class="nb-dot">{journalUnseen.value} new</span> : null}
             {unseenStories.value > 0 ? <StoryDot /> : null}

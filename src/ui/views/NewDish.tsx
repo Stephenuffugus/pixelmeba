@@ -12,16 +12,17 @@
  * (the worker records no change: host isAuthoredRecipe); Randomize or another setting is recorded as
  * the player's change. The summary shows the dish's question and labels its pre-seeded genomes.
  */
+import { DEMO_MODE } from '@platform/web'; // P4.11
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Manifest, RecipeDef } from '@sim/content/schema';
 import type { DishInfo, NewDishPreview, Speed } from '@worker/protocol';
 import { DISH_TEX, paintDish } from '@render/layers';
 import { CELL_COUNT } from '@sim/constants';
 import { IconBack, IconPlay } from '../icons';
-import { busy, dishInfo, newDishPreview, route, setSpeed, startCustom, toast } from '../state';
+import { busy, dishInfo, newDishPreview, route, setSpeed, sheet, startCustom, toast } from '../state';
 import { useKeepPlanText } from '../panels/KeepPlanLine';
 import { ChoiceGroup, newDishReturn, RatesTable } from '../panels/AdvancedEvolution';
-import { labShowsDish, openLabWith } from './LabView';
+import { labShowsDish, openLabWith, setDishView } from './LabView';
 import {
   CORE_PROTOTYPE_LABEL,
   FOUNDER_CHOICES,
@@ -322,6 +323,13 @@ export function NewDish() {
     // UX §2.3: a new Lab dish enters paused with the Life tray open. Tell the Lab this dish is already
     // shown first, so its toolbar keeps the tray it is about to open.
     labShowsDish(info.dishId);
+    if (DEMO_MODE) {
+      // P4.11 fix round 1 (D09 line 209 "Explore controls"): the demo has no Lab. The new dish opens in
+      // Explore, paused, with Add Life open (the demo's five organisms).
+      setDishView('explore');
+      sheet.value = 'addLife';
+      return;
+    }
     openLabWith('life');
     revealLifeTray();
   };
@@ -392,18 +400,23 @@ export function NewDish() {
                 label: 'Empty Water Garden',
                 note: 'The same water and stones, with nothing living and no food.',
               },
-              {
-                id: 'gel',
-                label: 'Empty Gel Colony',
-                note: 'Gel with one water channel and a little sugar everywhere, with nothing living.',
-              },
-              {
-                id: 'sediment',
-                label: 'Empty Sediment Edge',
-                note: 'Water above, sediment with debris below and one stone, with nothing living.',
-              },
-              // P3.9: curated dishes (CT §9.3), each with its question.
-              ...CURATED.map((c) => ({ id: `curated:${c.id}` as StartId, label: c.name, note: c.question })),
+              // P4.11 DEMO_MODE (ARCH §14 "restricts New Dish species"): the Garden's habitat and species only.
+              ...(DEMO_MODE
+                ? []
+                : [
+                    {
+                      id: 'gel' as StartId,
+                      label: 'Empty Gel Colony',
+                      note: 'Gel with one water channel and a little sugar everywhere, with nothing living.',
+                    },
+                    {
+                      id: 'sediment' as StartId,
+                      label: 'Empty Sediment Edge',
+                      note: 'Water above, sediment with debris below and one stone, with nothing living.',
+                    },
+                    // P3.9: curated dishes (CT §9.3), each with its question.
+                    ...CURATED.map((c) => ({ id: `curated:${c.id}` as StartId, label: c.name, note: c.question })),
+                  ]),
             ]}
           />
           <label class="field">

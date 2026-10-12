@@ -19,7 +19,8 @@ machine, plus a record of what was verified in the build environment.
 | `minSdkVersion` | 24 | `android/variables.gradle` |
 | `compileSdkVersion` | 36 | `android/variables.gradle` |
 | `targetSdkVersion` | 36 | `android/variables.gradle` |
-| `versionCode` / `versionName` | `1` / `"1.0"` (template defaults; set per §7 before the first upload) | `android/app/build.gradle` |
+| `versionName` | `1.0.0` = `package.json` "version" (the one source; P4.12) | `package.json`, read by `android/app/build.gradle` |
+| `versionCode` | `10000` = major*10000 + minor*100 + patch, computed by Gradle from `package.json` (§7) | `android/app/build.gradle` |
 | Permissions | `INTERNET` (template), `VIBRATE` (P4.10, D-0064 haptics; a normal permission, no prompt) | `android/app/src/main/AndroidManifest.xml` |
 | `allowBackup` | `true` (the player's own Android backup may carry saves to a new phone; Pixelmeba sends nothing) | `AndroidManifest.xml` |
 | Saves | Capacitor Filesystem, `Directory.Data/pixelmeba/` (D-0092): `records/`, `slots/`, `journal.json` | `src/persistence/capacitorFs.ts` |
@@ -194,19 +195,27 @@ which Play rejects. Debug builds ignore the file.
 
 ## 7. Versioning
 
-`versionName` is the semantic version (`major.minor.patch`). `versionCode` follows
-**`versionCode = major*10000 + minor*100 + patch`**. That caps `minor` and `patch` at 99.
+**One source: `package.json` "version"** (P4.12). Everything else is derived from it or checked against it:
 
-| Release | `versionName` | `versionCode` |
+- `android/app/build.gradle` parses `../package.json` with `groovy.json.JsonSlurper` and sets
+  `versionName` = that version and **`versionCode = major*10000 + minor*100 + patch`**. It stops the build
+  with a clear message when the version is not `major.minor.patch` or when `minor` or `patch` is above 99 (the
+  formula's cap).
+- `src/persistence/appVersion.ts` `APP_VERSION` (written into every `.pixelmeba` and recipe file's metadata,
+  shown in About) is a plain constant that must equal it; `tests/tools/version-scheme.test.ts` fails when they
+  differ, and checks the formula and the Gradle lines.
+
+| Release | `package.json` "version" = `versionName` | `versionCode` |
 |---|---|---|
-| 1.0.0 | `"1.0.0"` | `10000` |
-| 1.0.1 | `"1.0.1"` | `10001` |
-| 1.1.0 | `"1.1.0"` | `10100` |
-| 1.2.3 | `"1.2.3"` | `10203` |
+| 1.0.0 | `1.0.0` | `10000` |
+| 1.0.1 | `1.0.1` | `10001` |
+| 1.1.0 | `1.1.0` | `10100` |
+| 1.2.3 | `1.2.3` | `10203` |
 
-Set both in `android/app/build.gradle` → `defaultConfig` before each upload. Every upload to any
-Play track must have a higher `versionCode` than the last one. To upload a second build of the
-same release candidate, bump `patch`.
+To change the version, edit `package.json` "version" and `APP_VERSION` together, then run
+`npx vitest run tests/tools/version-scheme.test.ts`. Every upload to any Play track must have a higher
+`versionCode` than the last one. The release candidate is only the git tag `v1.0.0-rc1` (the app says 1.0.0);
+to upload a second build of the same release candidate, bump `patch` (1.0.1 → 10001).
 
 ## 8. Release build (AAB for Google Play)
 
@@ -324,19 +333,38 @@ installed or launched, and there are no device measurements.
   was opened."; the page going hidden paused the dish, autosaved, and Continue held that moment after a reload.
   The normal build contains no `__fsHarness`.
 
+### 9.2 P4.12, 2026‑10‑12 18:26–18:29 UTC (same codespace, JDK 21, `~/android-sdk`; the wave 7b tree on top of `33a2a62`, uncommitted)
+
+The version now comes from `package.json` (§7). Still **no emulator or device**.
+
+- `npm run android:build:debug`: `vite build` ✓, `cap sync android` ✓ (6 plugins), `./gradlew assembleDebug` →
+  **`BUILD SUCCESSFUL in 2m 26s`** (274 actionable tasks: 33 executed, 241 up-to-date). Output
+  `android/app/build/outputs/apk/debug/app-debug.apk`, **8,246,560 bytes**, sha256
+  `67c00bf4b3756a52426caf0e5c138b6063b724ad26a80c964e123bf9290ff0dd`.
+- `aapt2 dump badging` (build-tools 36.0.0): `package: name='com.lucidwinds.pixelmeba' versionCode='10000'
+  versionName='1.0.0' … compileSdkVersion='36'`, `targetSdkVersion:'36'`, `uses-permission:
+  name='android.permission.INTERNET'`, `uses-permission: name='android.permission.VIBRATE'`, `uses-permission:
+  name='com.lucidwinds.pixelmeba.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'`, `application-label:'Pixelmeba'`,
+  `application: label='Pixelmeba' icon='res/mipmap-anydpi-v26/ic_launcher.xml'` (the adaptive launcher icon of
+  §1, `application-icon-160` … `-640` all that resource), `launchable-activity:
+  name='com.lucidwinds.pixelmeba.MainActivity'`. Warnings as before (flatDir, SDK XML version 4).
+- The release bundle was not rebuilt in this stage (no keystore here; §9.1 has the unsigned `bundleRelease`);
+  it reads the same version lines.
+
 ## 10. Open items for the owner
 
 1. Use **JDK 21** for Gradle. JDK 25 fails with this Gradle version (§9).
 2. Create the upload keystore (`npm run android:keystore -- --out /path/outside/repo/pixelmeba-upload.jks`)
    and `android/keystore.properties` (§5–§6). Enrol in Play App Signing.
-3. Set `versionCode`/`versionName` per §7 before the first upload (currently the template's
-   `1`/`"1.0"`).
+3. The version is set: `package.json` "version" 1.0.0 → `versionName` 1.0.0, `versionCode` 10000 (§7, P4.12).
+   For a second upload of the same release candidate, bump the patch in `package.json` and `APP_VERSION`.
 4. Re-check the Play target API requirement at submission (API 36 required since 2026‑08‑31,
    read 2026‑09‑27 and 2026‑10‑12).
 5. Look at the launcher icon and splash (P4.10, `art/src/icons/appIcon.ts`: the dish with one bright colony,
    no text) on a real launcher: adaptive masks (circle, squircle, teardrop), the Android 12+ launch screen
-   (the icon on `#14252D`), and the legacy icon on an older launcher. The store icon (`store/icon-512.png`)
-   is P4.12's.
+   (the icon on `#14252D`), and the legacy icon on an older launcher. The store icon (`store/icon-512.png`,
+   the same art ×12 on the surround, full square; `npm run store:assets -- --only icon`) is what Play shows
+   with its own mask: check it in the Play Console preview (P4.12).
 6. The Capacitor template declares `android.permission.INTERNET`. ARCHITECTURE §12 says the app
    needs no network permission. Removing it from `android/app/src/main/AndroidManifest.xml`
    must be tested on a device first, because the WebView serves the bundled assets from
@@ -382,6 +410,9 @@ installed or launched, and there are no device measurements.
        (while a save is waiting to finish, Pixelmeba refuses every write, a removal included) and save again.
 9. Keep the Filesystem save store (D-0092) or flip the native app back to IndexedDB (D-0013) after item 8.4–8.5:
    the flip is one line in `src/platform/capacitor.ts` `platformStorage()`.
+10. The Play Console steps (listing, content rating, data safety, privacy-policy URL, Internal testing, the
+    device smoke test `store/smoke-test.md`, the usability gates) are numbered in
+    `docs/PLAY_STORE_CHECKLIST.md` §B.
 
 ## 11. How the Android app keeps saves, pauses and shares (P4.10)
 

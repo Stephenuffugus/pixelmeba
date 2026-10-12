@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { DEMO_MODE } from '@platform/web'; // P4.11
 import { DishRenderer } from '@render/renderer';
 import { loadAtlas } from '../atlas';
 import { attachGestures, type GestureHandlers } from '../gestures';
@@ -58,7 +59,7 @@ import { DiscoveryCard } from '../panels/DiscoveryCard';
 import { placeSpecimenTap } from '../panels/LineageState';
 import { IconMore } from '../icons';
 import { autosave } from '../state';
-import { dishView, handleViewKey, labGestures, LabViewToggle } from './LabView';
+import { dishView, handleViewKey, labGestures, LabViewToggle, setDishView } from './LabView';
 import { labTray } from './LabView';
 import { LabToolbar, LabTrayHost } from './LabToolbar';
 import { OverlayLegend } from '../panels/OverlayLegend';
@@ -151,6 +152,13 @@ export function DishScreen() {
   useEffect(() => {
     if (openSheet !== 'none' && dishView.value === 'lab') labTray.value = null;
   }, [openSheet]);
+
+  // P4.11 fix round 1 (D09 line 209 "Explore controls"): the demo has no Lab, so the dish never shows in it
+  // (a guard behind the hidden toggle and New Dish's Explore start).
+  const view = dishView.value;
+  useEffect(() => {
+    if (DEMO_MODE && view === 'lab') setDishView('explore');
+  }, [view]);
 
   // P3.11 (W6-04/W6-06): when a key or a choice closes the panel that held focus (a sheet, the candidate
   // list, a Lab tray), focus returns to the dish instead of the page body, so the next key acts there.
@@ -260,7 +268,8 @@ export function DishScreen() {
         <button class={`btn ${running ? '' : 'primary'}`} onClick={togglePause} aria-label={running ? 'Pause' : 'Run'} data-testid="run-toggle">
           {running ? <IconPause /> : <IconPlay />}
         </button>
-        <LabViewToggle />
+        {/* P4.11 DEMO_MODE (D09 §10 "Explore controls"): Explore only, no Lab. */}
+        {DEMO_MODE ? null : <LabViewToggle />}
         <button class="btn" aria-label="More" onClick={() => (sheet.value = sheet.value === 'more' ? 'none' : 'more')} data-testid="more">
           <IconMore />
         </button>

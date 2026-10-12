@@ -1,6 +1,7 @@
 # dependencies / build
 node_modules/
 dist/
+dist-demo/
 dist-ssr/
 .vite/
 coverage/
