@@ -13,7 +13,9 @@
  * dish the file carries. Any problem drops the whole notebook with a message and the world still loads.
  */
 import type { NotebookWorldRefs } from './notebook';
-import { goalsOf, type GoalRecord } from './notebookGoals';
+import { goalsOf, type GoalPredicateRecord, type GoalRecord } from './notebookGoals';
+import { typedPredicate } from '@sim/objectives';
+import { CHALLENGE_BUDGET_MAX, CHALLENGE_BUDGET_MIN, CHALLENGE_TOOL_GROUPS, challengeNumber, challengeObjectiveId, cleanChallengeName, SHARED_CHALLENGE_NAME, withoutChallengeNames, type ChallengeRecord, type ChallengeToolGroup } from './notebookChallenges';
 
 /** CT §12.10 "turn horizons 60/180/600 s", in ticks. */
 export const TURN_HORIZON_TICKS = [600, 1800, 6000] as const;
@@ -39,6 +41,22 @@ export interface TurnBaseline {
   readonly name: string;
 }
 
+/**
+ * P4.8c: the custom challenge a turn plays (src/persistence/notebookChallenges.ts; src/worker/challenge.ts).
+ * Its tool groups and action budget are refused in the host while this turn is open (D-0071: the objective
+ * itself is only evaluated). `startSeq` is the world's next command sequence number at the turn's start: the
+ * budget counts the accepted commands logged from it on, so Undo gives an action back with the world (D07).
+ * `predicate` is the challenge's engine predicate, so Another turn starts the same goal.
+ */
+export interface TurnChallenge {
+  readonly id: string;
+  readonly name: string;
+  readonly allowedTools: readonly ChallengeToolGroup[];
+  readonly commandBudget: number | null;
+  readonly startSeq: number;
+  readonly predicate: GoalPredicateRecord;
+}
+
 export interface TurnRecord {
   /** 'try-<n>': the try every turn of one baseline shares. */
   readonly tryId: string;
@@ -57,11 +75,14 @@ export interface TurnRecord {
   readonly state: TurnState;
   /** The named slot it was kept in (null: not kept). */
   readonly kept: { readonly slotId: string } | null;
+  /** P4.8c: the custom challenge this turn plays (absent: an ordinary Try my dish turn). */
+  readonly challenge?: TurnChallenge;
 }
 
 const isInt = (v: unknown, min: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min;
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const TURN_KEYS = ['tryId', 'baseline', 'turn', 'turnWorldId', 'startTick', 'horizonTicks', 'objectiveId', 'prediction', 'state', 'kept'];
+const TURN_KEYS = ['tryId', 'baseline', 'turn', 'turnWorldId', 'startTick', 'horizonTicks', 'objectiveId', 'prediction', 'state', 'kept', 'challenge'];
+const CHALLENGE_KEYS = ['id', 'name', 'allowedTools', 'commandBudget', 'startSeq', 'predicate'];
 const BASELINE_KEYS = ['shelfId', 'checksum', 'worldId', 'tick', 'name'];
 const NAMED_SLOT = /^slot([1-9]|10)$/;
 
@@ -97,6 +118,29 @@ function turnProblem(raw: unknown, worldId: unknown): string | null {
   if (!(TURN_STATES as readonly unknown[]).includes(raw.state)) return 'a turn has an unknown state';
   const kept = raw.kept;
   if (kept !== null && (!isObj(kept) || Object.keys(kept).some((k) => k !== 'slotId') || typeof kept.slotId !== 'string' || !NAMED_SLOT.test(kept.slotId))) return 'a turn has an invalid kept slot';
+  if (raw.challenge !== undefined) return turnChallengeProblem(raw.challenge, raw.objectiveId);
+  return null;
+}
+
+/** P4.8c: the first problem with a turn's challenge, or null (its goal is the challenge's objective). */
+function turnChallengeProblem(c: unknown, objectiveId: unknown): string | null {
+  if (!isObj(c) || Object.keys(c).some((k) => !CHALLENGE_KEYS.includes(k))) return 'a turn has an invalid challenge';
+  if (challengeNumber(c.id) === null || objectiveId !== challengeObjectiveId(c.id as string)) return 'a turn has an invalid challenge';
+  if (typeof c.name !== 'string' || c.name.length === 0 || cleanChallengeName(c.name) !== c.name) return 'a turn has an invalid challenge name';
+  if (!Array.isArray(c.allowedTools) || c.allowedTools.length > CHALLENGE_TOOL_GROUPS.length) return 'a turn has an invalid challenge tool list';
+  const seen: unknown[] = [];
+  for (const t of c.allowedTools as unknown[]) {
+    if (!(CHALLENGE_TOOL_GROUPS as readonly unknown[]).includes(t) || seen.includes(t)) return 'a turn has an invalid challenge tool list';
+    seen.push(t);
+  }
+  const b = c.commandBudget;
+  if (b !== null && !(isInt(b, CHALLENGE_BUDGET_MIN) && b <= CHALLENGE_BUDGET_MAX)) return 'a turn has an invalid challenge budget';
+  if (!isInt(c.startSeq, 0)) return 'a turn has an invalid challenge start';
+  const p = c.predicate;
+  if (!isObj(p) || Object.keys(p).some((k) => !['type', 'params', 'durationSeconds'].includes(k)) || typeof p.type !== 'string' || !isObj(p.params)) return 'a turn has an invalid challenge objective';
+  if (p.durationSeconds !== undefined && typeof p.durationSeconds !== 'number') return 'a turn has an invalid challenge objective';
+  const typed = typedPredicate({ type: p.type, params: p.params, durationSeconds: p.durationSeconds });
+  if ('path' in typed) return `a turn has an invalid challenge objective (${typed.message})`;
   return null;
 }
 
@@ -143,10 +187,12 @@ export function horizonTicksOf(seconds: unknown): TurnHorizonTicks | null {
  * The record as "Export without names or notes" carries it (D-0029): the turn's prediction note (the
  * player's note) and the baseline's dish name leave out. Unsealed; a record without a turn is returned as is.
  */
-export function withoutTurnNotes<T extends { readonly turns?: readonly TurnRecord[] }>(record: T): T {
-  const t = turnOf(record);
-  if (!t) return record;
-  return { ...record, turns: [{ ...t, prediction: '', baseline: { ...t.baseline, name: 'Shared dish' } }] };
+export function withoutTurnNotes<T extends { readonly turns?: readonly TurnRecord[]; readonly challenges?: readonly ChallengeRecord[] }>(record: T): T {
+  // P4.8c: challenge names are the player's words too (the challenges kind and a turn's challenge).
+  const named = withoutChallengeNames(record);
+  const t = turnOf(named);
+  if (!t) return named;
+  return { ...named, turns: [{ ...t, prediction: '', baseline: { ...t.baseline, name: 'Shared dish' }, ...(t.challenge ? { challenge: { ...t.challenge, name: SHARED_CHALLENGE_NAME } } : {}) }] };
 }
 
 /** The goal attempt of the dish's turn (started at the turn's start tick for its objective), or null. */

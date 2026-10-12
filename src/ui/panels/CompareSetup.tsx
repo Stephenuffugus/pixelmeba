@@ -13,11 +13,15 @@ import {
   compareState,
   dishInfo,
   runCompare,
+  runVariantPair,
   setCompareSpeed,
   sheet,
   stopCompare,
   tool,
+  variantPairKeptLine,
 } from '../state';
+import type { ComparisonVariantPair } from '@worker/variantPair';
+import { VARIANT_PAIR_UI } from '../strings/variantPair';
 import { clock, describeChanges, horizonLabel } from './CompareText';
 import { worldModesLine } from '../strings/modes';
 
@@ -27,6 +31,7 @@ export function CompareSetup() {
   const c = compareState.value;
   const info = dishInfo.value;
   if (!c || !info) return null;
+  if (c.variantPair) return <PairSetup vp={c.variantPair} />;
   const queued = c.interventions.length > 0;
   const placing = tool.value.kind !== 'look';
   const h = compareHorizon.value;
@@ -98,6 +103,60 @@ export function CompareSetup() {
   );
 }
 
+/**
+ * P4.5: a What if? idea against the unchanged Garden. Nothing to queue (no extra commands, D09 line 115)
+ * and no horizon to choose (the fixed 180 s): the change is stated, then the optional prediction note.
+ */
+function PairSetup(props: { readonly vp: ComparisonVariantPair }) {
+  const vp = props.vp;
+  const info = dishInfo.value;
+  const kept = variantPairKeptLine.value;
+  return (
+    <div class="compare-body" data-testid="pair-setup">
+      <h2 id="compare-heading">{VARIANT_PAIR_UI.title(vp.title)}</h2>
+      {kept ? (
+        <p class="sub" role="status" data-testid="pair-kept">
+          {kept}
+        </p>
+      ) : null}
+      <p class="whatif-question">{vp.question}</p>
+      <p class="sub">{VARIANT_PAIR_UI.setupIntro(vp.title)}</p>
+      <p class="constraint" data-testid="pair-change">
+        {vp.change}
+      </p>
+      <p data-testid="pair-horizon">{VARIANT_PAIR_UI.horizon}</p>
+      {vp.sequential ? <p data-testid="pair-sequential">{VARIANT_PAIR_UI.sequential}</p> : null}
+      {info ? (
+        <p class="world-modes" data-testid="compare-world-modes">
+          Both copies: {worldModesLine(info.mutationPreset, info.founderMode, info.registry)}
+        </p>
+      ) : null}
+      <p class="sub">
+        <code data-testid="pair-identity">{VARIANT_PAIR_UI.identities(vp.baseIdentity, vp.identity)}</code>
+      </p>
+
+      <h3>
+        <label for="compare-prediction">{VARIANT_PAIR_UI.prediction}</label>
+      </h3>
+      <textarea
+        id="compare-prediction"
+        class="compare-note"
+        rows={3}
+        maxLength={PREDICTION_MAX}
+        placeholder="What do you think will be different in B?"
+        value={comparePrediction.value}
+        onInput={(e) => (comparePrediction.value = e.currentTarget.value)}
+        data-testid="compare-prediction"
+      />
+
+      <button class="btn primary compare-go" onClick={() => void runVariantPair()} data-testid="compare-run">
+        {VARIANT_PAIR_UI.run}
+      </button>
+      <p class="sub">{VARIANT_PAIR_UI.closeNote(vp.title)}</p>
+    </div>
+  );
+}
+
 const SPEEDS: readonly { readonly speed: CompareSpeed; readonly label: string }[] = [
   { speed: 0, label: 'Pause' },
   { speed: 1, label: '1×' },
@@ -110,14 +169,19 @@ export function CompareRunning() {
   const info = dishInfo.value;
   if (!c || !info) return null;
   const done = c.ticksRun;
-  const total = c.horizonTicks;
+  const vp = c.variantPair;
+  // P4.5: a sequential pair runs A to the target first, then B to exactly the same tick count.
+  const total = vp ? vp.targetTicks : c.horizonTicks;
+  const seqArm = vp?.sequential ? vp.phase : null;
   return (
     <div class="compare-body">
-      <h2 id="compare-heading">Running A and B</h2>
+      <h2 id="compare-heading">{vp ? VARIANT_PAIR_UI.title(vp.title) : 'Running A and B'}</h2>
       <p data-testid="compare-progress" aria-live="off">
-        <strong>{clock(done)}</strong>
-        {total !== null ? ` of ${clock(total)}` : ''} · both copies at the same moment
+        <strong>{seqArm ? `${seqArm} · ` : ''}{clock(done)}</strong>
+        {total !== null ? ` of ${clock(total)}` : ''}
+        {seqArm ? '' : ' · both copies at the same moment'}
       </p>
+      {seqArm ? <p data-testid="pair-running-seq">{VARIANT_PAIR_UI.runningSeq(seqArm)}</p> : null}
       {total !== null ? <progress class="compare-progress" max={total} value={done} aria-label="Comparison progress" /> : null}
       <div class="segmented" role="group" aria-label="Pace (never changes the result)">
         {SPEEDS.map((s) => (
@@ -128,12 +192,13 @@ export function CompareRunning() {
       </div>
       <p class="sub">Pace only changes how long you wait. A and B always get the same number of ticks.</p>
       <p>
-        <strong>Change on B:</strong> {describeChanges(info, c.interventions)}
+        <strong>Change on B:</strong> {vp ? vp.change : describeChanges(info, c.interventions)}
       </p>
       <PredictionNote />
-      <button class="btn compare-go" onClick={() => void stopCompare()} data-testid="compare-stop">
+      <button class="btn compare-go" disabled={seqArm === 'B'} onClick={() => void stopCompare()} data-testid="compare-stop">
         {total === null ? 'Stop and see results' : 'Stop early and see results'}
       </button>
+      {seqArm === 'B' ? <p class="sub">{VARIANT_PAIR_UI.stopSeqB}</p> : null}
     </div>
   );
 }

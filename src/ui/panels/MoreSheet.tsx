@@ -25,7 +25,10 @@ import { saveAndLeave } from '../state';
 import { HOME_TEXT } from '../strings/home';
 import { GoalRow } from './GoalChoice';
 import { TryMoreRow } from './TrySetup';
+import { ChallengeMoreRows } from './ChallengeStart';
 import { openShare } from '../share';
+import { openBookmarkSheet } from '../bookmarks';
+import { BOOKMARK_UI } from '../strings/notebookTools';
 import { IconShare } from './ShareSheet';
 
 export function MoreSheet() {
@@ -50,6 +53,10 @@ export function MoreSheet() {
         <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.5rem' }}>
           <button class="btn" onClick={() => (sheet.value = 'history')} data-testid="more-history">
             History and what happened
+          </button>
+          {/* P4.8b (SPEC §12.8): a bookmark of this moment, optionally with a stored snapshot. */}
+          <button class="btn" onClick={openBookmarkSheet} data-testid="bookmark-now">
+            {BOOKMARK_UI.moreRow}
           </button>
           {/* P4.4 (SPEC §13.5): the Goal row — the running goal and Leave goal, or Try a goal… */}
           <GoalRow />
@@ -83,6 +90,8 @@ export function MoreSheet() {
           ) : null}
           {/* P4.7 (SPEC §13.6): Try my dish… (a turn at its horizon: its result card again). */}
           <TryMoreRow />
+          {/* P4.8c (SPEC §13.5): Make a challenge…, Start challenge: {name}, Export challenge, Leave challenge…. */}
+          <ChallengeMoreRows />
           {/* UX §2.4: Compare lives in More (and in the Lab Tools tray from P2.7). */}
           <button
             class="btn"

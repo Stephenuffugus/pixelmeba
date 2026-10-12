@@ -212,7 +212,7 @@ describe('a malformed notebook is dropped with a message; the world loads unchan
   const cases: [string, (nb: Record<string, unknown>, w: World) => Promise<Record<string, unknown>>][] = [
     ['a bad checksum', (nb) => Promise.resolve({ ...nb, checksum: `sha256:${'0'.repeat(64)}` })],
     ['another world id', async (nb) => reseal({ ...nb, worldId: 'someone-else' })],
-    ['an unknown kind key', async (nb) => reseal({ ...nb, gallery: [] })],
+    ['an unknown kind key', async (nb) => reseal({ ...nb, sketches: [] })], // P4.8b: 'gallery' is a kind now
     [
       'four followed families',
       async (nb, w) =>

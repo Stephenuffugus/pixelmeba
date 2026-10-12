@@ -16,6 +16,9 @@ import { canonicalJson, sha256Hex } from '@sim/hash';
 import { goalsProblem, goalsWorldProblem, type GoalRecord } from './notebookGoals';
 import { storiesProblem, storiesRefsProblem, type StoryCard } from './notebookStories';
 import { turnsProblem, turnsWorldProblem, type TurnRecord } from './notebookTurns';
+import { bookmarksProblem, type Bookmark } from './notebookBookmarks';
+import { galleryProblem, galleryWorldProblem, type GalleryEntry } from './notebookGallery';
+import { challengesProblem, challengesWorldProblem, type ChallengeRecord } from './notebookChallenges';
 
 export const NOTEBOOK_FORMAT = 'pixelmeba-notebook';
 export const NOTEBOOK_VERSION = 1;
@@ -79,6 +82,12 @@ export interface NotebookRecord {
   readonly stories?: readonly StoryCard[];
   /** P4.7: a Try my dish turn (src/persistence/notebookTurns.ts; at most one); absent in every other dish (reads as []). */
   readonly turns?: readonly TurnRecord[];
+  /** P4.8b: event bookmarks (src/persistence/notebookBookmarks.ts; ≤ 50); absent in records written before them (reads as []). */
+  readonly bookmarks?: readonly Bookmark[];
+  /** P4.8b: the specimen gallery (src/persistence/notebookGallery.ts; ≤ 100); absent in records written before it (reads as []). */
+  readonly gallery?: readonly GalleryEntry[];
+  /** P4.8c: custom challenges (src/persistence/notebookChallenges.ts; ≤ 20); absent in records written before them (reads as []). */
+  readonly challenges?: readonly ChallengeRecord[];
   readonly checksum: string;
 }
 
@@ -238,6 +247,10 @@ function worldRefsProblem(raw: Record<string, unknown>, refs: NotebookWorldRefs)
   if (stories) return stories;
   const turns = turnsWorldProblem(raw, refs); // P4.7
   if (turns) return turns;
+  const gallery = galleryWorldProblem(raw, refs); // P4.8b (bookmarks name no species or organism)
+  if (gallery) return gallery;
+  const challenges = challengesWorldProblem(raw, refs); // P4.8c (the recorded manifest, species and fields when the loader passes them)
+  if (challenges) return challenges;
   return null;
 }
 
@@ -249,6 +262,9 @@ const KIND_PROBLEMS: Readonly<
   goals: goalsProblem, // P4.4 (notebookGoals.ts)
   stories: storiesProblem, // P4.2 (notebookStories.ts)
   turns: turnsProblem, // P4.7 (notebookTurns.ts)
+  bookmarks: bookmarksProblem, // P4.8b (notebookBookmarks.ts)
+  gallery: galleryProblem, // P4.8b (notebookGallery.ts)
+  challenges: challengesProblem, // P4.8c (notebookChallenges.ts)
 };
 const ENVELOPE_KEYS = ['format', 'notebookVersion', 'worldId', 'nextFavorite', 'checksum'];
 
@@ -330,7 +346,7 @@ export function notebookWithoutNicknames(record: NotebookRecord): NotebookRecord
 
 /** True when the record holds nothing (no favorite, followed or not). Such a record is not written to a file. */
 export function notebookIsEmpty(record: NotebookRecord): boolean {
-  return record.favorites.length === 0 && (record.goals ?? []).length === 0 && (record.stories ?? []).length === 0 && (record.turns ?? []).length === 0;
+  return record.favorites.length === 0 && (record.goals ?? []).length === 0 && (record.stories ?? []).length === 0 && (record.turns ?? []).length === 0 && (record.bookmarks ?? []).length === 0 && (record.gallery ?? []).length === 0 && (record.challenges ?? []).length === 0;
 }
 
 /** Whether any favorite carries a nickname. */

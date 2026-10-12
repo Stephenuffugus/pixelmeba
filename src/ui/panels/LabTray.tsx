@@ -77,6 +77,8 @@ import { CLEAN_WATER_LABELS, SAMPLE_MODE_HINTS, SAMPLE_MODE_LABELS, TOOLS_COPY }
 import { OverlayPicker } from './OverlayPicker';
 import { OBSERVE_TEXT } from '../strings/observe';
 import { probeDrawing } from '../observe';
+import { openBookmarkSheet } from '../bookmarks';
+import { BOOKMARK_UI } from '../strings/notebookTools';
 import { endProbeSession, ShapeIcon, startProbeSession } from './ProbeSession';
 import {
   dietLine,
@@ -657,7 +659,27 @@ function ObserveActions() {
       >
         <ShapeIcon shape="rect" /> {OBSERVE_TEXT.regionsButton}
       </button>
+      {/* P4.8b (UX §4.4 Observe tray "bookmarks"): Bookmark this moment. */}
+      <button
+        class="btn"
+        onClick={() => {
+          labTray.value = null;
+          openBookmarkSheet();
+        }}
+        data-testid="bookmark-now"
+      >
+        <IconBookmark /> {BOOKMARK_UI.labButton}
+      </button>
     </div>
+  );
+}
+
+/** P4.8b: a bookmark ribbon. */
+function IconBookmark() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+      <path d="M6 3h12v18l-6-5-6 5z" />
+    </svg>
   );
 }
 

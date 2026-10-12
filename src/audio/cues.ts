@@ -23,6 +23,7 @@
 import { hapticTap } from './haptics';
 import { AUDIO_DEFAULTS, type AudioPrefs } from './mix';
 import { coalesceMsOf, isWorldCue, SILENT_DIVISION_CATEGORIES, type CueId } from './patches';
+import { narrator } from './narration';
 import { CueRateLimiter } from './rateLimiter';
 import { audioContextCtor, SoundKit } from './SoundKit';
 
@@ -36,6 +37,7 @@ const limiter = new CueRateLimiter({ now: () => performance.now(), isWorld: isWo
 
 /** Create the audio graph from a user gesture (idempotent). False when Web Audio is unavailable. */
 export function initAudio(): boolean {
+  narrator.gesture(); // P4.9: narration, like every sound, waits for the first gesture (with or without Web Audio)
   if (kit) {
     if (!held) void kit.resume().catch(() => undefined);
     return true;
@@ -62,16 +64,19 @@ export function audioReady(): boolean {
 export function setAudioPrefs(p: AudioPrefs): void {
   prefs = p;
   kit?.setPrefs(p);
+  narrator.setPrefs(p); // P4.9: narration on/off and the voice bus volume
 }
 
 /** Hidden page or the arcade host's pause: stop all sound until resumeAudio(). */
 export function suspendAudio(): void {
   held = true;
+  narrator.hold(true); // P4.9: stop speaking, drop what waits
   void kit?.suspend().catch(() => undefined);
 }
 
 export function resumeAudio(): void {
   held = false;
+  narrator.hold(false);
   void kit?.resume().catch(() => undefined);
 }
 

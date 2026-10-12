@@ -73,6 +73,10 @@ import { TrySetupSheet } from '../panels/TrySetup';
 import { closeTrySetup } from '../tryDish';
 import { shareSheetKey } from '../share';
 import { TryHorizonSheet } from '../panels/TryHorizon';
+import { BookmarkSheet } from '../panels/BookmarkSheet';
+import { bookmarkSheetKey } from '../bookmarks';
+import { ChallengeSheet } from '../panels/ChallengeStart';
+import { challengeSheetKey } from '../challenge';
 
 function formatTime(tick: number): string {
   const s = Math.floor(tick / 10);
@@ -179,6 +183,8 @@ export function DishScreen() {
         return;
       }
       if (shareSheetKey(e.key)) return; // P4.6: the Share sheet is a blocking panel too; Esc is its Close (run state restored)
+      if (bookmarkSheetKey(e.key)) return; // P4.8b: the Bookmark sheet pauses the dish; Esc is its Cancel (run state restored)
+      if (challengeSheetKey(e.key)) return; // P4.8c: the challenge sheet is a blocking panel; Esc is its Cancel (run state restored)
       if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
       if (e.key === ' ' && modality === 'keyboard' && (e.target as HTMLElement | null)?.closest(SPACE_CONTROLS)) return;
       if (handleViewKey(e)) return; // I / L / F / Esc per view (UX §4.2; P2.7)
@@ -328,6 +334,10 @@ export function DishScreen() {
         {/* P4.8: the Observe tray's relationship map and region probes (read-only sheets). */}
         {sheet.value === 'relationshipMap' ? <RelationshipMapSheet /> : null}
         {sheet.value === 'probes' ? <ProbeSheet /> : null}
+        {/* P4.8b: Bookmark this moment (opening it paused the dish; closing restores the speed). */}
+        {sheet.value === 'bookmark' ? <BookmarkSheet /> : null}
+        {/* P4.8c: Make a challenge, Start challenge, Leave challenge (opening it paused the dish; closing restores the speed). */}
+        {sheet.value === 'challenge' ? <ChallengeSheet /> : null}
         <WhatIfHost context="dish" />
       </div>
 

@@ -18,6 +18,8 @@ import {
 } from '../state';
 import { causeLabel, clock, CONCLUSIONS, describeChanges, fmt, fmtDiff, rowLabel } from './CompareText';
 import { PredictionNote } from './CompareSetup';
+import type { ComparisonVariantPair } from '@worker/variantPair';
+import { pairCardChange, sugarNote, sugarText, VARIANT_PAIR_UI } from '../strings/variantPair';
 
 export function CompareResults() {
   const c = compareState.value;
@@ -28,22 +30,29 @@ export function CompareResults() {
     if (shown) playCueFor('compare_result', shown); // P3.10: once per results (not on remount); the results table appearing is its visible equivalent
   }, [shown]);
   if (!c || !info || !r) return null;
-  const change = describeChanges(info, r.interventions);
+  const vp = c.variantPair;
+  const change = vp ? pairCardChange(vp.title, vp.changeShort) : describeChanges(info, r.interventions);
   const main = r.rows.filter((row) => row.key !== 'speciesCount' && row.key !== 'speciesBiomass');
   const perSpecies = r.rows.filter((row) => row.key === 'speciesCount' || row.key === 'speciesBiomass');
   return (
     <div class="compare-body">
-      <h2 id="compare-heading" data-testid="compare-results-title">
-        Results · {r.label}
-      </h2>
+      {vp ? (
+        <PairHead vp={vp} r={r} info={info} />
+      ) : (
+        <h2 id="compare-heading" data-testid="compare-results-title">
+          Results · {r.label}
+        </h2>
+      )}
+      {vp ? null : (
       <p class="sub" data-testid="compare-summary">
         A (baseline) and B ({change}) each ran {clock(r.ticks)} from {clock(r.baselineTick)}
         {r.stoppedEarly ? ' (stopped early)' : ''}. They started identical; your change was the only recorded difference. These numbers describe this paired run only —
         another seed, horizon or change could turn out differently.
       </p>
+      )}
       {/* G2 comprehension M4: a row is never presented as a direct effect of the change. */}
       <p class="sub" data-testid="compare-knock-on">
-        Every difference below traces back to your change, directly or through knock-on effects; this table does not show which.
+        Every difference below traces back to {vp ? 'the idea’s one change' : 'your change'}, directly or through knock-on effects; this table does not show which.
       </p>
       <div class="compare-results-grid">
         <PredictionNote />
@@ -147,14 +156,89 @@ export function CompareResults() {
           {compareCardSaved.value ? 'Result card saved' : 'Save result card'}
         </button>
         <button class="btn primary" onClick={() => void closeCompare()} data-testid="compare-done">
-          Done — back to my dish
+          {vp ? VARIANT_PAIR_UI.done(vp.title) : 'Done — back to my dish'}
         </button>
       </div>
-      <p class="sub" data-testid="compare-done-note">
-        Done discards the two copies. Your dish is exactly as you left it. A saved result card is listed in Notebook → Journal. To keep a changed version as its own dish, use More →
-        Duplicate dish and change the copy.
-      </p>
+      {vp ? (
+        <p class="sub" data-testid="compare-done-note">
+          {VARIANT_PAIR_UI.doneNote(vp.title)}
+        </p>
+      ) : (
+        <p class="sub" data-testid="compare-done-note">
+          Done discards the two copies. Your dish is exactly as you left it. A saved result card is listed in Notebook → Journal. To keep a changed version as its own dish, use More →
+          Duplicate dish and change the copy.
+        </p>
+      )}
     </div>
+  );
+}
+
+/**
+ * P4.5 (D09 line 115): the pair's title, question and changed input, "this paired run" and the caveat;
+ * then the two rows D09 asks for first — both counts (living organisms of each kind in A and B) and the
+ * food remaining (sugar left in the whole dish).
+ */
+function PairHead({ vp, r, info }: { vp: ComparisonVariantPair; r: ComparisonResults; info: DishInfo }) {
+  const kinds = r.a.species.map((sa, i) => ({ a: sa, b: r.b.species[i]! })).filter((k) => k.a.count > 0 || k.b.count > 0);
+  return (
+    <>
+      <h2 id="compare-heading" data-testid="compare-results-title">
+        {VARIANT_PAIR_UI.title(vp.title)}
+      </h2>
+      <p class="whatif-question" data-testid="pair-question">
+        {vp.question}
+      </p>
+      <p class="constraint" data-testid="pair-change">
+        {vp.change}
+      </p>
+      <p class="sub" data-testid="compare-summary">
+        <strong data-testid="pair-label">{r.label}</strong> · {VARIANT_PAIR_UI.summary(clock(r.ticks), r.stoppedEarly)}
+      </p>
+      <p class="sub" data-testid="pair-caveat">
+        {VARIANT_PAIR_UI.caveat}
+      </p>
+      {/* Focusable so a keyboard can scroll it when a narrow screen makes it scroll (axe scrollable-region-focusable). */}
+      <div class="compare-table-wrap" tabIndex={0} role="region" aria-label={VARIANT_PAIR_UI.countsCaption}>
+        <table class="compare-table" data-testid="pair-counts">
+          <caption>{VARIANT_PAIR_UI.countsCaption}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{VARIANT_PAIR_UI.countsHeading}</th>
+              <th scope="col">A</th>
+              <th scope="col">B</th>
+              <th scope="col">B − A</th>
+            </tr>
+          </thead>
+          <tbody>
+            {kinds.map(({ a, b }) => (
+              <tr key={a.id}>
+                <th scope="row">{VARIANT_PAIR_UI.alive(info.speciesNames[a.idx] ?? a.name)}</th>
+                <td>{fmt(a.count, 'speciesCount')}</td>
+                <td>{fmt(b.count, 'speciesCount')}</td>
+                <td>{fmtDiff(b.count - a.count, 'speciesCount')}</td>
+              </tr>
+            ))}
+            {kinds.length === 0 ? (
+              <tr>
+                <th scope="row">{VARIANT_PAIR_UI.noneAlive}</th>
+                <td>0</td>
+                <td>0</td>
+                <td>0</td>
+              </tr>
+            ) : null}
+            {vp.sugarEnd ? (
+              <tr data-testid="pair-sugar">
+                <th scope="row">{VARIANT_PAIR_UI.sugarLeft}</th>
+                <td>{sugarText(vp.sugarEnd.a)}</td>
+                <td>{sugarText(vp.sugarEnd.b)}</td>
+                <td>{fmtDiff(vp.sugarEnd.b - vp.sugarEnd.a, 'biomass')}</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+      <p class="sub">{sugarNote(vp.sugarStart)}</p>
+    </>
   );
 }
 

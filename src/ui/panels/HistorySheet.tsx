@@ -10,9 +10,11 @@ import { drawFrame, loadAtlas } from '../atlas';
 import { feed } from '../feed';
 import { inheritedLead } from '../strings/inherited';
 import { IconClose } from '../icons';
-import { dishInfo, getClient, historyFocus, inspector, meta, sheet } from '../state';
+import { dishInfo, getClient, historyFocus, inspector, meta, sheet, showToast } from '../state';
 import { TraitGraphs } from './TraitGraphs';
 import { JournalComposer } from '../views/NotebookJournal';
+import { bookmarkEvent } from '../bookmarks';
+import { BOOKMARK_UI } from '../strings/notebookTools';
 
 const INK = '#256E9E';
 const GRID = '#D9D6CC';
@@ -142,6 +144,8 @@ export function HistorySheet() {
   const [compacted, setCompacted] = useState(false);
   const [tab, setTab] = useState<HistoryTab>(focus ? 'events' : 'charts');
   const [composing, setComposing] = useState(false);
+  // P4.8b: the rows bookmarked in this opening of History (text only; the notebook holds them).
+  const [marked, setMarked] = useState<readonly string[]>([]);
   // Focus returns to "Record what you saw…" when the form closes (the form focuses its first field).
   const recordRef = useRef<HTMLButtonElement>(null);
   const returnFocus = useRef(false);
@@ -471,12 +475,30 @@ export function HistorySheet() {
               {lines.map((l) => (
                 <li
                   key={`${l.key}:${l.tick}`}
-                  style={{ display: 'flex', gap: '0.5rem', fontSize: 'var(--fs-body)' }}
+                  style={{ display: 'flex', gap: '0.5rem', fontSize: 'var(--fs-body)', alignItems: 'center', flexWrap: 'wrap' }}
                 >
                   <span class="sub" style={{ minWidth: '3.5rem', fontVariantNumeric: 'tabular-nums' }}>
                     {Math.floor(l.tick / 10)} s
                   </span>
                   <span>{l.text}</span>
+                  {/* P4.8b: a text-only bookmark of this row (past moments have no stored state). */}
+                  <button
+                    class="btn history-bookmark"
+                    disabled={marked.includes(`${l.key}:${l.tick}`)}
+                    aria-label={BOOKMARK_UI.eventLabel(l.text, `${Math.floor(l.tick / 10)} s`)}
+                    data-testid="history-bookmark"
+                    onClick={() =>
+                      void bookmarkEvent(l).then((refused) => {
+                        if (refused !== null) showToast(refused, 5000);
+                        else {
+                          setMarked((m) => [...m, `${l.key}:${l.tick}`]);
+                          showToast(BOOKMARK_UI.saved(false), 3500);
+                        }
+                      })
+                    }
+                  >
+                    {marked.includes(`${l.key}:${l.tick}`) ? BOOKMARK_UI.eventButtonDone : BOOKMARK_UI.eventButton}
+                  </button>
                 </li>
               ))}
             </ul>

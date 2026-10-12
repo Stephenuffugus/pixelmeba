@@ -112,7 +112,7 @@ export function isShelfSlot(slotId: string): boolean {
 }
 
 /** P4.7 fix round 1: SaveStore.remove's refusal of a shelf id (shelf records go only through Shelf.remove). */
-export const SHELF_REMOVE_REFUSED = 'That is a Try my dish starting point, not a saved dish; it is removed from the storage panel.';
+export const SHELF_REMOVE_REFUSED = 'That is a Try my dish starting point or a snapshot bookmark, not a saved dish; remove it in Saved dishes → Storage.';
 
 export interface SaveRequest {
   readonly slotId: string;

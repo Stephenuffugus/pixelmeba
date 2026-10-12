@@ -18,6 +18,9 @@ import type { SampleMode } from '@sim/sampleSlot';
 import type { FavoritePattern, NotebookRecord } from '@persist/notebook';
 import type { GoalRecord, GoalState } from '@persist/notebookGoals';
 import type { TurnRecord } from '@persist/notebookTurns';
+import type { ChallengeInput, ChallengeRecord } from '@persist/notebookChallenges';
+import type { GalleryEntry } from '@persist/notebookGallery';
+import type { StorageInfo } from './storage';
 import type { MapWindow, RelationshipMapData } from './relationshipMap';
 import type { ProbeMask, ProbeReadings } from './probes';
 
@@ -185,6 +188,45 @@ export type ToWorker =
   | { readonly type: 'tryNext'; readonly requestId: number; readonly dishId: string; readonly newDishId: string; readonly discard: boolean }
   /** P4.7: Finish — the turn becomes 'finished'; the dish stays open as an ordinary paused dish. Answered by 'tryTurn'. */
   | { readonly type: 'tryFinish'; readonly requestId: number; readonly dishId: string }
+  /**
+   * P4.8c custom challenge (src/worker/challenge.ts): store the paused dish as the challenge's baseline on the
+   * shelf and record the challenge in its notebook. Answered by 'challengeSaved' or 'challengeRefused' (nothing changed).
+   */
+  | { readonly type: 'challengeSave'; readonly requestId: number; readonly dishId: string; readonly challenge: ChallengeInput }
+  /** P4.8c: the challenge file (the baseline save with only this challenge in its notebook). Answered by 'challengeExported' or 'challengeRefused'. */
+  | { readonly type: 'challengeExport'; readonly requestId: number; readonly dishId: string; readonly challengeId: string }
+  /**
+   * P4.8c: start challenge `challengeId` as a Try my dish turn from its baseline (the open dish kept first, D-0033).
+   * `check`: only say whether it can start (answered by 'challengeChecked'; nothing is kept, written or opened).
+   * Answered by 'challengeStarted', 'challengeRefused' (nothing changed) or 'keepRefused'.
+   */
+  | { readonly type: 'challengeStart'; readonly requestId: number; readonly dishId: string; readonly challengeId: string; readonly newDishId: string; readonly keepFrom?: KeepFrom; readonly check?: boolean }
+  /**
+   * P4.8b Bookmark this moment (no `event`) or an event row of History "What happened" (`event`; text only:
+   * past moments have no stored state). Notebook state, never a command. With `snapshot` the dish's full save
+   * at this tick goes on the shelf (kind 'snapshot', ≤ 20 per device) BEFORE the bookmark is added; a refused
+   * or failed write adds nothing. Answered by 'notebook' (`refused`: nothing was added).
+   */
+  | { readonly type: 'bookmarkAdd'; readonly requestId: number; readonly dishId: string; readonly title: string; readonly snapshot: boolean; readonly event: BookmarkEventRef | null }
+  /** P4.8b: delete one bookmark (its snapshot stays on the shelf until removed in Saved dishes → Storage). Answered by 'notebook'. */
+  | { readonly type: 'bookmarkDelete'; readonly requestId: number; readonly dishId: string; readonly id: string }
+  /**
+   * P4.8b: open a snapshot bookmark of dish `dishId` as a NEW branch `newDishId`, exactly as a checkpoint opens
+   * (branchWorldId, branchName, favorites only; D-0031), the open dish kept first (D-0033). Answered by
+   * 'loaded' (with `branch`), 'keepRefused', or 'bookmarkGone' (the stored moment is gone or unreadable; nothing changed).
+   */
+  | { readonly type: 'bookmarkOpen'; readonly requestId: number; readonly dishId: string; readonly id: string; readonly newDishId: string; readonly keepFrom?: KeepFrom }
+  /** P4.8b: save a specimen to the gallery from the UI's snapshot copy and the inspector lines on screen (notebook state; never spawns). Answered by 'notebook'. */
+  | { readonly type: 'galleryAdd'; readonly requestId: number; readonly dishId: string; readonly entry: GalleryEntryInput }
+  /** P4.8b: delete one gallery entry. Answered by 'notebook'. */
+  | { readonly type: 'galleryDelete'; readonly requestId: number; readonly dishId: string; readonly id: string }
+  /** P4.8b: what this device stores (src/worker/storage.ts; read-only). Answered by 'storageInfo'. */
+  | { readonly type: 'storageInfo'; readonly requestId: number }
+  /**
+   * P4.8b: remove one automatic checkpoint or shelf record (the storage panel, after its confirmation). A
+   * named slot or the autosave is refused ('error'; nothing changed). Answered by 'storageInfo' (removed).
+   */
+  | { readonly type: 'storageRemove'; readonly requestId: number; readonly slotId: string }
   /** Read-only lineage panel query (SPEC §8.5, UX §5.5): branches, variation, specimens, and detail for one branch or one organism's branch. */
   | { readonly type: 'lineage'; readonly requestId: number; readonly dishId: string; readonly branch: number | null; readonly birthId: number | null }
   /** Trait overlay and lineage highlight for this dish's snapshots (render-only; never touches the world). */
@@ -249,6 +291,23 @@ export type ToWorker =
       readonly newDishId: string;
       readonly compare: { readonly compareId: string; readonly aDishId: string; readonly bDishId: string } | null;
       /** D-0033: keep the open dish first (see KeepFrom); the card's arms are realized before it is kept. */
+      readonly keepFrom?: KeepFrom;
+    }
+  /**
+   * P4.5 Paired Garden variants (src/worker/variantPair.ts): compare What if? idea `variantId` (R-G1…R-G3)
+   * with the unchanged Garden (R-G0) for the fixed 180 s. Both arms are realized from content at tick 0
+   * (a refusal changes nothing), then the open dish is kept first (`keepFrom`, D-0033), then a NEW paused
+   * dish `newDishId` holding the idea's start opens with the comparison in setup (no change on B; the
+   * arms take no command). `sequential`: run A to the horizon, then B (SPEC §13.4). Answered by
+   * 'variantPairStarted', 'whatIfRefused' (nothing changed) or 'keepRefused'.
+   */
+  | {
+      readonly type: 'variantPairStart';
+      readonly requestId: number;
+      readonly variantId: string;
+      readonly newDishId: string;
+      readonly compare: { readonly compareId: string; readonly aDishId: string; readonly bDishId: string };
+      readonly sequential: boolean;
       readonly keepFrom?: KeepFrom;
     }
   /**
@@ -609,6 +668,18 @@ export type FavoriteOp =
   | { readonly kind: 'representative'; readonly id: string; readonly birthId: number }
   | { readonly kind: 'unpin'; readonly id: string }
   | { readonly kind: 'pin'; readonly id: string };
+
+/** P4.8b: an event row of History "What happened" being bookmarked (its first event: tick, type, species, cause; and the row's words). */
+export interface BookmarkEventRef {
+  readonly tick: number;
+  readonly type: VisualEvent['type'];
+  readonly species: number;
+  readonly cause: number | null;
+  readonly text: string;
+}
+
+/** P4.8b: a gallery entry as the UI sends it (the worker gives it its id). */
+export type GalleryEntryInput = Omit<GalleryEntry, 'id'>;
 
 /** P4.4: a goal a dish offers (content texts; "{time}" in the sentences is the dish time m:ss). */
 export interface GoalOffer {
@@ -999,6 +1070,22 @@ export type FromWorker =
   | { readonly type: 'tryTurn'; readonly requestId?: number; readonly dishId: string; readonly turn: TurnRecord | null }
   /** P4.7 (unsolicited): a turn reached its horizon; the dish was paused. `goal`: this turn's goal attempt (null: free observation). */
   | { readonly type: 'tryHorizon'; readonly dishId: string; readonly turn: TurnRecord; readonly elapsedTicks: number; readonly goal: GoalRecord | null }
+  /** P4.8c: a challenge was saved; `record`: the dish's notebook now. */
+  | { readonly type: 'challengeSaved'; readonly requestId: number; readonly dishId: string; readonly record: NotebookRecord; readonly challenge: ChallengeRecord }
+  /** P4.8c: the challenge file to download. */
+  | { readonly type: 'challengeExported'; readonly requestId: number; readonly text: string; readonly filename: string }
+  /** P4.8c: the answer to a 'challengeStart' check (null: it can start). */
+  | { readonly type: 'challengeChecked'; readonly requestId: number; readonly dishId: string; readonly refusal: string | null }
+  /** P4.8c: a challenge turn opened (paused, at its baseline tick). `kept`: how the open dish was kept first (D-0033). */
+  | { readonly type: 'challengeStarted'; readonly requestId: number; readonly info: DishInfo; readonly turn: TurnRecord; readonly kept?: WhatIfKept }
+  /** P4.8c: a challenge request was refused; nothing was changed. */
+  | { readonly type: 'challengeRefused'; readonly requestId: number; readonly message: string }
+  /** P4.8c (unsolicited, besides the command's ack): a command a challenge turn refused; the dish is unchanged. */
+  | { readonly type: 'challengeBlocked'; readonly dishId: string; readonly message: string }
+  /** P4.8b: a snapshot bookmark's stored moment is gone or could not be read (the bookmark text is kept; nothing changed). */
+  | { readonly type: 'bookmarkGone'; readonly requestId: number; readonly id: string; readonly message: string }
+  /** P4.8b: the answer to 'storageInfo', and to 'storageRemove' (`removed`: the record was removed). */
+  | { readonly type: 'storageInfo'; readonly requestId: number; readonly storage: StorageInfo; readonly removed?: boolean }
   /** P2.8: a recorded regional trait series; `available` lists, per species, the loci that have records. */
   | {
       readonly type: 'traitHistory';
@@ -1121,6 +1208,8 @@ export type FromWorker =
   | { readonly type: 'experimentCatalog'; readonly requestId: number; readonly cards: readonly ExperimentCardView[] }
   /** A card started: its new paused dish, and for a paired card its comparison (setup, change on B). */
   | { readonly type: 'experimentStarted'; readonly requestId: number; readonly cardId: string; readonly info: DishInfo; readonly compare: ComparisonState | null; readonly kept?: WhatIfKept }
+  /** P4.5: a Garden variant pair opened: the idea's new paused dish and the comparison (setup; `variantPair` set). */
+  | { readonly type: 'variantPairStarted'; readonly requestId: number; readonly info: DishInfo; readonly compare: ComparisonState; readonly kept?: WhatIfKept }
   /** D-0033: the answer to keepPlan. */
   | { readonly type: 'keepPlan'; readonly requestId: number; readonly plan: WhatIfPlan }
   /**

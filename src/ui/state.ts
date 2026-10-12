@@ -35,6 +35,8 @@ import { importFailedText } from './strings/share';
 import { wireFavorites } from './favorites';
 import { startGoal, wireGoals } from './goals';
 import { wireTry } from './tryDish';
+import { wireChallenge } from './challenge';
+import { VARIANT_PAIR_SECONDS, VARIANT_PAIR_UI } from './strings/variantPair';
 
 export type Route =
   | { readonly name: 'home' }
@@ -48,7 +50,7 @@ export type Route =
   /** Paired comparison of two copies of the current dish (SPEC §13.4, UX §5.6). */
   | { readonly name: 'compare' }
   /** Notebook (UX §1): Journal · Experiments (P2.5; the other tabs arrive in later phases). */
-  | { readonly name: 'notebook'; readonly tab: 'journal' | 'experiments' | 'favorites' | 'stories' }
+  | { readonly name: 'notebook'; readonly tab: 'journal' | 'experiments' | 'favorites' | 'stories' | 'bookmarks' | 'gallery' }
   /** One experiment card in full, with Start (SPEC §13.2). */
   | { readonly name: 'experiment'; readonly cardId: string }
   /** A paired experiment card's run (the comparison engine with the card's change on B). */
@@ -90,6 +92,8 @@ export interface Settings {
   readonly muted?: boolean;
   readonly quietAudio?: boolean;
   readonly haptics?: boolean;
+  /** P4.9: Settings → Sound → Narration (src/audio/mix.ts AudioPrefs.narration); off unless chosen. */
+  readonly narration?: boolean;
   /**
    * Settings "Simplified overlay colours" (UX §9; P3.11): every overlay drawn in one light-to-dark ramp.
    * Optional so settings stored by older builds still load; off unless chosen.
@@ -107,7 +111,7 @@ export const selection = signal<Selection | null>(null);
 export const inspector = signal<InspectorPayload | null>(null);
 export const candidates = signal<{ x: number; y: number; items: { birthId: number; species: number }[] } | null>(null);
 export const tool = signal<Tool>({ kind: 'look' });
-export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | 'save' | 'history' | 'lineage' | 'evolution' | 'favorite' | 'trySetup' | 'tryHorizon' | 'share' | 'relationshipMap' | 'probes'>('none');
+export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | 'save' | 'history' | 'lineage' | 'evolution' | 'favorite' | 'trySetup' | 'tryHorizon' | 'share' | 'relationshipMap' | 'probes' | 'bookmark' | 'challenge'>('none');
 /** P2.2: the open dish's evolution setting, rates and recorded changes (from its snapshots). */
 export const evolution = signal<EvolutionState | null>(null);
 export const overlay = signal<OverlayId | null>(null);
@@ -240,6 +244,7 @@ export function getClient(): SimClient {
     wireFavorites(client); // P4.1: client.onNotebook (favorite changes, a dropped notebook) and the snapshots' family marks
     wireGoals(client); // P4.4: goal changes autosave; the open dish's goal offers and its one goal sentence
     wireTry(client); // P4.7: client.onTry (a turn's horizon, a turn record changed) and the open dish's turn
+    wireChallenge(client); // P4.8c: a command a challenge turn refused is announced in its words
     // P2.8: automatic checkpoints follow the Settings choice; journal entries of the open dish are kept with it.
     client.onCheckpoint(onCheckpointNotice);
     client.setCheckpointRing(settings.value.checkpointRing === true);
@@ -816,6 +821,25 @@ async function replaceOpenDish(verb: KeepVerb, waiting: string, attempt: KeepAtt
   return { kind: 'refused', message: r.message };
 }
 
+/** P4.8b: a snapshot bookmark opens as a new branch, replacing the open dish, which is kept first (D-0033) as a checkpoint's opening keeps it. */
+export async function replaceForBookmark(waiting: string, attempt: KeepAttempt): Promise<ReplaceOutcome> {
+  return replaceOpenDish('checkpoint', waiting, attempt);
+}
+
+/**
+ * P4.8b: show a dish just opened as a branch from a snapshot bookmark (as loadSlot shows an opened
+ * checkpoint): disposes the dish it replaced, enters the branch, and lets Continue follow it at once.
+ */
+export async function enterBookmarkBranch(info: DishInfo, previousDishId: string | null): Promise<boolean> {
+  const c = getClient();
+  if (previousDishId && previousDishId !== info.dishId) c.dispose(previousDishId);
+  enterDish(info, null);
+  return c.autosave(info.dishId).then(
+    () => true,
+    () => false,
+  );
+}
+
 /** P4.7 Try my dish: turn 1 replaces the open dish, which is kept first (D-0033) through the shared keep flow. */
 export async function replaceForTry(waiting: string, attempt: KeepAttempt): Promise<ReplaceOutcome> {
   return replaceOpenDish('start', waiting, attempt);
@@ -1328,7 +1352,93 @@ export async function closeCompare(): Promise<void> {
   });
   client.activate(c.sourceDishId);
   if (c.priorSpeed > 0) client.setSpeed(c.sourceDishId, c.priorSpeed);
-  showToast('Comparison closed. Your dish is exactly as you left it.', 3000);
+  // P4.5: a Garden variant pair opens the idea's own dish, paused at its first moment (it never ran).
+  variantPairKeptLine.value = null;
+  if (c.variantPair) showToast(VARIANT_PAIR_UI.closed(c.variantPair.title), 5000);
+  else showToast('Comparison closed. Your dish is exactly as you left it.', 3000);
+}
+
+// ---------------------------------------------------------------------------------------------
+// P4.5 Paired Garden variants (src/worker/variantPair.ts; SPEC §13.3–§13.4; D09 line 115). A What if?
+// idea of the Garden runs against the unchanged Garden for the fixed 180 s through the comparison
+// screens: the prediction note before, the results with both counts and the sugar left, the conclusion
+// after. The worker realizes both arms from content first, keeps the open dish (D-0033), then opens a
+// new paused dish holding the idea's start; Close opens it at 0:00.
+
+/** D-0033: the line about the dish kept when the pair opened, shown in its setup panel (null: nothing written). */
+export const variantPairKeptLine = signal<string | null>(null);
+
+/**
+ * SPEC §13.4 "sequentially if memory requires": a device reporting 2 GB of memory or less runs the two
+ * dishes one after the other (navigator.deviceMemory; unknown counts as enough).
+ */
+export function pairRunsSequentially(nav: { readonly deviceMemory?: unknown } | undefined = typeof navigator === 'undefined' ? undefined : (navigator as { deviceMemory?: unknown })): boolean {
+  const m = nav?.deviceMemory;
+  return typeof m === 'number' && m <= 2;
+}
+
+/** A refusal of the pair that is not about keeping the open dish (readable as-is; nothing changed). */
+export interface PairRefused {
+  readonly ok: false;
+  readonly code: 'refused';
+  readonly message: string;
+}
+
+/**
+ * One try of opening the pair with a way of keeping the open dish (the What if? sheet asks the player
+ * when all ten slots are used, as for Start).
+ */
+export async function startVariantPair(variantId: string, keepFrom: KeepFrom): Promise<{ readonly ok: true } | KeepRefused | PairRefused> {
+  const c = getClient();
+  const old = dishInfo.value;
+  const dishId = newDishId();
+  const base = `${dishId}-vp`;
+  const ids = { compareId: base, aDishId: `${base}-A`, bDishId: `${base}-B` };
+  compareLastGeometry.A = compareLastGeometry.B = null;
+  compareLastSnapshot.A = compareLastSnapshot.B = null;
+  batch(() => {
+    // Set before the request so the arms' first snapshots are routed to the comparison.
+    compareState.value = { ...ids, sourceDishId: dishId, baselineTick: 0, status: 'setup', horizonTicks: VARIANT_PAIR_SECONDS * 10, ticksRun: 0, speed: 4, priorSpeed: 0, interventions: [], results: null, error: null };
+    comparePrediction.value = '';
+    compareHorizon.value = VARIANT_PAIR_SECONDS;
+    compareConclusion.value = null;
+    compareNote.value = '';
+    compareCardSaved.value = false;
+    compareArmMeta.value = { A: null, B: null };
+    compareShown.value = 'B';
+    cameraLeader = 'B';
+  });
+  let r: Awaited<ReturnType<SimClient['variantPairStart']>>;
+  try {
+    r = await c.variantPairStart({ variantId, newDishId: dishId, compare: ids, sequential: pairRunsSequentially(), keepFrom });
+  } catch (e) {
+    compareState.value = null;
+    throw e;
+  }
+  if (!r.ok) {
+    compareState.value = null;
+    return r;
+  }
+  if (old && old.dishId !== r.info.dishId) c.dispose(old.dishId);
+  enterDish(r.info, null);
+  const started = r;
+  batch(() => {
+    compareState.value = started.compare;
+    variantPairKeptLine.value = keptLine(started.kept) || null;
+    route.value = { name: 'compare' };
+  });
+  return { ok: true };
+}
+
+/** Run the pair: always its fixed 180 s (the worker refuses any other horizon). */
+export async function runVariantPair(): Promise<void> {
+  const c = compareState.value;
+  if (!c || c.status !== 'setup' || !c.variantPair) return;
+  try {
+    compareState.value = await getClient().compareRun(c.compareId, VARIANT_PAIR_SECONDS * 10, 4);
+  } catch (e) {
+    showToast(`Couldn't run the comparison: ${(e as Error).message}`, 4000);
+  }
 }
 
 /** A saved result card (UI state on this device; Notebook → Journal lists them, G2 comprehension M1). */

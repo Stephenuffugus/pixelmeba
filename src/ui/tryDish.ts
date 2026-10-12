@@ -309,7 +309,7 @@ export async function finishTurn(port: TryPort = defaultTryPort()): Promise<void
     const t = await port.finish(card.dishId);
     if (dishInfo.peek()?.dishId === card.dishId) currentTurn.value = t;
     closeCard();
-    showToast(TRY_TEXT.finished(card.turn.turn), 5000);
+    showToast(card.turn.challenge ? TRY_TEXT.finishedChallenge(card.turn.turn) : TRY_TEXT.finished(card.turn.turn), 5000);
     void autosave();
   } catch (e) {
     tryCard.value = { ...card, step: 'card', message: e instanceof Error ? e.message : String(e) };

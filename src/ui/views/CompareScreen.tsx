@@ -24,6 +24,7 @@ import {
   toast,
 } from '../state';
 import { CompareViewport } from './CompareViewport';
+import { VARIANT_PAIR_UI } from '../strings/variantPair';
 
 export function CompareScreen() {
   const c = compareState.value;
@@ -90,11 +91,13 @@ export function CompareScreen() {
   }
 
   const shown = compareShown.value;
+  // P4.5: a sequential Garden pair runs A first, then B (the progress names the dish running).
+  const seqArm = c.variantPair?.sequential ? c.variantPair.phase : null;
   const progress =
     status === 'setup'
       ? `Paused at ${clock(c.baselineTick)} · nothing has run yet`
       : status === 'running'
-        ? `Running · ${clock(c.ticksRun)}${c.horizonTicks !== null ? ` of ${clock(c.horizonTicks)}` : ''}`
+        ? `Running${seqArm ? ` ${seqArm}` : ''} · ${clock(c.ticksRun)}${c.horizonTicks !== null ? ` of ${clock(c.variantPair ? c.variantPair.targetTicks : c.horizonTicks)}` : ''}`
         : status === 'complete'
           ? `Finished · both ran ${clock(c.ticksRun)}`
           : 'Stopped by an error';
@@ -106,7 +109,7 @@ export function CompareScreen() {
           <IconBack />
         </button>
         <div class="title">
-          <strong>Compare · {info.name}</strong>
+          <strong>{c.variantPair ? VARIANT_PAIR_UI.title(c.variantPair.title) : `Compare · ${info.name}`}</strong>
           <span class="time" data-testid="compare-time">
             {progress}
           </span>
@@ -126,10 +129,10 @@ export function CompareScreen() {
       <div class="compare-views" data-show={shown}>
         <div class="segmented compare-toggle" role="group" aria-label="Show dish">
           <button class="btn" aria-pressed={shown === 'A'} onClick={() => showCompareArm('A')} data-testid="compare-show-A">
-            A · baseline
+            {c.variantPair ? VARIANT_PAIR_UI.armA : 'A · baseline'}
           </button>
           <button class="btn" aria-pressed={shown === 'B'} onClick={() => showCompareArm('B')} data-testid="compare-show-B">
-            B · changed
+            {c.variantPair ? VARIANT_PAIR_UI.armB(c.variantPair.title) : 'B · changed'}
           </button>
         </div>
         <CompareViewport arm="A" />

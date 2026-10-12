@@ -5,11 +5,16 @@
 import { signal } from '@preact/signals';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { CellInspect, EntityInspect, FamilyAnswer } from '@worker/protocol';
+import { ENT_STRIDE, ID_STRIDE } from '@worker/protocol';
 import { IconClose, IconFollow } from '../icons';
 import {
   askFamily,
+  autosave,
   clearFamily,
   dishInfo,
+  getClient,
+  latestDishSnapshots,
+  showToast,
   familyView,
   getRenderer,
   inspector,
@@ -31,6 +36,44 @@ import { PAINT_TARGETS, PLACEABLE_STRUCTURES, type PaintTarget, type PlaceableSt
 import { favoriteOf, followTarget, nameOf, openFavoriteSheet } from '../favorites';
 import { FAVORITE_TEXT, followingText } from '../strings/favorites';
 import { FavoriteFollow } from './FavoriteFollow';
+import { notebook } from '../favorites';
+import { buildGalleryEntry, saveSpecimen } from '../gallery';
+import { GALLERY_UI } from '../strings/notebookTools';
+
+/**
+ * P4.8b Save to gallery: an entry from a COPY of the latest published snapshot and this inspector answer
+ * (no new worker query of world state; notebook state only, never a command, nothing changes in the dish).
+ */
+async function saveToGallery(e: EntityInspect, speciesName: string): Promise<void> {
+  const info = dishInfo.value;
+  const got = latestDishSnapshots();
+  if (!info || !got) {
+    showToast(GALLERY_UI.noPicture, 3000);
+    return;
+  }
+  const { snap, geometry } = got;
+  const entry = buildGalleryEntry(e, speciesName, {
+    tick: snap.tick,
+    count: snap.count,
+    ents: snap.ents.slice(0, snap.count * ENT_STRIDE),
+    ids: snap.ids.slice(0, snap.count * ID_STRIDE),
+    substrate: geometry.substrate.slice(),
+    structure: geometry.structure.slice(),
+    shade: geometry.shade.slice(),
+  });
+  if (!entry) {
+    showToast(GALLERY_UI.noPicture, 3000);
+    return;
+  }
+  const r = await saveSpecimen(getClient(), info.dishId, entry);
+  if (r.record && dishInfo.value?.dishId === info.dishId) notebook.value = r.record;
+  if (r.refused !== null) {
+    showToast(r.refused, 5000);
+    return;
+  }
+  void autosave();
+  showToast(GALLERY_UI.saved, 3500);
+}
 
 /** The cell's ground in content words ("Impermeable wall", "Gel"), never the simulation's codes. */
 function groundName(substrate: string, structure: string): string {
@@ -456,6 +499,10 @@ function EntityView({ e }: { e: EntityInspect }) {
               onClick={() => openHistoryFor(e.speciesIdx, e.birthId)}
             >
               What changed?
+            </button>
+            {/* P4.8b (SPEC §12.8): a picture and these lines in the dish's gallery; never spawns, never a command. */}
+            <button class="btn" data-testid="gallery-save" onClick={() => void saveToGallery(e, name)}>
+              {GALLERY_UI.save}
             </button>
           </div>
           {followTarget.value?.birthId === e.birthId && !followed ? <FavoriteFollow birthId={e.birthId} speciesName={name} /> : null}

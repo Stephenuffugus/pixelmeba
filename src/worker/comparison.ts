@@ -28,6 +28,7 @@ import { PairedRun, type ComparisonResults, type Intervention } from '@sim/paire
 import { deserializeWorld, serializeWorld, type WorldState } from '@sim/serialize';
 import type { World } from '@sim/world';
 import type { Speed } from './protocol';
+import type { ComparisonVariantPair } from './variantPair';
 
 // One model: the paired run and its measurements are shared with experiment cards.
 export {
@@ -102,6 +103,8 @@ export interface ComparisonState {
   readonly error: string | null;
   /** Set when this comparison is an experiment card's paired run (P2.5). */
   readonly experiment?: ComparisonExperiment;
+  /** P4.5: set when this comparison is a What if? idea against the unchanged Garden (src/worker/variantPair.ts). */
+  readonly variantPair?: ComparisonVariantPair;
 }
 
 /** A fresh world from the stored baseline under its own world id (the baseline itself is never touched). */
