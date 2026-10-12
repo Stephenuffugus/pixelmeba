@@ -72,8 +72,8 @@ with the next task).
 - [x] (ca8c184 part a, 52e6a27 parts b–c; D-0085, D-0086, D-0087, D-0090; follow family = P2.3 + P4.1 favorites (D-0073), recipe card = the P4.6 Starting recipe (D-0080); transfer preview moves to Phase 5 with the gate structures, D-0082) P4.8 Observation tools (relationship map, region probes, follow family, bookmarks, recipe card, gallery, challenge editor, transfer preview)
 - [x] (52e6a27; D-0089; hearing the phrases on a device is an owner item) P4.9 Narration (16 phrases), sound polish, reduced‑motion audit table
 - [x] (ed374ba; D-0091, D-0092, D-0093, D-0095; debug APK and unsigned AAB built here, the interruption harness passes; no device: install, offline launch and the device smoke test are owner items, ANDROID_SETUP §10) P4.10 Android (Filesystem adapter, lifecycle, share/import, offline launch, debug build or documented blocker, ANDROID_SETUP.md signing)
-- [ ] P4.11 Web/arcade build (relative base, iframe‑safe, PWA offline, DEMO_MODE)
-- [ ] P4.12 Store readiness (icon, feature graphic, screenshots, listing text, PRIVACY_POLICY.md, data safety, checklist)
+- [x] (487a152; D-0097; offline from its own folder; the stamped arcade deploy plays online until the owner's embedding rules) P4.11 Web/arcade build (relative base, iframe‑safe, PWA offline, DEMO_MODE)
+- [x] (487a152; D-0098; screenshots regenerated on the clean commit; owner items in PLAY_STORE_CHECKLIST §B) P4.12 Store readiness (icon, feature graphic, screenshots, listing text, PRIVACY_POLICY.md, data safety, checklist)
 - [x] (ed374ba; D-0094, D-0095; measured under load: the 1× tick < 10 ms at 6,000 agents, the heap slope with a save in the window and the web worker heap at 4× NOT MET, quiet re-measure at P4.14; heat, frame rate and touch latency are owner device items) P4.13 Performance pass 2 + first‑minute polish (docs/reports/perf-rc1.md)
 - [ ] P4.14 Release candidate: full suite, EXPANSION_RESPONSE complete, README updated → tag `v1.0.0-rc1`
 - [ ] v1.0 gate evidence recorded (all fixtures, full‑journey e2e, axe, perf, Android result, store assets, owner usability gates listed)
