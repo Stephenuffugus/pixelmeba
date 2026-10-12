@@ -3,6 +3,18 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑12 05:05 UTC — RESUMED ("lets get started"). Lead items a–d DONE (D‑0090); integration VERIFIER
+> RUNNING: run `wf_f5f03585-9db` (session 79887b47), script `docs/agent/g4-wave-6b-integrate-verify.workflow.js.txt`
+> (its SOURCES now list the lead items). START HERE.**
+> - Tree = wip/g4-wave-6b (backup loop running, pid in tmp/lead/backup-6b.pid). The 04:05 tree matched the backup exactly.
+> - Lead items (uncommitted code, D‑0090 committed): NOTEBOOK_MAX_BYTES 2 MiB + wide tripwire case (1,383,868 = 66.0 %);
+>   challengeSave shares only 'ch-' baselines (test "D-0090" fails without it); CompareSetup/ExperimentRun sentences;
+>   SHELF_REMOVE_REFUSED names challenges. tsc + eslint clean on the changed files; bookmarks/shelf/challenge tests pass.
+> - If this session dies: restore from wip/g4-wave-6b if `git status` is clean; read the run's journal
+>   (~/.claude/projects/-workspaces-pixelmeba/79887b47-4ab1-419b-b4a6-21e592733ed1/subagents/workflows/wf_f5f03585-9db/)
+>   and docs/reports/reviews/g4-wave-6b/integrate-verify1.md; re-run the verifier only if it wrote no verdict.
+> - Then steps 6 of the 04:05 block: `npm run check`, desktop e2e (all specs, alone), commit 6b, tick P4.5/P4.8/P4.9, 7a.
+
 > **Update 2026‑10‑12 04:05 UTC — SAFE STOP FOR THE OVERNIGHT CODESPACE STOP (owner: "the codespace will need to close
 > before i will wake up so we should find a good place to save it all and refresh the codespace"). START HERE.**
 > - **State.** main = this commit (docs only; pushed). The wave 6b code plus BOTH integration fixers' edits are uncommitted
