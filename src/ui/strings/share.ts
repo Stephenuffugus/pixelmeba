@@ -50,6 +50,8 @@ export const SHARE_TEXT = {
   shared: 'Shared.',
   saved: (filename: string) => `Saved ${filename}.`,
   cancelled: 'Not shared. Nothing changed.',
+  /** D-0096: the share sheet that offers an export on the Android app was closed without saving. */
+  exportCancelled: 'Not exported. Nothing changed.',
   failed: (why: string) => `Could not make the file; nothing changed: ${why}`,
 } as const;
 

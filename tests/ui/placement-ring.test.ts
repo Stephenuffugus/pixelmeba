@@ -5,6 +5,7 @@
  * Checked to fail without the mechanism: with the `res.accepted > 0` guards removed, the refused cases
  * see a ring.
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { reportCommand } from '../../src/ui/state';
 import { reportSpecimenPlacement } from '../../src/ui/panels/LineageState';
@@ -70,5 +71,12 @@ describe('a specimen placement draws its ring only when something was placed (D-
     reportSpecimenPlacement({ accepted: 4 }, 'Branch 3', 10.5, 20.5, ring);
     expect(ring.placementRing).toHaveBeenCalledTimes(1);
     expect(ring.placementRing).toHaveBeenCalledWith(10.5, 20.5, SPECIMEN_RADIUS);
+  });
+
+  it('placeSpecimenTap reports through reportSpecimenPlacement and draws no ring of its own (integration verifier)', () => {
+    const src = readFileSync('src/ui/panels/LineageState.tsx', 'utf8');
+    const body = src.slice(src.indexOf('export function placeSpecimenTap'), src.indexOf('export function reportSpecimenPlacement'));
+    expect(body).toContain('reportSpecimenPlacement(res, p.label, wx, wy, getRenderer());');
+    expect(body).not.toContain('placementRing(');
   });
 });

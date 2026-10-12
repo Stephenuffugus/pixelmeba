@@ -4,8 +4,8 @@
  *
  * Worker only: DishHost times stepDish and sendSnapshot with performance.now() while Settings → "Show
  * performance numbers" is on, and each snapshot then carries a PerfSample. Nothing here is read by the
- * simulation, saved or hashed, and nothing is timed while diagnostics are off (the host does not call
- * performance.now() at all then). Timings are wall clock in the worker, so on a busy device they include
+ * simulation, saved or hashed, and nothing is timed while diagnostics are off (none of these timers run then;
+ * the host's own pacing clock reads performance.now() either way). Timings are wall clock in the worker, so on a busy device they include
  * waiting for a CPU; a bug report quotes them with the device.
  */
 import type { PerfSample } from './protocol';

@@ -357,10 +357,14 @@ installed or launched, and there are no device measurements.
       Pixelmeba → Force stop; relaunch: Saved dishes opens the last committed save of that slot (the new one
       or the one before; never an error). Also force-stop with a dish running, relaunch, Continue;
    6. **Share a picture** and **Share a living dish** (the system share sheet; "Save to Files"/Drive are
-      among its targets); cancel once: "Not shared. Nothing changed.". Do it once with the dish running: the
-      sheet covering the app pauses the dish like Home does, and the return says so (intended, D-0095);
+      among its targets); cancel once: "Not shared. Nothing changed.". The Share sheet pauses the dish itself
+      while it is open ("The dish is paused while this is open."), so no line shows on return and Close runs it
+      again. For the background pause, use More → Export living dish file with the dish running: the system
+      sheet covers the app, the dish pauses, and the return shows "Paused while Pixelmeba was in the
+      background…" (D-0095, D-0096);
    7. **Export** (More → Export, and the keep flow's Export): offered through the share sheet (no storage
-      permission is asked);
+      permission is asked); cancel the sheet once: "Not exported. Nothing changed." (the keep flow stays at its
+      choice: D-0096);
    8. **import a .pixelmeba from Files** (More → Import, Saved dishes → Import). The Android document picker
       may grey out `.pixelmeba` files because the type is unknown to Android; if it does, record it: the fix is
       to widen the file input's `accept` on the native app (P4.10 left it as on the web);
@@ -368,11 +372,14 @@ installed or launched, and there are no device measurements.
       and Saved dishes;
    10. haptics: Settings → Sound → Haptics on, place life: a short buzz (VIBRATE, D-0064);
    11. the INTERNET permission test of item 6;
-   12. **Home during a save, then a long wait** (D-0095): run a dish, press Home (that autosaves), leave the
-       phone for 2 minutes or more (Android freezes a backgrounded app), return, then Save to a slot and open
-       Saved dishes: the save works and the list opens (no "Saving is stopped until Pixelmeba is restarted");
+   12. **Home during a save, then a long wait** (D-0095; a smoke check: the Home autosave usually ends before
+       Android freezes the app, and the re-arm itself is proved by tests/platform/fs-bridge.test.ts "D-0095 …"):
+       run a dish, press Home (that autosaves), leave the phone for 2 minutes or more, return, then Save to a
+       slot and open Saved dishes: the save works and the list opens (no "Saving is stopped until Pixelmeba is
+       restarted");
    13. **a nearly full phone** (optional; D-0095): fill the storage until a save is refused ("storage full"),
-       then open Saved dishes: every earlier save still opens; free some space and save again.
+       then open Saved dishes: every earlier save still opens; free some space in Android's Settings → Storage
+       (while a save is waiting to finish, Pixelmeba refuses every write, a removal included) and save again.
 9. Keep the Filesystem save store (D-0092) or flip the native app back to IndexedDB (D-0013) after item 8.4–8.5:
    the flip is one line in `src/platform/capacitor.ts` `platformStorage()`.
 
@@ -384,17 +391,23 @@ installed or launched, and there are no device measurements.
   reads back each new record, then the journal (renamed to `journal.json`: committed), then removes the records it
   drops, writes the slot pointers, deletes slots, and removes the journal. A commit refused before its commit point
   removes what it wrote. Opening the store re-applies a committed journal, removes `*.tmp` and removes records no
-  slot names, except those of a slot file that cannot be read (D-0095). On a full phone a committed journal that
-  cannot be applied yet leaves every save readable and refuses new saves as "storage full" until space is freed
-  (D-0095). The worker reaches the files through a MessagePort; the main thread (`src/platform/fsHost.ts`)
-  answers with the Filesystem plugin; an operation unanswered for 30 s of running time stops saving until the
-  app restarts (what was saved stays); a timer held up while Android froze the app gets a fresh 30 s (D-0095).
-  The web build keeps IndexedDB.
+  slot names, except those of a slot file that cannot be read (D-0095: saving into such a slot, which shows as
+  free, lets the next open remove its old records; the records of a damaged checkpoint or shelf file are kept).
+  On a full phone a committed journal that cannot be applied yet leaves every save readable and refuses every
+  write, a removal included, as "storage full" until space is freed outside Pixelmeba (D-0095). The worker
+  reaches the files through a MessagePort; the main thread (`src/platform/fsHost.ts`) answers with the
+  Filesystem plugin; an operation unanswered 30 s after it started stops saving until the app restarts (what was
+  saved stays), and a timer that fires more than 5 s late (Android froze the app) gets a fresh 30 s (D-0095). A
+  power cut (not an app kill) is outside the tested crash points: Capacitor's `writeFile` does not fsync. The
+  web build keeps IndexedDB.
 - **Background**: Capacitor App `pause` → the same handler as the web's page-hidden (pause, a comparison comes
   back paused, one autosave); `resume` never changes the speed and says "Paused while Pixelmeba was in the
   background. No dish time passed." when a dish had been running. The page becoming visible again also ends
-  the absence (silently), so a missed `resume` never leaves the next background unpaused. Pixelmeba's own
-  share sheet and file picker count as the background too (D-0095). There is no offline growth.
+  the absence (silently), so a missed `resume` never leaves the next background unpaused. A running comparison
+  or experiment stops too (D-0096). The system share sheet (More → Export) and the file picker count as the
+  background; the in-app Share sheet pauses the dish itself while open and shows no return line (D-0095,
+  D-0096); its stored speed also survives a trip to the background, so Close after a return runs the dish
+  again (P4.6, unchanged). There is no offline growth.
 - **Share and export**: files go to `Directory.Cache/share/<name>` and to the system share sheet
   (`@capacitor/share`); a cancel changes nothing and removes the file; a shared file stays until the next share
   (the receiving app may still be reading it). Export uses the same sheet; no storage permission is requested.

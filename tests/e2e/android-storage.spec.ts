@@ -149,11 +149,16 @@ async function newMoment(page: Page, from: string): Promise<string> {
   return moment(page);
 }
 
-/** Relaunch: reload the page, then Saved dishes → Slot 1 → Open. */
-async function relaunchAndOpenSlot1(page: Page): Promise<string> {
+/**
+ * Relaunch: reload the page, then Saved dishes → Slot 1 → Open. `line`: a toast the open must show, watched
+ * from the moment of the click (D-0096: a toast is gone after 6 s, and the waits below can take longer).
+ */
+async function relaunchAndOpenSlot1(page: Page, line?: string): Promise<string> {
   await page.reload();
   await page.getByRole('button', { name: 'Saved dishes' }).click();
+  const shown = line === undefined ? null : expect(page.getByText(line).first()).toBeVisible({ timeout: 60_000 });
   await page.locator('li[data-slot="slot1"]').getByRole('button', { name: 'Open' }).click({ timeout: 60_000 });
+  await shown;
   await expect(page.getByTestId('dish-screen')).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run'); // opened paused
   await expect.poll(() => page.evaluate(() => (window as unknown as { __pm: Pm }).__pm.dishId !== null)).toBe(true);
@@ -231,8 +236,7 @@ test('a save cut after any of its file operations relaunches to exactly the old 
   expect(slot.previous).not.toBeNull();
   await harness.corrupt(page, `pixelmeba/records/${fsName(slot.current)}.json`);
   const previous = committed[committed.length - 2]!;
-  expect(await relaunchAndOpenSlot1(page)).toBe(previous);
-  await expect(page.getByText(DAMAGED).first()).toBeVisible();
+  expect(await relaunchAndOpenSlot1(page, DAMAGED)).toBe(previous);
   await expectNoSeriousA11yViolations(page);
 
   // Going to the background pauses the running dish and autosaves; Continue holds that moment after a reload.

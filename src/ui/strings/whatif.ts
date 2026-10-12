@@ -51,6 +51,8 @@ export const WHATIF_TEXT = {
   exporting: 'Exporting…',
   exported: (file: string) => `Exported ${file}. Keep that file to open this dish again.`,
   exportFailed: (why: string) => `Export failed, so nothing was started: ${why}`,
+  /** D-0096: the share sheet was closed without saving the file (the Android app). */
+  exportCancelled: 'Not exported, so nothing was started.',
   startAfterExport: 'Start the new dish',
   replaceIt: 'Replace a saved dish…',
   replaceLegend: 'Choose the save to replace',

@@ -95,6 +95,8 @@ export const CHALLENGE_TEXT = {
   startFailed: (why: string) => `The challenge did not start: ${why}`,
   exported: (filename: string) => `Exported ${filename}.`,
   exportFailed: (why: string) => `The challenge was not exported: ${why}`,
+  /** D-0096: the share sheet was closed without saving the file (the Android app). */
+  exportCancelled: 'The challenge was not exported. Nothing changed.',
 
   leaveTitle: 'Leave challenge',
   leaveIntro: 'The challenge turn stays as it is. A copy of this moment opens with every tool and no action limit.',

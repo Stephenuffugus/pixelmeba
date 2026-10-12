@@ -1,10 +1,10 @@
 import { render } from 'preact';
 import './styles.css';
 import { App } from './app/App';
-import { autosave, compareState, dishInfo, initDisplaySettings, meta, setSpeed, showToast } from './state';
+import { autosave, compareState, dishInfo, initDisplaySettings, meta, setCompareSpeed, setSpeed, showToast } from './state';
 import { initAudio, resumeAudio, suspendAudio } from '@audio/cues';
 import { wireNarration } from './narration';
-import { Lifecycle, pauseDishForBackground, wireNativeLifecycle } from '@platform/lifecycle';
+import { Lifecycle, pauseDishForBackground, visibilityChanged, wireNativeLifecycle } from '@platform/lifecycle';
 import { isNativePlatform } from '@platform/capacitor';
 
 initDisplaySettings();
@@ -31,11 +31,11 @@ for (const g of GESTURES) window.addEventListener(g, onGesture, { capture: true,
 // Backgrounding pauses (SPEC §14.2); returning never advances unseen time.
 /**
  * Going to the background (the page hidden, or the Android app's 'pause'; P4.10): the dish pauses when it
- * was running, a comparison comes back paused (SPEC §14.2: no running on after the app is left), and one
- * autosave is written. True when a dish was running.
+ * was running, a comparison comes back paused (SPEC §14.2: no running on after the app is left) and a running
+ * one stops (D-0096), and one autosave is written. True when the dish or a comparison was running.
  */
 function pauseForBackground(): boolean {
-  return pauseDishForBackground({ dishInfo, meta, compareState, setSpeed, autosave });
+  return pauseDishForBackground({ dishInfo, meta, compareState, setSpeed, setCompareSpeed, autosave });
 }
 /** P4.10: one handler for both platforms; it acts once per absence. Returning never changes the speed. */
 const lifecycle = new Lifecycle({ pauseForBackground, announce: (text) => showToast(text, 6000) });
@@ -57,11 +57,9 @@ document.addEventListener('visibilitychange', () => {
   // P3.10: audio pauses on suspension (ARCH §10.3) and comes back when the page is visible again.
   if (document.visibilityState === 'hidden') suspendAudio();
   else if (!hostPaused) resumeAudio();
-  if (document.visibilityState === 'hidden') lifecycle.background();
-  // Visible again ends the absence silently on both platforms (D-0095: a missed native 'resume' must never
-  // leave the next background unpaused); on the native app the App plugin's 'resume', before or after this,
-  // says the dish was paused.
-  else lifecycle.foreground(false);
+  // Both platforms (D-0095): visible again ends the absence silently, so a missed native 'resume' never leaves
+  // the next background unpaused; on the native app the App plugin's 'resume' says the dish was paused.
+  visibilityChanged(lifecycle, document.visibilityState === 'hidden');
 });
 
 // Arcade host hooks (ARCH §14): a parent page may pause/resume.

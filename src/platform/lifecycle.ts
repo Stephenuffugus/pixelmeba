@@ -24,15 +24,18 @@ export interface LifecycleHooks {
 export interface DishControls {
   readonly dishInfo: { readonly value: unknown };
   readonly meta: { readonly value: { readonly speed: number } | null };
-  readonly compareState: { value: { readonly priorSpeed: number } | null };
+  readonly compareState: { value: { readonly priorSpeed: number; readonly status?: string; readonly speed?: number | string } | null };
   readonly setSpeed: (speed: 0) => void;
+  /** D-0096: stop a running comparison or experiment (src/ui/state.ts setCompareSpeed). */
+  readonly setCompareSpeed?: (speed: 0) => void;
   readonly autosave: () => Promise<unknown>;
 }
 
 /**
  * The one handler for going to the background (the page hidden, or the Android app's 'pause'): with a dish
- * open, speed 0 when it was running, a comparison's prior speed 0 (it comes back paused, SPEC §14.2), and
- * one autosave. True when the dish was running.
+ * open, speed 0 when it was running, a comparison's prior speed 0 (it comes back paused, SPEC §14.2), a
+ * running comparison or experiment stopped too (D-0096: its screens stop it only when the page goes hidden,
+ * and an App 'pause' can come without that), and one autosave. True when the dish or a comparison was running.
  */
 export function pauseDishForBackground(c: DishControls): boolean {
   if (!c.dishInfo.value) return false;
@@ -40,8 +43,21 @@ export function pauseDishForBackground(c: DishControls): boolean {
   if (running) c.setSpeed(0);
   const cmp = c.compareState.value;
   if (cmp && cmp.priorSpeed > 0) c.compareState.value = { ...cmp, priorSpeed: 0 };
+  const run = c.compareState.value;
+  const comparing = run !== null && run.status === 'running' && (run.speed ?? 0) !== 0;
+  if (comparing) c.setCompareSpeed?.(0);
   void c.autosave();
-  return running;
+  return running || comparing;
+}
+
+/**
+ * The page's visibility (src/ui/main.tsx, on the web and on the Android app alike): hidden → background(),
+ * visible → foreground(false). D-0095: on the app 'visible' ends the absence silently, so a missed 'resume'
+ * never leaves the next background unpaused; the App plugin's 'resume' says the line.
+ */
+export function visibilityChanged(lc: Lifecycle, hidden: boolean): void {
+  if (hidden) lc.background();
+  else lc.foreground(false);
 }
 
 export class Lifecycle {
