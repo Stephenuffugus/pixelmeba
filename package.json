@@ -25,6 +25,10 @@
     "store:assets": "tsx tools/store-assets.ts",
     "bug:export": "tsx tools/bug-export.ts",
     "android:sync": "tsx tools/android-sync.ts",
+    "android:build:debug": "tsx tools/android-build.ts debug",
+    "android:build:release": "tsx tools/android-build.ts release",
+    "android:keystore": "bash tools/android-keystore.sh",
+    "android:icons": "tsx tools/android-icons.ts",
     "format": "prettier --write .",
     "art:preview": "tsx tools/art-preview.ts"
   },

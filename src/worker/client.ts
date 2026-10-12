@@ -24,6 +24,7 @@ import type { MapWindow, RelationshipMapData } from './relationshipMap';
 import type { ProbeMask } from './probes';
 import type { BookmarkEventRef, GalleryEntryInput } from './protocol';
 import type { StorageInfo } from './storage';
+import { platformStorage, startFsHost } from '@platform/capacitor';
 import { PROTOCOL_VERSION, stamp, type DishInfo, type DishSource, type Envelope, type FamilyAnswer, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 
 export class WorkerRequestError extends Error {
@@ -102,6 +103,18 @@ export interface WorkerErrorNotice {
   readonly request: ToWorker['type'] | null;
 }
 
+/**
+ * P4.10 (D-0092): the client's first message to a new worker. 'filesystem' sends one end of a MessageChannel
+ * (transferred) and hands the other to `host`, the main thread's file host; 'idb' sends no port.
+ */
+export function sendPlatform(w: WorkerLike, storage: 'idb' | 'filesystem', host: (port: MessagePort) => void): void {
+  if (storage === 'filesystem') {
+    const ch = new MessageChannel();
+    w.postMessage(stamp({ type: 'platform', storage, port: ch.port2 } as const), [ch.port2]);
+    host(ch.port1);
+  } else w.postMessage(stamp({ type: 'platform', storage: 'idb' } as const));
+}
+
 export class SimClient {
   private nextRequest = 1;
   private readonly pending: Record<number, Pending> = {};
@@ -126,6 +139,8 @@ export class SimClient {
 
   static create(): SimClient {
     const w = new Worker(new URL('./sim.worker.ts', import.meta.url), { type: 'module' });
+    // P4.10 (D-0092): the FIRST message picks the worker's save store (src/worker/boot.ts chooseStore).
+    sendPlatform(w, platformStorage(), startFsHost);
     return new SimClient(w);
   }
 
@@ -492,6 +507,11 @@ export class SimClient {
   /** P2.8: turn the automatic checkpoint ring on or off. */
   setCheckpointRing(enabled: boolean): void {
     this.send({ type: 'checkpointRing', enabled });
+  }
+
+  /** P4.13: Settings "Show performance numbers": snapshots carry the worker's timings while on. */
+  setDiagnostics(on: boolean): void {
+    this.send({ type: 'diagnostics', on });
   }
 
   /** P2.8: the recorded regional series of one species' locus, and the loci with records per species (read-only). */

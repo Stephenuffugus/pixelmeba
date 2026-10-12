@@ -14,10 +14,12 @@ export function FamilyMarkers() {
   useEffect(() => {
     if (!f || f.members.length === 0) return;
     let raf = 0;
-    const place = () => {
+    let last = Number.NEGATIVE_INFINITY; // P4.13: redraw at the renderer's marker budget (every frame, or 2 Hz under load)
+    const place = (t: number = performance.now()) => {
       const r = getRenderer();
       const host = ref.current;
-      if (r && host) {
+      if (r && host && t - last >= r.markerRedrawMs) {
+        last = t;
         const cam = r.camera;
         for (let k = 0; k < f.members.length; k++) {
           const el = host.children[k] as HTMLElement | undefined;

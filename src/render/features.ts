@@ -30,8 +30,10 @@ import {
   CUE_MOD_E01,
   CUE_MOD_E03,
   CUE_MOD_E05,
+  CUE_FEEDING,
   CUE_RESERVE_BAND_MASK,
   CUE_RESERVE_BAND_SHIFT,
+  CUE_STRESSED,
 } from '@worker/protocol';
 import { STAIN_MS, stainAlpha } from './world3';
 
@@ -211,7 +213,9 @@ export const SPLIT_FLASH_MS = 380;
 /** UX §7.4: "division flash → static split frame for 1 s". */
 export const SPLIT_STATIC_MS = 1000;
 /** The expanding ring where the player just placed something (motion on). */
-export const PLACEMENT_RING_MS = 500;
+export const PLACEMENT_RING_MS = 700;
+/** P4.13 (UX §6.5): the placement ring grows from 0 to the dose radius over this long, then fades out by PLACEMENT_RING_MS. */
+export const PLACEMENT_EXPAND_MS = 300;
 /** Reduced motion: the same ring, still, at its full radius, for this long. */
 export const PLACEMENT_STATIC_MS = 1000;
 /** Reduced motion: a death shows the dissolve's still frame (or a fungal segment's decaying tile) this long. */
@@ -253,7 +257,13 @@ export function effectLook(spec: EffectSpec, baseRadius: number, t: number): Eff
   if (spec.kind === 'split') {
     return spec.animated ? { radius: baseRadius * (0.4 + u), alpha: 0.7 * (1 - u), divider: false } : { radius: baseRadius * 0.9, alpha: 0.7, divider: true };
   }
-  return spec.animated ? { radius: baseRadius * (0.7 + 0.3 * u), alpha: 0.6 * (1 - u), divider: false } : { radius: baseRadius, alpha: 0.6, divider: false };
+  if (!spec.animated) return { radius: baseRadius, alpha: 0.6, divider: false };
+  // P4.13: expand 0 → the dose radius over PLACEMENT_EXPAND_MS (ease-out), then hold it and fade by the end.
+  const ms = u * spec.durationMs;
+  const grow = Math.min(1, ms / PLACEMENT_EXPAND_MS);
+  const g = 1 - (1 - grow) * (1 - grow);
+  const fade = ms <= PLACEMENT_EXPAND_MS ? 1 : Math.max(0, 1 - (ms - PLACEMENT_EXPAND_MS) / (spec.durationMs - PLACEMENT_EXPAND_MS));
+  return { radius: baseRadius * g, alpha: u >= 1 ? 0 : 0.6 * fade, divider: false };
 }
 
 /**
@@ -264,6 +274,42 @@ export function effectLook(spec: EffectSpec, baseRadius: number, t: number): Eff
 export function bodyFrameIndex(frames: number, durationMs: number, reducedMotionFrame: number, reduced: boolean, dormant: boolean, clock: number): number {
   if (reduced || dormant || frames <= 1 || !(durationMs > 0)) return reducedMotionFrame;
   return Math.floor(clock / durationMs) % frames;
+}
+
+/**
+ * P4.13 (UX §7.1 "feeding and reproduction play only after committed events"; UX §6.5 eating pulse): which
+ * body animation an organism shows. The feeding animation needs the snapshot's CUE_FEEDING bit (recorded
+ * intake this tick), an active life state and no locomotion; without the cue it is never chosen.
+ */
+export type BodyAnim = 'stress' | 'feed' | 'move' | 'idle';
+export function bodyAnimFor(cue: number, moving: boolean, dormant: boolean, has: { readonly stress: boolean; readonly feed: boolean; readonly move: boolean }): BodyAnim {
+  if (cue & CUE_STRESSED && has.stress) return 'stress';
+  if (!dormant && cue & CUE_FEEDING && has.feed && !moving) return 'feed';
+  return has.move ? 'move' : 'idle';
+}
+
+/** A feed animation whose cue just turned on: its clock starts at the next rendered frame. */
+export const FEED_START_PENDING = -1;
+
+/**
+ * P4.13 first feeding pulse: the feed animation's start, carried from snapshot to snapshot per organism.
+ * It starts (pending) in the snapshot where the feeding animation turns on, keeps its start while it stays
+ * on, and is cleared (NaN) when it stops, so every new bout of eating starts at frame 0.
+ */
+export function feedStartAfterSnapshot(feedingNow: boolean, previousStart: number): number {
+  if (!feedingNow) return Number.NaN;
+  return Number.isNaN(previousStart) ? FEED_START_PENDING : previousStart;
+}
+
+/**
+ * The clock the body frame is chosen on: for a feeding organism, ms since its feed animation started (the
+ * first rendered frame after the cue turned on is 0, so frame 0 shows within one snapshot interval of the
+ * recorded intake); otherwise the free-running per-organism clock.
+ */
+export function feedFrameClock(start: number, now: number, freeClock: number): number {
+  if (Number.isNaN(start)) return freeClock;
+  if (start === FEED_START_PENDING) return 0;
+  return Math.max(0, now - start);
 }
 
 /** A newborn's alpha over its first snapshot: a short fade in with motion on, full at once in reduced motion. */

@@ -66,6 +66,12 @@ export type DishSource =
   | { readonly kind: 'state'; readonly state: WorldState };
 
 export type ToWorker =
+  /**
+   * P4.10 (D-0092): the client's FIRST message picks the worker's save store — 'filesystem' (the Android app
+   * and the harness build) with the MessagePort to the main thread's file host in the transfer list, or 'idb'
+   * (the web). Additive (ARCH §7): no protocol version change; any other first message boots IndexedDB.
+   */
+  | { readonly type: 'platform'; readonly storage: 'idb' | 'filesystem'; readonly port?: MessagePort }
   /** With `keepFrom` (D-0033) the open dish is kept first, as What if? keeps it: see KeepFrom. */
   | { readonly type: 'create'; readonly requestId: number; readonly dishId: string; readonly source: DishSource; readonly name?: string; readonly keepFrom?: KeepFrom }
   | { readonly type: 'dispose'; readonly dishId: string }
@@ -97,6 +103,8 @@ export type ToWorker =
   | { readonly type: 'journalGet'; readonly requestId: number; readonly dishId: string }
   /** P2.8: turn the automatic checkpoint ring on or off (Settings; off unless the player turns it on). */
   | { readonly type: 'checkpointRing'; readonly enabled: boolean }
+  /** P4.13: Settings "Show performance numbers": snapshots carry `perf` while on (no answer; off by default). */
+  | { readonly type: 'diagnostics'; readonly on: boolean }
   | { readonly type: 'release'; readonly buffers: ArrayBuffer[] }
   | { readonly type: 'saveSlot'; readonly requestId: number; readonly dishId: string; readonly slotId: string; readonly name: string }
   | { readonly type: 'autosave'; readonly requestId: number; readonly dishId: string }
@@ -621,6 +629,20 @@ export interface SnapshotMsg {
   readonly sample?: SampleHeldSummary | null;
   /** P4.1: the followed families' marks and slot summaries (absent when no family is followed). */
   readonly favorites?: FavoriteMarks;
+  /** P4.13: the worker's own timings, only while diagnostics are on (src/worker/perfCounters.ts). */
+  readonly perf?: PerfSample;
+}
+
+/** P4.13 (ARCH §13): worker timings over the last 300 ticks and snapshots, in ms (wall clock, worker side). */
+export interface PerfSample {
+  readonly tickMsP50: number;
+  readonly tickMsP95: number;
+  /** How many tick times the percentiles are over (≤ 300). */
+  readonly ticksMeasured: number;
+  /** The last snapshot's build time. */
+  readonly snapshotMs: number;
+  /** The relationship watcher's share of the tick (its stage hooks and after-tick scan), mean over the ring. */
+  readonly relationshipMs: number;
 }
 
 /**

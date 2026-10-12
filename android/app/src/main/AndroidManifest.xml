@@ -37,5 +37,9 @@
 
     <!-- Permissions -->
 
+    <!-- INTERNET: from the Capacitor template; the app makes no network requests (ARCH §12). It stays until a
+         device test shows the WebView serves https://localhost without it (docs/ANDROID_SETUP.md §10). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- P4.10 (D-0064): haptics for accepted placements (Settings → Sound, off by default); a normal permission, no prompt. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 </manifest>

@@ -32,6 +32,7 @@ function map(edges: Partial<MapEdge>[], pools: RelationshipMapData['pools'] = []
     fromSecond: 0,
     toSecond: 59,
     recordedSinceSecond: null,
+    poolsRecordedSinceSecond: null, // P4.13: pool totals cover the whole window in these fixtures
     edges: edges.map((e) => ({
       kind: 'eats',
       actor: 'B01',

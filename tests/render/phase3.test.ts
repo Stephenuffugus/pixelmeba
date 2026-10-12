@@ -234,12 +234,12 @@ describe('fungal segments (D-0046; never the body path)', () => {
     expect(kinds.V01).toBe('virus');
     for (const id of ['A01', 'B01', 'B02', 'P01', 'P04', 'X01', 'Y01']) expect(kinds[id], id).toBe('body');
     expect(drawKindOf(undefined)).toBe('body');
-    // renderer.ts: the body animation (move ?? idle) is chosen only in the non-fungus branch; a virus
-    // is skipped; a dead segment shows its decaying tile, never a body dissolve.
+    // renderer.ts: the body animation (since P4.13 bodyAnimFor's stress, feed, move or idle) is chosen only
+    // in the non-fungus branch; a virus is skipped; a dead segment shows its decaying tile, never a body dissolve.
     const src = readFileSync(join(REPO_ROOT, 'src', 'render', 'renderer.ts'), 'utf8');
     expect(src).toMatch(/if \(!d \|\| d\.kind === 'virus'\) continue;/);
-    expect(src).toMatch(/if \(d\.kind === 'fungus'\) \{[\s\S]{0,400}?d\.fungus\?\.mask\[fungal\.mask\][\s\S]{0,200}?\} else \{\s*const a = [^\n]*\(d\.move \?\? d\.idle\);/);
-    expect(src.match(/d\.move \?\? d\.idle/g)).toHaveLength(1);
+    expect(src).toMatch(/if \(d\.kind === 'fungus'\) \{[\s\S]{0,400}?d\.fungus\?\.mask\[fungal\.mask\][\s\S]{0,200}?\} else \{[\s\S]{0,400}?const anim = bodyAnimFor\([^\n]*\);\s*const a = [^\n]*: d\.idle;/);
+    expect(src.match(/const a = anim === /g)).toHaveLength(1); // the drawn body animation is picked in one place
     expect(src).toMatch(/d\.fungus\?\.decaying\[\(prev\.ents\[o \+ E_LINKMASK\] \?\? 0\) & 15\]/);
     expect(src).toMatch(/if \(!d\?\.death \|\| d\.kind !== 'body'\) continue;/);
   });

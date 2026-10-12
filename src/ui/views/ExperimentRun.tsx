@@ -35,6 +35,7 @@ import {
 import { clauseText, describeArms, durationText, formatDiff, formatMeasure, measureLabel, plural, playerStepText } from '../strings/experiments';
 import type { HistorySample } from '@sim/history';
 import { ExperimentViewport } from './ExperimentViewport';
+import { PairSpeedBadge } from '../speedBadge';
 import { worldModesLine } from '../strings/modes';
 
 export const PREDICTION_MAX = 280;
@@ -144,6 +145,8 @@ export function ExperimentRun() {
           <strong>Experiment · {card.title}</strong>
           <span class="time" data-testid="experiment-time">
             {progress}
+            {/* P4.13: the effective-speed badge when this device can't keep up (src/ui/speedBadge.ts). */}
+            <PairSpeedBadge running={status === 'running'} speed={c.speed} ticks={c.ticksRun} />
           </span>
         </div>
         <button

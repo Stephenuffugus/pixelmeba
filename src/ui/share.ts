@@ -18,6 +18,8 @@ import {
   type PictureOptions,
 } from '@render/picture';
 import type { Speed } from '@worker/protocol';
+import { isNativePlatform } from '@platform/capacitor';
+import { nativeShareEnv } from '@platform/nativeShare';
 import { loadAtlas, type LoadedAtlas } from './atlas';
 import { notebook } from './favorites';
 import { dishClock, dishInfo, getClient, latestDishSnapshots, meta, route, setSpeed, sheet } from './state';
@@ -247,11 +249,17 @@ export function browserShareEnv(): ShareEnv {
   };
 }
 
+/** P4.10: the Android app's share sheet (src/platform/nativeShare.ts) on the native app, else the browser's. */
+export function platformShareEnv(): ShareEnv {
+  return isNativePlatform() ? nativeShareEnv() : browserShareEnv();
+}
+
 /**
  * Hand a file to the OS share sheet when it can take files (Web Share Level 2), else save it as a
  * download. The player cancelling (AbortError) or the platform refusing changes nothing: 'cancelled'.
+ * P4.10: on the Android app the share sheet is the Share plugin's (platformShareEnv).
  */
-export async function deliverFile(f: ShareFile, env: ShareEnv = browserShareEnv()): Promise<ShareOutcome> {
+export async function deliverFile(f: ShareFile, env: ShareEnv = platformShareEnv()): Promise<ShareOutcome> {
   const nav = env.nav;
   const file = env.makeFile(f.blob, f.filename, f.type);
   let canShare: boolean;

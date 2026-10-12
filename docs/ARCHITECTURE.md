@@ -391,6 +391,32 @@ TurnRecord.challenge?: TurnChallenge                     // see §11.2
   A to the horizon, then B (B's view shows the idea's start until then); Stop in sequential B refuses.
   `compareRun` with any other horizon, `compareReset`, and any command on an arm are refused.
 
+As built, Phase 4 wave 7a (P4.10 Android, P4.13 performance pass 2; D-0092…D-0095; `PROTOCOL_VERSION`
+stays 2, every addition is a new message or an optional field):
+```
+Main → Worker
+platform {storage 'idb'|'filesystem', port?: MessagePort} // the client's FIRST message (SimClient.create →
+                                                          // sendPlatform); the port is in the transfer list
+diagnostics {on}                                         // Settings "Show performance numbers"; no answer
+Worker → Main
+SnapshotMsg.perf?: PerfSample                            // only while diagnostics are on: {tickMsP50, tickMsP95,
+                                                          // ticksMeasured ≤ 300, snapshotMs, relationshipMs}
+```
+- The worker boots on its first message (`src/worker/sim.worker.ts`, `src/worker/boot.ts` chooseStore):
+  'platform' with 'filesystem' and a port opens `FilesystemBackend` over `PortFsOps` (the Android app, and
+  the interruption harness build `VITE_FS_HARNESS=1`, never shipped); any other first message opens
+  IndexedDB as before and is then handled; a later 'platform' is ignored. A store that fails to open falls
+  back to `MemoryBackend` with `persistent` false (Saved dishes then says saves last only until the app
+  closes; on the app it names its save folder, D-0095). The port carries the file operations to the main
+  thread's `src/platform/fsHost.ts` (Capacitor Filesystem, `Directory.Data`); see §11.1.
+- `diagnostics` (P4.13; `src/worker/perfCounters.ts`): while on, the host times each `stepDish` and
+  `sendSnapshot` with `performance.now()` into a ring of 300 and attaches `perf` to every snapshot; while
+  off it never calls `performance.now()`. Read-only: toggling it mid-run changes no state hash.
+- The relationship map's pool totals (D-0085, P4.13): the 'relationshipMap' request arms them for that dish
+  in this session (a map opened before the first tick arms at the first tick); until then the watcher sums
+  no pool. `RelationshipMapData.poolsRecordedSinceSecond` is the second the pools' own record starts (null
+  when it covers the window), and the map says "Recorded since m:ss." for the pools only.
+
 ## 8. Snapshots
 Published ≤ 10/s (adaptive under load). Contents: `renderList` as a packed `Float32Array`
 [entityIndex, speciesIdx, x, y, heading, scale/sizeFactor, stateFlags, cueBits] per living
@@ -518,6 +544,35 @@ pointer in a second transaction; old record retained as predecessor). Android: C
 Filesystem in `Directory.Data/pixelmeba/slots/<id>/` with `current.json`, `previous.json`,
 `current.tmp`; write tmp → read back and verify checksum → rename to current after moving current
 to previous. Settings only in Preferences.
+
+As built (P1.9, P2.8, P4.7, P4.10; D-0013, D-0092, D-0095). The code's contract is `StorageBackend`
+(`src/persistence/store.ts`): `getSlot`, `listSlots`, `getRecord`, `usage?` and one `commit({putRecords,
+putSlots, deleteRecords, deleteSlots})` that is atomic over several records and slot pointers (the
+checkpoint ring and the shelf commit several at once). `SaveStore` keeps the predecessor through the slot's
+`previous` pointer and drops the record before it in the same commit; `load` falls back to the predecessor.
+- Web: `IdbBackend` (`src/persistence/idb.ts`): one readwrite transaction over 'records' and 'slots' per
+  commit (D-0013).
+- Android: `FilesystemBackend` (`src/persistence/capacitorFs.ts`) under `Directory.Data/pixelmeba/`:
+  `records/<name>.json` = {recordId, checksum, data: base64 of the gzip bytes}, `slots/<name>.json` = the
+  SlotInfo, `journal.json`. Names are `fsName(id)`: [a-z0-9-] stay, every other byte becomes `_hh`. A commit:
+  (a) each new record tmp → read back and compare → rename; (b) `journal.tmp` = {putSlots, deleteSlots,
+  deleteRecords} → read back → rename to `journal.json`, the commit point; (c) delete the dropped records,
+  write each slot pointer tmp → read back → rename, delete slots; (d) remove the journal. Neither platform's
+  rename is atomic (Android deletes the target first), which is safe because a slot file is replaced only
+  after the commit point. A failure before (b)'s rename rejects the commit and removes what it wrote, best
+  effort; after it the commit is durable and is applied before the next operation or at the next open. Open
+  re-applies a journal, removes `*.tmp` and removes records no slot names (a slot file that cannot be read
+  keeps its records). While a committed journal cannot be applied (a full device), reads see the files
+  with the journal laid over them and writes are refused with `StorageFullError`; the store still opens.
+- The worker reaches the files through `PortFsOps` (`src/persistence/fsPort.ts`), a MessagePort to the main
+  thread's `src/platform/fsHost.ts`: errors keep their names (out of space → `StorageFullError`); each
+  operation has 30 s, re-armed when its timer fires more than 5 s late (the app was frozen in the
+  background); a real timeout stops the port, and every later operation is refused until a restart.
+- The storage estimate on the app (`src/worker/boot.ts` filesystemEstimate; the checkpoint ring's and the
+  shelf's preflight and the Storage panel): usage = the store's own files + the WebView's usage; quota = the
+  WebView's quota, or none (then the preflight is skipped and the store's own refusal keeps everything).
+- Settings, the device journal and relationship badges stay in WebView localStorage on both platforms (the
+  app's private data; D-0093, owner review).
 
 ### 11.2 Save format
 ```
@@ -762,6 +817,32 @@ input. Unknown newer versions produce a typed error surfaced as copy.
 - If the SDK is unavailable in the build environment, everything else ships and the exact
   commands for the owner are documented. Never fabricate a device measurement.
 
+As built (P4.10; D-0091…D-0095; docs/ANDROID_SETUP.md):
+- `capacitor.config.ts` as above. `android/variables.gradle`: minSdk 24, compileSdk and targetSdk 36 (the
+  Capacitor 8.5.2 template; Play requires API 36 for new apps and updates from 31 August 2026, read
+  2026-10-12). Manifest: INTERNET (kept until the device test, ANDROID_SETUP §10), VIBRATE (D-0064 haptics),
+  `allowBackup="true"` (owner item); `windowSplashScreenBackground` #14252D.
+- Lifecycle (`src/platform/lifecycle.ts`, wired in `src/ui/main.tsx`): App 'pause' and the page hidden →
+  `pauseDishForBackground` (speed 0 when running, a comparison's prior speed 0, one autosave), once per
+  absence; 'resume' never changes the speed and, when a dish had been running, says "Paused while Pixelmeba
+  was in the background. No dish time passed."; the page visible again ends the absence silently (D-0095).
+  Pixelmeba's own share sheet and file picker also pause a running dish (D-0095).
+- Recovery on launch: `FilesystemBackend.open` (§11.1), then `SaveStore.load`'s predecessor fallback with
+  "The latest save was damaged, so the previous copy was opened."
+- Share (`src/platform/nativeShare.ts`): the file goes to `Directory.Cache/share/<name>` and to the system
+  share sheet by its uri; a cancel removes it at once, a completed share's file stays until the next share
+  starts. Every export on the app (`saveTextFile`) goes through the share sheet: no storage permission.
+  Import stays `<input type=file>`.
+- Icons and splash: `art/src/icons/appIcon.ts` compiled by `tools/android-icons.ts` (`npm run android:icons`,
+  `--check`): 15 launcher PNGs, 11 splash PNGs, `ic_launcher_background` #14252D and
+  `public/icons/{icon-192,icon-512,maskable-512}.png`, at integer scales.
+- Scripts: `npm run android:build:debug` and `android:build:release` (`tools/android-build.ts`: web build,
+  `cap sync`, Gradle on JDK 21 with the SDK passed by environment; prints the path, bytes, sha256 and
+  `aapt2 dump badging`, or the unsigned line); `npm run android:keystore` (`tools/android-keystore.sh`:
+  refuses any path inside the repository). Results: ANDROID_SETUP §9.1, EXPANSION_RESPONSE §7.
+- Only `src/platform` imports `@capacitor/*` (eslint `@typescript-eslint/no-restricted-imports`); the
+  Filesystem, Share and App plugins load on demand on the native app only.
+
 ## 13. Performance discipline
 - No allocation in stage loops; scratch buffers; typed arrays; avoid closures per entity.
 - Neighborhood queries via the spatial index; contact checks only within the same and adjacent
@@ -773,6 +854,24 @@ input. Unknown newer versions produce a typed error surfaced as copy.
 - Measure: `tools/sim-run --perf` prints tick p50/p95/p99 and stage breakdown; in‑app opt‑in
   diagnostics overlay shows tick ms, effective speed, snapshot ms, fps, memory (where available).
 - Targets in SPEC §16; record machine/device for every number.
+
+As built (P3.12, P4.13; D-0066, D-0085, D-0094; docs/reports/perf-g3.md, perf-rc1.md):
+- Diagnostics: Settings → "Show performance numbers" (off by default) sends `diagnostics`; snapshots then
+  carry `perf` (§7) and `src/ui/panels/Diagnostics.tsx` shows tick p50/p95, effective speed, snapshot ms,
+  fps, memory (`performance.memory`, else n/a) and the detail level, as its own row under the top strip.
+- Renderer budgets and the degrade ladder (`src/render/budgets.ts`; renderer only: never the worker, the
+  simulation or the snapshot rate): at level 0 effects 64, stains 128, death dissolves 1,024, markers every
+  frame, overlay and aggregation textures ≤ 10 Hz; level 1 effects 16 and no stains; level 2 markers at
+  2 Hz; level 3 textures at 2 Hz. A frame-time moving average against 33.3 ms moves one level down after
+  2 s over and one back after 5 s under 0.8 × the budget.
+- Effective speed (`src/ui/speedBadge.ts`): " · running at {x.x}×" after 2 s below 0.8 × the chosen speed,
+  gone after 2 s at ≥ 0.9 ×; its accessible sentence is announced once.
+- Memory: `evictProfiles` (`src/sim/profiles.ts`) drops derived profiles with no living carrier every 600
+  ticks inside `step()`, and `src/sim/movement.ts` releases its food-array references after stage 4; both
+  are hash-neutral (profiles are never saved or hashed).
+- `tools/perf-stress.ts` (headless 6,000 agents; `--hashes` neutrality probe; `--save-out` the stress dish
+  as a save) and `tools/perf-web.ts` (the web build: Garden at 4× for 15 min, the stress dish imported,
+  touch latency; worker heap through CDP).
 
 ## 14. Web and arcade build
 - `npm run build` → `dist/` with relative asset URLs; works from any subpath and inside an

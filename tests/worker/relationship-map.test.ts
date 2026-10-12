@@ -33,6 +33,9 @@ function watch(
   stage?: (stage: number, w: World) => void,
 ): RelationshipWatcher {
   const rw = new RelationshipWatcher(w);
+  // P4.13 (D-0085): pool totals are measured once the map has been opened; these ledger tests read the
+  // map from the first tick, so the watcher starts measuring at once (the P4.8 always-on behaviour).
+  rw.armPools();
   for (let t = 0; t < ticks; t++) {
     step(w, {
       afterStage: (s, world) => {

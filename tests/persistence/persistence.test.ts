@@ -45,6 +45,19 @@ describe('save file (P1.9)', () => {
     await expectRejected(JSON.stringify(tampered), 'checksum');
   });
 
+  it('D-0095: the header tick (outside the checksum) is replaced by the checked state tick; the world loads exactly', async () => {
+    const { w, text } = await sampleSave(60);
+    const f = JSON.parse(text) as { tick: number; state: { tick: number } };
+    expect(f.tick).toBe(60);
+    const edited = JSON.stringify({ ...f, tick: 61 });
+    const parsed = await parseSaveFile(edited);
+    expect(parsed.tick).toBe(60);
+    expect(parsed.tick).toBe(parsed.state.tick);
+    const { file, world } = await loadSaveFile(edited);
+    expect(file.tick).toBe(60);
+    expect(stateHash(world)).toBe(stateHash(w));
+  });
+
   it('rejects integrity violations even with a recomputed checksum', async () => {
     const { text } = await sampleSave(50);
     const f = JSON.parse(text) as { state: { entities: { highWater: number } } };

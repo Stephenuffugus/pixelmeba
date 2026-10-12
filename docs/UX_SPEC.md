@@ -334,9 +334,9 @@ each with reduced motion on and off). Locomotion is never removed: it is real ve
 | trap loop | not in v1.0 (Phase 5 species) | `content/manifest.json: enabledSpecies` |
 | glow halo | static bright center — not in v1.0 (Phase 5 species) | `content/manifest.json: enabledSpecies` |
 | particles | none (no resource particles are built in any mode) | `src/render/renderer.ts: spawnEffect` |
-| camera easing | instant (the camera has no easing in any mode: presets, Find and follow set the view at once) | `src/render/camera.ts: centerOn, fit, zoomAt` |
+| camera easing | instant (presets, Find and follow set the view at once) | P4.13: with motion on, player-initiated moves ease over 220 ms, ease-out cubic (zoom buttons and +/−, whole dish, Find / "go to", the inspector's reveal pan); wheel, pinch, drag and follow stay direct; a touch on the dish ends a move where it was going; in reduced motion every move is instant: `src/render/camera.ts: eased, easePose, CAMERA_EASE_MS, reducedMotion` |
 | unfolding (wake) | state swap: Preparing/Resting/Waking hold a still folded pose and a seam frame per state | `src/render/features.ts: bodyFrameIndex, featureLayers` |
-| deposit/placement ring | a still ring at full radius for 1 s (no growth or fade) | `src/render/features.ts: placementEffect, effectLook, PLACEMENT_STATIC_MS` |
+| deposit/placement ring | a still ring at full radius for 1 s (no growth or fade) | `src/render/features.ts: placementEffect, effectLook, PLACEMENT_STATIC_MS` (with motion on since P4.13 it grows from 0 to the dose radius over `PLACEMENT_EXPAND_MS` 300 ms and has faded by `PLACEMENT_RING_MS` 700 ms); drawn only for an accepted placement in both modes: `src/ui/state.ts: reportCommand`, `src/ui/panels/LineageState.tsx: reportSpecimenPlacement` |
 | food‑object stain | held still at its first opacity, removed after 6 s (no fade) | `src/render/features.ts: stainAlphaAt` |
 | favorite glyphs | unchanged: static outlines in both modes | `src/render/renderer.ts: drawFavorites` |
 | probe outlines | unchanged: static dashed outlines in both modes | `src/render/renderer.ts: drawProbes` |

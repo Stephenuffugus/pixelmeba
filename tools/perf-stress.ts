@@ -4,6 +4,8 @@
  *   node --expose-gc --import tsx tools/perf-stress.ts [--ticks 9000] [--seed 6000] [--hash-at 3000]
  *       [--save-at 3000] [--snapshot-every 10] [--no-stages] [--out file.json]
  *   npx tsx tools/perf-stress.ts --hashes [--stress-only]     (the hash-neutrality probe, see hashes())
+ *   npx tsx tools/perf-stress.ts --save-out <file.pixelmeba> [--save-out-tick 600]   (P4.13: the stress
+ *       world as a save file, through buildSaveFile, for tools/perf-web.ts's import; ≤ 25 MB)
  *
  * Builds the target population IN MEMORY (not a content recipe; nothing under content/ changes): a
  * Water Garden variant with 6,000 live agents, 2,000 of them fungal segments (1,000 F01 Threadlace on a
@@ -924,7 +926,8 @@ async function main(): Promise<void> {
  * `--hashes`: the hash-neutrality probe (P3.12). Every fence entry (tests/fixtures/fence.json) realized
  * and run as the fence tests do, under the shipped manifest (stateHash and trajectoryDigest 'full') and,
  * for entries with a g2 digest, under registryWith(G2_LISTS) (stateHash and 'g2' digest); then the
- * stress world's stateHash at ticks 0, 600, 1,500 and 3,000. Run it before and after an optimization:
+ * stress world's stateHash at ticks 0, 600, 1,500, 3,000 and 9,000 (`--hashes-to <tick>` stops earlier). Run it
+ * before and after an optimization:
  * the two outputs must be identical.
  */
 async function hashes(): Promise<void> {
@@ -977,9 +980,12 @@ async function hashes(): Promise<void> {
     return h.digest('hex').slice(0, 16);
   };
   snaps[0] = digestSnapshot();
-  while (w.tick < 3000) {
+  // P4.13: the probe runs to tick 9,000 (the 15-minute endpoint) unless --hashes-to says otherwise.
+  const toArg = process.argv.indexOf('--hashes-to');
+  const until = toArg >= 0 ? Number(process.argv[toArg + 1]) : 9000;
+  while (w.tick < until) {
     step(w);
-    if (w.tick === 600 || w.tick === 1500 || w.tick === 3000) {
+    if (w.tick === 600 || w.tick === 1500 || w.tick === 3000 || w.tick === 9000) {
       marks[w.tick] = stateHash(w);
       snaps[w.tick] = digestSnapshot();
     }
@@ -989,8 +995,30 @@ async function hashes(): Promise<void> {
   console.log(JSON.stringify(out, null, 1));
 }
 
+/**
+ * `--save-out <file>`: P4.13 (perf-web's wave E1 dense import). The stress world run to `--save-out-tick`
+ * (default 600) and written through buildSaveFile exactly as Export writes a .pixelmeba (text JSON).
+ */
+async function saveOut(): Promise<void> {
+  const at = (n: string): string | undefined => {
+    const i = process.argv.indexOf(`--${n}`);
+    return i >= 0 ? process.argv[i + 1] : undefined;
+  };
+  const file = at('save-out')!;
+  const tick = Number(at('save-out-tick') ?? '600');
+  const w = buildStressWorld().world;
+  while (w.tick < tick) step(w);
+  // Built in memory, not from a recipe: its file says so (recipeId null; D-0095).
+  const built = await buildSaveFile(w, { name: 'Perf stress', savedAt: '2026-10-12T00:00:00.000Z', recipeId: null });
+  const bytes = Buffer.byteLength(built.text, 'utf8');
+  if (bytes > 25 * 1024 * 1024) throw new Error(`save is ${bytes} bytes, over the 25 MB import limit`);
+  writeFileSync(file, built.text);
+  const cs = census(w);
+  console.log(JSON.stringify({ file, tick: w.tick, bytes, agents: cs.alive, fungal: cs.fungal, stateHash: stateHash(w) }));
+}
+
 if (process.argv[1] && /perf-stress\.(ts|mjs)$/.test(process.argv[1])) {
-  (process.argv.includes('--hashes') ? hashes() : main()).catch((e: unknown) => {
+  (process.argv.includes('--hashes') ? hashes() : process.argv.includes('--save-out') ? saveOut() : main()).catch((e: unknown) => {
     console.error(e);
     process.exit(1);
   });

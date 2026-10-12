@@ -126,6 +126,10 @@ interface RendererInternals {
   aggCanvas: HTMLCanvasElement;
   effects: Container;
   frames: Record<string, Texture>;
+  /** Live transient effects and their specs (features.ts EffectSpec; P4.13 reads `animated`). */
+  fx: { spec: { animated: boolean } }[];
+  /** P4.13: the degrade ladder's level (src/render/budgets.ts). */
+  budgetLevelNow: number;
 }
 
 const publish = (v: unknown): void => {
@@ -647,7 +651,9 @@ async function effectsWindow(
   ms: number,
 ): Promise<{
   maxEffects: number;
+  maxAnimated: number;
   ringAdded: number;
+  ringAnimated: boolean;
   frames: number;
   maxOffReducedFrame: number;
   particlesSampled: number;
@@ -655,7 +661,12 @@ async function effectsWindow(
   const before = priv.effects.children.length;
   renderer.placementRing(CX, CY, 3);
   const ringAdded = priv.effects.children.length - before;
+  const ringAnimated = ringAdded > 0 && priv.fx.at(-1)?.spec.animated === true;
   let maxEffects = priv.effects.children.length;
+  // D-0089: reduced motion keeps still effects (the 1 s placement ring, the 1 s split frame); what it
+  // removes is movement, so the audit counts the animated ones.
+  const animated = () => priv.fx.filter((e) => e.spec.animated).length;
+  let maxAnimated = animated();
   let maxOff = 0;
   let sampled = 0;
   let frames = 0;
@@ -666,11 +677,12 @@ async function effectsWindow(
     await nextFrame();
     frames++;
     maxEffects = Math.max(maxEffects, priv.effects.children.length);
+    maxAnimated = Math.max(maxAnimated, animated());
     const a = frameAudit(priv, manifest, reverse);
     maxOff = Math.max(maxOff, a.offReducedFrame);
     sampled = Math.max(sampled, a.particles);
   }
-  return { maxEffects, ringAdded, frames, maxOffReducedFrame: maxOff, particlesSampled: sampled };
+  return { maxEffects, maxAnimated, ringAdded, ringAnimated, frames, maxOffReducedFrame: maxOff, particlesSampled: sampled };
 }
 
 /**
@@ -941,7 +953,7 @@ async function main(): Promise<void> {
   await wait(500);
   const motionOn = await effectsWindow(renderer, priv, manifest, reverse, 2000);
   renderer.setOptions({ reducedMotion: true });
-  await wait(700); // let in-flight effects (≤ 500 ms) expire…
+  await wait(900); // let in-flight effects (≤ 700 ms, the placement ring since P4.13) expire…
   await nextFrame(); // …and be cleaned up by at least two renderer frames
   await nextFrame();
   const motionOff = await effectsWindow(renderer, priv, manifest, reverse, 2000);
@@ -951,10 +963,14 @@ async function main(): Promise<void> {
     pass:
       motionOn.particlesSampled > 0 &&
       motionOff.particlesSampled > 0 &&
-      motionOn.maxEffects > 0 &&
+      motionOn.maxAnimated > 0 &&
+      motionOn.ringAnimated &&
       motionOn.maxOffReducedFrame > 0 &&
-      motionOff.maxEffects === 0 &&
-      motionOff.ringAdded === 0 &&
+      // P4.13: D-0089 (UX §7.4) draws still effects in reduced motion (a 1 s still placement ring, a 1 s
+      // static split frame); the gate is that nothing animates: no animated effect, no ring that grows or
+      // fades, and every body on its reducedMotionFrame.
+      motionOff.maxAnimated === 0 &&
+      !motionOff.ringAnimated &&
       motionOff.maxOffReducedFrame === 0,
     trailsImplemented: false,
   };
@@ -986,6 +1002,8 @@ async function main(): Promise<void> {
     neighborhoodReduced,
     cpu: cpuOnly,
     snapshotsDelivered: feed.delivered,
+    // P4.13: the degrade ladder's level at the end, and the highest it reached (src/render/budgets.ts).
+    ladder: renderer.frameStats(),
   });
   say('done');
 }

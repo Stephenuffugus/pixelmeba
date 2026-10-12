@@ -77,6 +77,9 @@ import { BookmarkSheet } from '../panels/BookmarkSheet';
 import { bookmarkSheetKey } from '../bookmarks';
 import { ChallengeSheet } from '../panels/ChallengeStart';
 import { challengeSheetKey } from '../challenge';
+import { useSpeedBadge } from '../speedBadge';
+import { DiagnosticsBar } from '../panels/Diagnostics';
+import { settings as appSettings } from '../state';
 
 function formatTime(tick: number): string {
   const s = Math.floor(tick / 10);
@@ -195,6 +198,7 @@ export function DishScreen() {
         e.preventDefault();
         const h = gestures.current;
         if (!r || !h) return;
+        r.camera.settle(); // P4.13: an eased move ends where it was going, so the tap lands where the view goes
         const sx = r.camera.viewW / 2;
         const sy = r.camera.viewH / 2;
         const [wx, wy] = r.camera.screenToWorld(sx, sy);
@@ -213,8 +217,8 @@ export function DishScreen() {
         select(null);
         sheet.value = 'none';
       } else if (e.key === 'u' || e.key === 'U') void undo();
-      else if (r && (e.key === '+' || e.key === '=')) r.camera.zoomAt(r.camera.viewW / 2, r.camera.viewH / 2, 1.25);
-      else if (r && e.key === '-') r.camera.zoomAt(r.camera.viewW / 2, r.camera.viewH / 2, 0.8);
+      else if (r && (e.key === '+' || e.key === '=')) r.camera.zoomBy(1.25); // P4.13: eased like the zoom buttons
+      else if (r && e.key === '-') r.camera.zoomBy(0.8);
       else if (r && e.key.startsWith('Arrow')) {
         const d = 40;
         r.camera.panBy(e.key === 'ArrowLeft' ? d : e.key === 'ArrowRight' ? -d : 0, e.key === 'ArrowUp' ? d : e.key === 'ArrowDown' ? -d : 0);
@@ -230,10 +234,12 @@ export function DishScreen() {
 
   const running = (m?.speed ?? 0) > 0;
   const t = tool.value;
-  const behind = running && m && m.effectiveSpeed > 0 && m.effectiveSpeed < m.speed * 0.8;
+  // P4.13 (src/ui/speedBadge.ts): shown after 2 s below 0.8 × the chosen speed, gone after 2 s at ≥ 0.9 ×.
+  const badge = useSpeedBadge(running, m?.speed ?? 0, m?.effectiveSpeed ?? 0);
+  const diagnostics = appSettings.value.showPerformance === true;
 
   return (
-    <div class="dish-screen" data-testid="dish-screen" data-view={dishView.value}>
+    <div class={`dish-screen${diagnostics ? ' with-diag' : ''}`} data-testid="dish-screen" data-view={dishView.value}>
       <header class="topbar">
         <button class="btn ghost" aria-label="Home" onClick={() => (route.value = { name: 'home' })}>
           <IconBack />
@@ -241,7 +247,12 @@ export function DishScreen() {
         <div class="title">
           <strong>{info?.name ?? 'Dish'}</strong>
           <span class="time" aria-live="off" data-testid="sim-time">
-            {formatTime(m?.tick ?? 0)} · {m?.count ?? 0} alive{behind ? <span class="speed-badge"> · running at {m.effectiveSpeed.toFixed(1)}×</span> : null}
+            {formatTime(m?.tick ?? 0)} · {m?.count ?? 0} alive
+            {badge.shown ? (
+              <span class="speed-badge" title={badge.label} aria-label={badge.label} role="img" data-testid="speed-badge">
+                {badge.text}
+              </span>
+            ) : null}
           </span>
           {/* P4.7: a Try my dish turn's time left, or "Turn n finished" at its horizon. */}
           <TryBadge />
@@ -272,6 +283,8 @@ export function DishScreen() {
           </button>
         )}
       </header>
+      {/* P4.13: Settings "Show performance numbers": a line under the top strip, part of the layout (never over the dish). */}
+      {diagnostics ? <DiagnosticsBar /> : null}
 
       <div class="viewport" ref={host} data-testid="viewport">
         {!ready ? <p style={{ color: '#c9d6d8', padding: '1rem' }}>Preparing the dish…</p> : null}
@@ -299,10 +312,10 @@ export function DishScreen() {
           <button class="btn" aria-label="Whole dish" onClick={() => getRenderer()?.zoomPreset('dish')}>
             <IconZoomDish />
           </button>
-          <button class="btn" aria-label="Zoom in" onClick={() => getRenderer()?.camera.zoomAt(getRenderer()!.camera.viewW / 2, getRenderer()!.camera.viewH / 2, 1.6)}>
+          <button class="btn" aria-label="Zoom in" onClick={() => getRenderer()?.camera.zoomBy(1.6)}>
             <IconZoomIn />
           </button>
-          <button class="btn" aria-label="Zoom out" onClick={() => getRenderer()?.camera.zoomAt(getRenderer()!.camera.viewW / 2, getRenderer()!.camera.viewH / 2, 0.625)}>
+          <button class="btn" aria-label="Zoom out" onClick={() => getRenderer()?.camera.zoomBy(0.625)}>
             <IconZoomOut />
           </button>
         </div>

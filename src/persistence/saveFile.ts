@@ -442,7 +442,10 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
 
   const expected = `sha256:${await sha256Hex(canonicalJson(original))}`;
   if (f.checksum !== expected) fail('checksum', 'The file is damaged or was edited (checksum mismatch).');
-  return { ...(f as SaveFile), schemaVersion: SCHEMA_VERSION, state: s };
+  // D-0095: the header's tick sits outside the checksum, so the checked state's tick replaces it (a file
+  // whose header was edited loads exactly as checked; builds before P2.8 read the header's tick after an await,
+  // so it could be later than the state's).
+  return { ...(f as SaveFile), schemaVersion: SCHEMA_VERSION, tick: s.tick, state: s };
 }
 
 /**

@@ -73,7 +73,8 @@ export class RelationshipWatcher {
     this.ledger = new RelationshipLedger(world.tick);
     this.rebind(world);
     this.hook = (stage, w) => {
-      if (stage === 5 && w === this.world) this.beforeIntake(w);
+      // P4.13 (D-0085): the pool sums run only once the map has been opened for this dish.
+      if (stage === 5 && w === this.world && this.ledger.poolsArmed) this.beforeIntake(w);
       if (stage === 6) this.afterIntake(w);
     };
   }
@@ -94,6 +95,11 @@ export class RelationshipWatcher {
     this.infectedBy.clear();
     this.riddenBy.clear();
     this.scan(world, false);
+  }
+
+  /** P4.13: the relationship map was opened for this dish: measure pool totals from now on. */
+  armPools(): void {
+    this.ledger.armPools(this.world.tick);
   }
 
   /** Whether this watcher is bound to `world`. */

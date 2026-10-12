@@ -503,6 +503,21 @@ export function stageSenseAndMove(world: World): void {
   }
   followHosts(world); // attached parasites take their host's position at no cost (parasites.ts)
   rebuildIndex(world);
+  releaseFoodRefs();
+}
+
+/**
+ * P4.13 (D-0066 MINOR): the stage's food-array references are dropped when it ends, so this module never
+ * keeps the last world's fields reachable after that world is gone (prepareFoodScore sets them again
+ * before every use, so nothing reads them in between).
+ */
+const NO_FIELD = new Float64Array(0);
+function releaseFoodRefs(): void {
+  for (let k = 0; k < FOOD_ARRS.length; k++) FOOD_ARRS[k] = NO_FIELD;
+  foodN = 0;
+  foodStarch = null;
+  foodOil = null;
+  foodProtein = null;
 }
 
 /** Fresh decision offset for a newborn or introduced organism (avoids lockstep decisions). */

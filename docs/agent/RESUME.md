@@ -3,6 +3,26 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑12 12:25 UTC — WAVE 7a DONE (run `wf_77241b39-da5`: android + perf2-polish built, 3 verdicts ok,
+> 0 BLOCKER/MAJOR, 13 MINOR). LEAD INTEGRATION DONE IN THE TREE (uncommitted): all 13 MINORs fixed or decided
+> (docs/reports/reviews/g4-wave-7a/integrate-lead-7a.md; D‑0093/D‑0094/D‑0095 appended; ARCH §7/§11.1/§12/§13;
+> ANDROID_SETUP §10.8/§11; UX §7.4; a11y-screens "wave 7a"; profile-eviction stress case trimmed to 3,000 ticks).
+> `npm run check` RUNNING (tmp/lead/check-7a.log). START HERE.**
+> - Next: desktop e2e of android-storage, first-minute, garden, place-and-undo, save-reload, keep-dish, whatif, compare,
+>   share, try-dish, observe-tools, sound-settings, keyboard, a11y-screens, garden-home, lineage, experiments (port 4290,
+>   tmp/lead/e2e-7a-desktop.log) → commit 7a (evidence in the message) → tick P4.10 + P4.13 → put the commit and evidence
+>   into the WAVE 7a AS BUILT draft (scratchpad asbuilt-7a.txt; if lost, rewrite from integrate-lead-7a.md + D‑0093..95)
+>   and append it to STATE in docs/agent/g4-wave-7.tasks.js.txt → build the 7b run file (keys web-arcade,store) → move the
+>   backup loop to wip/g4-wave-7b → launch 7b.
+> - If this session dies: the tree is on wip/g4-wave-7a (backup loop, pid tmp/lead/backup-7a.pid); restore if `git status`
+>   is clean; rerun the check, then continue as above.
+> - 12:40: owner asked for a session REFRESH before the codespace's forced stop (~14:30 UTC). Refresh point = after the
+>   7a commit + push + the 7b run file, BEFORE launching 7b (never mid-workflow). Running now: an integration verifier
+>   (run `wf_f37f471b-538`, 2 lenses → docs/reports/reviews/g4-wave-7a/integrate-verify-{saves,rules}.md). Desktop e2e
+>   order: android-storage, first-minute, a11y-screens, save-reload, lineage, place-and-undo, garden-home, sound-settings
+>   first (before the commit); garden, keep-dish, whatif, compare, share, try-dish, observe-tools, keyboard, experiments
+>   after (if cut by the refresh, the new session runs them before launching 7b).
+
 > **Update 2026‑10‑12 08:35 UTC — WAVE 6b COMMITTED (`52e6a27`, worklog `2d21c82`; check 191 files / 1910 tests, desktop
 > e2e 109/109). P4.1–P4.9 done. WAVE 7a LAUNCHING (android 4281 + perf2-polish 4282, both critical 'own' → saves lenses
 > 4396/4397; rules verifier 4390) from `docs/agent/g4-wave-7a.run.workflow.js.txt` (built with tools/lead/build-run-file.py).

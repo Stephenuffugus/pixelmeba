@@ -315,6 +315,11 @@ export function RelationshipMapSheet() {
         {pools.length > 0 ? (
           <section aria-labelledby="relmap-pools-title">
             <h3 id="relmap-pools-title">{OBSERVE_TEXT.poolsTitle}</h3>
+            {shown && shown.poolsRecordedSinceSecond !== null && shown.poolsRecordedSinceSecond !== shown.recordedSinceSecond ? (
+              <p class="sub" data-testid="relmap-pools-since">
+                {OBSERVE_TEXT.recordedSince(clockText(shown.poolsRecordedSinceSecond))} {OBSERVE_TEXT.poolsSinceWhy}
+              </p>
+            ) : null}
             <ul data-testid="relmap-pools">
               {pools.map((l) => (
                 <li key={l}>{l}</li>

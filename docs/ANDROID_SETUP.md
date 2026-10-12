@@ -20,11 +20,21 @@ machine, plus a record of what was verified in the build environment.
 | `compileSdkVersion` | 36 | `android/variables.gradle` |
 | `targetSdkVersion` | 36 | `android/variables.gradle` |
 | `versionCode` / `versionName` | `1` / `"1.0"` (template defaults; set per §7 before the first upload) | `android/app/build.gradle` |
+| Permissions | `INTERNET` (template), `VIBRATE` (P4.10, D-0064 haptics; a normal permission, no prompt) | `android/app/src/main/AndroidManifest.xml` |
+| `allowBackup` | `true` (the player's own Android backup may carry saves to a new phone; Pixelmeba sends nothing) | `AndroidManifest.xml` |
+| Saves | Capacitor Filesystem, `Directory.Data/pixelmeba/` (D-0092): `records/`, `slots/`, `journal.json` | `src/persistence/capacitorFs.ts` |
+| Settings, journal, badges | WebView `localStorage` (the app's private data, like IndexedDB) | `src/ui/settings`, `src/ui/journal.ts` |
+| Launcher icon, splash | generated from `art/src/icons/appIcon.ts` by `npm run android:icons` | `android/app/src/main/res/` |
 
 **Google Play target API.** The Play page
-(<https://developer.android.com/google/play/requirements/target-sdk>, read 2026‑09‑27) says:
-"Starting August 31 2026: New apps and app updates must target Android 16 (API level 36) or
-higher". `targetSdkVersion = 36` meets that today. **Check that page again at submission time**;
+(<https://developer.android.com/google/play/requirements/target-sdk>, read 2026‑09‑27 and again
+2026‑10‑12) says: "Starting August 31 2026: New apps and app updates must target Android 16 (API level
+36) or higher to be submitted to Google Play" (Wear OS / Automotive / TV / XR have lower floors; an
+extension to November 1, 2026 can be requested). Capacitor 8.5.2's own template default is the same:
+`node_modules/@capacitor/cli/assets/android-template.tar.gz` → `variables.gradle` has
+`minSdkVersion = 24`, `compileSdkVersion = 36`, `targetSdkVersion = 36` (and
+`node_modules/@capacitor/android/capacitor/build.gradle` falls back to 36). `targetSdkVersion = 36` meets
+that today. **Check that page again at submission time**;
 the requirement moves every year. To raise it, change `compileSdkVersion`/`targetSdkVersion` in
 `android/variables.gradle` and install the matching `platforms;android-NN` package.
 
@@ -81,6 +91,17 @@ Those two are committed, so review and commit them when a plugin is added or upd
 ## 4. Debug build
 
 ```bash
+npm run android:build:debug   # P4.10: vite build + cap sync android + ./gradlew assembleDebug on a JDK 21
+```
+
+`tools/android-build.ts` finds a JDK 21 (`JAVA_HOME` when it is 21, else
+`/usr/local/sdkman/candidates/java/21*`; otherwise it stops with "Gradle 8.14.3 needs JDK 21; set JAVA_HOME
+(docs/ANDROID_SETUP.md §2)") and the SDK (`ANDROID_HOME`, `ANDROID_SDK_ROOT`, `android/local.properties`, else
+`~/android-sdk`; it passes the SDK to Gradle as `ANDROID_HOME` and never writes `local.properties`). It then prints
+the APK's path, size, sha256 and the `aapt2 dump badging` lines (package, versions, SDK levels, permissions).
+By hand, the same build is:
+
+```bash
 cd android
 ./gradlew assembleDebug       # Windows: gradlew.bat assembleDebug
 ```
@@ -100,7 +121,16 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Play App Signing (§8) means Google holds the key that signs what users install. You hold only an
 **upload key**. Create it once, **outside the repository**, and back it up (along with its
-passwords) somewhere other than this machine:
+passwords) somewhere other than this machine. The script refuses any path inside the repository
+(resolved, so `..` and symlinks do not get round it), lets `keytool` ask for the passwords (it never
+stores or prints one), and prints the four `keystore.properties` lines of §6 with password placeholders:
+
+```bash
+npm run android:keystore -- --out /path/outside/repo/pixelmeba-upload.jks
+npm run android:keystore -- --out /path/outside/repo/pixelmeba-upload.jks --dry-run   # prints the command only
+```
+
+which runs:
 
 ```bash
 keytool -genkeypair -v \
@@ -182,6 +212,15 @@ same release candidate, bump `patch`.
 
 ```bash
 npm ci
+npm run check                 # typecheck + lint + unit tests (android:build:* does not typecheck)
+npm run android:build:release # vite build + cap sync android + ./gradlew bundleRelease on a JDK 21
+```
+
+The script prints the AAB's path, size and sha256 and runs `jarsigner -verify` on it. Without
+`android/keystore.properties` it also prints "UNSIGNED: Google Play rejects this file. Create the upload key
+(npm run android:keystore) and android/keystore.properties (docs/ANDROID_SETUP.md §5-§6)." By hand:
+
+```bash
 npm run build
 npx cap sync android
 cd android
@@ -190,8 +229,8 @@ cd android
 
 Output: `android/app/build/outputs/bundle/release/app-release.aab`. Check that it is signed:
 `jarsigner -verify -verbose:summary app/build/outputs/bundle/release/app-release.aab` should end
-with `jar verified.` and name your upload certificate. If it says `no manifest.`, the AAB is
-unsigned; see §6. (`./gradlew assembleRelease` makes a sideloadable APK under
+with `jar verified.` and name your upload certificate. If it says `no manifest.` or `jar is unsigned.`
+(JDK 21's wording), the AAB is unsigned; see §6. (`./gradlew assembleRelease` makes a sideloadable APK under
 `android/app/build/outputs/apk/release/` if you need one.)
 
 **Play App Signing:** when you create the app in the Play Console, let Google generate and
@@ -244,19 +283,122 @@ Environment: GitHub Codespace, Linux 6.8.0-1064-azure x86_64, 2 CPUs, 7 GB RAM, 
   installed or launched. There are no device measurements (frame rate, tick cost, memory,
   lifecycle pause/resume, share sheet, file import). Those need a real phone (PLAY_STORE_CHECKLIST §B).
 
+### 9.1 P4.10, 2026‑10‑12 (same codespace; JDK 21 at `/usr/local/sdkman/candidates/java/21.0.12+1-ms`, `~/android-sdk`)
+
+Every line below is a command run here and its result. Still **no emulator or device**: nothing below was
+installed or launched, and there are no device measurements.
+
+- **Capacitor template default** (`tar -xzOf node_modules/@capacitor/cli/assets/android-template.tar.gz variables.gradle`):
+  `minSdkVersion = 24`, `compileSdkVersion = 36`, `targetSdkVersion = 36`. **Play page** (WebFetch of
+  <https://developer.android.com/google/play/requirements/target-sdk>, 2026‑10‑12): "Starting August 31 2026: New
+  apps and app updates must target Android 16 (API level 36) or higher to be submitted to Google Play". Kept 36.
+- `npx tsx tools/android-icons.ts` → wrote the 15 launcher PNGs (`mipmap-{mdpi…xxxhdpi}/ic_launcher{,_round,_foreground}.png`),
+  the 11 splash PNGs, `values/ic_launcher_background.xml` (`#14252D`) and `public/icons/{icon-192,icon-512,maskable-512}.png`;
+  `--check` → "android-icons: every file matches".
+- `npm run android:build:debug` (09:36:51–09:38:22 UTC): `vite build` ✓, `cap sync android` ✓ (6 plugins), then
+  `./gradlew assembleDebug --console=plain` → **`BUILD SUCCESSFUL in 1m 18s`** (274 actionable tasks: 37 executed,
+  237 up-to-date). Output `android/app/build/outputs/apk/debug/app-debug.apk`, **8,568,278 bytes**, sha256
+  `ed058b449f8802cb2d1f396c5cf53577fad951da1d03a92ec0f597b4baf90a95`. `aapt2 dump badging` (build-tools 36.0.0):
+  `package: name='com.lucidwinds.pixelmeba' versionCode='1' versionName='1.0' … compileSdkVersion='36'`,
+  `targetSdkVersion:'36'`, `uses-permission: name='android.permission.INTERNET'`,
+  `uses-permission: name='android.permission.VIBRATE'`,
+  `uses-permission: name='com.lucidwinds.pixelmeba.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'`,
+  `application-label:'Pixelmeba'`. (`sdkVersion:` is not printed by this aapt2 for this APK; minSdk 24 is in
+  `android/variables.gradle`.) Warnings as before: flatDir, SDK XML version 4.
+- `npm run android:build:release` (09:38–09:39:28 UTC, no `keystore.properties`): `./gradlew bundleRelease` →
+  **`BUILD SUCCESSFUL in 40s`** (335 actionable tasks: 52 executed, 283 up-to-date). Output
+  `android/app/build/outputs/bundle/release/app-release.aab`, **6,233,377 bytes**, sha256
+  `42583a0d4412d61a9440e5aeb9eba21d3df1c607578f7243df52e9d26eb4df78`; the script printed the UNSIGNED line;
+  `jarsigner -verify` (JDK 21) → **`jar is unsigned.`** (the 2026‑09‑27 run's JDK printed `no manifest.` for the
+  same situation: both mean unsigned).
+- `npm run android:keystore -- --out <path inside the repo> --dry-run` → refused ("… is inside the repository …;
+  nothing was created."); outside the repo with `--dry-run` → printed the `keytool -genkeypair …` command and the
+  four properties lines; **no keystore was created in this session** (tests/tools/android-keystore.test.ts).
+- The browser interruption harness (`VITE_FS_HARNESS=1 npx vite build --outDir tmp/dist-android-harness`, the real
+  bridge and the real `@capacitor/filesystem` web implementation): `tests/e2e/android-storage.spec.ts` passed on
+  `phone-portrait` (4.2 min) and `desktop` (11.9 min; the web Filesystem stores in IndexedDB on the main thread,
+  and under SwiftShader each of its requests waits for a frame). The measured save to Slot 1 took 12 file
+  operations on phone-portrait and 13 on desktop, with the commit point (the journal rename) at operation 7 in
+  both; cut after k = 0…7 → the relaunch opened the old moment, k = 8…11 (8…12 on desktop) → the new moment;
+  never an error. A damaged current record opened the previous copy with "The latest save was damaged, so the previous copy
+  was opened."; the page going hidden paused the dish, autosaved, and Continue held that moment after a reload.
+  The normal build contains no `__fsHarness`.
+
 ## 10. Open items for the owner
 
 1. Use **JDK 21** for Gradle. JDK 25 fails with this Gradle version (§9).
-2. Create the upload keystore and `android/keystore.properties` (§5–§6). Enrol in Play App Signing.
+2. Create the upload keystore (`npm run android:keystore -- --out /path/outside/repo/pixelmeba-upload.jks`)
+   and `android/keystore.properties` (§5–§6). Enrol in Play App Signing.
 3. Set `versionCode`/`versionName` per §7 before the first upload (currently the template's
    `1`/`"1.0"`).
 4. Re-check the Play target API requirement at submission (API 36 required since 2026‑08‑31,
-   read 2026‑09‑27).
-5. The launcher icon and splash are still Capacitor's defaults. They get replaced from `store/`
-   in the Phase 4 asset tasks.
+   read 2026‑09‑27 and 2026‑10‑12).
+5. Look at the launcher icon and splash (P4.10, `art/src/icons/appIcon.ts`: the dish with one bright colony,
+   no text) on a real launcher: adaptive masks (circle, squircle, teardrop), the Android 12+ launch screen
+   (the icon on `#14252D`), and the legacy icon on an older launcher. The store icon (`store/icon-512.png`)
+   is P4.12's.
 6. The Capacitor template declares `android.permission.INTERNET`. ARCHITECTURE §12 says the app
    needs no network permission. Removing it from `android/app/src/main/AndroidManifest.xml`
    must be tested on a device first, because the WebView serves the bundled assets from
-   `https://localhost`. It stays as generated until someone runs that test.
-7. Install the debug APK on a real phone and run the pre-launch smoke test in
-   `docs/PLAY_STORE_CHECKLIST.md` §A.
+   `https://localhost`. It stays as generated until someone runs that test: remove it, install,
+   cold-launch in airplane mode, play, save, reopen; keep it removed only if all of that works.
+7. `android:allowBackup="true"` stays (PROPOSED in P4.10): the player's own Android backup may restore their
+   saves on a new phone; Pixelmeba itself sends nothing. Decide whether to keep it (Play's Data safety form
+   asks nothing about the OS backup).
+8. **Device smoke test** (install the debug APK, `adb install -r android/app/build/outputs/apk/debug/app-debug.apk`),
+   with notes of what you saw:
+   1. cold launch in **airplane mode**: Home appears, no network error;
+   2. create the Garden, feed (Add life / food), run at 1× and 4×;
+   3. **Home button, then return**: the dish is paused and the line "Paused while Pixelmeba was in the
+      background. No dish time passed." shows; the dish time did not move; Resume runs it;
+   4. **autosave stutter**: on a mid-range phone, going to the background with a long-running dish shows no
+      visible stutter, and Home → return keeps the last save (Continue opens it) (D-0092);
+   5. **force-stop during a save**: Save to a slot, and while it saves force-stop from Settings → Apps →
+      Pixelmeba → Force stop; relaunch: Saved dishes opens the last committed save of that slot (the new one
+      or the one before; never an error). Also force-stop with a dish running, relaunch, Continue;
+   6. **Share a picture** and **Share a living dish** (the system share sheet; "Save to Files"/Drive are
+      among its targets); cancel once: "Not shared. Nothing changed.". Do it once with the dish running: the
+      sheet covering the app pauses the dish like Home does, and the return says so (intended, D-0095);
+   7. **Export** (More → Export, and the keep flow's Export): offered through the share sheet (no storage
+      permission is asked);
+   8. **import a .pixelmeba from Files** (More → Import, Saved dishes → Import). The Android document picker
+      may grey out `.pixelmeba` files because the type is unknown to Android; if it does, record it: the fix is
+      to widen the file input's `accept` on the native app (P4.10 left it as on the web);
+   9. rotate the phone with a dish open; set system font size to 200 %; a TalkBack pass over Home, the dish
+      and Saved dishes;
+   10. haptics: Settings → Sound → Haptics on, place life: a short buzz (VIBRATE, D-0064);
+   11. the INTERNET permission test of item 6;
+   12. **Home during a save, then a long wait** (D-0095): run a dish, press Home (that autosaves), leave the
+       phone for 2 minutes or more (Android freezes a backgrounded app), return, then Save to a slot and open
+       Saved dishes: the save works and the list opens (no "Saving is stopped until Pixelmeba is restarted");
+   13. **a nearly full phone** (optional; D-0095): fill the storage until a save is refused ("storage full"),
+       then open Saved dishes: every earlier save still opens; free some space and save again.
+9. Keep the Filesystem save store (D-0092) or flip the native app back to IndexedDB (D-0013) after item 8.4–8.5:
+   the flip is one line in `src/platform/capacitor.ts` `platformStorage()`.
+
+## 11. How the Android app keeps saves, pauses and shares (P4.10)
+
+- **Saves** (D-0092): `src/persistence/capacitorFs.ts` FilesystemBackend under `Directory.Data/pixelmeba/`:
+  `records/<name>.json` (one save record: `recordId`, `checksum`, base64 of the gzip bytes), `slots/<name>.json`
+  (the slot pointer: current and previous record), `journal.json` (the commit point), `*.tmp`. A commit writes and
+  reads back each new record, then the journal (renamed to `journal.json`: committed), then removes the records it
+  drops, writes the slot pointers, deletes slots, and removes the journal. A commit refused before its commit point
+  removes what it wrote. Opening the store re-applies a committed journal, removes `*.tmp` and removes records no
+  slot names, except those of a slot file that cannot be read (D-0095). On a full phone a committed journal that
+  cannot be applied yet leaves every save readable and refuses new saves as "storage full" until space is freed
+  (D-0095). The worker reaches the files through a MessagePort; the main thread (`src/platform/fsHost.ts`)
+  answers with the Filesystem plugin; an operation unanswered for 30 s of running time stops saving until the
+  app restarts (what was saved stays); a timer held up while Android froze the app gets a fresh 30 s (D-0095).
+  The web build keeps IndexedDB.
+- **Background**: Capacitor App `pause` → the same handler as the web's page-hidden (pause, a comparison comes
+  back paused, one autosave); `resume` never changes the speed and says "Paused while Pixelmeba was in the
+  background. No dish time passed." when a dish had been running. The page becoming visible again also ends
+  the absence (silently), so a missed `resume` never leaves the next background unpaused. Pixelmeba's own
+  share sheet and file picker count as the background too (D-0095). There is no offline growth.
+- **Share and export**: files go to `Directory.Cache/share/<name>` and to the system share sheet
+  (`@capacitor/share`); a cancel changes nothing and removes the file; a shared file stays until the next share
+  (the receiving app may still be reading it). Export uses the same sheet; no storage permission is requested.
+- **Import**: the WebView's file input (`accept=".pixelmeba,application/json,application/vnd.pixelmeba+json"`).
+  The Android document picker may grey out `.pixelmeba` (an unknown MIME type); a device test decides (§10.8.8).
+- **Icons**: `npm run android:icons` regenerates every launcher, splash and web icon from `art/src/icons/appIcon.ts`
+  (integer scales, deterministic bytes).

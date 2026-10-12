@@ -23,6 +23,8 @@ import {
 } from '../state';
 import { saveAndLeave } from '../state';
 import { HOME_TEXT } from '../strings/home';
+import { NOT_KEEPING_SAVES } from '../strings/saves';
+import { isNativePlatform } from '@platform/capacitor';
 import { GoalRow } from './GoalChoice';
 import { TryMoreRow } from './TrySetup';
 import { ChallengeMoreRows } from './ChallengeStart';
@@ -189,10 +191,7 @@ export function SaveSheet() {
           </button>
         </header>
         {!persistent ? (
-          <p class="constraint">
-            This browser is not keeping saves (private mode?). Saves last only until you close the app —
-            export a file to keep it.
-          </p>
+          <p class="constraint">{NOT_KEEPING_SAVES.sheet(isNativePlatform())}</p>
         ) : null}
         <label style={{ display: 'grid', gap: '0.25rem', margin: '0.5rem 0' }}>
           Name

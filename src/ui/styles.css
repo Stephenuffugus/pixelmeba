@@ -301,9 +301,36 @@ textarea {
   }
 }
 .speed-badge {
-  font-size: 0.75rem;
+  /* P4.13: the strip's own size (was 0.75rem). */
+  font-size: inherit;
   color: var(--danger);
   font-weight: 700;
+}
+/* P4.13 diagnostics bar (Settings "Show performance numbers"): a layout row under the top strip, never over the dish. */
+.dish-screen.with-diag {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+.dish-screen.with-diag > .viewport {
+  grid-row: 3;
+}
+.dish-screen.with-diag > .bottombar {
+  grid-row: 4;
+}
+.diag-bar {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  padding: 4px calc(8px + var(--safe-right)) 4px calc(8px + var(--safe-left));
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 @media (orientation: landscape) and (min-width: 700px) {
@@ -317,6 +344,14 @@ textarea {
   .viewport {
     grid-row: 2;
     grid-column: 1;
+  }
+  /* P4.13: with the diagnostics bar, the dish and the side panel move down one row. */
+  .dish-screen.with-diag {
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+  .dish-screen.with-diag > .viewport,
+  .dish-screen.with-diag > .bottombar {
+    grid-row: 3;
   }
   .bottombar {
     grid-row: 2;

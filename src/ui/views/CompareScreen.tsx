@@ -3,6 +3,7 @@
  * Large screens: A and B side by side. The panel walks setup → running → results.
  */
 import { useEffect, useRef } from 'preact/hooks';
+import { PairSpeedBadge } from '../speedBadge';
 import { IconBack, IconZoomDish } from '../icons';
 import { AddLifeSheet } from '../panels/AddLifeSheet';
 import { CompareResults } from '../panels/CompareResults';
@@ -112,6 +113,8 @@ export function CompareScreen() {
           <strong>{c.variantPair ? VARIANT_PAIR_UI.title(c.variantPair.title) : `Compare · ${info.name}`}</strong>
           <span class="time" data-testid="compare-time">
             {progress}
+            {/* P4.13: the effective-speed badge when this device can't keep up (src/ui/speedBadge.ts). */}
+            <PairSpeedBadge running={status === 'running'} speed={c.speed} ticks={c.ticksRun} />
           </span>
         </div>
         <button

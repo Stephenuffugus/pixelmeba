@@ -75,6 +75,8 @@ export const OBSERVE_TEXT = {
   recordedSinceWhy:
     'The map keeps what it saw while this dish was open in this visit, and starts again after Undo.',
   poolsTitle: 'Taken from the pools',
+  /** P4.13 (D-0085): pool totals are measured only from the map's first opening in this visit. */
+  poolsSinceWhy: 'Pool totals are measured from the moment this map was first opened for this dish in this visit.',
   poolRemoved: (pool: string, c: string) => `${pool}: ${c} C taken by feeding`,
   poolNet: (pool: string, c: string, out: boolean) =>
     out

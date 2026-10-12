@@ -8,6 +8,7 @@ import { SimClient } from '@worker/client';
 import type { CompareSpeed, ComparisonState } from '@worker/comparison';
 import type { DishInfo, FamilyAnswer, InspectorPayload, OverlayId, Selection, SnapshotMsg, Speed } from '@worker/protocol';
 import type { NewDishPreview, RecipeOverrides } from '@worker/protocol';
+import type { PerfSample } from '@worker/protocol'; // P4.13
 import type { EvolutionState } from '@sim/mutation';
 import { presetChangedToast, presetChangeText, type PresetId } from './strings/modes';
 import { LIFE_COPY } from './strings/lab';
@@ -37,6 +38,8 @@ import { startGoal, wireGoals } from './goals';
 import { wireTry } from './tryDish';
 import { wireChallenge } from './challenge';
 import { VARIANT_PAIR_SECONDS, VARIANT_PAIR_UI } from './strings/variantPair';
+import { isNativePlatform } from '@platform/capacitor'; // P4.10 (saveTextFile)
+import { deliverFile, dishFile } from './share'; // P4.10 (saveTextFile on the Android app)
 
 export type Route =
   | { readonly name: 'home' }
@@ -99,6 +102,11 @@ export interface Settings {
    * Optional so settings stored by older builds still load; off unless chosen.
    */
   readonly simplifiedOverlayPalette?: boolean;
+  /**
+   * P4.13 Settings "Show performance numbers" (UX §2 "diagnostics (opt-in)"; ARCH §13): the diagnostics bar
+   * under the top strip, and the worker's timings on each snapshot. Optional so older settings load; off.
+   */
+  readonly showPerformance?: boolean;
 }
 
 /** Text sizes offered in Settings (UX §4.1 acceptance runs at 100 % and 200 %). */
@@ -119,6 +127,10 @@ export const overlay = signal<OverlayId | null>(null);
 export const infectionMarkers = signal<boolean>(false);
 export const overlayMax = signal<number>(0);
 export const toast = signal<string | null>(null);
+/** P4.13: a sentence for the polite live region only, with no visible toast (the effective-speed badge's, once per appearance). */
+export const announcement = signal<string | null>(null);
+/** P4.13: the worker's timings from the last snapshot of the open dish, while "Show performance numbers" is on. */
+export const diagPerf = signal<PerfSample | null>(null);
 export const prompt = signal<string | null>(null);
 export const busy = signal<boolean>(false);
 const REDUCE_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
@@ -186,6 +198,10 @@ export function updateSettings(patch: Partial<Settings>): void {
   }
   applyDisplaySettings();
   if (patch.checkpointRing !== undefined) getClient().setCheckpointRing(patch.checkpointRing === true);
+  if (patch.showPerformance !== undefined) {
+    getClient().setDiagnostics(patch.showPerformance === true); // P4.13
+    if (patch.showPerformance !== true) diagPerf.value = null;
+  }
 }
 
 /** Follow the device's reduced-motion preference until the player sets it in Settings. */
@@ -248,6 +264,7 @@ export function getClient(): SimClient {
     // P2.8: automatic checkpoints follow the Settings choice; journal entries of the open dish are kept with it.
     client.onCheckpoint(onCheckpointNotice);
     client.setCheckpointRing(settings.value.checkpointRing === true);
+    if (settings.value.showPerformance === true) client.setDiagnostics(true); // P4.13 (the worker starts with it off)
     setJournalSink(keepJournalWithDish);
   }
   return client;
@@ -307,6 +324,7 @@ function onSnapshot(s: SnapshotMsg): void {
     };
     if (s.selection) inspector.value = s.selection;
     if (s.overlay) overlayMax.value = s.overlay.max;
+    if (s.perf) diagPerf.value = s.perf; // P4.13
   });
 }
 
@@ -559,6 +577,12 @@ export function latestDishSnapshots(): { readonly snap: SnapshotMsg; readonly ge
 
 /** A dish file the player keeps: `text` offered as a download named `filename` (Export; the keep flow's export). */
 export function saveTextFile(text: string, filename: string): void {
+  // P4.10: a download does nothing in the Android WebView, so the app offers the file through the share
+  // sheet ("Save to Files" and Drive are among its targets; no storage permission). Cancelling changes nothing.
+  if (isNativePlatform()) {
+    void deliverFile(dishFile(text, filename, filename));
+    return;
+  }
   const blob = new Blob([text], { type: 'application/vnd.pixelmeba+json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1084,8 +1108,17 @@ export function reportDishCommand(dishId: string, payload: CommandPayload, res: 
   if (res) for (const fn of dishCommandListeners.slice()) fn(dishId, payload, res);
 }
 
-/** The player-facing outcome of a placement command (toast + placement ring on the dish it went to). */
-function reportCommand(info: DishInfo, payload: CommandPayload, res: CommandResult | null, ring: DishRenderer | null): void {
+/**
+ * The player-facing outcome of a placement command (toast + placement ring on the dish it went to).
+ * P4.13 (UX §7.1, "every visible feature maps to real state"): the ring is drawn only when something was
+ * placed (res.accepted > 0); a refused placement shows its refusal and no ring.
+ */
+export function reportCommand(
+  info: DishInfo,
+  payload: CommandPayload,
+  res: CommandResult | null,
+  ring: Pick<DishRenderer, 'placementRing'> | null,
+): void {
   if (!res) return;
   if (payload.kind === 'inoculate' || payload.kind === 'deposit') placementCue(res.accepted); // P3.10: drop / placement_error (+ haptics)
   if (payload.kind === 'inoculate') {
@@ -1093,19 +1126,19 @@ function reportCommand(info: DishInfo, payload: CommandPayload, res: CommandResu
     // A phage dose: accepted counts the cells dosed, each with `count` units (SPEC §10.2; W2-14).
     if (info.speciesDiets?.[info.speciesIds.indexOf(payload.speciesId)]?.metabolism === 'viral') {
       showToast(res.accepted === 0 ? LIFE_COPY.phageNone(name) : LIFE_COPY.phageAdded(payload.count, name, res.accepted));
-      ring?.placementRing(payload.x, payload.y, payload.radius);
+      if (res.accepted > 0) ring?.placementRing(payload.x, payload.y, payload.radius);
       return;
     }
     if (res.accepted === 0) showToast(res.note === 'capacity' ? 'The dish is full.' : `No room here for ${name}.`);
     else showToast(res.rejected > 0 ? `Added ${res.accepted} ${name} (${res.rejected} didn't fit).` : `Added ${res.accepted} ${name}.`);
-    ring?.placementRing(payload.x, payload.y, payload.radius);
+    if (res.accepted > 0) ring?.placementRing(payload.x, payload.y, payload.radius);
   } else if (payload.kind === 'deposit') {
     const mat = info.materials.find((m) => m.id === payload.materialId);
     // m4: say why. A deposit goes only into cells open to the water (SPEC §2.4: not stone, a wall or beyond the rim).
     if (res.accepted === 0) showToast("That can't go there: food can't go onto stone, a wall or beyond the rim. Tap open water.", 4000);
     else showToast(`Added ${mat?.name.toLowerCase() ?? 'food'} to ${res.accepted} cells.`);
     const p = payload.points[payload.points.length - 1];
-    if (p) ring?.placementRing(p[0], p[1], payload.radius);
+    if (p && res.accepted > 0) ring?.placementRing(p[0], p[1], payload.radius);
   }
 }
 

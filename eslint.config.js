@@ -110,6 +110,17 @@ export default tseslint.config(
     },
   },
   {
+    // P4.10 (ARCH §3, D-0092): only src/platform talks to Capacitor; the worker and persistence never do.
+    files: ['src/**/*.ts', 'src/**/*.tsx'],
+    ignores: ['src/platform/**'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        { patterns: [{ group: ['@capacitor/*'], message: 'ARCH §3: only src/platform imports @capacitor/* (P4.10).' }] },
+      ],
+    },
+  },
+  {
     files: ['tests/**/*.ts', 'tests/**/*.tsx', 'tools/**/*.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',

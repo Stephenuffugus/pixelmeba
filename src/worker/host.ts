@@ -58,6 +58,7 @@ import {
 import type { WhatIfAnswer, WhatIfChoice, WhatIfKeep, WhatIfKept, WhatIfPlan, WhatIfRefusalCode } from './protocol';
 import type { KeepFrom, KeepRefusalCode } from './protocol';
 import { RelationshipWatcher } from './relationships';
+import { PerfCounters } from './perfCounters';
 import { emptyMap, isMapWindow } from './relationshipMap';
 import { probeSetProblem, ProbeSet } from './probes';
 import { emptyNotebook, favoritesOnly, notebookHasNicknames, notebookIsEmpty, notebookWithoutNicknames, sealNotebook, type NotebookRecord } from '@persist/notebook';
@@ -293,6 +294,8 @@ interface Dish {
   sampleBeginHash?: string | null;
   /** P3.8 (D-0039): relationships first seen while this dish is played (worker state; never saved). */
   relationships?: RelationshipWatcher | null;
+  /** P4.13 (D-0085): the relationship map was opened for this dish in this session (pool totals are measured from then on). */
+  mapOpened?: boolean;
   /** P4.8: the region probes drawn on this dish (session state; never saved, never on a comparison copy). */
   probes?: ProbeSet | null;
   /**
@@ -408,6 +411,11 @@ export class DishHost {
   /** P4.7 (D-0082): write-once stored snapshots (Try my dish baselines), same backend and atomic commit. */
   private readonly shelf: Shelf | null;
   private ringEnabled = false;
+  /** P4.13: Settings "Show performance numbers" (off by default): only then are ticks and snapshots timed. */
+  private diagnostics = false;
+  private readonly perf = new PerfCounters();
+  /** P4.13: the relationship watcher's time within the tick being measured (diagnostics only). */
+  private relMs = 0;
   /** P4.8b: the platform's storage estimate, read by the storage panel ('storageInfo'). */
   private readonly storageEstimate: (() => Promise<StorageEstimate | undefined>) | undefined;
   private ringBusy = false;
@@ -1013,12 +1021,20 @@ export class DishHost {
       case 'checkpointRing':
         this.ringEnabled = msg.enabled === true;
         return;
+      case 'diagnostics':
+        // P4.13: timings only (worker state; never read by the simulation, saved or hashed).
+        if (msg.on === true && !this.diagnostics) this.perf.reset();
+        this.diagnostics = msg.on === true;
+        return;
       case 'relationshipMap': {
         // P4.8: read-only; the watcher's ledger (empty until the dish has been played this session).
         const d = this.need(msg.dishId);
         const w = isMapWindow(msg.windowSeconds) ? msg.windowSeconds : 60;
         const rw = d.relationships;
         if (rw && !rw.watches(d.world)) rw.rebind(d.world); // Undo or a rollback replaced the world
+        // P4.13 (D-0085): the first open starts the pool totals ("Recorded since" for them until the window is covered).
+        d.mapOpened = true;
+        rw?.armPools();
         const map = rw ? rw.ledger.read(d.world.tick, w) : emptyMap(d.world.tick, w);
         this.post({ type: 'relationshipMap', requestId: msg.requestId, dishId: d.id, map });
         return;
@@ -1526,13 +1542,22 @@ export class DishHost {
     // P3.8: the relationship watcher rides along on a played dish (never a comparison copy; read-only).
     const rw = d.arm ? null : (d.relationships ??= new RelationshipWatcher(d.world));
     if (rw && !rw.watches(d.world)) rw.rebind(d.world); // undo, rollback or a reload replaced the world
+    if (rw && d.mapOpened && !rw.ledger.poolsArmed) rw.armPools(); // P4.13: opened before the dish was first played
     // P4.1: the notebook's watch rides along too (read-only; rebinds after undo, rollback or reload).
     const nw = this.watchOf(d);
     const observing = !!x && !x.ended && !x.watch.reached;
     // One list of the read-only stage hooks (a running card's observer first, as stepObserved does), one step.
     const hooks: ((stage: number, w: World) => void)[] = [];
     if (observing) hooks.push(x.obs.hook);
-    if (rw) hooks.push(rw.hook);
+    const timed = this.diagnostics; // P4.13: time the relationship watcher only while diagnostics are on
+    if (rw && timed) {
+      const hook = rw.hook;
+      hooks.push((stage, w) => {
+        const t0 = performance.now();
+        hook(stage, w);
+        this.relMs += performance.now() - t0;
+      });
+    } else if (rw) hooks.push(rw.hook);
     if (!d.arm && d.probes && d.probes.size > 0) hooks.push(d.probes.hook); // P4.8: region probes (read-only)
     if (nw?.hook) hooks.push(nw.hook);
     if (hooks.length === 0) step(d.world);
@@ -1546,7 +1571,11 @@ export class DishHost {
         x.pending = { stamp, title: x.watch.def.title, label: SINGLE_RUN_LABEL, labels: x.labels, measured };
       }
     }
-    rw?.afterTick(d.world);
+    if (rw && timed) {
+      const t0 = performance.now();
+      rw.afterTick(d.world);
+      this.relMs += performance.now() - t0;
+    } else rw?.afterTick(d.world);
     if (!d.arm) d.probes?.afterTick(d.world); // P4.8
     if (nw) this.notebookChanges(d, nw.afterTick(d.world));
     if (x && !x.ended && !x.posted) this.experimentSteps(d);
@@ -3401,8 +3430,11 @@ export class DishHost {
         if (this.turnHorizon(d)) break; // P4.7: a turn never runs past its horizon
         if (d.world.tick - d.checkpoint.tick >= CHECKPOINT_TICKS) this.checkpoint(d);
         const t0 = d.world.tick;
+        const p0 = this.diagnostics ? performance.now() : 0; // P4.13: timed only while diagnostics are on
+        this.relMs = 0;
         try {
           this.stepDish(d);
+          if (this.diagnostics) this.perf.recordTick(performance.now() - p0, this.relMs);
         } catch (e) {
           d.speed = 0;
           d.failed = true;
@@ -3430,6 +3462,7 @@ export class DishHost {
   }
 
   sendSnapshot(d: Dish): void {
+    const p0 = this.diagnostics ? performance.now() : 0; // P4.13: timed only while diagnostics are on
     const w = d.world;
     this.lastSnapshot = this.clock.now();
     const packed = packEntities(w, null, null);
@@ -3485,6 +3518,8 @@ export class DishHost {
       // P3.5: the held sample (the UI offers Transfer, Cancel and Discard while it is held).
       sample: heldSummary(w),
       ...(favorites ? { favorites } : {}),
+      // P4.13: the worker's timings while diagnostics are on (the snapshot time is the previous one's).
+      ...(this.diagnostics ? { perf: this.perf.sample() } : {}),
     };
     const transfer: Transferable[] = [packed.ents.buffer, packed.ids.buffer, deposits.buffer, links.buffer];
     if (overlay) transfer.push(overlay.data.buffer);
@@ -3492,5 +3527,6 @@ export class DishHost {
     if (favorites) transfer.push(favorites.marks.buffer as ArrayBuffer, favorites.member.buffer as ArrayBuffer);
     if (geometry) transfer.push(geometry.substrate.buffer, geometry.structure.buffer, geometry.shade.buffer);
     this.post(msg, transfer);
+    if (this.diagnostics) this.perf.recordSnapshot(performance.now() - p0);
   }
 }

@@ -15,7 +15,6 @@ import {
   CUE2_MOD_E10,
   CUE_FEEDING,
   CUE_JUST_BORN,
-  CUE_STRESSED,
   DEPOSIT_FILM_BAND,
   E_CUE,
   E_CUE2,
@@ -52,8 +51,12 @@ import { Camera, ZOOM_CLOSE, ZOOM_NEIGHBORHOOD } from './camera';
 import { DISH_PX_PER_CELL, DISH_TEX, paintAggregation, paintDeposits, paintDish, paintOverlay, repaintDepositCells, type DirtyRect } from './layers';
 import { speciesRgb } from './speciesColors';
 import {
+  bodyAnimFor,
   bodyFrameIndex,
   decayTileAlpha,
+  FEED_START_PENDING,
+  feedFrameClock,
+  feedStartAfterSnapshot,
   effectForEvent,
   effectLook,
   featureFrameKeys,
@@ -70,6 +73,7 @@ import {
   type FeatureLayerId,
   type LayerPick,
 } from './features';
+import { BudgetLadder, budgetFor, GHOSTS_MAX, refreshDue, STAINS_MAX, type Budget, type BudgetLevel } from './budgets';
 import { brushCellOutcome, lifeCellOutcome, ST_NONE, ST_STONE, SUB_WATER, type LabBrushRule, type LifeBrush } from '@sim/grid';
 import type { LineageMarks } from '@worker/protocol';
 import type { FavoriteMarks } from '@worker/protocol';
@@ -290,6 +294,23 @@ export class DishRenderer {
   private selectedBirthId: number | null = null;
   private selectedCell: number | null = null;
   private opts: RendererOptions = { reducedMotion: false, overlayOpacity: 0.45 };
+  /** P4.13 (src/render/budgets.ts): the degrade ladder and what its level allows (cosmetic only). */
+  private readonly ladder = new BudgetLadder();
+  private budget: Budget = budgetFor(0);
+  private lastFrameAt = Number.NaN;
+  private fpsFrames = 0;
+  private fpsSince = Number.NaN;
+  private fpsNow = 0;
+  /** P4.13: overlay and aggregation textures refresh at most every budget interval. */
+  private lastOverlayPaint = Number.NEGATIVE_INFINITY;
+  private pendingOverlay: NonNullable<SnapshotMsg['overlay']> | null = null;
+  private lastAggPaint = Number.NEGATIVE_INFINITY;
+  /**
+   * P4.13 first feeding pulse: per index of the current snapshot, when its feed animation started (NaN: not
+   * feeding; FEED_START_PENDING: started in this snapshot, so its clock begins at the next frame).
+   */
+  private feedStart = new Float64Array(0);
+  private spareFeed = new Float64Array(0);
   private depositVersion = -1;
   private destroyed = false;
 
@@ -396,12 +417,16 @@ export class DishRenderer {
     this.app.stage.addChild(this.root);
     this.app.ticker.add(() => this.frame());
     this.camera.setViewport(this.app.screen.width, this.app.screen.height);
-    this.camera.fit();
+    this.camera.fit(true);
+    // P4.13: player-initiated preset moves ease on the renderer's clock (instant in reduced motion).
+    this.camera.clock = () => performance.now();
     this.app.renderer.on('resize', (w: number, h: number) => {
-      const wasFit = Math.abs(this.camera.zoom - this.camera.fitZoom()) < 1e-6;
+      const wasFit = Math.abs(this.camera.target().zoom - this.camera.fitZoom()) < 1e-6;
       this.camera.setViewport(w, h);
-      if (wasFit) this.camera.fit();
+      if (wasFit) this.camera.fit(true);
     });
+    // P4.13: touching the dish ends an eased move where it was going, so a tap lands where the view goes.
+    this.app.canvas.addEventListener('pointerdown', () => this.camera.settle(), { capture: true });
   }
 
   get canvas(): HTMLCanvasElement {
@@ -490,6 +515,7 @@ export class DishRenderer {
   setOptions(o: Partial<RendererOptions>): void {
     const palette = this.opts.simplifiedOverlayPalette === true;
     this.opts = { ...this.opts, ...o };
+    this.camera.reducedMotion = this.opts.reducedMotion; // P4.13: UX §7.4 camera easing → instant
     this.overlaySprite.alpha = this.opts.overlayOpacity;
     // A paused dish sends no new snapshot: repaint the shown overlay in the chosen palette now.
     if ((this.opts.simplifiedOverlayPalette === true) !== palette && this.lastOverlay) this.paintOverlayLayer(this.lastOverlay);
@@ -573,10 +599,16 @@ export class DishRenderer {
     this.applyFilm(s.deposits);
     if (s.overlay) {
       this.lastOverlay = s.overlay;
-      this.paintOverlayLayer(s.overlay);
+      // P4.13 (ARCH §13): the overlay texture refreshes at most every budget interval; a later frame paints it.
+      if (refreshDue(this.lastOverlayPaint, now, this.budget.overlayRefreshMs)) {
+        this.paintOverlayLayer(s.overlay);
+        this.lastOverlayPaint = now;
+        this.pendingOverlay = null;
+      } else this.pendingOverlay = s.overlay;
       this.overlaySprite.visible = true;
     } else {
       this.lastOverlay = null;
+      this.pendingOverlay = null;
       this.overlaySprite.visible = false;
     }
 
@@ -601,6 +633,10 @@ export class DishRenderer {
     const py = this.prevY;
     const index = this.spareIndex;
     index.clear();
+    // P4.13: the feed animation's start per organism (a new bout of eating starts at frame 0).
+    if (this.spareFeed.length < n) this.spareFeed = new Float64Array(Math.max(64, Math.ceil(n * 1.25)));
+    const lastFeed = this.feedStart;
+    const feed = this.spareFeed;
     for (let k = 0; k < n; k++) {
       const o = k * ENT_STRIDE;
       const entityId = s.ids[k * ID_STRIDE + 1]!;
@@ -617,7 +653,18 @@ export class DishRenderer {
         py[k] = lastY[j]!;
       }
       index.set(entityId, k);
+      const d = this.draws[s.ents[o + E_SPECIES]!];
+      const feeding =
+        d?.kind === 'body' &&
+        bodyAnimFor(s.ents[o + E_CUE]!, (s.ents[o + E_FLAGS]! & FLAG_MOVING) !== 0, s.ents[o + E_LIFE]! !== 0, {
+          stress: d.stress !== null,
+          feed: d.feed !== null,
+          move: d.move !== null,
+        }) === 'feed';
+      feed[k] = feedStartAfterSnapshot(feeding, j === undefined || j >= lastFeed.length ? Number.NaN : lastFeed[j]!);
     }
+    this.spareFeed = lastFeed;
+    this.feedStart = feed;
     this.spareX = lastX;
     this.spareY = lastY;
     this.spareIndex = lastIndex;
@@ -753,7 +800,7 @@ export class DishRenderer {
       if (ev.type === 'objectEmptied') {
         // A fading stain where a food object ran out (cosmetic; it blocks nothing).
         const tex = this.frames[tileFrameKey('stain', 0)];
-        if (tex && ev.cell >= 0 && this.stains.length < 128) {
+        if (tex && ev.cell >= 0 && this.budget.stains && this.stains.length < STAINS_MAX) {
           const size = this.manifest.tiles?.stain?.size ?? 16;
           const particle = new Particle({ texture: tex, x: cx, y: cy, anchorX: 0.5, anchorY: 0.5, scaleX: 1 / size, scaleY: 1 / size });
           this.stains.push({ particle, start: now });
@@ -767,7 +814,7 @@ export class DishRenderer {
           for (let k = prev.count - 1; k >= 0; k--) byBirth.set(prev.ids[k * ID_STRIDE]!, k);
         }
         const k = byBirth.get(ev.birthId);
-        if (k === undefined) continue;
+        if (k === undefined || this.ghosts.length >= GHOSTS_MAX) continue; // P4.13: ghost cap (cosmetic)
         const o = k * ENT_STRIDE;
         const d = this.draws[prev.ents[o + E_SPECIES]!];
         if (d?.kind === 'fungus') {
@@ -786,13 +833,53 @@ export class DishRenderer {
     }
   }
 
+  /**
+   * P4.13: one frame's budget bookkeeping: the frame-time moving average drives the degrade ladder
+   * (budgets.ts; cosmetic only), and the frames counted per second are the diagnostics bar's fps.
+   */
+  private frameBudget(now: number): void {
+    if (!Number.isNaN(this.lastFrameAt)) {
+      const level = this.ladder.update(now - this.lastFrameAt, now);
+      if (level !== this.budgetLevelNow) {
+        this.budgetLevelNow = level;
+        this.budget = budgetFor(level);
+        if (!this.budget.stains) this.stains.length = 0; // level ≥ 1: no stains
+      }
+    }
+    this.lastFrameAt = now;
+    if (Number.isNaN(this.fpsSince)) this.fpsSince = now;
+    this.fpsFrames++;
+    if (now - this.fpsSince >= 1000) {
+      this.fpsNow = (this.fpsFrames * 1000) / (now - this.fpsSince);
+      this.fpsFrames = 0;
+      this.fpsSince = now;
+    }
+  }
+
+  private budgetLevelNow: BudgetLevel = 0;
+
+  /** P4.13: the degrade ladder's level now (0 normal … 3), for the diagnostics bar. */
+  get budgetLevel(): BudgetLevel {
+    return this.budgetLevelNow;
+  }
+
+  /** P4.13: frames per second over the last whole second, the ladder's level, the highest level reached and the frame-time average. */
+  frameStats(): { fps: number; level: BudgetLevel; maxLevel: BudgetLevel; frameMsAvg: number } {
+    return { fps: this.fpsNow, level: this.budgetLevelNow, maxLevel: this.ladder.maxLevel, frameMsAvg: this.ladder.avgMs };
+  }
+
+  /** P4.13: how often HTML markers and labels over the dish should redraw (0 = every frame; 500 ms at level ≥ 2). */
+  get markerRedrawMs(): number {
+    return this.budget.markerRedrawMs;
+  }
+
   /** UI hook: a placement ring where the player just added something (a still ring in reduced motion). */
   placementRing(x: number, y: number, radius: number): void {
     this.spawnEffect(placementEffect(this.opts.reducedMotion), x, y, radius, performance.now());
   }
 
   private spawnEffect(spec: EffectSpec, x: number, y: number, radius: number, now: number): void {
-    if (this.fx.length > 64) return; // budget: cosmetic effects degrade first
+    if (this.fx.length >= this.budget.effectsMax) return; // budget: cosmetic effects degrade first (budgets.ts)
     const g = new Graphics();
     this.effects.addChild(g);
     this.fx.push({ g, start: now, spec, x, y, radius });
@@ -801,7 +888,9 @@ export class DishRenderer {
   private frame(): void {
     if (this.destroyed) return;
     const now = performance.now();
+    this.frameBudget(now);
     const cam = this.camera;
+    cam.step(now); // P4.13: an eased player move advances before the follow rule
     const s = this.cur;
     // Follow target, if any.
     if (s && cam.followEntityId !== null) {
@@ -818,7 +907,15 @@ export class DishRenderer {
     this.statusParticles.visible = !wide;
     this.particles.alpha = 1;
     if (!s) return;
-    if (wide && this.aggDirty) this.paintAggregation(s);
+    if (wide && this.aggDirty && refreshDue(this.lastAggPaint, now, this.budget.aggregationRefreshMs)) {
+      this.paintAggregation(s);
+      this.lastAggPaint = now;
+    }
+    if (this.pendingOverlay && refreshDue(this.lastOverlayPaint, now, this.budget.overlayRefreshMs)) {
+      this.paintOverlayLayer(this.pendingOverlay);
+      this.lastOverlayPaint = now;
+      this.pendingOverlay = null;
+    }
     this.drawObjects(s, now);
 
     const alpha = Math.min(1, (now - this.curAt) / this.interval);
@@ -915,9 +1012,17 @@ export class DishRenderer {
             py = Math.floor(y) + 0.5;
             if (!tex) continue;
           } else {
-            const a = cue & CUE_STRESSED && d.stress ? d.stress : !dormant && cue & CUE_FEEDING && d.feed && !(flags & FLAG_MOVING) ? d.feed : (d.move ?? d.idle);
+            // P4.13: the feeding animation only with the snapshot's CUE_FEEDING bit (features.ts bodyAnimFor),
+            // and each new bout of eating starts at frame 0 on the first frame after its snapshot.
+            const anim = bodyAnimFor(cue, (flags & FLAG_MOVING) !== 0, dormant, { stress: d.stress !== null, feed: d.feed !== null, move: d.move !== null });
+            const a = anim === 'stress' ? d.stress : anim === 'feed' ? d.feed : anim === 'move' ? d.move : d.idle;
             if (!a) continue;
-            const idx = bodyFrameIndex(a.frames, a.durationMs, a.reducedMotionFrame, reduced, dormant, now + phase);
+            let clock = now + phase;
+            if (anim === 'feed') {
+              if (this.feedStart[k] === FEED_START_PENDING) this.feedStart[k] = now;
+              clock = feedFrameClock(this.feedStart[k]!, now, clock);
+            }
+            const idx = bodyFrameIndex(a.frames, a.durationMs, a.reducedMotionFrame, reduced, dormant, clock);
             hRow = headingRow(d.headings, ents[o + E_HEADING]!);
             tex = a.tex[hRow]![idx];
           }

@@ -14,6 +14,13 @@
  *   removed from it (its total before and after stage 6, as ArmObserver's consumed.F). A pool's removal
  *   is never divided among the species that ate from it.
  *
+ * P4.13 (D-0085's cost): the pool totals (a sum over every dish cell before and after stage 6, about 0.3 ms
+ * per tick on the Garden) are taken only once the map has been opened for the dish in this session
+ * (armPools; the 'relationshipMap' request is the signal). From then on the pools have their own record,
+ * and when it starts after the window's start the map says "Recorded since m:ss" for them
+ * (poolsRecordedSinceSecond), exactly as a mid-second restart does for the whole map. The event-based
+ * edges (catches, infects, attaches, bursts, drains, converts, eats-seen) keep their full window.
+ *
  * Kept per whole dish second for the last MAP_RETAIN_SECONDS seconds. Worker session state for a played
  * dish: never saved, never hashed, never read by the simulation; it starts empty after a reload. After
  * Undo or a rollback to tick T, every second holding a tick ≥ T is dropped; when T falls inside a second
@@ -66,6 +73,12 @@ export interface RelationshipMapData {
   readonly toSecond: number;
   /** When the record starts after the window's start: the second it starts (the map says "Recorded since"). */
   readonly recordedSinceSecond: number | null;
+  /**
+   * P4.13: when the pool totals start after the window's start (they are measured only since the map was
+   * first opened for this dish in this session, or after Undo): that second; null when they cover the
+   * whole window.
+   */
+  readonly poolsRecordedSinceSecond: number | null;
   /** Edges in a stable order: kind, then actor, then target. */
   readonly edges: readonly MapEdge[];
   /** Pools some species was seen eating from in the window, with the carbon feeding removed from them. */
@@ -79,7 +92,6 @@ interface EdgeAcc {
 
 interface Bucket {
   readonly edges: Map<string, EdgeAcc>;
-  readonly pools: Map<string, number>;
 }
 
 const KIND_ORDER: readonly MapEdgeKind[] = [
@@ -155,13 +167,25 @@ export class SecondRecord<T> {
 /** The map's per-second ledger (owned by a RelationshipWatcher). */
 export class RelationshipLedger {
   private readonly record: SecondRecord<Bucket>;
+  /** P4.13: the pools' own record, from the first time the map was opened (null until then). */
+  private poolRecord: SecondRecord<Map<string, number>> | null = null;
 
   constructor(startTick: number) {
-    this.record = new SecondRecord<Bucket>(startTick, () => ({ edges: new Map(), pools: new Map() }));
+    this.record = new SecondRecord<Bucket>(startTick, () => ({ edges: new Map() }));
   }
 
   get startTick(): number {
     return this.record.startTick;
+  }
+
+  /** P4.13: whether pool totals are being measured (the map has been opened for this dish). */
+  get poolsArmed(): boolean {
+    return this.poolRecord !== null;
+  }
+
+  /** P4.13: start measuring pool totals from `tick` (the first time the map is opened; later calls do nothing). */
+  armPools(tick: number): void {
+    if (this.poolRecord === null) this.poolRecord = new SecondRecord<Map<string, number>>(tick, () => new Map());
   }
 
   /** Count one occurrence (or carbon) of an edge in `second`. */
@@ -185,13 +209,14 @@ export class RelationshipLedger {
 
   /** Feeding removed `c` carbon from `pool` during one stage 6 in `second` (negative when it returned more). */
   poolRemoved(second: number, pool: string, c: number): void {
-    if (c === 0) return;
-    const pools = this.record.at(second).pools;
+    if (c === 0 || this.poolRecord === null) return;
+    const pools = this.poolRecord.at(second);
     pools.set(pool, (pools.get(pool) ?? 0) + c);
   }
 
   restoreTo(tick: number): void {
     this.record.restoreTo(tick);
+    this.poolRecord?.restoreTo(tick);
   }
 
   /** The map of the last `windowSeconds` seconds at `tick`. Pure read. */
@@ -209,7 +234,13 @@ export class RelationshipLedger {
           a.seconds += 1;
         }
       }
-      for (const [p, c] of b.pools) pools.set(p, (pools.get(p) ?? 0) + c);
+    }
+    // P4.13: pool totals from their own record (same window; "Recorded since" when it starts later).
+    let poolsSince: number | null;
+    if (this.poolRecord === null) poolsSince = to + 1; // never measured (the map was not opened yet)
+    else {
+      poolsSince = this.poolRecord.window(tick, windowSeconds).since;
+      for (const b of this.poolRecord.range(from, to)) for (const [p, c] of b) pools.set(p, (pools.get(p) ?? 0) + c);
     }
     const edges: MapEdge[] = [];
     for (const [key, a] of acc) {
@@ -236,6 +267,7 @@ export class RelationshipLedger {
       fromSecond: from,
       toSecond: to,
       recordedSinceSecond: since,
+      poolsRecordedSinceSecond: poolsSince,
       edges,
       pools: eaten.map((pool) => ({
         pool,

@@ -13,6 +13,7 @@ import { stageConversion } from './conversion';
 import { stageContacts } from './contacts';
 import { stageStructures } from './structures';
 import type { World } from './world';
+import { evictProfiles, PROFILE_EVICT_TICKS } from './profiles';
 
 export interface StepHooks {
   /** Called after every stage (tests use it to observe ordering). */
@@ -42,6 +43,9 @@ export function step(world: World, hooks: StepHooks = {}): void {
   stagePublish(world);
   after?.(10, world);
   world.tick++;
+  // P4.13 (D-0066): the derived profile cache forgets genomes nothing current refers to (memory only;
+  // profiles are rebuilt identically on demand and are never saved or hashed).
+  if (world.tick % PROFILE_EVICT_TICKS === 0) evictProfiles(world);
 }
 
 export function run(world: World, ticks: number, hooks: StepHooks = {}): void {

@@ -87,6 +87,20 @@ export function SimplePage({ title, body, settings: showSettings, about }: { tit
                   onInput={(e) => updateSettings({ overlayOpacity: Number(e.currentTarget.value) })}
                 />
               </label>
+              {/* P4.13 (UX §2 Settings "diagnostics (opt-in)"; ARCH §13): off unless the player turns it on. */}
+              <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', minHeight: '48px' }}>
+                <input
+                  type="checkbox"
+                  checked={s.showPerformance === true}
+                  onChange={(e) => updateSettings({ showPerformance: e.currentTarget.checked })}
+                  aria-describedby="show-performance-note"
+                  data-testid="setting-show-performance"
+                />
+                Show performance numbers
+              </label>
+              <p class="setting-note" id="show-performance-note">
+                Tick time, speed, frame rate and memory, for bug reports. Off by default.
+              </p>
             </div>
           ) : null}
         </section>

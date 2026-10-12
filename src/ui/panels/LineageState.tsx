@@ -9,6 +9,7 @@ import { batch, signal } from '@preact/signals';
 import type { LineageAnswer, LineageBranchRow } from '@sim/lineage';
 import { SPECIMEN_RADIUS, type LineageOp } from '@sim/specimens';
 import type { SnapshotMsg } from '@worker/protocol';
+import type { DishRenderer } from '@render/renderer';
 import { dishInfo, getClient, getRenderer, meta, setSpeed, settings, sheet, showToast } from '../state';
 import { pinnedExtinctText } from '../strings/lineage';
 import { cardPlaceHeldByOther } from '../notices';
@@ -179,12 +180,24 @@ export function placeSpecimenTap(wx: number, wy: number): boolean {
   void (async () => {
     const res = await lineageCommand({ op: 'spawnSpecimen', specimen: p.specimen, x: wx, y: wy, radius: SPECIMEN_RADIUS, count: p.count }, true);
     if (!res) return;
-    if (res.accepted === 0) showToast(res.note === 'capacity' ? 'The dish is full.' : 'No room here for that specimen.');
-    else showToast(`Added ${res.accepted} from ${p.label} — a new introduction, logged as an addition to the dish.`, 3500);
-    getRenderer()?.placementRing(wx, wy, SPECIMEN_RADIUS);
+    reportSpecimenPlacement(res, p.label, wx, wy, getRenderer());
     if (sheet.value === 'lineage') await refreshLineage();
   })();
   return true;
+}
+
+/**
+ * The outcome of a specimen placement: its toast, and the placement ring only when something was placed
+ * (D-0095, as reportCommand in src/ui/state.ts since P4.13; UX §7.1 "every visible feature maps to real
+ * state": a refused placement shows its refusal and no ring).
+ */
+export function reportSpecimenPlacement(res: { readonly accepted: number; readonly note?: string }, label: string, wx: number, wy: number, ring: Pick<DishRenderer, 'placementRing'> | null): void {
+  if (res.accepted === 0) {
+    showToast(res.note === 'capacity' ? 'The dish is full.' : 'No room here for that specimen.');
+    return;
+  }
+  showToast(`Added ${res.accepted} from ${label} — a new introduction, logged as an addition to the dish.`, 3500);
+  ring?.placementRing(wx, wy, SPECIMEN_RADIUS);
 }
 
 export function setTraitLocus(locus: number | null): void {

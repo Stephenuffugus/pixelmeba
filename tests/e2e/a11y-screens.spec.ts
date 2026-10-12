@@ -16,6 +16,12 @@
  *   - What if? with an idea chosen ("Compare with Garden"), the Bookmark sheet (More → Bookmark), the
  *     gallery's Delete confirmation, a Storage "Remove…" confirmation, Leave challenge: this file, test
  *     "wave 6b".
+ *
+ * Phase 4 wave 7a screens:
+ *   - Settings with "Show performance numbers" on, the dish with the performance bar (running and paused):
+ *     this file, test "wave 7a" (first-minute.spec.ts scans them too, at 360×800 and 1440×900);
+ *   - the dish showing "The latest save was damaged, so the previous copy was opened." (the Filesystem
+ *     store's harness build): android-storage.spec.ts.
  */
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
@@ -726,6 +732,28 @@ test('wave 6b: What if? with Compare with Garden, Bookmark sheet, gallery Delete
     'Storage: Remove… confirmation',
     'Leave challenge',
   ]);
+});
+
+test('wave 7a: Settings with "Show performance numbers" on, the dish with the performance bar (running, then paused)', async ({ page }) => {
+  test.setTimeout(240_000);
+  const a = new Audit(page);
+  await seedSettings(page, { showPrompts: false, showPerformance: true });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await expect(page.getByTestId('setting-show-performance')).toBeChecked();
+  await a.scan('Settings (performance numbers on)');
+  await page.getByRole('button', { name: 'Back' }).click();
+  await page.getByTestId('home-play').click();
+  await page.getByTestId('start-garden').click();
+  await expect(page.getByTestId('dish-screen')).toBeVisible();
+  await expect(page.getByTestId('diag-bar')).toBeVisible();
+  await page.getByTestId('run-toggle').click();
+  await expect(page.getByTestId('diag-tick')).toHaveText(/^Tick \d+\.\d ms \(p95 \d+\.\d\)$/, { timeout: 30_000 });
+  await a.scan('Dish with the performance bar (running)');
+  await page.getByTestId('run-toggle').click();
+  await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
+  await a.scan('Dish with the performance bar (paused)');
+  a.done(['Settings (performance numbers on)', 'Dish with the performance bar (running)', 'Dish with the performance bar (paused)']);
 });
 
 // ------------------------------------------------------------------------------------ comparison and cards

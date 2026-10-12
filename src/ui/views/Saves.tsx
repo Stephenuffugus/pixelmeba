@@ -9,6 +9,8 @@ import { slotModesLine } from '../strings/modes';
 import { keepPlanText } from '../strings/keep';
 import { StoragePanel } from './StoragePanel';
 import { STORAGE_UI } from '../strings/notebookTools';
+import { NOT_KEEPING_SAVES } from '../strings/saves';
+import { isNativePlatform } from '@platform/capacitor';
 
 /** Continue first, then the named slots in their own order (Slot 1 … Slot 10, never "slot10" before "slot2"). */
 function savedInOrder(slots: readonly SlotSummary[]): SlotSummary[] {
@@ -71,7 +73,7 @@ export function Saves() {
             Saved dishes
           </h1>
         </header>
-        {!persistent ? <p class="card">This browser is not keeping saves between visits. Export files to keep your dishes.</p> : null}
+        {!persistent ? <p class="card">{NOT_KEEPING_SAVES.page(isNativePlatform())}</p> : null}
         <section class="card">
           {slots === null ? <p>Loading…</p> : null}
           {slots !== null && slots.every((s) => s.automatic) ? <p>No saved dishes yet.</p> : null}

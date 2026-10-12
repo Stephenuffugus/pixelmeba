@@ -117,7 +117,9 @@ describe('UX §7.4 reduced motion, effect by effect', () => {
   it('deposit/placement ring → a still ring at full radius for 1 s', () => {
     expect(placementEffect(false)).toEqual({ kind: 'deposit', durationMs: PLACEMENT_RING_MS, animated: true });
     expect(placementEffect(true)).toEqual({ kind: 'deposit', durationMs: PLACEMENT_STATIC_MS, animated: false });
-    expect(effectLook(placementEffect(false), 2, 0).radius).toBeCloseTo(1.4, 12);
+    // P4.13 (UX §6.5): with motion on the ring now grows from 0 to the dose radius over 300 ms, then fades by 700 ms.
+    expect(effectLook(placementEffect(false), 2, 0).radius).toBe(0);
+    expect(effectLook(placementEffect(false), 2, 300 / PLACEMENT_RING_MS).radius).toBeCloseTo(2, 12);
     expect(effectLook(placementEffect(false), 2, 1).alpha).toBe(0);
     for (const t of [0, 0.5, 0.99]) expect(effectLook(placementEffect(true), 2, t)).toEqual({ radius: 2, alpha: 0.6, divider: false });
   });
@@ -131,14 +133,19 @@ describe('UX §7.4 reduced motion, effect by effect', () => {
     expect(stainAlphaAt(STAIN_MS, false)).toBe(0);
   });
 
-  it('camera easing → instant: presets and Find set the view at once (there is no easing in any mode)', () => {
+  it('camera easing → instant: in reduced motion presets and Find set the view at once', () => {
+    // P4.13: with motion on, player-initiated moves ease over 220 ms (tests/render/camera-easing.test.ts);
+    // in reduced motion every move is instant (UX §7.4).
     const c = new Camera();
     c.setViewport(800, 600);
+    c.clock = () => 0;
+    c.reducedMotion = true;
     c.centerOn(30, 40, ZOOM_CLOSE);
     expect([c.cx, c.cy, c.zoom]).toEqual([30, 40, ZOOM_CLOSE]);
+    expect(c.moving).toBe(false);
     c.fit();
     expect([c.cx, c.cy, c.zoom]).toEqual([64, 64, c.fitZoom()]);
-    expect(read('src', 'render', 'camera.ts')).not.toMatch(/requestAnimationFrame|ease|lerp|performance\.now/i);
+    expect(read('src', 'render', 'camera.ts')).not.toMatch(/requestAnimationFrame|performance\.now/);
   });
 
   it('favorite glyphs, probe outlines, selection, lineage marks and links are static (they read no clock)', () => {
