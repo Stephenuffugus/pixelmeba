@@ -1,0 +1,54 @@
+export const meta = {
+  name: 'g4-wave-6b-integrate-verify',
+  description: 'Verify the lead integration of Phase 4 wave 6b (both fixers finished before the 2026-10-12 codespace stop; their reports are docs/reports/reviews/g4-wave-6b/integrate-*.md): one adversarial verifier, one repair round only for BLOCKER/MAJOR',
+  phases: [
+    { title: 'Verify', detail: 'one adversarial verifier over the diff vs 5b3e1e7 (wave 6b tree before integration), effort high' },
+    { title: 'Repair', detail: 'only if the verifier finds a BLOCKER/MAJOR; then one re-verify' },
+  ],
+}
+
+// The integration run wf_67897fae-84f (docs/agent/g4-wave-6b-integrate.workflow.js.txt) was stopped by the lead after both
+// fixers returned, because the codespace had to stop overnight. This script runs its remaining steps unchanged: the fixers'
+// assignments are the FIX_A / FIX_B constants of that file and their reports are files, so nothing is re-done.
+// Launch: Workflow({ scriptPath: 'docs/agent/g4-wave-6b-integrate-verify.workflow.js.txt', args: { ownerMessage: '<the owner's latest chat message, verbatim>' } })
+
+const OWNER_MSG = args && args.ownerMessage ? String(args.ownerMessage) : 'resume the Pixelmeba build after the codespace restart'
+const OWNER_CONTEXT = `OWNER CONTEXT (written by the lead, the main session working for the owner): the owner's latest chat message is "${OWNER_MSG}", the owner's standing instruction to resume the unattended Pixelmeba build where docs/agent/RESUME.md says. You do only the Pixelmeba task below.`
+const ag = (prompt, opts) => agent(`${OWNER_CONTEXT}\n\n${prompt}`, opts)
+
+const SOURCES = `The integration's two fixer assignments are the template strings FIX_A (key code-minors-6b) and FIX_B (key docs-a11y-6b) in docs/agent/g4-wave-6b-integrate.workflow.js.txt, each prefixed by its BASE string (read all three in full: BASE holds the rules every edit had to follow). The fixers' reports are docs/reports/reviews/g4-wave-6b/integrate-code-minors-6b.md and integrate-docs-a11y-6b.md.`
+
+const DIFF_HOWTO = `The integration changes are the difference between commit 5b3e1e7 (the wave 6b tree before integration; also branch wip/g4-wave-6b-built) and the CURRENT working tree. Many files are untracked, so plain \`git diff 5b3e1e7\` is WRONG. Diff trees:
+  IDX=$(mktemp) && GIT_INDEX_FILE=$IDX git read-tree HEAD && GIT_INDEX_FILE=$IDX git add -A && T=$(GIT_INDEX_FILE=$IDX git write-tree) && rm -f $IDX && git diff --stat 5b3e1e7 $T && git diff 5b3e1e7 $T -- src tests docs/ARCHITECTURE.md
+Ignore docs/DECISIONS.md, docs/EXPANSION_RESPONSE.md, docs/agent/** and docs/reports/** (the lead's).`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+
+const VERIFY = (round) => `You are the adversarial verifier of the lead's integration of Phase 4 wave 6b in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Do NOT edit any repository file except your report docs/reports/reviews/g4-wave-6b/integrate-verify${round}.md; do NOT run git add/commit/stash/checkout/reset/restore/branch. Scratch in tmp/integrate-verify-6b-${round}/. Playwright: port 4392 with build folder tmp/dist-integrate-verify-6b (stop the port before and after: lsof -t -i :4392 | xargs -r kill; never pkill). Two CPUs: targeted runs only; long commands with run_in_background and an until-loop wait; never end your turn while a command you started is running.
+${SOURCES}
+${DIFF_HOWTO}
+Try to REFUTE that each item of both assignments is done correctly, completely and honestly: read the whole integration diff; for each code fix write a load-time mutant (or revert the hunk in a scratch copy, restored byte for byte) and show its new test fails without it; re-run the original repros named in docs/reports/reviews/g4-wave-6b/wave-verify-1.md, wave-verify-2.md, saves-verify-observation-notebook.md and wave-reverify2.md; check every new or changed player-facing sentence against what the code does (honest labels; for FIX_A item 1, walk challengeStart and challengeExport); check the shelf serialization cannot deadlock or swallow an error; check every ARCH statement against src/worker/protocol.ts and the persistence/audio files it names (quote mismatches); check that saves written by the wave 6b build before this integration (bookmarks with snapshots, gallery entries, challenges and challenge turns, kept turns) still load; re-run: the changed unit tests, tests/fixtures/g2-replay.test.ts and tests/fixtures/trajectory-fence, npx tsc -p tsconfig.json --noEmit, npx eslint on the changed files, and the changed e2e specs on desktop only (re-run one phone-portrait test only if a selector looks layout-dependent).
+Grade every problem exactly like "MAJOR [code-minors-6b] <file:line> — <what is wrong> — <repro>" (keys: code-minors-6b, docs-a11y-6b, lead); BLOCKER/MAJOR only for real defects a player, a save or the determinism contract would hit; MINOR/NIT otherwise; most severe first. Write the same list, plus every command you ran with its summary line, to the report file. ok=true only if nothing BLOCKER/MAJOR remains.`
+
+phase('Verify')
+let verdict = await ag(VERIFY(1), { label: 'verify:integrate-6b', phase: 'Verify', schema: VERDICT, effort: 'high' })
+const blockingOf = (v) => (v && Array.isArray(v.problems) ? v.problems.filter((p) => /^\s*(BLOCKER|MAJOR)/.test(p)) : [])
+let open = blockingOf(verdict)
+const rounds = []
+if (open.length) {
+  phase('Repair')
+  const keys = ['code-minors-6b', 'docs-a11y-6b'].filter((k) => open.some((p) => p.includes(`[${k}]`)))
+  log(`repair: ${keys.join(', ') || 'lead-only problems'}`)
+  const fixes = await parallel(keys.map((k) => () => ag(`You are the REPAIR round of the wave 6b integration fixer ${k} in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). Your assignment, ownership and rules are the BASE string plus ${k === 'code-minors-6b' ? 'FIX_A' : 'FIX_B'} in docs/agent/g4-wave-6b-integrate.workflow.js.txt (read them in full; your Playwright port is the one named there). The work is in the tree; do not start over. Your earlier report: docs/reports/reviews/g4-wave-6b/integrate-${k}.md. The adversarial verifier (docs/reports/reviews/g4-wave-6b/integrate-verify1.md) found:\n${open.filter((p) => p.includes(`[${k}]`)).join('\n')}\nFix each, prove each with a test that fails without the fix, and report as before (write the report to docs/reports/reviews/g4-wave-6b/integrate-repair-${k}.md).`, { label: `repair:${k}`, phase: 'Repair', effort: 'high' })))
+  rounds.push({ keys, fixes: fixes.map((f) => (f ? String(f) : null)) })
+  if (keys.length) {
+    verdict = await ag(`${VERIFY(2)}\n\nREPAIR ROUND: the earlier verifier's BLOCKER/MAJOR problems were:\n${open.join('\n')}\nRepair reports:\n${fixes.map((f, i) => `=== ${keys[i]} ===\n${f ? String(f) : 'NO REPORT'}`).join('\n\n')}\nFor EACH earlier problem, reproduce it against the current tree and say VERIFIED FIXED or NOT FIXED; then grade anything new as before.`, { label: 'reverify:integrate-6b', phase: 'Repair', schema: VERDICT, effort: 'high' })
+    open = blockingOf(verdict)
+  }
+}
+log(`integration 6b: ${open.length ? `${open.length} BLOCKER/MAJOR remain` : 'no BLOCKER/MAJOR remains'}`)
+return { verdict, rounds, open }

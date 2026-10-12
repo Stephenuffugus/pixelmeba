@@ -3,6 +3,45 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑12 04:05 UTC — SAFE STOP FOR THE OVERNIGHT CODESPACE STOP (owner: "the codespace will need to close
+> before i will wake up so we should find a good place to save it all and refresh the codespace"). START HERE.**
+> - **State.** main = this commit (docs only; pushed). The wave 6b code plus BOTH integration fixers' edits are uncommitted
+>   in the working tree and saved as branch **`wip/g4-wave-6b`** (tip made right after this commit; its tree = this
+>   commit's tree + the uncommitted code). The pre-integration 6b tree is **`wip/g4-wave-6b-built` = `5b3e1e7`**.
+> - **What ran.** Integration run `wf_67897fae-84f` was stopped by the lead at 03:53 after both fixers returned:
+>   docs-a11y-6b (ARCH §7/§10.3/§11.2 "As built 6b", a11y-screens additions) and code-minors-6b (all 14 items DONE with
+>   mutants; reports `docs/reports/reviews/g4-wave-6b/integrate-{code-minors,docs-a11y}-6b.md`). The verifier was killed
+>   at its start: it wrote no report and edited nothing (only scratch `tmp/integrate-verify-6b-1/`, ignore it).
+>   Nothing is verified yet; `npm run check` has NOT run on this tree. D‑0086…D‑0089 and §8 items 29–35 are committed.
+> - **Resume steps:**
+>   1. `git status`: the 6b files (src/ui/views/StoragePanel.tsx, src/worker/challenge.ts, …) must be present. Compare
+>      trees: `IDX=$(mktemp); GIT_INDEX_FILE=$IDX git read-tree HEAD; GIT_INDEX_FILE=$IDX git add -A;
+>      GIT_INDEX_FILE=$IDX git write-tree; rm $IDX` must equal `git rev-parse 'wip/g4-wave-6b^{tree}'`. If the files are
+>      missing and `git status` is clean: `git checkout wip/g4-wave-6b -- . && git reset -q`.
+>   2. If the codespace was REBUILT (not just restarted): `npm ci`; `npx playwright install chromium`; Android SDK per
+>      docs/ANDROID_SETUP.md (it lived in ~/android-sdk; JDK 21 at /usr/local/sdkman/candidates/java/21.0.12+1-ms).
+>   3. Backups: `nohup tools/lead/backup-loop.sh wip/g4-wave-6b "wip: wave 6b integration" >/dev/null 2>&1 & echo $! > tmp/lead/backup-6b.pid`.
+>   4. Lead items before the verifier (small; then add them to SOURCES in the verify script as a 'lead' list):
+>      a. **Notebook cap (saves).** code-minors-6b item 5 measured every kind at its limit: 1,021,268 of 1,048,576
+>         (97.4 %); with story cards at the validator's bounds 1,559,618 (148.7 %); nothing checks size at write time, so an
+>         over-cap notebook would be written and then dropped whole at the next load. Lead ruling planned: raise
+>         `NOTEBOOK_MAX_BYTES` (src/persistence/notebook.ts:31, our own D‑0070 number, pre-release) to 2 MiB so every record
+>         the validators accept fits; add the validator-bounds case to the all-kinds test (bookmarks.test.ts:263) as the
+>         tripwire; ARCH §11.2 line ~548; a new D‑entry.
+>      b. CompareSetup.tsx:101 "Your dish and your saves are never changed by it." is false (completion autosaves Continue):
+>         reword; fix pins.
+>      c. challengeSave reuses a Try my dish 'try-n' baseline with the same checksum, so removing that Storage row silently
+>         removes a challenge's starting point. Planned: challengeSave always writes its own 'ch-' record (shared only
+>         among challenges); test.
+>      d. store.ts SHELF_REMOVE_REFUSED names only "a Try my dish starting point or a snapshot bookmark": add challenge
+>         starting points; pins.
+>   5. Launch `Workflow({scriptPath: 'docs/agent/g4-wave-6b-integrate-verify.workflow.js.txt', args: {ownerMessage:
+>      '<owner's latest message, verbatim>'}})` (verifier on 4392 + one repair round only for BLOCKER/MAJOR).
+>   6. Then: `npm run check`; the desktop e2e project (all specs; one run, not beside the check); commit 6b with the
+>      evidence; tick P4.5, P4.8 (transfer preview → Phase 5), P4.9; push; stop the backup loop; 7a pre-launch (LEAD
+>      PRE-LAUNCH in docs/agent/g4-wave-7.tasks.js.txt: patch the `<lead: …>` placeholders, record D-<n>/D-<n+1>, free
+>      ports, backup loop on wip/g4-wave-7a, launch 7a = android + perf2-polish).
+
 > **Update 2026‑10‑12 03:10 UTC — WAVE 6b BUILT AND VERIFIED (run `wf_0527b70e-8ef` done; 11 agents, no BLOCKER/MAJOR
 > left after two challenge-editor fix rounds). INTEGRATION RUNNING (run `wf_67897fae-84f`, launched 03:08 from session
 > 78f75dc7: `docs/agent/g4-wave-6b-integrate.workflow.js.txt`). START HERE.**
