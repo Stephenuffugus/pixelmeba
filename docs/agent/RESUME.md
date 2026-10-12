@@ -3,6 +3,22 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑12 08:35 UTC — WAVE 6b COMMITTED (`52e6a27`, worklog `2d21c82`; check 191 files / 1910 tests, desktop
+> e2e 109/109). P4.1–P4.9 done. WAVE 7a LAUNCHING (android 4281 + perf2-polish 4282, both critical 'own' → saves lenses
+> 4396/4397; rules verifier 4390) from `docs/agent/g4-wave-7a.run.workflow.js.txt` (built with tools/lead/build-run-file.py).
+> START HERE.**
+> - Pre-launch done: every `<lead: …>` placeholder of docs/agent/g4-wave-7.tasks.js.txt filled with the 6b facts; D‑0091
+>   (Android = debug build + documented steps) and D‑0092 (Filesystem adapter on the native app, IndexedDB on the web;
+>   owner review) recorded; ports freed; JDK 21 and android-36 present. Nothing else may run on the machine during 7a
+>   (perf2-polish measures under the android build's load).
+> - Backups: `nohup tools/lead/backup-loop.sh wip/g4-wave-7a "wip: wave 7a in flight"`, pid in tmp/lead/backup-7a.pid.
+> - If this session dies mid-wave: restore from wip/g4-wave-7a if `git status` is clean; read the run's journal
+>   (~/.claude/projects/-workspaces-pixelmeba/<session>/subagents/workflows/<run>/journal.jsonl) and
+>   docs/reports/reviews/g4-wave-7a/; rerun only unfinished builders with `A.only` + `finish` notes.
+> - After 7a: LEAD AFTER (7a) in the tasks file → integrate → `npm run check` → commit → tick P4.10 (and P4.13 if its
+>   criteria are met) → build 7b (web-arcade 4283 + store 4284, rules verifier 4391) → P4.14 (full suite, three-project
+>   e2e, EXPANSION_RESPONSE, README) → tag v1.0.0-rc1.
+
 > **Update 2026‑10‑12 06:20 UTC — INTEGRATION VERIFIED (integrate-verify1 ok: 3 MINOR + 3 NIT, all fixed by the lead,
 > integrate-lead-6b.md); `npm run check` GREEN (191 files / 1910 tests, 2719 s, tmp/lead/check-6b.log). DESKTOP E2E RUNNING
 > (all 38 specs, port 4290, tmp/lead/e2e-6b-desktop.log). START HERE.**

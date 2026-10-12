@@ -1237,3 +1237,43 @@ Decision:
 Reason: saves are sacred (a notebook the app wrote must load again); honest labels; CLAUDE.md "Saves are sacred".
 Affects: src/persistence/{notebook,store}.ts, src/worker/host.ts (challengeBaseline, challengeSave), src/ui/panels/CompareSetup.tsx, src/ui/views/ExperimentRun.tsx, docs/ARCHITECTURE.md §11.2, tests/persistence/{bookmarks,shelf}.test.ts, tests/worker/challenge-host.test.ts.
 Owner review: no.
+
+## D-0091 · 2026-10-12 · P4.10 · Android is a debug build with documented steps
+Context: g4-plan.md call 5; BUILD_DIRECTIVE P4.10; docs/agent/g4-wave-7.tasks.js.txt (wave 7a, android); reference: JDK 21 and the Android SDK are present in this codespace, and there is no device or emulator.
+Decision:
+- **P4.10 builds a debug APK and an unsigned release AAB** with the SDK in this codespace and records the exact result: the commands, the output paths, the sizes and `aapt dump badging` (docs/ANDROID_SETUP.md §9, EXPANSION_RESPONSE §7).
+- **Release signing is an owner item.**
+  - A keystore script and its steps ship in docs/ANDROID_SETUP.md.
+  - No keystore, password or signing config with secrets is committed.
+  - Play App Signing is the recommended route.
+- **On-device checks are owner items** (PLAY_STORE_CHECKLIST §B):
+  - install and launch;
+  - process death and restore;
+  - share and import;
+  - an offline first launch.
+  The codespace has no device or emulator.
+Reason: call 5 as written; CLAUDE.md "Never commit secrets, keystores"; evidence or it didn't happen (what cannot be run here is listed, not claimed).
+Affects: android/, capacitor.config.ts, docs/ANDROID_SETUP.md, docs/PLAY_STORE_CHECKLIST.md, EXPANSION_RESPONSE §7–§8.
+Owner review: yes (signing and the device checks).
+
+## D-0092 · 2026-10-12 · P4.10 · Saves on the Android app go through the Capacitor Filesystem adapter; IndexedDB stays the web store
+Context: BUILD_DIRECTIVE P4.10, ARCH §11.1 and §12, R27 and g4-plan.md call 5 name the Filesystem adapter. D-0013 kept IndexedDB on Android and used Filesystem only for export and share. The wave 7 writer's PROPOSED DECISIONS (docs/reports/reviews/g4-wave-7/writer.md) were accepted at the lead review of 2026-10-11 22:45.
+Decision:
+- **Supersedes D-0013 for the native app only.** Device saves on Android (named slots, Continue, checkpoints and the shelf) go through a Capacitor Filesystem StorageBackend in the app's private data directory. The web build keeps IndexedDB.
+- **The adapter keeps the StorageBackend contract:** one atomic multi-record commit, which was D-0013's reason. It does this with a commit journal.
+  - Writes are temp files, verified, then renamed.
+  - The journal is applied idempotently on open, and stray temp files and orphan records are removed.
+  - SaveStore, the checkpoint ring and the shelf are unchanged.
+  - Crash-point enumeration (a crash after every operation of a slot save, a checkpoint commit, a shelf commit and a remove, then a reopen) proves that the current world or its predecessor always loads.
+- **What crosses the bridge:**
+  - The stored record is the gzip bytes, so an autosave crosses the main-thread bridge as base64 of the compressed record. A 3,000-tick Garden save is about 10.7 MB uncompressed (perf-g3.md).
+  - That cost cannot be measured without a device. The owner's device test therefore includes "autosave on a mid-range phone: no visible stutter, and Home → return keeps the last save".
+- **The fallback:** flipping the native store back to IndexedDB (D-0013) stays a one-line change in client.ts. The adapter, its tests and the browser interruption harness stay either way.
+- **Related scope calls accepted with it:**
+  - native exports go through the share sheet, with no storage permission;
+  - settings stay in localStorage;
+  - android:allowBackup stays true (owner item);
+  - the service worker never registers in the native app.
+Reason: the canonical rule (BUILD_DIRECTIVE P4.10, ARCH §11.1/§12, R27, call 5). The journal is what keeps D-0013's atomicity argument true for the file store.
+Affects: src/persistence/{capacitorFs,fsPort}.ts, src/platform/{capacitor,fsHost,fsHarness}.ts, src/worker/{boot,sim.worker,client}.ts, tests/persistence/capacitor-fs.test.ts, tests/platform/fs-bridge.test.ts, docs/ARCHITECTURE.md §11.1, docs/ANDROID_SETUP.md (all written by wave 7a).
+Owner review: yes (the device test above; whether to keep Filesystem or flip back to IndexedDB after it).
