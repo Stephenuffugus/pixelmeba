@@ -1126,7 +1126,7 @@ Decision:
   - the shelf's "full" message is true for Try my dish and challenges and says where to remove one;
   - shelf writes are serialized per page, so two writes of one kind can never share a sequence number;
   - the dropped-notebook message names every kind a notebook holds;
-  - one test fills every notebook kind to its limit and measures the record against the 1 MB cap;
+  - one test fills every notebook kind to its limit and measures the record against the cap (1 MiB then; 2 MiB since D-0090);
   - g2, wave 5 and stage 1 saves load with every newer kind empty.
 Reason: SPEC §12.8 ("bookmarks (timestamp + summary ± snapshot; text‑only labelled non‑replayable)", "specimen gallery (image + species + inspector summary; never spawns)"); SPEC limits; D-0070; D-0084; saves are sacred.
 Affects: src/persistence/{notebookBookmarks,notebookGallery,notebook,store,shelf}.ts, src/worker/{storage,host,protocol,client}.ts, src/render/picture.ts, src/ui/{bookmarks,gallery,storage}.ts, src/ui/strings/notebookTools.ts, src/ui/views/{NotebookBookmarks,NotebookGallery,StoragePanel,Notebook,Saves}.tsx, src/ui/panels/{BookmarkSheet,Inspector,LabTray,MoreSheet,HistorySheet}.tsx, tests/persistence/bookmarks.test.ts, tests/worker/bookmarks-host.test.ts, tests/ui/{gallery,storage}.test.ts, tests/e2e/bookmarks-gallery.spec.ts.
