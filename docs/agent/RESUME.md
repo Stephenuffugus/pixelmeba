@@ -3,6 +3,23 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑12 03:10 UTC — WAVE 6b BUILT AND VERIFIED (run `wf_0527b70e-8ef` done; 11 agents, no BLOCKER/MAJOR
+> left after two challenge-editor fix rounds). INTEGRATION RUNNING (run `wf_67897fae-84f`, launched 03:08 from session
+> 78f75dc7: `docs/agent/g4-wave-6b-integrate.workflow.js.txt`). START HERE.**
+> - The 6b tree before integration is backup commit `5b3e1e7` (the backup loop keeps moving wip/g4-wave-6b; use the hash).
+> - Integration = code-minors-6b (4285: 14 MINOR/NIT items from the four verifier reports, incl. the Storage label for
+>   challenge baselines, Shelf.put serialization, the all-kinds notebook size test, the variant-pair close note and
+>   viewport labels, Lab commands reaching the narration listeners, Finish clearing kept) + docs-a11y-6b (4286: ARCH §7,
+>   §10.3, §11.2, a11y sweep additions) + one verifier (4392), one repair round only for BLOCKER/MAJOR.
+> - The lead meanwhile writes D‑0086…D‑0089 (6b as built; the challenge budget rule is an owner item, EXPANSION_RESPONSE §8).
+> - If this session dies during integration: restore from `wip/g4-wave-6b` only if `git status` is clean; read the run's
+>   journal; reports go to docs/reports/reviews/g4-wave-6b/integrate-*.md; resume the run with
+>   `Workflow({scriptPath: 'docs/agent/g4-wave-6b-integrate.workflow.js.txt', resumeFromRunId: 'wf_67897fae-84f'})`
+>   only in the same session, else re-run the unfinished fixer by hand.
+> - After integration: npm run check; the desktop e2e project; commit; tick P4.5, P4.8 (transfer preview → Phase 5),
+>   P4.9; stop the backup loop (`kill "$(cat tmp/lead/backup-6b.pid)"`); then 7a pre-launch (LEAD PRE-LAUNCH in
+>   docs/agent/g4-wave-7.tasks.js.txt).
+
 > **Update 2026‑10‑11 22:25 UTC — WAVE 6a COMMITTED (`ca8c184`), P4.6 and P4.7 ticked. WAVE 6b RUNNING (run `wf_0527b70e-8ef`, launched 22:24 from session 78f75dc7). START HERE.**
 > - Evidence (commit message): check 1785/1786 with the one failure a timeout under load (goals-host, 121 s vs 120 s;
 >   15/15 alone; its limit is now 600 s, re-run 26/26 with try-dish-host); all 74 desktop journeys of the touched specs
