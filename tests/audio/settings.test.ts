@@ -23,6 +23,7 @@ describe('audio settings → gains', () => {
       muted: false,
       quietAudio: false,
       haptics: false,
+      narration: false, // P4.9: narration off by default
     });
     // Settings stored by an older build have no audio fields: they take the defaults.
     expect(audioPrefsOf({})).toEqual(AUDIO_DEFAULTS);

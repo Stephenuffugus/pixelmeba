@@ -509,7 +509,7 @@ describe('fix round 1: the UI side of favorites', () => {
   it('a dropped notebook’s message waits for its dish to open, then survives the “Opened …” toast', () => {
     wireFavorites(fake);
     const M =
-      "This dish's notebook (favorites, story cards and goals) could not be read, so it was left out. The dish itself loaded.";
+      "This dish's notebook (favorites, story cards, goals, bookmarks, gallery, challenges and its Try my dish turn) could not be read, so it was left out. The dish itself loaded.";
     // The 'loaded' answer arrives before the UI opens the dish (state.ts enterDish runs after the load resolves).
     onNotebookNotice({ type: 'notebookDropped', dishId: 'x', message: M });
     expect(uiState.toast.value).toBeNull();

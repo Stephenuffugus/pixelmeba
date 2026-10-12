@@ -54,6 +54,11 @@ export const TRY_TEXT = {
   discard: 'Discard turn',
   baselineMissing: "The saved starting point for these turns is gone, so another turn can't start. This turn is unchanged.",
   finished: (turn: number) => `Turn ${turn} finished. The dish stays open, paused, as an ordinary dish.`,
+  /**
+   * P4.8c fix round 1: Finish leaves a challenge, so its limits end with the turn (src/worker/challenge.ts challengeOf).
+   * Fix round 2: a goal still running is left with it (challengeGoalEndsOnFinish), so nothing after Finish counts for the challenge.
+   */
+  finishedChallenge: (turn: number) => `Turn ${turn} finished. The dish stays open, paused, as an ordinary dish: the challenge’s limits no longer apply, and nothing after this counts for the challenge.`,
 
   badgeRunning: (turn: number, leftTicks: number) => `Turn ${turn} · ${turnClock(leftTicks)} left`,
   badgeDone: (turn: number) => `Turn ${turn} finished`,

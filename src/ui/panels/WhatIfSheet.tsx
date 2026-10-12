@@ -20,6 +20,7 @@ import {
 } from '../strings/whatif';
 import type { KeepChoiceText } from '../strings/keep';
 import { IconAgain, IconAnother, WhatIfIcon } from './WhatIfIcons';
+import { pairOffered, VARIANT_PAIR_UI } from '../strings/variantPair';
 import { amountScale, WhatIfPreview } from './WhatIfPreview';
 import { inertOutside, KeepChoicePanel } from './KeepChoice';
 import {
@@ -30,6 +31,7 @@ import {
   exportBeforeStart,
   pickReplacement,
   selectWhatIf,
+  startPairFromWhatIf,
   startWhatIf,
   whatIfAnswer,
   whatIfBusy,
@@ -39,6 +41,7 @@ import {
   whatIfOpen,
   whatIfReturnTarget,
   whatIfSelected,
+  PLAY_SOURCE,
   type FullStep,
   type WhatIfContext,
 } from './WhatIfState';
@@ -239,6 +242,20 @@ function Selected(props: { readonly answer: WhatIfAnswer; readonly choice: WhatI
         <IconPlay /> {busy ? WHATIF_TEXT.starting : WHATIF_TEXT.start(p.title)}
       </button>
       <p class="whatif-note">{WHATIF_TEXT.startNote}</p>
+      {/* P4.5: an idea of the Garden can also run beside the unchanged Garden (D09 line 115). */}
+      {pairOffered(p, PLAY_SOURCE) ? (
+        <>
+          <button
+            class="btn whatif-wide"
+            disabled={busy}
+            onClick={() => void startPairFromWhatIf(p.id)}
+            data-testid="whatif-pair"
+          >
+            {busy ? VARIANT_PAIR_UI.starting : VARIANT_PAIR_UI.button}
+          </button>
+          <p class="whatif-note">{VARIANT_PAIR_UI.buttonNote}</p>
+        </>
+      ) : null}
     </section>
   );
 }
@@ -393,7 +410,7 @@ function FullStepPanel(props: { readonly answer: WhatIfAnswer; readonly step: Fu
       onExport={() => void exportBeforeStart()}
       onChooseReplacement={() => void chooseReplacement()}
       onPick={pickReplacement}
-      onKeep={(keep) => void startWhatIf(step.pick, keep)}
+      onKeep={(keep) => void (step.pair ? startPairFromWhatIf(step.pair, keep) : startWhatIf(step.pick, keep))}
       onCancel={cancelFullStep}
     />
   );

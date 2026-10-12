@@ -1,10 +1,12 @@
 /**
  * Settings → Sound (UX §2 Settings "sound/music/voice · haptics", §8, §9 "quiet audio"; P3.10): mute,
- * effects / music / voice volumes, quiet audio and haptics. Device preferences only: they change what
+ * effects / music / voice volumes, quiet audio, haptics and narration (P4.9, off by default). Device preferences only: they change what
  * the player hears or feels, never the dish. Defaults come from src/audio/mix.ts (W5-21).
  */
 import { audioPrefsOf } from '@audio/mix';
+import { speechAvailable } from '@audio/narration';
 import { settings, updateSettings } from '../state';
+import { NARRATION_TEXT } from '../strings/narration';
 
 const T = {
   legend: 'Sound',
@@ -14,7 +16,7 @@ const T = {
   music: 'Music volume',
   musicNote: 'The quiet background loop.',
   voice: 'Voice volume',
-  voiceNote: 'For spoken narration, which this version does not have yet.',
+  voiceNote: NARRATION_TEXT.voiceNote,
   quiet: 'Quiet audio',
   quietNote: 'Softer cues and no background sound.',
   haptics: 'Haptics',
@@ -107,6 +109,21 @@ export function SoundSettings() {
       </label>
       <p class="setting-note sound-note" id="sound-haptics-note">
         {T.hapticsNote}
+      </p>
+      {/* P4.9 (UX §8.3): the 16 fixed phrases, only with their evidence (src/ui/narration.ts); off by default. */}
+      <label class="sound-check">
+        <input
+          type="checkbox"
+          checked={p.narration}
+          onChange={(e) => updateSettings({ narration: e.currentTarget.checked })}
+          aria-describedby="sound-narration-note"
+          data-testid="setting-narration"
+        />
+        {NARRATION_TEXT.setting}
+      </label>
+      <p class="setting-note sound-note" id="sound-narration-note">
+        {NARRATION_TEXT.note}
+        {speechAvailable() ? null : ` ${NARRATION_TEXT.noVoice}`}
       </p>
     </fieldset>
   );

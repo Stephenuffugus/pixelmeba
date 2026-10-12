@@ -75,7 +75,7 @@ export interface SlotInfo {
    * or a checkpoint: 'baseline' (a Try my dish starting point) or 'snapshot' (a snapshot bookmark).
    */
   readonly shelfKind?: 'baseline' | 'snapshot';
-  /** P4.7: what the shelf record was written for (a try id 'try-<n>' or a bookmark id). */
+  /** P4.7: what the shelf record was written for (a try id 'try-<n>', a challenge id 'ch-<n>' or a bookmark id). */
   readonly createdFor?: string;
 }
 
@@ -112,7 +112,7 @@ export function isShelfSlot(slotId: string): boolean {
 }
 
 /** P4.7 fix round 1: SaveStore.remove's refusal of a shelf id (shelf records go only through Shelf.remove). */
-export const SHELF_REMOVE_REFUSED = 'That is a Try my dish starting point, not a saved dish; it is removed from the storage panel.';
+export const SHELF_REMOVE_REFUSED = 'That is a starting point for Try my dish or a challenge, or a snapshot bookmark, not a saved dish; remove it in Saved dishes → Storage.';
 
 export interface SaveRequest {
   readonly slotId: string;

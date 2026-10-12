@@ -24,6 +24,9 @@ test('compare: Feed on B, run 60 s, read results beside the prediction, pick a c
   await expect(page.getByTestId('compare-label-A')).toContainText('56 alive');
   await expect(page.getByTestId('compare-label-B')).toContainText('56 alive');
   await expect(page.getByTestId('compare-run')).toBeDisabled();
+  // D-0090: the setup's promise is about the dish only (completion autosaves Continue).
+  await expect(page.getByTestId('compare-screen')).toContainText('Closing a comparison discards its two copies. Your own dish is never changed by it.');
+  await expect(page.getByTestId('compare-screen')).not.toContainText('your saves');
 
   const phone = await page.getByTestId('compare-show-A').isVisible();
   if (phone) {

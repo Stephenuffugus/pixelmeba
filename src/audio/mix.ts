@@ -3,7 +3,7 @@
  * Pure functions, unit-tested in tests/audio/settings.test.ts.
  *
  * W5-21 (proposed decision): defaults effects 0.7, music 0.4, voice 0.8, not muted, quiet audio off,
- * haptics off. Quiet audio = effects −12 dB and the ambient loop off. The ambient loop sits at −24 dB
+ * haptics off, narration off (P4.9). Quiet audio = effects −12 dB and the ambient loop off. The ambient loop sits at −24 dB
  * on the music bus (ARCH §10.3). Mute silences every bus.
  */
 
@@ -14,6 +14,11 @@ export interface AudioPrefs {
   readonly muted: boolean;
   readonly quietAudio: boolean;
   readonly haptics: boolean;
+  /**
+   * P4.9 (UX §8.3): speak the 16 fixed phrases when their evidence is true (src/audio/narration.ts). Off by
+   * default; optional in stored settings, so settings stored by older builds load with it off.
+   */
+  readonly narration: boolean;
 }
 
 /** The stored settings' audio fields; any may be missing (settings stored by an older build). */
@@ -26,6 +31,7 @@ export const AUDIO_DEFAULTS: AudioPrefs = {
   muted: false,
   quietAudio: false,
   haptics: false,
+  narration: false,
 };
 
 /** Quiet audio lowers effects by this much (W5-21). */
@@ -50,6 +56,7 @@ export function audioPrefsOf(s: StoredAudioPrefs): AudioPrefs {
     muted: s.muted === true,
     quietAudio: s.quietAudio === true,
     haptics: s.haptics === true,
+    narration: s.narration === true,
   };
 }
 

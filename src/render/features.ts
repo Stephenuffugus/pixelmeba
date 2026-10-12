@@ -33,6 +33,7 @@ import {
   CUE_RESERVE_BAND_MASK,
   CUE_RESERVE_BAND_SHIFT,
 } from '@worker/protocol';
+import { STAIN_MS, stainAlpha } from './world3';
 
 /** The marks featureLayers() can pick; each is a module's content `visualLayer` id. */
 export type FeatureLayerId =
@@ -196,4 +197,107 @@ export function featureFrameKeys(features: Readonly<Record<string, AtlasFeatureL
     out[layer] = rows;
   }
   return out;
+}
+
+// -------------------------------------------------------------------------------------------------
+// Reduced motion (UX §7.4 filled in at P4.9; D08 "Reduced motion removes camera easing, repeating pulses
+// and trails while retaining state patterns and text"). Every time-varying dish effect's choice is one
+// of these pure functions; src/render/renderer.ts only calls them, and tests/render/reduced-motion.test.ts
+// checks each with reduced motion on and off. Nothing here reads the world: the inputs are snapshot
+// cues, the event type and the renderer's own clock.
+
+/** The split flash after a committed division (motion on). */
+export const SPLIT_FLASH_MS = 380;
+/** UX §7.4: "division flash → static split frame for 1 s". */
+export const SPLIT_STATIC_MS = 1000;
+/** The expanding ring where the player just placed something (motion on). */
+export const PLACEMENT_RING_MS = 500;
+/** Reduced motion: the same ring, still, at its full radius, for this long. */
+export const PLACEMENT_STATIC_MS = 1000;
+/** Reduced motion: a death shows the dissolve's still frame (or a fungal segment's decaying tile) this long. */
+export const DEATH_STATIC_MS = 600;
+/** Period of a feature mark's two-frame pulse (E08 granule on detritus intake), motion on. */
+export const FEATURE_PULSE_MS = 400;
+
+export type EffectKind = 'split' | 'deposit';
+
+/** One transient effect on the dish: what it is, how long it stays and whether it moves. */
+export interface EffectSpec {
+  readonly kind: EffectKind;
+  readonly durationMs: number;
+  /** false: drawn still (no growth, no fade) for its whole life (reduced motion). */
+  readonly animated: boolean;
+}
+
+/** A snapshot event's effect, if it has one: only a committed birth ('birth') draws one (the split). */
+export function effectForEvent(type: string, reduced: boolean): EffectSpec | null {
+  if (type !== 'birth') return null;
+  return reduced ? { kind: 'split', durationMs: SPLIT_STATIC_MS, animated: false } : { kind: 'split', durationMs: SPLIT_FLASH_MS, animated: true };
+}
+
+/** The placement ring's effect (a placement the player made). */
+export function placementEffect(reduced: boolean): EffectSpec {
+  return reduced ? { kind: 'deposit', durationMs: PLACEMENT_STATIC_MS, animated: false } : { kind: 'deposit', durationMs: PLACEMENT_RING_MS, animated: true };
+}
+
+/** How an effect is drawn at fraction `t` (0..1) of its life: ring radius, stroke alpha, split divider. */
+export interface EffectLook {
+  readonly radius: number;
+  readonly alpha: number;
+  /** A short bar across the ring: the static split frame ("it split in two"). */
+  readonly divider: boolean;
+}
+
+export function effectLook(spec: EffectSpec, baseRadius: number, t: number): EffectLook {
+  const u = Math.min(1, Math.max(0, t));
+  if (spec.kind === 'split') {
+    return spec.animated ? { radius: baseRadius * (0.4 + u), alpha: 0.7 * (1 - u), divider: false } : { radius: baseRadius * 0.9, alpha: 0.7, divider: true };
+  }
+  return spec.animated ? { radius: baseRadius * (0.7 + 0.3 * u), alpha: 0.6 * (1 - u), divider: false } : { radius: baseRadius, alpha: 0.6, divider: false };
+}
+
+/**
+ * The frame of a body animation (move, idle, feeding, stress): it cycles on the clock with motion on;
+ * in reduced motion, and in the still Preparing/Resting/Waking poses (dormant), it is the animation's
+ * reducedMotionFrame, so the feeding or stress pose stays as a static state mark.
+ */
+export function bodyFrameIndex(frames: number, durationMs: number, reducedMotionFrame: number, reduced: boolean, dormant: boolean, clock: number): number {
+  if (reduced || dormant || frames <= 1 || !(durationMs > 0)) return reducedMotionFrame;
+  return Math.floor(clock / durationMs) % frames;
+}
+
+/** A newborn's alpha over its first snapshot: a short fade in with motion on, full at once in reduced motion. */
+export function newbornAlpha(justBorn: boolean, reduced: boolean, alpha: number): number {
+  return justBorn && !reduced ? 0.75 + 0.25 * alpha : 1;
+}
+
+/** How long a death's ghost stays: the dissolve's frames, a fungal segment's decay, or the static still. */
+export function ghostDurationMs(death: { readonly frames: number; readonly durationMs: number } | null, reduced: boolean, decayMs: number): number {
+  if (reduced) return DEATH_STATIC_MS;
+  return death ? death.frames * death.durationMs : decayMs;
+}
+
+/** The dissolve frame at `t` ms after the death (the still frame in reduced motion). */
+export function ghostFrameIndex(death: { readonly frames: number; readonly durationMs: number; readonly reducedMotionFrame: number }, reduced: boolean, t: number): number {
+  if (reduced) return death.reducedMotionFrame;
+  return Math.min(death.frames - 1, Math.floor(t / death.durationMs));
+}
+
+/** A dead fungal segment's decaying tile: fades out with motion on, held still in reduced motion. */
+export function decayTileAlpha(t: number, total: number, reduced: boolean): number {
+  return reduced ? 1 : Math.max(0, 1 - t / total);
+}
+
+/** Whether a pulsing feature mark shows its bright frame now; reduced motion: always (a static mark). */
+export function featurePulseOn(clock: number, reduced: boolean): boolean {
+  return reduced || Math.floor(clock / FEATURE_PULSE_MS) % 2 === 0;
+}
+
+/**
+ * The stain an emptied food object leaves (src/render/world3.ts stainAlpha): fades over STAIN_MS with
+ * motion on; in reduced motion it is held at its first alpha and removed after the same time.
+ */
+export function stainAlphaAt(t: number, reduced: boolean): number {
+  if (!reduced) return stainAlpha(t);
+  return t >= 0 && t < STAIN_MS ? stainAlpha(0) : 0;
 }

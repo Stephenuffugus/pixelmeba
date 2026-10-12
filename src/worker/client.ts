@@ -18,8 +18,12 @@ import type { FavoriteOp } from './protocol';
 import type { GoalOffer } from './protocol';
 import type { TryGoalOption, TryRefusalCode } from './protocol';
 import type { TurnRecord } from '@persist/notebookTurns';
+import type { ChallengeInput, ChallengeRecord } from '@persist/notebookChallenges'; // P4.8c
+import type { NotebookRecord } from '@persist/notebook';
 import type { MapWindow, RelationshipMapData } from './relationshipMap';
 import type { ProbeMask } from './probes';
+import type { BookmarkEventRef, GalleryEntryInput } from './protocol';
+import type { StorageInfo } from './storage';
 import { PROTOCOL_VERSION, stamp, type DishInfo, type DishSource, type Envelope, type FamilyAnswer, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 
 export class WorkerRequestError extends Error {
@@ -80,6 +84,9 @@ export type TryAnswer =
   | { readonly ok: true; readonly info: DishInfo; readonly turn: TurnRecord; readonly kept: WhatIfKept | null }
   | { readonly ok: false; readonly code: TryRefusalCode; readonly message: string };
 
+/** P4.8c: a challenge request's answer, or its refusal (nothing changed). */
+export type ChallengeAnswer<T> = ({ readonly ok: true } & T) | { readonly ok: false; readonly message: string };
+
 /** Unsolicited experiment packets (P2.5). */
 export type ExperimentNotice = Extract<FromWorker, { type: 'experimentStamp' | 'experimentWaiting' | 'experimentEnded' }>;
 
@@ -110,6 +117,8 @@ export class SimClient {
   private readonly checkpointListeners: ((m: CheckpointNotice) => void)[] = [];
   private readonly notebookListeners: ((m: NotebookNotice) => void)[] = [];
   private readonly tryListeners: ((m: TryNotice) => void)[] = [];
+  /** P4.8c: commands a challenge turn refused (unsolicited, besides the command's ack). */
+  private readonly challengeListeners: ((m: Extract<FromWorker, { type: 'challengeBlocked' }>) => void)[] = [];
 
   constructor(private readonly worker: WorkerLike) {
     worker.onmessage = (ev) => this.receive(ev.data);
@@ -188,6 +197,41 @@ export class SimClient {
   }
 
   /** P4.7: Try my dish notices (a turn's horizon; a turn record changed). Answers to tryFinish are delivered here too. */
+  /** P4.8c: a command a challenge turn refused (its words; the dish is unchanged). */
+  onChallengeBlocked(fn: (m: Extract<FromWorker, { type: 'challengeBlocked' }>) => void): () => void {
+    this.challengeListeners.push(fn);
+    return () => {
+      const i = this.challengeListeners.indexOf(fn);
+      if (i >= 0) this.challengeListeners.splice(i, 1);
+    };
+  }
+
+  /** P4.8c: save a custom challenge of the paused dish (its baseline goes on the shelf). */
+  async challengeSave(dishId: string, challenge: ChallengeInput): Promise<ChallengeAnswer<{ readonly record: NotebookRecord; readonly challenge: ChallengeRecord }>> {
+    const msg = await this.request<Extract<FromWorker, { type: 'challengeSaved' | 'challengeRefused' }>>((requestId) => ({ type: 'challengeSave', requestId, dishId, challenge }));
+    return msg.type === 'challengeRefused' ? { ok: false, message: msg.message } : { ok: true, record: msg.record, challenge: msg.challenge };
+  }
+
+  /** P4.8c: the challenge file (text and file name). */
+  async challengeExport(dishId: string, challengeId: string): Promise<ChallengeAnswer<{ readonly text: string; readonly filename: string }>> {
+    const msg = await this.request<Extract<FromWorker, { type: 'challengeExported' | 'challengeRefused' }>>((requestId) => ({ type: 'challengeExport', requestId, dishId, challengeId }));
+    return msg.type === 'challengeRefused' ? { ok: false, message: msg.message } : { ok: true, text: msg.text, filename: msg.filename };
+  }
+
+  /** P4.8c: whether a challenge can start from this dish now (null: it can). Read-only. */
+  async challengeCheck(dishId: string, challengeId: string): Promise<string | null> {
+    const msg = await this.request<Extract<FromWorker, { type: 'challengeChecked' | 'challengeRefused' }>>((requestId) => ({ type: 'challengeStart', requestId, dishId, challengeId, newDishId: '', check: true }));
+    return msg.type === 'challengeRefused' ? msg.message : msg.refusal;
+  }
+
+  /** P4.8c: start a challenge turn, keeping the open dish first (D-0033). */
+  async challengeStartKeeping(dishId: string, challengeId: string, newDishId: string, keepFrom: KeepFrom | null): Promise<ChallengeAnswer<{ readonly info: DishInfo; readonly turn: TurnRecord; readonly kept: WhatIfKept | null }> | KeepRefused> {
+    const msg = await this.request<Extract<FromWorker, { type: 'challengeStarted' | 'challengeRefused' | 'keepRefused' }>>((requestId) => ({ type: 'challengeStart', requestId, dishId, challengeId, newDishId, ...(keepFrom ? { keepFrom } : {}) }));
+    if (msg.type === 'keepRefused') return keepRefused(msg);
+    if (msg.type === 'challengeRefused') return { ok: false, message: msg.message };
+    return { ok: true, info: msg.info, turn: msg.turn, kept: msg.kept ?? null };
+  }
+
   onTry(fn: (m: TryNotice) => void): () => void {
     this.tryListeners.push(fn);
     return () => {
@@ -262,6 +306,53 @@ export class SimClient {
     return this.request<NotebookAnswer>((requestId) => ({ type: 'storyMark', requestId, dishId, id, mark }));
   }
 
+  /** P4.8b: add a bookmark (now, optionally with a stored snapshot; or an event row, text only). Resolves with the record or the refusal. */
+  async bookmarkAdd(dishId: string, title: string, snapshot: boolean, event: BookmarkEventRef | null): Promise<NotebookAnswer> {
+    return this.request<NotebookAnswer>((requestId) => ({ type: 'bookmarkAdd', requestId, dishId, title, snapshot, event }));
+  }
+
+  /** P4.8b: delete one bookmark (notebook state). */
+  async bookmarkDelete(dishId: string, id: string): Promise<NotebookAnswer> {
+    return this.request<NotebookAnswer>((requestId) => ({ type: 'bookmarkDelete', requestId, dishId, id }));
+  }
+
+  /**
+   * P4.8b: open snapshot bookmark `id` of dish `dishId` as a new branch, keeping the open dish first (D-0033).
+   * `gone`: the stored moment is missing or unreadable (nothing changed).
+   */
+  async bookmarkOpenKeeping(
+    dishId: string,
+    id: string,
+    newDishId: string,
+    keepFrom: KeepFrom | null,
+  ): Promise<KeptOr<{ readonly info: DishInfo; readonly branch?: { readonly fromName: string; readonly tick: number } }> | { readonly ok: false; readonly gone: string }> {
+    const msg = await this.request<Extract<FromWorker, { type: 'loaded' | 'keepRefused' | 'bookmarkGone' }>>((requestId) => ({ type: 'bookmarkOpen', requestId, dishId, id, newDishId, ...(keepFrom ? { keepFrom } : {}) }));
+    if (msg.type === 'bookmarkGone') return { ok: false, gone: msg.message };
+    if (msg.type === 'keepRefused') return keepRefused(msg);
+    return { ok: true, info: msg.info, kept: msg.kept ?? null, ...(msg.branch ? { branch: msg.branch } : {}) };
+  }
+
+  /** P4.8b: save a specimen to the gallery (notebook state; never spawns). */
+  async galleryAdd(dishId: string, entry: GalleryEntryInput): Promise<NotebookAnswer> {
+    return this.request<NotebookAnswer>((requestId) => ({ type: 'galleryAdd', requestId, dishId, entry }));
+  }
+
+  /** P4.8b: delete one gallery entry. */
+  async galleryDelete(dishId: string, id: string): Promise<NotebookAnswer> {
+    return this.request<NotebookAnswer>((requestId) => ({ type: 'galleryDelete', requestId, dishId, id }));
+  }
+
+  /** P4.8b: what this device stores (read-only). */
+  async storageInfo(): Promise<StorageInfo> {
+    return (await this.request<Extract<FromWorker, { type: 'storageInfo' }>>((requestId) => ({ type: 'storageInfo', requestId }))).storage;
+  }
+
+  /** P4.8b: remove one checkpoint or shelf record (the storage panel, after its confirmation); resolves with the store as it now is. */
+  async storageRemove(slotId: string): Promise<{ readonly storage: StorageInfo; readonly removed: boolean }> {
+    const msg = await this.request<Extract<FromWorker, { type: 'storageInfo' }>>((requestId) => ({ type: 'storageRemove', requestId, slotId }));
+    return { storage: msg.storage, removed: msg.removed === true };
+  }
+
   /** Every packet leaves stamped with the protocol version. */
   private send(msg: ToWorker): void {
     this.worker.postMessage(stamp(msg));
@@ -314,6 +405,11 @@ export class SimClient {
     if (msg.type === 'tryHorizon') {
       // P4.7 (unsolicited): a turn reached its horizon.
       for (const fn of this.tryListeners) fn(msg);
+      return;
+    }
+    if (msg.type === 'challengeBlocked') {
+      // P4.8c (unsolicited): a challenge turn refused a command (the ack resolves the command as usual).
+      for (const fn of this.challengeListeners) fn(msg);
       return;
     }
     // P4.7: a turn record changed (unsolicited, or the answer to tryFinish, which then resolves as usual).
@@ -533,6 +629,30 @@ export class SimClient {
       ...(keepFrom ? { keepFrom } : {}),
     }));
     if (msg.type === 'keepRefused') return keepRefused(msg);
+    return { ok: true, info: msg.info, compare: msg.compare, kept: msg.kept ?? null };
+  }
+
+  /**
+   * P4.5: compare What if? idea `variantId` with the unchanged Garden for 180 s, keeping the open dish
+   * first (D-0033). Resolves with the idea's new paused dish and the comparison (setup), a keep refusal,
+   * or a readable refusal (`refused`; nothing was started, saved or changed).
+   */
+  async variantPairStart(args: {
+    readonly variantId: string;
+    readonly newDishId: string;
+    readonly compare: { readonly compareId: string; readonly aDishId: string; readonly bDishId: string };
+    readonly sequential: boolean;
+    readonly keepFrom: KeepFrom | null;
+  }): Promise<KeptOr<{ readonly info: DishInfo; readonly compare: ComparisonState }> | { readonly ok: false; readonly code: 'refused'; readonly message: string }> {
+    const { keepFrom, ...rest } = args;
+    const msg = await this.request<Extract<FromWorker, { type: 'variantPairStarted' | 'whatIfRefused' | 'keepRefused' }>>((requestId) => ({
+      type: 'variantPairStart',
+      requestId,
+      ...rest,
+      ...(keepFrom ? { keepFrom } : {}),
+    }));
+    if (msg.type === 'keepRefused') return keepRefused(msg);
+    if (msg.type === 'whatIfRefused') return { ok: false, code: 'refused', message: msg.message };
     return { ok: true, info: msg.info, compare: msg.compare, kept: msg.kept ?? null };
   }
 

@@ -16,16 +16,21 @@ import { canonicalJson, sha256Hex } from '@sim/hash';
 import { goalsProblem, goalsWorldProblem, type GoalRecord } from './notebookGoals';
 import { storiesProblem, storiesRefsProblem, type StoryCard } from './notebookStories';
 import { turnsProblem, turnsWorldProblem, type TurnRecord } from './notebookTurns';
+import { bookmarksProblem, type Bookmark } from './notebookBookmarks';
+import { galleryProblem, galleryWorldProblem, type GalleryEntry } from './notebookGallery';
+import { challengesProblem, challengesWorldProblem, type ChallengeRecord } from './notebookChallenges';
 
 export const NOTEBOOK_FORMAT = 'pixelmeba-notebook';
 export const NOTEBOOK_VERSION = 1;
 /**
- * Largest record (canonical JSON) a file may carry. 1 MB, not 256 KB: a legal favorites record can pass
- * 256 KB (three nested active families of up to 6,000 living members at ≈ 17 bytes per [birthId,
- * birthTick] pair ≈ 306 KB, plus 20 unpinned records of up to 200 members), and an oversized record would
- * be dropped at the next load. PROPOSED DECISION in docs/reports/reviews/g4-wave-5a/favorites-build.md.
+ * Largest record (canonical JSON, UTF-16 units) a file may carry: 2 MiB (D-0090; 1 MiB from wave 5a). An
+ * oversized record is dropped whole at the next load and nothing checks the size at write time, so the cap
+ * must hold everything the app can write with room to spare: every kind at its limit (three followed
+ * families of AGENT_CAP members each) measures 1,285,268 (61.3 %) with the story generator's own texts and
+ * 1,647,868 (78.6 %) with story texts at the validator's 200 units. tests/persistence/bookmarks.test.ts
+ * "every kind at its limit" is the tripwire: the first must stay under 70 % of this cap, the second under it.
  */
-export const NOTEBOOK_MAX_BYTES = 1024 * 1024;
+export const NOTEBOOK_MAX_BYTES = 2 * 1024 * 1024;
 /** CT §12.10 "favorites 3": active favorites per dish. */
 export const FAVORITES_ACTIVE_MAX = 3;
 /** Unpinned favorites kept per dish (the 21st removes the oldest unpinned extinct record, else the oldest unpinned). */
@@ -79,12 +84,21 @@ export interface NotebookRecord {
   readonly stories?: readonly StoryCard[];
   /** P4.7: a Try my dish turn (src/persistence/notebookTurns.ts; at most one); absent in every other dish (reads as []). */
   readonly turns?: readonly TurnRecord[];
+  /** P4.8b: event bookmarks (src/persistence/notebookBookmarks.ts; ≤ 50); absent in records written before them (reads as []). */
+  readonly bookmarks?: readonly Bookmark[];
+  /** P4.8b: the specimen gallery (src/persistence/notebookGallery.ts; ≤ 100); absent in records written before it (reads as []). */
+  readonly gallery?: readonly GalleryEntry[];
+  /** P4.8c: custom challenges (src/persistence/notebookChallenges.ts; ≤ 20); absent in records written before them (reads as []). */
+  readonly challenges?: readonly ChallengeRecord[];
   readonly checksum: string;
 }
 
-/** The message a dropped notebook shows (the dish itself loaded). */
+/**
+ * The message a dropped notebook shows (the dish itself loaded). It names every kind a dropped record loses
+ * (KIND_PROBLEMS below; a new kind adds its name here; tests/persistence/notebook.test.ts pins one word per kind).
+ */
 export const NOTEBOOK_DROPPED_TEXT =
-  "This dish's notebook (favorites, story cards and goals) could not be read, so it was left out. The dish itself loaded.";
+  "This dish's notebook (favorites, story cards, goals, bookmarks, gallery, challenges and its Try my dish turn) could not be read, so it was left out. The dish itself loaded.";
 
 export function emptyNotebook(worldId: string): NotebookRecord {
   return {
@@ -238,6 +252,10 @@ function worldRefsProblem(raw: Record<string, unknown>, refs: NotebookWorldRefs)
   if (stories) return stories;
   const turns = turnsWorldProblem(raw, refs); // P4.7
   if (turns) return turns;
+  const gallery = galleryWorldProblem(raw, refs); // P4.8b (bookmarks name no species or organism)
+  if (gallery) return gallery;
+  const challenges = challengesWorldProblem(raw, refs); // P4.8c (the recorded manifest, species and fields when the loader passes them)
+  if (challenges) return challenges;
   return null;
 }
 
@@ -249,6 +267,9 @@ const KIND_PROBLEMS: Readonly<
   goals: goalsProblem, // P4.4 (notebookGoals.ts)
   stories: storiesProblem, // P4.2 (notebookStories.ts)
   turns: turnsProblem, // P4.7 (notebookTurns.ts)
+  bookmarks: bookmarksProblem, // P4.8b (notebookBookmarks.ts)
+  gallery: galleryProblem, // P4.8b (notebookGallery.ts)
+  challenges: challengesProblem, // P4.8c (notebookChallenges.ts)
 };
 const ENVELOPE_KEYS = ['format', 'notebookVersion', 'worldId', 'nextFavorite', 'checksum'];
 
@@ -330,7 +351,7 @@ export function notebookWithoutNicknames(record: NotebookRecord): NotebookRecord
 
 /** True when the record holds nothing (no favorite, followed or not). Such a record is not written to a file. */
 export function notebookIsEmpty(record: NotebookRecord): boolean {
-  return record.favorites.length === 0 && (record.goals ?? []).length === 0 && (record.stories ?? []).length === 0 && (record.turns ?? []).length === 0;
+  return record.favorites.length === 0 && (record.goals ?? []).length === 0 && (record.stories ?? []).length === 0 && (record.turns ?? []).length === 0 && (record.bookmarks ?? []).length === 0 && (record.gallery ?? []).length === 0 && (record.challenges ?? []).length === 0;
 }
 
 /** Whether any favorite carries a nickname. */

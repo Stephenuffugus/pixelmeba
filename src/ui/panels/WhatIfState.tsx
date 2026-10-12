@@ -5,7 +5,7 @@
  */
 import { batch, signal } from '@preact/signals';
 import type { Speed, WhatIfAnswer, WhatIfKeep, WhatIfPick } from '@worker/protocol';
-import { dishInfo, enterStartedDish, exportContinueFile, exportDishFile, freshDishId, getClient, meta, namedSlots, setSpeed, showToast } from '../state';
+import { dishInfo, enterStartedDish, exportContinueFile, exportDishFile, freshDishId, getClient, meta, namedSlots, setSpeed, showToast, startVariantPair } from '../state';
 import { startedText, WHATIF_TEXT } from '../strings/whatif';
 import type { KeepStep } from './KeepChoice';
 
@@ -19,7 +19,11 @@ export const PLAY_SOURCE = 'FIRST_DISH_V1';
  * The all-slots-used step (UX §3.4): the pick waiting to start, and the player's way of keeping the
  * current dish (the shared KeepStep, D-0033). Cancel clears it and nothing is changed.
  */
-export type FullStep = KeepStep & { readonly pick: WhatIfPick };
+export type FullStep = KeepStep & {
+  readonly pick: WhatIfPick;
+  /** P4.5: the waiting action is "Compare with Garden" for this idea, not Start. */
+  readonly pair?: string;
+};
 
 export const whatIfOpen = signal<WhatIfContext | null>(null);
 export const whatIfAnswer = signal<WhatIfAnswer | null>(null);
@@ -144,6 +148,39 @@ export async function startWhatIf(pick: WhatIfPick, keep: WhatIfKeep = { kind: '
   }
 }
 
+/**
+ * P4.5 "Compare with Garden (180 s)": the idea runs against the unchanged Garden. The worker realizes
+ * both dishes first (a refusal changes nothing), keeps the current dish as Start does (`keep` after the
+ * all-slots-used step), then opens the comparison with the idea's new paused dish behind it.
+ */
+export async function startPairFromWhatIf(variantId: string, keep: WhatIfKeep = { kind: 'auto' }): Promise<void> {
+  if (whatIfBusy.value) return;
+  const from = dishInfo.value?.dishId ?? null;
+  batch(() => {
+    whatIfBusy.value = true;
+    whatIfNotice.value = null;
+  });
+  try {
+    const r = await startVariantPair(variantId, { dishId: from, keep });
+    if (!r.ok) {
+      if (r.code === 'slots-full' || r.code === 'save-unavailable')
+        whatIfFull.value = { stage: 'choose', pick: { kind: 'variant', variantId }, pair: variantId, reason: r.code === 'slots-full' ? 'full' : 'unavailable' };
+      else whatIfNotice.value = r.message;
+      return;
+    }
+    // Opened: the previous dish is kept, so it is not resumed.
+    openedOver = null;
+    batch(() => {
+      whatIfOpen.value = null;
+      whatIfFull.value = null;
+    });
+  } catch (e) {
+    whatIfNotice.value = `${WHATIF_TEXT.cancelled} ${(e as Error).message}`;
+  } finally {
+    whatIfBusy.value = false;
+  }
+}
+
 /** All slots used → "Export it as a file": a real export of the current dish, then Start is offered. */
 export async function exportBeforeStart(): Promise<void> {
   const step = whatIfFull.value;
@@ -153,7 +190,7 @@ export async function exportBeforeStart(): Promise<void> {
   try {
     // With no dish open, the dish being kept is the one Continue holds (D-0033 fix round 1).
     const filename = info ? await exportDishFile(info.dishId) : await exportContinueFile();
-    whatIfFull.value = { stage: 'exported', pick: step.pick, file: filename };
+    whatIfFull.value = { stage: 'exported', pick: step.pick, file: filename, ...(step.pair ? { pair: step.pair } : {}) };
   } catch (e) {
     whatIfNotice.value = WHATIF_TEXT.exportFailed((e as Error).message);
   } finally {
@@ -171,6 +208,7 @@ export async function chooseReplacement(): Promise<void> {
       pick: step.pick,
       slots: await namedSlots(),
       slotId: null,
+      ...(step.pair ? { pair: step.pair } : {}),
     };
   } catch (e) {
     whatIfNotice.value = (e as Error).message;

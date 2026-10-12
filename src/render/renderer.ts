@@ -43,7 +43,6 @@ import {
   infectionGlyphShown,
   objectFrame,
   riderMarks,
-  stainAlpha,
   tileFrameKey,
   type AtlasTileLike,
   type DrawKind,
@@ -52,7 +51,25 @@ import {
 import { Camera, ZOOM_CLOSE, ZOOM_NEIGHBORHOOD } from './camera';
 import { DISH_PX_PER_CELL, DISH_TEX, paintAggregation, paintDeposits, paintDish, paintOverlay, repaintDepositCells, type DirtyRect } from './layers';
 import { speciesRgb } from './speciesColors';
-import { featureFrameKeys, featureLayers, featureMarkScale, type AtlasFeatureLike, type FeatureLayerId, type LayerPick } from './features';
+import {
+  bodyFrameIndex,
+  decayTileAlpha,
+  effectForEvent,
+  effectLook,
+  featureFrameKeys,
+  featureLayers,
+  featureMarkScale,
+  featurePulseOn,
+  ghostDurationMs,
+  ghostFrameIndex,
+  newbornAlpha,
+  placementEffect,
+  stainAlphaAt,
+  type AtlasFeatureLike,
+  type EffectSpec,
+  type FeatureLayerId,
+  type LayerPick,
+} from './features';
 import { brushCellOutcome, lifeCellOutcome, ST_NONE, ST_STONE, SUB_WATER, type LabBrushRule, type LifeBrush } from '@sim/grid';
 import type { LineageMarks } from '@worker/protocol';
 import type { FavoriteMarks } from '@worker/protocol';
@@ -155,8 +172,8 @@ function headingRow(headings: number, h: number): number {
 interface Effect {
   g: Graphics;
   start: number;
-  duration: number;
-  kind: 'ring' | 'split' | 'deposit';
+  /** What it is, how long it stays and whether it moves (features.ts effectForEvent / placementEffect; UX §7.4). */
+  spec: EffectSpec;
   x: number;
   y: number;
   radius: number;
@@ -685,7 +702,7 @@ export class DishRenderer {
     }
     let live = 0;
     for (const st of this.stains) {
-      const a = stainAlpha(now - st.start);
+      const a = stainAlphaAt(now - st.start, this.opts.reducedMotion); // UX §7.4: held still in reduced motion
       if (a <= 0) continue;
       this.stains[live++] = st;
       st.particle.alpha = a;
@@ -724,13 +741,15 @@ export class DishRenderer {
   }
 
   private handleEvents(events: readonly VisualEvent[], now: number): void {
-    // Deaths still leave a dissolve (a static frame in reduced motion); births flash only with motion.
+    // Deaths leave a dissolve (a static frame in reduced motion); a committed birth leaves the split flash,
+    // or in reduced motion a static split frame for 1 s (UX §7.4; features.ts effectForEvent).
     const prev = this.cur;
     let byBirth: Map<number, number> | null = null;
     for (const ev of events) {
       const cx = (ev.cell % GRID_W) + 0.5;
       const cy = Math.floor(ev.cell / GRID_W) + 0.5;
-      if (ev.type === 'birth' && !this.opts.reducedMotion) this.spawnEffect('split', cx, cy, 0.9, 380, now);
+      const fx = effectForEvent(ev.type, this.opts.reducedMotion);
+      if (fx) this.spawnEffect(fx, cx, cy, 0.9, now);
       if (ev.type === 'objectEmptied') {
         // A fading stain where a food object ran out (cosmetic; it blocks nothing).
         const tex = this.frames[tileFrameKey('stain', 0)];
@@ -767,17 +786,16 @@ export class DishRenderer {
     }
   }
 
-  /** UI hook: a placement ring where the player just added something. */
+  /** UI hook: a placement ring where the player just added something (a still ring in reduced motion). */
   placementRing(x: number, y: number, radius: number): void {
-    if (this.opts.reducedMotion) return;
-    this.spawnEffect('deposit', x, y, radius, 500, performance.now());
+    this.spawnEffect(placementEffect(this.opts.reducedMotion), x, y, radius, performance.now());
   }
 
-  private spawnEffect(kind: Effect['kind'], x: number, y: number, radius: number, duration: number, now: number): void {
+  private spawnEffect(spec: EffectSpec, x: number, y: number, radius: number, now: number): void {
     if (this.fx.length > 64) return; // budget: cosmetic effects degrade first
     const g = new Graphics();
     this.effects.addChild(g);
-    this.fx.push({ g, start: now, duration, kind, x, y, radius });
+    this.fx.push({ g, start: now, spec, x, y, radius });
   }
 
   private frame(): void {
@@ -899,7 +917,7 @@ export class DishRenderer {
           } else {
             const a = cue & CUE_STRESSED && d.stress ? d.stress : !dormant && cue & CUE_FEEDING && d.feed && !(flags & FLAG_MOVING) ? d.feed : (d.move ?? d.idle);
             if (!a) continue;
-            const idx = reduced || dormant ? a.reducedMotionFrame : Math.floor((now + phase) / a.durationMs) % a.frames;
+            const idx = bodyFrameIndex(a.frames, a.durationMs, a.reducedMotionFrame, reduced, dormant, now + phase);
             hRow = headingRow(d.headings, ents[o + E_HEADING]!);
             tex = a.tex[hRow]![idx];
           }
@@ -911,7 +929,7 @@ export class DishRenderer {
           p.scaleY = sc;
           // Newborns fade in over their first snapshot (not in reduced motion, UX §7.4: no flash);
           // feeders glow very slightly brighter.
-          const born = cue & CUE_JUST_BORN && !reduced ? 0.75 + 0.25 * alpha : 1;
+          const born = newbornAlpha((cue & CUE_JUST_BORN) !== 0, reduced, alpha);
           if (p.alpha !== born) p.alpha = born;
           const tint = dormant ? 0xc8c8c8 : cue & CUE_FEEDING ? 0xffffff : 0xf0f0f0;
           if (this.poolTint[k] !== tint) {
@@ -935,7 +953,7 @@ export class DishRenderer {
             // Module feature layers: only marks the snapshot says are real for this organism.
             const cell = Math.floor(curY[k]!) * GRID_W + Math.floor(curX[k]!);
             const filmBand = cue2 & CUE2_MOD_E10 && cell >= 0 && cell < CELL_COUNT ? filmLevelBand(filmLevel(s.deposits, cell)) : 0;
-            const pulseOn = Math.floor((now + phase) / 400) % 2 === 0;
+            const pulseOn = featurePulseOn(now + phase, reduced);
             const marks = featureLayers(cue, life, selected, this.picks, cue2, { filmBand, reduced, pulseOn });
             for (let m = 0; m < marks; m++) {
               const pick = this.picks[m]!;
@@ -959,17 +977,16 @@ export class DishRenderer {
     for (const gh of this.ghosts) {
       const a = gh.death;
       const t = now - gh.start;
-      const total = reduced ? 600 : a ? a.frames * a.durationMs : DECAY_MS;
+      const total = ghostDurationMs(a, reduced, DECAY_MS);
       if (t > total) continue;
       this.ghosts[live++] = gh;
       if (!draw) continue;
       if (a) {
-        const idx = reduced ? a.reducedMotionFrame : Math.floor(t / a.durationMs);
-        const tex = a.tex[gh.row]![Math.min(a.frames - 1, idx)];
+        const tex = a.tex[gh.row]![ghostFrameIndex(a, reduced, t)];
         if (tex) gh.particle.texture = tex;
         gh.particle.scaleX = scale;
         gh.particle.scaleY = scale;
-      } else gh.particle.alpha = reduced ? 1 : 1 - t / total;
+      } else gh.particle.alpha = decayTileAlpha(t, total, reduced);
       list[n++] = gh.particle;
     }
     this.ghosts.length = live;
@@ -992,18 +1009,24 @@ export class DishRenderer {
 
     // Effects.
     this.fx = this.fx.filter((e) => {
-      const t = (now - e.start) / e.duration;
+      const t = (now - e.start) / e.spec.durationMs;
       if (t >= 1) {
         e.g.destroy();
         return false;
       }
       e.g.clear();
-      if (e.kind === 'split') {
-        e.g.circle(e.x, e.y, e.radius * (0.4 + t)).stroke({ width: 1.5 / cam.zoom, color: 0xffffff, alpha: 0.7 * (1 - t) });
-      } else if (e.kind === 'deposit') {
-        e.g.circle(e.x, e.y, e.radius * (0.7 + 0.3 * t)).stroke({ width: 2 / cam.zoom, color: 0x256e9e, alpha: 0.6 * (1 - t) });
+      // Growth and fade only with motion on; reduced motion draws the same ring still (features.ts effectLook).
+      const look = effectLook(e.spec, e.radius, t);
+      if (e.spec.kind === 'split') {
+        e.g.circle(e.x, e.y, look.radius).stroke({ width: 1.5 / cam.zoom, color: 0xffffff, alpha: look.alpha });
+        // The static split frame: a short bar across the ring ("it split in two"), dark-edged to read on any substrate.
+        if (look.divider) {
+          const lw = 1.5 / cam.zoom;
+          e.g.moveTo(e.x, e.y - look.radius).lineTo(e.x, e.y + look.radius).stroke({ width: lw * 2.2, color: 0x172c35, alpha: look.alpha });
+          e.g.moveTo(e.x, e.y - look.radius).lineTo(e.x, e.y + look.radius).stroke({ width: lw, color: 0xffffff, alpha: look.alpha });
+        }
       } else {
-        e.g.circle(e.x, e.y, e.radius).stroke({ width: 1 / cam.zoom, color: 0xffffff, alpha: 1 - t });
+        e.g.circle(e.x, e.y, look.radius).stroke({ width: 2 / cam.zoom, color: 0x256e9e, alpha: look.alpha });
       }
       return true;
     });

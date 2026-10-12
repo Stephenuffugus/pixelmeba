@@ -7,6 +7,8 @@ import { atDishTime, dishClock, dishInfo, meta } from '../state';
 import { savedIdeaLine, slotNumber } from '../strings/whatif';
 import { slotModesLine } from '../strings/modes';
 import { keepPlanText } from '../strings/keep';
+import { StoragePanel } from './StoragePanel';
+import { STORAGE_UI } from '../strings/notebookTools';
 
 /** Continue first, then the named slots in their own order (Slot 1 … Slot 10, never "slot10" before "slot2"). */
 function savedInOrder(slots: readonly SlotSummary[]): SlotSummary[] {
@@ -25,6 +27,8 @@ export function Saves() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   /** P2.8: the automatic checkpoint whose Open asks first (Continue would follow the new branch). */
   const [confirmOpen, setConfirmOpen] = useState<string | null>(null);
+  /** P4.8b: the storage panel (sizes and cleanup), shown on request. */
+  const [storageOpen, setStorageOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // Focus follows the delete confirmation (as in the checkpoint list): Keep takes focus when it appears,
   // Keep returns it to Delete…, and after a deletion it goes to the page heading (never to <body>).
@@ -144,6 +148,13 @@ export function Saves() {
             refresh={refresh}
           />
         ) : null}
+        {/* P4.8b (D02 §20 "Show approximate storage used and offer explicit cleanup"): Storage. */}
+        <div>
+          <button class="btn" aria-expanded={storageOpen} onClick={() => setStorageOpen(!storageOpen)} data-testid="saves-storage">
+            {STORAGE_UI.button}
+          </button>
+        </div>
+        {storageOpen ? <StoragePanel onChanged={refresh} /> : null}
         <section class="card">
           <h2>Import</h2>
           <p>Open a .pixelmeba file someone shared with you: a saved dish or a starting recipe. A damaged or unsupported file changes nothing.</p>

@@ -8,14 +8,18 @@
  * - the storage preflight and the kind's limit refuse with a message and leave everything as it was;
  * - write-once: a second put never replaces a record; remove only by id (and only shelf ids);
  * - SaveStore.list(), slot() and freeSlot() never show or count shelf ids;
- * - a corrupt shelf record makes get() return null, never a fallback to another record.
+ * - a corrupt shelf record makes get() return null, never a fallback to another record;
+ * - two puts of one kind in flight together on one Shelf (a backend whose reads and commits yield) get
+ *   distinct ids and both read back; a failed put never blocks the next (writes are serialized);
+ * - the refusals name what the records are for (Try my dish and challenges share the baseline limit) and
+ *   where to remove one (Saved dishes → Storage).
  */
 import { describe, expect, it } from 'vitest';
 import { CheckpointRing } from '../../src/persistence/checkpoints';
 import { gzipText } from '../../src/persistence/compress';
 import { buildSaveFile, parseSaveFile } from '../../src/persistence/saveFile';
-import { Shelf, SHELF_LIMITS, shelfKindOf, type ShelfRequest } from '../../src/persistence/shelf';
-import { AUTOSAVE_SLOT, isShelfSlot, MemoryBackend, SaveStore, SHELF_REMOVE_REFUSED } from '../../src/persistence/store';
+import { Shelf, SHELF_LIMITS, SHELF_TEXT, shelfKindOf, type ShelfRequest } from '../../src/persistence/shelf';
+import { AUTOSAVE_SLOT, isShelfSlot, MemoryBackend, SaveStore, SHELF_REMOVE_REFUSED, type SlotInfo, type StoredRecord } from '../../src/persistence/store';
 import { realizeRecipe } from '../../src/sim/recipes';
 import { run } from '../../src/sim/tick';
 import { registry } from '../helpers/world';
@@ -87,6 +91,10 @@ describe('the shelf', () => {
     if (!r.ok) throw new Error('not put');
     const before = snapshotOf(backend);
     await expect(store.remove(r.slot.slotId)).rejects.toThrow(SHELF_REMOVE_REFUSED);
+    // Its words name every kind of shelf record: Try my dish and challenge starting points, snapshot bookmarks.
+    expect(SHELF_REMOVE_REFUSED).toMatch(/Try my dish/);
+    expect(SHELF_REMOVE_REFUSED).toMatch(/challenge/);
+    expect(SHELF_REMOVE_REFUSED).toMatch(/snapshot bookmark/);
     expect(snapshotOf(backend)).toBe(before);
     expect((await shelf.get(r.slot.slotId, accept))?.text).toBe(s.text);
     await store.remove('slot2');
@@ -138,7 +146,7 @@ describe('the shelf', () => {
     const full = snapshotOf(backend);
     const r11 = await shelf.put('baseline', req(s, 'try-11'));
     expect(r11).toMatchObject({ ok: false, reason: 'full' });
-    if (!r11.ok) expect(r11.message).toBe(`This device already keeps 10 Try my dish starting points. Remove one you no longer need, then try again. Nothing was changed.`);
+    if (!r11.ok) expect(r11.message).toBe(`This device already keeps 10 starting points for Try my dish and challenges. Remove one you no longer need in Saved dishes → Storage, then try again. Nothing was changed.`);
     expect(await shelf.check('baseline')).toMatchObject({ reason: 'full' });
     expect(snapshotOf(backend)).toBe(full);
     // Another kind has its own limit.
@@ -205,5 +213,75 @@ describe('the shelf', () => {
     expect(await shelf.get(c.slot.slotId, accept)).toBeNull();
     expect(await shelf.get('slot1', accept)).toBeNull();
     expect(await shelf.get('shelf-baseline-99999999-none', accept)).toBeNull();
+  });
+
+  it('the refusals are true for every caller: baselines serve Try my dish and challenges; snapshots are named as such', () => {
+    expect(SHELF_TEXT.full('snapshot', 20)).toBe('This device already keeps 20 snapshot bookmarks. Remove one you no longer need in Saved dishes → Storage, then try again. Nothing was changed.');
+    expect(SHELF_TEXT.storageFull('baseline', 'd')).toBe('There is not enough storage space for this starting point (d). Nothing was changed.');
+    expect(SHELF_TEXT.storageFull('snapshot', 'd')).toBe('There is not enough storage space for this snapshot (d). Nothing was changed.');
+    expect(SHELF_TEXT.writeFailed('baseline', 'd')).toBe('The starting point could not be stored (d). Nothing was changed.');
+    expect(SHELF_TEXT.writeFailed('snapshot', 'd')).toBe('The snapshot could not be stored (d). Nothing was changed.');
+  });
+
+  it('two puts of one kind in flight together get distinct ids and both read back; a failed put does not block the next', async () => {
+    const { backend, s } = await playerStore();
+    const later = await saveText(40);
+    // Reads and commits yield macrotasks (a commit takes 25 ms), so two puts started together would interleave:
+    // without the chain both read the index before either commits and choose the same sequence number.
+    const later2 = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
+    const turns = () => later2(0).then(() => later2(0));
+    const slow = Object.create(backend) as MemoryBackend;
+    slow.listSlots = async (): Promise<SlotInfo[]> => {
+      const v = await backend.listSlots();
+      await turns();
+      return v;
+    };
+    slow.getSlot = async (id: string): Promise<SlotInfo | null> => {
+      const v = await backend.getSlot(id);
+      await turns();
+      return v;
+    };
+    slow.getRecord = async (id: string): Promise<StoredRecord | null> => {
+      await turns();
+      return backend.getRecord(id);
+    };
+    slow.commit = async (ops) => {
+      await turns();
+      await later2(25);
+      return backend.commit(ops);
+    };
+    const shelf = new Shelf(slow, undefined, 'tab1');
+    const [a, b] = await Promise.all([shelf.put('baseline', req(s, 'try-1')), shelf.put('baseline', req(later, 'try-2'))]);
+    expect(a.ok && b.ok).toBe(true);
+    if (!a.ok || !b.ok) return;
+    expect(a.slot.slotId).toBe('shelf-baseline-00000001-tab1');
+    expect(b.slot.slotId).toBe('shelf-baseline-00000002-tab1');
+    const gotA = await shelf.get(a.slot.slotId, accept);
+    const gotB = await shelf.get(b.slot.slotId, accept);
+    expect(gotA?.text).toBe(s.text);
+    expect(gotA?.slot.checksum).toBe(s.checksum);
+    expect(gotB?.text).toBe(later.text);
+    expect(gotB?.slot.checksum).toBe(later.checksum);
+    expect((await shelf.list('baseline')).map((x) => [x.slotId, x.createdFor])).toEqual([
+      [a.slot.slotId, 'try-1'],
+      [b.slot.slotId, 'try-2'],
+    ]);
+    // A failed write (its commit throws) is answered as such, and the put queued behind it still goes through.
+    backend.failNextCommit = true;
+    const [c, d] = await Promise.all([shelf.put('snapshot', req(s, 'bm-1')), shelf.put('snapshot', req(later, 'bm-2'))]);
+    expect(c).toMatchObject({ ok: false, reason: 'write-failed' });
+    expect(d.ok).toBe(true);
+    if (d.ok) expect((await shelf.get(d.slot.slotId, accept))?.text).toBe(later.text);
+    // A removal waits its turn too, and a later put does not reuse a removed id's neighbour by mistake.
+    const [removed, e] = await Promise.all([shelf.remove(a.slot.slotId), shelf.put('baseline', req(s, 'try-3'))]);
+    expect(removed).toBe(true);
+    expect(e.ok && e.slot.slotId).toBe('shelf-baseline-00000003-tab1');
+    expect((await shelf.list('baseline')).map((x) => x.createdFor)).toEqual(['try-2', 'try-3']);
+    // A removal whose commit throws rejects, and the put queued behind it still goes through.
+    backend.failNextCommit = true;
+    const [f, g] = await Promise.allSettled([shelf.remove(b.slot.slotId), shelf.put('baseline', req(later, 'try-4'))]);
+    expect(f.status).toBe('rejected');
+    expect(g.status === 'fulfilled' && g.value.ok).toBe(true);
+    expect((await shelf.list('baseline')).map((x) => x.createdFor)).toEqual(['try-2', 'try-3', 'try-4']);
   });
 });

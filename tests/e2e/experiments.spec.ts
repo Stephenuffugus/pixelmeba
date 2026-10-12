@@ -97,6 +97,9 @@ test('experiments: Notebook → Experiment A → paired run with the change on B
   await page.getByTestId('experiment-prediction').fill(prediction);
   await expectReachable(page.getByTestId('experiment-run'));
   await expect(page.getByTestId('experiment-run')).toHaveText('Run A and B for 3 min');
+  // D-0090: the note's promise is about the dish only (a start may keep the open dish first).
+  await expect(page.getByTestId('experiment-run-screen')).toContainText("Closing discards the two copies. The experiment's dish is never changed by them.");
+  await expect(page.getByTestId('experiment-run-screen')).not.toContainText('your saves');
   await expectTextAtLeast16px(page, '.xp-panel');
   await expectNoSeriousA11yViolations(page);
 

@@ -43,6 +43,7 @@ import {
   getClient,
   getRenderer,
   overlay,
+  reportDishCommand,
   select,
   sendCommand,
   setOverlay,
@@ -281,6 +282,7 @@ export async function sendLabCommand(payload: CommandPayload): Promise<CommandRe
   const info = dishInfo.value;
   if (!info) return null;
   const res = await getClient().command(info.dishId, `lab-${++commandCounter}`, payload, true);
+  reportDishCommand(info.dishId, payload, res); // the onDishCommand listeners (narration's "Add food" for a food object), as sendCommand does
   if (res && dishInfo.value?.dishId === info.dishId) placementCue(res.accepted); // P3.10: drop / placement_error (+ haptics)
   if (res && dishInfo.value?.dishId === info.dishId && payload.kind === 'cleanWater') {
     showToast(

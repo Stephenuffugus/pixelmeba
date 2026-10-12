@@ -23,6 +23,7 @@ import { stamp, type DishInfo, type DishSource, type Envelope, type FromWorker, 
 import type { ExperimentStampMsg } from './protocol';
 import { captureBaseline, PairedRun, realizeArm, type CompareSpeed, type CompareStatus, type ComparisonResults, type ComparisonState, type Intervention } from './comparison';
 import type { ComparisonExperiment } from './comparison';
+import { prepareVariantPair, realizePairArm, VARIANT_PAIR_TEXT, VARIANT_PAIR_TICKS, variantPairRefusal, VariantPairRun, type ComparisonVariantPair, type VariantPairFacts, type VariantPairSugar } from './variantPair';
 import { experimentCardView, experimentCatalog, experimentOf, GateWatch, inspectedOxygenReading, inspectShowsFoodUse, inspectShowsInfection, PlayerSteps, realizeExperimentArms, stepSpecies, type PlayerStep } from '@sim/experiments';
 import { PAIRED_RUN_LABEL, SINGLE_RUN_LABEL, type ArmObserver } from '@sim/pairedRun';
 import { TICKS_PER_SECOND } from '@sim/constants';
@@ -75,9 +76,16 @@ import { gzipText } from '@persist/compress';
 import { parseSaveFile } from '@persist/saveFile';
 import { isShelfSlot } from '@persist/store';
 import { Shelf } from '@persist/shelf';
-import { cleanPrediction, horizonTicksOf, turnOf, withoutTurnNotes, type TurnBaseline, type TurnHorizonTicks, type TurnRecord } from '@persist/notebookTurns';
+import { BOOKMARK_TEXT, BOOKMARKS_MAX, bookmarkClock, bookmarksOf, cleanBookmarkTitle, nextBookmarkId, withoutBookmarkNotes, type Bookmark } from '@persist/notebookBookmarks';
+import { GALLERY_MAX, GALLERY_TEXT, galleryEntryProblem, galleryOf, nextGalleryId, type GalleryEntry } from '@persist/notebookGallery';
+import { eventBookmark, momentSummary, readStorage, storageRemovable } from './storage';
+import { cleanPrediction, horizonTicksOf, turnOf, withoutTurnNotes, type TurnBaseline, type TurnChallenge, type TurnHorizonTicks, type TurnRecord } from '@persist/notebookTurns';
 import { cloneTurn, goalFitsTurn, TRY_REFUSALS, tryGoalOptions, turnAfterChange, turnAfterTime, turnGoal, turnHoldsTime, turnRecordFor, withTurn } from './tryDish';
 import type { TryRefusalCode } from './protocol';
+import { challengeExportText, challengeFileName, challengeGoalEndsOnFinish, CHALLENGE_REFUSALS, challengeRefusal, challengeSaveProblem, turnChallengeDef, turnChallengeGoal, turnChallengeOf } from './challenge';
+import { challengeObjectiveId, challengePredicate, challengesOf, CHALLENGES_MAX, nextChallengeId, type ChallengeRecord } from '@persist/notebookChallenges';
+import { shelfSequenceOf } from '@persist/shelf';
+import { objectiveSupportProblem } from '@sim/objectives';
 
 export interface HostClock {
   now(): number;
@@ -89,7 +97,7 @@ export interface HostClock {
  * D-0033: what an action that replaces the open dish is about to do, for the keep step's refusals. What
  * if? keeps its own wording byte for byte ('whatIf' and 'start' read the same).
  */
-type KeepAction = 'whatIf' | 'start' | 'experiment' | 'open' | 'checkpoint' | 'import' | 'duplicate' | 'tryDish';
+type KeepAction = 'whatIf' | 'start' | 'experiment' | 'open' | 'checkpoint' | 'import' | 'duplicate' | 'tryDish' | 'bookmark';
 
 const NOT_DONE: Readonly<Record<KeepAction, string>> = {
   whatIf: 'the new dish was not started',
@@ -100,6 +108,7 @@ const NOT_DONE: Readonly<Record<KeepAction, string>> = {
   import: 'the file was not opened',
   duplicate: 'the copy was not made',
   tryDish: 'Try my dish did not start', // P4.7
+  bookmark: 'the bookmark was not opened', // P4.8b
 };
 
 /** A save file as buildSaveFile builds it (text, checksum, file). */
@@ -357,6 +366,19 @@ interface Comparison {
   error: string | null;
   /** Set when this comparison is an experiment card's paired run (P2.5). */
   experiment?: LiveExperiment;
+  /** P4.5: set when this comparison is a What if? idea against the unchanged Garden. */
+  variantPair?: LiveVariantPair;
+}
+
+/** P4.5 (src/worker/variantPair.ts): a Garden variant pair's worker state (never saved). */
+interface LiveVariantPair {
+  readonly facts: VariantPairFacts;
+  readonly sequential: boolean;
+  /** The arms' starts (A: R-G0, B: the idea), each under its arm's world id. */
+  readonly startA: WorldState;
+  readonly startB: WorldState;
+  runner: VariantPairRun | null;
+  sugarEnd: VariantPairSugar | null;
 }
 
 const MAX_PUMP_MS = 30;
@@ -386,6 +408,8 @@ export class DishHost {
   /** P4.7 (D-0082): write-once stored snapshots (Try my dish baselines), same backend and atomic commit. */
   private readonly shelf: Shelf | null;
   private ringEnabled = false;
+  /** P4.8b: the platform's storage estimate, read by the storage panel ('storageInfo'). */
+  private readonly storageEstimate: (() => Promise<StorageEstimate | undefined>) | undefined;
   private ringBusy = false;
   private ringKept = 0;
   /** The autosave being handled (D-0033 fix round 3): autosaves run one after another. */
@@ -403,6 +427,7 @@ export class DishHost {
     this.lastPump = clock.now();
     this.ring = store ? new CheckpointRing(store.backend, storageEstimate) : null;
     this.shelf = store ? new Shelf(store.backend, storageEstimate) : null;
+    this.storageEstimate = storageEstimate;
   }
 
   /** Every packet leaves stamped with the protocol version. */
@@ -517,7 +542,7 @@ export class DishHost {
             d.world,
             { name: d.name, savedAt: this.iso(), recipeId: d.world.content.provenance.recipeId },
             // P4.7: "without names or notes" also leaves out a turn's prediction note and the baseline's name.
-            { stripNames: msg.strip, notebook: msg.strip ? withoutTurnNotes(this.notebookOf(d)) : this.notebookOf(d), includeNicknames: msg.includeNicknames === true },
+            { stripNames: msg.strip, notebook: msg.strip ? withoutBookmarkNotes(withoutTurnNotes(this.notebookOf(d))) : this.notebookOf(d), includeNicknames: msg.includeNicknames === true }, // P4.8b: and bookmark titles
           );
           this.post({ type: 'exported', requestId: msg.requestId, text: built.text, filename: `${fileBase(msg.strip ? 'shared-dish' : d.name)}.pixelmeba` });
           return;
@@ -669,6 +694,28 @@ export class DishHost {
           return;
         case 'tryNext':
           await this.tryNext(msg);
+          return;
+        case 'bookmarkAdd': // P4.8b
+          await this.bookmarkAdd(msg);
+          return;
+        case 'bookmarkOpen': // P4.8b
+          await this.bookmarkOpen(msg);
+          return;
+        case 'storageInfo': // P4.8b
+        case 'storageRemove':
+          await this.storageRequest(msg);
+          return;
+        case 'challengeSave': // P4.8c (src/worker/challenge.ts)
+          await this.challengeSave(msg);
+          return;
+        case 'challengeExport':
+          await this.challengeExport(msg);
+          return;
+        case 'challengeStart':
+          await this.challengeStart(msg);
+          return;
+        case 'variantPairStart': // P4.5
+          await this.variantPairStart(msg);
           return;
         default:
           this.handle(msg);
@@ -822,6 +869,7 @@ export class DishHost {
           this.post({ type: 'ack', requestId: msg.requestId, dishId: d.id, result: null, error: 'Pause the dish before taking a sample.' });
           return;
         }
+        const challengeNo = challengeRefusal(d, msg.payload); if (challengeNo !== null) return this.challengeBlocked(d, msg.requestId, challengeNo); // P4.8c: a challenge turn's tool and budget limits (never reaches the world)
         const before = msg.undoable ? serializeWorld(d.world) : null;
         const tick = d.world.tick;
         const cmd = applyNow(d.world, msg.commandId, msg.payload);
@@ -1052,8 +1100,9 @@ export class DishHost {
         let r: { refused: string | null; changes: NotebookChange[] };
         if (msg.type === 'goalLeave') r = nw.goals.leave(d.world);
         else {
-          const def = this.registry.objectives[msg.objectiveId];
-          const offered = def !== undefined && goalCatalog(this.registry, { world: d.world }).some((g) => g.id === def.id);
+          const challengeGoal = turnChallengeGoal(d.notebook, msg.objectiveId, d.world.content.manifest.buildPhase); // P4.8c: Try again on a challenge turn's goal
+          const def = this.registry.objectives[msg.objectiveId] ?? challengeGoal ?? undefined;
+          const offered = def !== undefined && (challengeGoal !== null || goalCatalog(this.registry, { world: d.world }).some((g) => g.id === def.id));
           r = def ? nw.goals.start(d.world, def, offered) : { refused: GOAL_REFUSALS.unknown, changes: [] };
         }
         if (r.refused === null) this.turnEdited(d, mark); // P4.7: a goal started or left on a kept turn is a change too
@@ -1115,6 +1164,7 @@ export class DishHost {
       case 'compareReset': {
         const c = this.needCompare(msg.compareId);
         if (c.status !== 'setup') throw new Error('The change on B can only be cleared before the run starts.');
+        if (c.variantPair) throw new Error(VARIANT_PAIR_TEXT.noReset);
         if (c.experiment) throw new Error("This experiment's change is part of the card and cannot be cleared.");
         c.interventions = [];
         this.resetB(c);
@@ -1124,6 +1174,12 @@ export class DishHost {
       case 'compareRun': {
         const c = this.needCompare(msg.compareId);
         if (c.status !== 'setup') throw new Error('This comparison has already run.');
+        if (c.variantPair) {
+          // P4.5: the fixed 180-s horizon; any other refuses and nothing runs.
+          this.variantPairRun(c, c.variantPair, msg.horizonTicks, msg.speed);
+          this.postCompare(c, msg.requestId);
+          return;
+        }
         const a = this.dishes[c.aDishId]!;
         const b = this.dishes[c.bDishId]!;
         const x = c.experiment;
@@ -1148,7 +1204,8 @@ export class DishHost {
       }
       case 'compareStop': {
         const c = this.needCompare(msg.compareId);
-        if (c.status === 'running') this.finishComparison(c);
+        if (c.status === 'running' && c.variantPair) this.variantPairStop(c, c.variantPair);
+        else if (c.status === 'running') this.finishComparison(c);
         this.postCompare(c, msg.requestId);
         return;
       }
@@ -1223,15 +1280,42 @@ export class DishHost {
       case 'trySetup':
       case 'tryStart':
       case 'tryNext':
+      case 'bookmarkAdd': // P4.8b
+      case 'bookmarkOpen':
+      case 'storageInfo':
+      case 'storageRemove':
+      case 'challengeSave': // P4.8c
+      case 'challengeExport':
+      case 'challengeStart':
+      case 'variantPairStart': // P4.5
         void this.handleAsync(msg);
         return;
+      case 'bookmarkDelete':
+      case 'galleryAdd':
+      case 'galleryDelete': {
+        // P4.8b (D-0070): notebook state only. Never a command; the world is not changed.
+        const d = this.need(msg.dishId);
+        if (d.arm || d.transient) {
+          this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: d.notebook, refused: msg.type === 'bookmarkDelete' ? BOOKMARK_TEXT.arm : GALLERY_TEXT.arm });
+          return;
+        }
+        const mark = this.keptTurnMark(d);
+        const r = msg.type === 'bookmarkDelete' ? this.bookmarkDeleted(d, msg.id) : msg.type === 'galleryDelete' ? this.galleryDeleted(d, msg.id) : this.galleryAdded(d, msg.entry);
+        if (r === null) this.turnEdited(d, mark); // P4.7: a notebook change on a kept turn is a change its slot does not hold
+        this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: this.notebookOf(d), ...(r !== null ? { refused: r } : {}) });
+        return;
+      }
       case 'tryFinish': {
         // P4.7: Finish — the turn becomes an ordinary paused dish (nothing is deleted; the baseline stays on the shelf).
         const d = this.need(msg.dishId);
         if (!d.arm) this.turnHorizon(d);
         const t = d.arm ? null : turnOf(d.notebook);
+        const mark = this.keptTurnMark(d); // D-0084: Finish changes what a kept turn's slot holds (the turn's state, a left goal)
+        const left = t && t.state !== 'finished' && challengeGoalEndsOnFinish(d.notebook) ? (this.watchOf(d)?.goals.leave(d.world).changes ?? []) : []; // P4.8c fix round 2: Finish leaves the challenge's goal too
         if (t && t.state !== 'finished') d.notebook = withTurn(d.notebook, { ...t, state: 'finished' });
+        this.turnEdited(d, mark); // P4.7: a finished turn is no longer the kept one (its slot holds it at the horizon)
         this.post({ type: 'tryTurn', requestId: msg.requestId, dishId: d.id, turn: d.arm ? null : turnOf(d.notebook) });
+        this.notebookChanges(d, left);
         return;
       }
       default:
@@ -1656,6 +1740,7 @@ export class DishHost {
     if (!c || !d.arm || c.id !== d.arm.compareId) return refuse('This comparison has ended.');
     if (d.arm.role === 'A') return refuse('A is the baseline and never receives changes; queue the change on B.');
     if (c.experiment) return refuse("This experiment's one change is already on B; it takes no other change.");
+    if (c.variantPair) return refuse(VARIANT_PAIR_TEXT.noChange); // P4.5: no extra commands (D09 line 115)
     if (c.status !== 'setup') return refuse('Changes can only be queued on B before the run starts.');
     const k = msg.payload.kind;
     if (k === 'sampleTake' || k === 'sampleTransfer' || k === 'sampleDiscard') return refuse('Comparison copies take no samples; sample the dish itself.');
@@ -1690,13 +1775,14 @@ export class DishHost {
       baselineTick: c.baseline.tick,
       status: c.status,
       horizonTicks: c.horizonTicks,
-      ticksRun: c.run?.ticksRun ?? 0,
+      ticksRun: c.run?.ticksRun ?? c.variantPair?.runner?.ticksRun ?? 0,
       speed: c.speed,
       priorSpeed: c.priorSpeed,
       interventions: c.interventions,
       results: c.results,
       error: c.error,
       ...(c.experiment ? { experiment: this.experimentView(c, c.experiment) } : {}),
+      ...(c.variantPair ? { variantPair: this.variantPairView(c.variantPair) } : {}),
     };
   }
 
@@ -1722,6 +1808,7 @@ export class DishHost {
    */
   private pumpComparison(elapsed: number, now: number): void {
     const c = this.comparison;
+    if (c?.variantPair && c.status === 'running') return this.pumpVariantPair(c, c.variantPair, elapsed, now);
     if (!c || c.status !== 'running' || !c.run) return;
     const run = c.run;
     const start = this.clock.now();
@@ -1753,6 +1840,193 @@ export class DishHost {
       c.lastSnapshot = now;
       this.sendSnapshot(this.dishes[c.aDishId]!);
       this.sendSnapshot(this.dishes[c.bDishId]!);
+      this.postCompare(c);
+    }
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // P4.5 Paired Garden variants (src/worker/variantPair.ts; SPEC §13.3–§13.4, D09 line 115). A What if?
+  // idea runs against the unchanged Garden for the fixed 180 s, through the comparison engine's state
+  // and screens. Modelled on an experiment card's paired start: both arms are realized from content
+  // first (a refusal keeps nothing), then the open dish is kept (D-0033), then a NEW paused dish holding
+  // the idea's start opens; it never runs during the comparison. The arms take no command.
+
+  /** Why this pair cannot start now (null: it can). Read before and again after the keep's awaits. */
+  private variantPairProblem(msg: Extract<ToWorker, { type: 'variantPairStart' }>): string | null {
+    const refusal = variantPairRefusal(this.registry, msg.variantId);
+    if (refusal !== null) return refusal;
+    if (this.comparison) return VARIANT_PAIR_TEXT.busy;
+    const all = [msg.newDishId, msg.compare.aDishId, msg.compare.bDishId];
+    if (!msg.compare.compareId || new Set(all).size !== 3 || all.some((id) => !id || this.dishes[id])) return VARIANT_PAIR_TEXT.ids;
+    return null;
+  }
+
+  private async variantPairStart(msg: Extract<ToWorker, { type: 'variantPairStart' }>): Promise<void> {
+    const refuse = (e: unknown) =>
+      this.post({ type: 'whatIfRefused', requestId: msg.requestId, code: e instanceof VariantError ? e.code : 'failed', message: e instanceof Error ? e.message : String(e) });
+    const ids = msg.compare;
+    const worldIds = { dish: msg.newDishId, a: `${msg.newDishId}+${ids.compareId}:A`, b: `${msg.newDishId}+${ids.compareId}:B` };
+    let prepared: Awaited<ReturnType<typeof prepareVariantPair>>;
+    try {
+      const problem = this.variantPairProblem(msg);
+      if (problem !== null) throw new Error(problem);
+      prepared = await prepareVariantPair(this.registry, msg.variantId, worldIds);
+    } catch (e) {
+      refuse(e);
+      return;
+    }
+    let kept: WhatIfKept | null | false;
+    try {
+      kept = await this.keepFirst(msg, WHAT_IF_KEEP);
+    } catch (e) {
+      refuse(e);
+      return;
+    }
+    if (kept === false) return;
+    // Checked again after the keep's awaits: nothing else may have taken the ids or opened a comparison.
+    const late = this.variantPairProblem(msg);
+    if (late !== null) {
+      refuse(new Error(late));
+      return;
+    }
+    const { facts, startA, startB, ideaWorld } = prepared;
+    // The idea's own dish: paused at tick 0 and never stepped during the comparison.
+    const src = this.makeDish(msg.newDishId, ideaWorld, facts.title, { ...startB, worldId: msg.newDishId });
+    this.dishes[src.id] = src;
+    const vp: LiveVariantPair = { facts, sequential: msg.sequential, startA, startB, runner: null, sugarEnd: null };
+    const c: Comparison = {
+      id: ids.compareId,
+      sourceDishId: src.id,
+      aDishId: ids.aDishId,
+      bDishId: ids.bDishId,
+      baseline: startA,
+      priorSpeed: 0,
+      status: 'setup',
+      horizonTicks: VARIANT_PAIR_TICKS,
+      speed: 4,
+      acc: 0,
+      lastSnapshot: -Infinity,
+      interventions: [],
+      run: null,
+      results: null,
+      error: null,
+      variantPair: vp,
+    };
+    this.comparison = c;
+    const a = this.makeDish(ids.aDishId, realizePairArm(startA), `${this.registry.variants['R-G0']?.title ?? 'Garden'} (A)`, startA);
+    // Sequential: B is realized only once A has run (SPEC §13.4 "sequentially if memory requires"); until
+    // then B's view shows the idea's start, read from the idea's own (paused, never stepped) world.
+    // The B dish and the idea dish (`src`) then hold the SAME World object. Safe because: the arms refuse
+    // every command (armCommand); the idea dish is never stepped or commanded while this comparison is open;
+    // and B gets its own world when the runner realizes it (variantPairBindB). No behaviour depends on it.
+    const b = this.makeDish(ids.bDishId, msg.sequential ? ideaWorld : realizePairArm(startB), `${facts.title} (B)`, startB);
+    for (const [role, dish] of [
+      ['A', a],
+      ['B', b],
+    ] as const) {
+      dish.arm = { compareId: c.id, role };
+      this.dishes[dish.id] = dish;
+    }
+    this.active = null;
+    this.post({ type: 'variantPairStarted', requestId: msg.requestId, info: this.info(src), compare: this.compareState(c), ...(kept ? { kept } : {}) });
+    this.sendSnapshot(a);
+    this.sendSnapshot(b);
+  }
+
+  private variantPairView(vp: LiveVariantPair): ComparisonVariantPair {
+    const r = vp.runner;
+    return { ...vp.facts, sequential: vp.sequential, phase: r?.phase ?? null, targetTicks: r?.targetTicks ?? VARIANT_PAIR_TICKS, sugarEnd: vp.sugarEnd };
+  }
+
+  /** Run: always the fixed 180 s (D09 "the existing 180-simulation-second paired comparison"). */
+  private variantPairRun(c: Comparison, vp: LiveVariantPair, horizonTicks: number | null, speed: CompareSpeed): void {
+    if (horizonTicks !== VARIANT_PAIR_TICKS) throw new Error(VARIANT_PAIR_TEXT.horizon);
+    const a = this.dishes[c.aDishId]!;
+    const b = this.dishes[c.bDishId]!;
+    vp.runner = new VariantPairRun(vp.startA, vp.startB, vp.sequential, vp.sequential ? { a: a.world } : { a: a.world, b: b.world });
+    c.horizonTicks = VARIANT_PAIR_TICKS;
+    c.speed = speed;
+    c.acc = 0;
+    c.lastSnapshot = -Infinity;
+    c.status = 'running';
+  }
+
+  /** Stop: paired, both end now; sequential A, B will run to the same tick; sequential B refuses. */
+  private variantPairStop(c: Comparison, vp: LiveVariantPair): void {
+    const r = vp.runner!;
+    const at = r.stop();
+    if (at === 'aDone') this.variantPairAfterA(c);
+    else if (at === 'done') this.variantPairFinish(c, vp);
+  }
+
+  /** Sequential: A's last view is sent, then A's world is let go (its dish entry with it). */
+  private variantPairAfterA(c: Comparison): void {
+    const a = this.dishes[c.aDishId];
+    if (a) this.sendSnapshot(a);
+    delete this.dishes[c.aDishId];
+    if (this.active === c.aDishId) this.active = null;
+    this.postCompare(c);
+  }
+
+  /** Sequential: B's dish shows B's own world once the runner has realized it. */
+  private variantPairBindB(c: Comparison, vp: LiveVariantPair): void {
+    const b = this.dishes[c.bDishId];
+    const w = vp.runner?.b;
+    if (!b || !w || b.world === w) return;
+    b.world = w;
+    b.checkpoint = vp.startB;
+    b.lastEventId = w.counters.nextEventId - 1;
+    b.lastGeometryVersion = -1;
+  }
+
+  private variantPairFinish(c: Comparison, vp: LiveVariantPair): void {
+    const r = vp.runner!;
+    if (vp.sequential) this.variantPairBindB(c, vp);
+    c.status = 'complete';
+    c.acc = 0;
+    c.results = r.results();
+    vp.sugarEnd = r.sugarEnd();
+    const a = this.dishes[c.aDishId];
+    if (a) this.sendSnapshot(a);
+    this.sendSnapshot(this.dishes[c.bDishId]!);
+  }
+
+  /** As pumpComparison: wall-clock time decides only how many steps run now, never how many ticks either arm gets. */
+  private pumpVariantPair(c: Comparison, vp: LiveVariantPair, elapsed: number, now: number): void {
+    const r = vp.runner;
+    if (!r) return;
+    const start = this.clock.now();
+    if (c.speed === 'max') c.acc = MAX_COMPARE_PAIRS_PER_PUMP;
+    else if (c.speed > 0) c.acc = Math.min(MAX_BACKLOG_TICKS, c.acc + (elapsed / 1000) * 10 * c.speed);
+    while (c.acc >= 1 && !r.done) {
+      let at: ReturnType<VariantPairRun['step']>;
+      try {
+        at = r.step();
+      } catch (e) {
+        c.status = 'failed';
+        c.error = e instanceof Error ? e.message : String(e);
+        this.postCompare(c);
+        return;
+      }
+      if (at === 'aDone') this.variantPairAfterA(c);
+      else if (vp.sequential) this.variantPairBindB(c, vp);
+      c.acc -= 1;
+      if (this.clock.now() - start > MAX_PUMP_MS) {
+        c.acc = Math.min(c.acc, 1);
+        break;
+      }
+    }
+    if (c.speed === 'max') c.acc = 0;
+    if (r.done) {
+      this.variantPairFinish(c, vp);
+      this.postCompare(c);
+      return;
+    }
+    if (now - c.lastSnapshot >= SNAPSHOT_INTERVAL_MS) {
+      c.lastSnapshot = now;
+      const a = this.dishes[c.aDishId];
+      if (a && (!vp.sequential || r.phase === 'A')) this.sendSnapshot(a);
+      if (!vp.sequential || r.phase === 'B') this.sendSnapshot(this.dishes[c.bDishId]!);
       this.postCompare(c);
     }
   }
@@ -2505,19 +2779,21 @@ export class DishHost {
   private async openTurn(
     newDishId: string,
     baseline: TurnBaseline,
-    params: { readonly tryId: string; readonly turn: number; readonly horizonTicks: TurnHorizonTicks; readonly objectiveId: string | null; readonly prediction: string },
+    params: { readonly tryId: string; readonly turn: number; readonly horizonTicks: TurnHorizonTicks; readonly objectiveId: string | null; readonly prediction: string; readonly challenge?: TurnChallenge },
   ): Promise<{ readonly dish: Dish; readonly turn: TurnRecord } | null> {
     if (!this.shelf) return null;
     const got = await this.shelf.get(baseline.shelfId, async (text, slot) => slot.shelfKind === 'baseline' && slot.checksum === baseline.checksum && (await parseSaveFile(text)).checksum === baseline.checksum);
     if (!got) return null;
-    const c = await cloneTurn(got.text, newDishId, (turnWorldId) => turnRecordFor({ ...params, baseline, turnWorldId }));
+    // P4.8c: a challenge turn counts its actions from the cloned world's next command sequence number.
+    const c = await cloneTurn(got.text, newDishId, (turnWorldId, w) => turnRecordFor({ ...params, baseline, turnWorldId, ...(params.challenge ? { challenge: { ...params.challenge, startSeq: w.commands.nextSeq } } : {}) }));
     if (c.world.tick !== baseline.tick) return null;
     const dish = this.addDish(newDishId, c.world, c.name, c.notebook);
     if (params.objectiveId !== null) {
-      const def = this.registry.objectives[params.objectiveId];
+      const challenge = turnOf(dish.notebook)?.challenge; // P4.8c: a challenge's goal is its own definition, never a registry id
+      const def = challenge ? turnChallengeDef(challenge, dish.world.content.manifest.buildPhase) : this.registry.objectives[params.objectiveId];
       const nw = this.watchOf(dish);
       if (def && nw) {
-        const offered = tryGoalOptions(this.registry, dish.world).some((o) => o.id === def.id && goalFitsTurn(o, params.horizonTicks / TICKS_PER_SECOND));
+        const offered = challenge !== undefined || tryGoalOptions(this.registry, dish.world).some((o) => o.id === def.id && goalFitsTurn(o, params.horizonTicks / TICKS_PER_SECOND));
         this.notebookChanges(dish, nw.goals.start(dish.world, def, offered).changes);
       }
     }
@@ -2596,13 +2872,330 @@ export class DishHost {
       return this.tryRefused(msg.requestId, 'unsaved', TRY_REFUSALS.unsaved);
     }
     if (!this.shelf) return this.tryRefused(msg.requestId, 'not-here', TRY_REFUSALS.noStore);
-    const opened = await this.openTurn(msg.newDishId, t.baseline, { tryId: t.tryId, turn: t.turn + 1, horizonTicks: t.horizonTicks, objectiveId: t.objectiveId, prediction: t.prediction });
+    const opened = await this.openTurn(msg.newDishId, t.baseline, { tryId: t.tryId, turn: t.turn + 1, horizonTicks: t.horizonTicks, objectiveId: t.objectiveId, prediction: t.prediction, ...(t.challenge ? { challenge: t.challenge } : {}) }); // P4.8c: Another turn plays the same challenge
+    if (opened && t.challenge) opened.dish.notebook = { ...opened.dish.notebook, challenges: challengesOf(this.notebookOf(d)) }; // P4.8c: its records come along
     if (!opened) return this.tryRefused(msg.requestId, 'baseline-missing', TRY_REFUSALS.baselineMissing);
     // The prior turn goes: discarded by the player's choice, or already in its slot. Never written here.
     delete this.dishes[d.id];
     delete this.ownSlots[d.id];
     this.post({ type: 'tryStarted', requestId: msg.requestId, info: this.info(opened.dish), turn: opened.turn });
     this.sendSnapshot(opened.dish);
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // P4.8c custom challenges (src/worker/challenge.ts; src/persistence/notebookChallenges.ts; SPEC §13.5;
+  // D-0071: the objective is only evaluated; the tool and budget limits refuse commands here, before
+  // applyNow, as a comparison arm refuses them).
+
+  /** A command a challenge turn refused: the ack carries the refusal and the UI is told (the dish is unchanged). */
+  private challengeBlocked(d: Dish, requestId: number, message: string): void {
+    this.post({ type: 'ack', requestId, dishId: d.id, result: null, error: message });
+    this.post({ type: 'challengeBlocked', dishId: d.id, message });
+  }
+
+  private challengeRefused(requestId: number, message: string): void {
+    this.post({ type: 'challengeRefused', requestId, message });
+  }
+
+  /** Why no challenge can be made or started from `d` (null: it can). */
+  private challengeRefusalFor(d: Dish): string | null {
+    if (d.arm) return CHALLENGE_REFUSALS.arm;
+    if (d.world.sample !== null) return CHALLENGE_REFUSALS.sample;
+    if (d.failed) return CHALLENGE_REFUSALS.failed;
+    if (!this.shelf) return CHALLENGE_REFUSALS.noStore;
+    return null;
+  }
+
+  /**
+   * A shelf baseline holding exactly the challenge's baseline (its index and its file's checksum), newest first, or
+   * null. `ownOnly`: only records written for a challenge (createdFor 'ch-<n>'), so a challenge never depends on a
+   * Try my dish starting point the player may remove in Storage (D-0090).
+   */
+  private async challengeBaseline(c: Pick<ChallengeRecord, 'baseline'>, ownOnly = false): Promise<{ readonly text: string; readonly slot: SlotInfo } | null> {
+    if (!this.shelf) return null;
+    const held = (await this.shelf.list('baseline'))
+      .filter((s) => s.checksum === c.baseline.checksum && (!ownOnly || (s.createdFor ?? '').startsWith('ch-')))
+      .reverse();
+    for (const s of held) {
+      const got = await this.shelf.get(s.slotId, async (text, slot) => slot.shelfKind === 'baseline' && (await parseSaveFile(text)).checksum === c.baseline.checksum);
+      if (got) return got;
+    }
+    return null;
+  }
+
+  /**
+   * Save: the typed values are checked (challengeSaveProblem), the paused dish is stored as a baseline on the
+   * shelf (preflight first; one atomic write), then the challenge joins the dish's notebook with the baseline's
+   * world id, tick and state checksum. A refusal changes nothing.
+   */
+  private async challengeSave(msg: Extract<ToWorker, { type: 'challengeSave' }>): Promise<void> {
+    const d = this.need(msg.dishId);
+    const why = this.challengeRefusalFor(d);
+    if (why) return this.challengeRefused(msg.requestId, why);
+    if (challengesOf(d.notebook).length >= CHALLENGES_MAX) return this.challengeRefused(msg.requestId, CHALLENGE_REFUSALS.full(CHALLENGES_MAX));
+    const problem = challengeSaveProblem(this.registry, d.world, msg.challenge);
+    if (problem) return this.challengeRefused(msg.requestId, problem);
+    d.speed = 0; // the editor is a blocking panel; the baseline is this paused tick
+    d.acc = 0;
+    const savedAt = this.iso();
+    const built = await buildSaveFile(d.world, { name: d.name, savedAt, recipeId: d.world.content.provenance.recipeId }, this.localSave(d));
+    const id = nextChallengeId(d.notebook);
+    // Challenges made at the same paused moment share one baseline on the shelf (the same state checksum), but
+    // only a challenge's own record: a Try my dish starting point can be removed in Storage (D-0090).
+    const shared = await this.challengeBaseline({ baseline: { worldId: built.file.state.worldId, tick: built.file.tick, checksum: built.checksum } }, true);
+    const put = shared ? ({ ok: true } as const) : await this.shelf!.put('baseline', {
+      text: built.text,
+      checksum: built.checksum,
+      name: built.file.meta.name,
+      worldId: built.file.state.worldId,
+      tick: built.file.tick,
+      savedAt,
+      recipeId: d.world.content.provenance.recipeId,
+      createdFor: id,
+      ...slotMetaCopies(built.file),
+    });
+    if (!put.ok) return this.challengeRefused(msg.requestId, put.message);
+    const input = msg.challenge; // checked above: exactly the editor's typed keys
+    const challenge: ChallengeRecord = { ...input, id, baseline: { worldId: built.file.state.worldId, tick: built.file.tick, checksum: built.checksum } };
+    const mark = this.keptTurnMark(d);
+    d.notebook = { ...d.notebook, challenges: [...challengesOf(d.notebook), challenge] };
+    this.turnEdited(d, mark); // P4.7: a notebook change on a kept turn
+    this.post({ type: 'challengeSaved', requestId: msg.requestId, dishId: d.id, record: this.notebookOf(d), challenge });
+  }
+
+  /**
+   * Export: the baseline save from the shelf (or, on a device without it, the open dish while its state checksum
+   * still equals the baseline's) with a notebook holding only this challenge. Read-only.
+   */
+  private async challengeExport(msg: Extract<ToWorker, { type: 'challengeExport' }>): Promise<void> {
+    const d = this.need(msg.dishId);
+    const c = challengesOf(this.notebookOf(d)).find((x) => x.id === msg.challengeId);
+    if (!c) return this.challengeRefused(msg.requestId, CHALLENGE_REFUSALS.unknown);
+    let text = (await this.challengeBaseline(c))?.text ?? null;
+    if (text === null && !d.arm) {
+      const built = await buildSaveFile(d.world, { name: d.name, savedAt: this.iso(), recipeId: d.world.content.provenance.recipeId }, this.localSave(d));
+      if (built.checksum === c.baseline.checksum) text = built.text;
+    }
+    if (text === null) return this.challengeRefused(msg.requestId, CHALLENGE_REFUSALS.noBaseline);
+    this.post({ type: 'challengeExported', requestId: msg.requestId, text: await challengeExportText(text, c), filename: challengeFileName(c.name) });
+  }
+
+  /**
+   * Start: a Try my dish turn from the challenge's baseline with its objective, horizon and limits. The
+   * baseline is the shelf record holding it, else the open dish while its state checksum still equals the
+   * baseline's (an imported challenge file), stored on the shelf after the open dish is kept first (D-0033).
+   */
+  private async challengeStart(msg: Extract<ToWorker, { type: 'challengeStart' }>): Promise<void> {
+    if (!msg.check && this.dishes[msg.newDishId]) return this.challengeRefused(msg.requestId, CHALLENGE_REFUSALS.inUse);
+    const d = this.need(msg.dishId);
+    const answer = (refusal: string | null): void => {
+      if (msg.check) this.post({ type: 'challengeChecked', requestId: msg.requestId, dishId: d.id, refusal });
+      else if (refusal !== null) this.challengeRefused(msg.requestId, refusal);
+    };
+    const why = this.challengeRefusalFor(d);
+    if (why) return answer(why);
+    const c = challengesOf(this.notebookOf(d)).find((x) => x.id === msg.challengeId);
+    if (!c) return answer(CHALLENGE_REFUSALS.unknown);
+    const support = objectiveSupportProblem(d.world, challengePredicate(c));
+    if (support !== null) return answer(CHALLENGE_REFUSALS.cannotRun(support));
+    const horizonTicks = horizonTicksOf(c.horizonSeconds)!;
+    const shelf = this.shelf!;
+    const found = await this.challengeBaseline(c);
+    let built: Awaited<ReturnType<typeof buildSaveFile>> | null = null;
+    const savedAt = this.iso();
+    if (!found) {
+      built = await buildSaveFile(d.world, { name: d.name, savedAt, recipeId: d.world.content.provenance.recipeId }, this.localSave(d));
+      if (built.checksum !== c.baseline.checksum) return answer(CHALLENGE_REFUSALS.changed);
+      const full = await shelf.check('baseline', (await gzipText(built.text)).byteLength);
+      if (full) return answer(full.message);
+    }
+    if (msg.check) return answer(null);
+    const kept = await this.keepFirst(msg, { action: 'tryDish', exclude: null, opening: null });
+    if (kept === false) return;
+    let slot = found?.slot ?? null;
+    if (!slot && built) {
+      const put = await shelf.put('baseline', {
+        text: built.text,
+        checksum: built.checksum,
+        name: built.file.meta.name,
+        worldId: built.file.state.worldId,
+        tick: built.file.tick,
+        savedAt,
+        recipeId: d.world.content.provenance.recipeId,
+        createdFor: c.id,
+        ...slotMetaCopies(built.file),
+      });
+      if (!put.ok) return this.challengeRefused(msg.requestId, put.message);
+      slot = put.slot;
+    } else if (found && !(found.slot.createdFor ?? '').startsWith('ch-')) {
+      // D-0090: only a Try my dish record holds this moment (a save from before D-0090, or the challenge's own
+      // record was removed in Storage). Store the challenge's own copy when the shelf has room, so removing that
+      // Try my dish row later cannot take the challenge's starting point; without room, start from it as before.
+      const room = (await shelf.check('baseline', (await gzipText(found.text)).byteLength)) === null;
+      const own = room
+        ? await shelf.put('baseline', {
+            text: found.text,
+            checksum: found.slot.checksum,
+            name: found.slot.name,
+            worldId: found.slot.worldId ?? c.baseline.worldId,
+            tick: found.slot.tick,
+            savedAt: found.slot.savedAt,
+            recipeId: found.slot.recipeId,
+            createdFor: c.id,
+            ...(found.slot.evolution ? { evolution: found.slot.evolution } : {}),
+            ...(found.slot.registry ? { registry: found.slot.registry } : {}),
+          })
+        : null;
+      if (own?.ok) slot = own.slot;
+    }
+    if (!slot) return this.challengeRefused(msg.requestId, TRY_REFUSALS.baselineMissing);
+    const baseline: TurnBaseline = { shelfId: slot.slotId, checksum: c.baseline.checksum, worldId: slot.worldId ?? c.baseline.worldId, tick: slot.tick, name: slot.name };
+    const opened = await this.openTurn(msg.newDishId, baseline, {
+      tryId: `try-${Math.max(1, shelfSequenceOf(slot.slotId))}`,
+      turn: 1,
+      horizonTicks,
+      objectiveId: challengeObjectiveId(c.id),
+      prediction: '',
+      challenge: turnChallengeOf(c, 0),
+    });
+    if (!opened) return this.challengeRefused(msg.requestId, TRY_REFUSALS.baselineMissing);
+    // The turn dish holds the challenge record too (Start again and Export work from it; a copy never takes it).
+    opened.dish.notebook = { ...opened.dish.notebook, challenges: [c] };
+    this.post({ type: 'challengeStarted', requestId: msg.requestId, info: this.info(opened.dish), turn: opened.turn, ...(kept ? { kept } : {}) });
+    this.sendSnapshot(opened.dish);
+  }
+
+  // ── P4.8b: bookmarks, the specimen gallery and storage (notebook state and the store; never a command) ──
+
+  /**
+   * P4.8b Bookmark this moment (with `snapshot`: the dish's full save at this tick goes on the shelf, kind
+   * 'snapshot', BEFORE the bookmark is added; a refused or failed write adds nothing), or an event row (text
+   * only). The world is only read. Answered by 'notebook' (`refused`: nothing was added).
+   */
+  private async bookmarkAdd(msg: Extract<ToWorker, { type: 'bookmarkAdd' }>): Promise<void> {
+    const d = this.need(msg.dishId);
+    const refuse = (refused: string): void => this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: this.notebookOf(d), refused });
+    if (d.arm || d.transient) return refuse(BOOKMARK_TEXT.arm);
+    if (bookmarksOf(d.notebook).length >= BOOKMARKS_MAX) return refuse(BOOKMARK_TEXT.full);
+    if (msg.snapshot && msg.event) return refuse('Past moments have no stored state, so an event bookmark is text only. Nothing was added.');
+    if (msg.snapshot && !this.shelf) return refuse(BOOKMARK_TEXT.noStore);
+    // Read with no await in between: the words, the moment and (below) the save are the same tick.
+    const createdTick = d.world.tick;
+    const at = msg.event ? eventBookmark(d.world, msg.event) : { tick: createdTick, eventId: null, summary: momentSummary(d.world) };
+    if (!at || at.tick > createdTick) return refuse('That event is not in this dish’s record. Nothing was added.');
+    const title = cleanBookmarkTitle(msg.title) ?? cleanBookmarkTitle(`${d.name} at ${bookmarkClock(at.tick)}`)!;
+    let snapshot: Bookmark['snapshot'] = null;
+    if (msg.snapshot) {
+      const shelf = this.shelf!;
+      const savedAt = this.iso();
+      const id = nextBookmarkId(bookmarksOf(d.notebook));
+      // buildSaveFile serializes the world before its first await: the snapshot holds exactly this tick.
+      const built = await buildSaveFile(d.world, { name: d.name, savedAt, recipeId: d.world.content.provenance.recipeId }, this.localSave(d));
+      const put = await shelf.put('snapshot', {
+        text: built.text,
+        checksum: built.checksum,
+        name: title,
+        worldId: built.file.state.worldId,
+        tick: built.file.tick,
+        savedAt,
+        recipeId: d.world.content.provenance.recipeId,
+        createdFor: id,
+        ...slotMetaCopies(built.file),
+      });
+      if (!put.ok) {
+        const detail = /\(([^)]*)\)/u.exec(put.message)?.[1] ?? put.message;
+        return refuse(put.reason === 'full' ? BOOKMARK_TEXT.snapshotsFull : put.reason === 'storage-full' ? BOOKMARK_TEXT.storageFull(detail) : BOOKMARK_TEXT.writeFailed(detail));
+      }
+      // The dish closed, or its bookmarks filled, while the snapshot was written: that record is taken back.
+      if (this.dishes[d.id] !== d || bookmarksOf(d.notebook).length >= BOOKMARKS_MAX) {
+        await shelf.remove(put.slot.slotId);
+        return refuse(this.dishes[d.id] !== d ? BOOKMARK_TEXT.closed : BOOKMARK_TEXT.full);
+      }
+      snapshot = { shelfId: put.slot.slotId, checksum: built.checksum, bytes: put.slot.bytes };
+    }
+    const mark = this.keptTurnMark(d);
+    const list = bookmarksOf(d.notebook);
+    const bm: Bookmark = { id: nextBookmarkId(list), tick: at.tick, title, summary: at.summary, eventId: at.eventId, snapshot, createdTick };
+    d.notebook = { ...d.notebook, bookmarks: [...list, bm] };
+    this.turnEdited(d, mark); // P4.7: a bookmark on a kept turn is a change its slot does not hold
+    this.post({ type: 'notebook', requestId: msg.requestId, dishId: d.id, record: this.notebookOf(d) });
+  }
+
+  /**
+   * P4.8b: open a snapshot bookmark as a NEW branch exactly as a checkpoint opens (branchWorldId, branchName,
+   * favorites only; D-0031), the open dish kept first (D-0033). The shelf record is read and verified first (its
+   * stored checksum, the file's own checks, and the checksum the bookmark recorded): a missing or changed one
+   * answers 'bookmarkGone' and nothing changes.
+   */
+  private async bookmarkOpen(msg: Extract<ToWorker, { type: 'bookmarkOpen' }>): Promise<void> {
+    const d = this.need(msg.dishId);
+    if (this.dishes[msg.newDishId]) throw new Error('That new dish id is already in use.');
+    const bm = bookmarksOf(d.notebook).find((b) => b.id === msg.id);
+    if (!bm) throw new Error(BOOKMARK_TEXT.unknown);
+    const ref = bm.snapshot;
+    if (!ref) return this.post({ type: 'bookmarkGone', requestId: msg.requestId, id: bm.id, message: BOOKMARK_TEXT.notOpenable });
+    const got = this.shelf ? await this.shelf.get(ref.shelfId, async (text, slot) => slot.shelfKind === 'snapshot' && slot.checksum === ref.checksum && (await loadSaveFile(text)).file.checksum === ref.checksum) : null;
+    if (!got) return this.post({ type: 'bookmarkGone', requestId: msg.requestId, id: bm.id, message: BOOKMARK_TEXT.gone });
+    const { file, world, notebook, notebookDropped } = await loadSaveFile(got.text);
+    const branch = { fromName: file.meta.name, tick: world.tick };
+    const opened = deserializeWorld({ ...file.state, worldId: branchWorldId(world.worldId, msg.newDishId) });
+    const kept = await this.keepFirst(msg, { action: 'bookmark', exclude: null, opening: null });
+    if (kept === false) return;
+    const dish = this.addDish(msg.newDishId, opened, branchName(file.meta.name, branch.tick), favoritesOnly(notebook, opened.worldId));
+    this.post({ type: 'loaded', requestId: msg.requestId, info: this.info(dish), usedPredecessor: false, branch, ...(kept ? { kept } : {}), ...(notebookDropped !== null ? { notebookDropped } : {}) });
+    this.sendSnapshot(dish);
+    this.experimentReopened(dish);
+  }
+
+  /** P4.8b: the storage panel's read, or one checkpoint / shelf record removed on the player's confirmed choice. */
+  private async storageRequest(msg: Extract<ToWorker, { type: 'storageInfo' | 'storageRemove' }>): Promise<void> {
+    if (!this.store) throw new Error('Saving is unavailable on this device.');
+    let removed: boolean | undefined;
+    if (msg.type === 'storageRemove') {
+      // Never a named slot or the autosave (D02 line 657: named dish saves are never evicted from here).
+      if (!storageRemovable(msg.slotId)) throw new Error('Saved dishes are deleted only with their own Delete… in Saved dishes; Storage never removes them. Nothing was changed.');
+      if (isShelfSlot(msg.slotId)) removed = this.shelf ? await this.shelf.remove(msg.slotId) : false;
+      else {
+        removed = (await this.store.backend.getSlot(msg.slotId)) !== null;
+        await this.store.remove(msg.slotId);
+        if (this.ring) this.ringKept = (await this.ring.list()).length;
+      }
+    }
+    this.post({ type: 'storageInfo', requestId: msg.requestId, storage: await readStorage(this.store.backend, this.storageEstimate), ...(removed !== undefined ? { removed } : {}) });
+  }
+
+  /** P4.8b: delete one bookmark (its snapshot stays on the shelf until removed in Storage). The refusal, or null. */
+  private bookmarkDeleted(d: Dish, id: string): string | null {
+    const list = bookmarksOf(d.notebook);
+    if (!list.some((b) => b.id === id)) return BOOKMARK_TEXT.unknown;
+    d.notebook = { ...d.notebook, bookmarks: list.filter((b) => b.id !== id) };
+    return null;
+  }
+
+  /** P4.8b: delete one gallery entry. The refusal, or null. */
+  private galleryDeleted(d: Dish, id: string): string | null {
+    const list = galleryOf(d.notebook);
+    if (!list.some((e) => e.id === id)) return GALLERY_TEXT.unknown;
+    d.notebook = { ...d.notebook, gallery: list.filter((e) => e.id !== id) };
+    return null;
+  }
+
+  /**
+   * P4.8b: keep a specimen the UI composed from its latest snapshot copy and the inspector lines on screen.
+   * Only checked here (its own fields; a species this dish has; an organism it has had); never spawns, never a
+   * command. The refusal, or null.
+   */
+  private galleryAdded(d: Dish, input: Omit<GalleryEntry, 'id'>): string | null {
+    const list = galleryOf(d.notebook);
+    if (list.length >= GALLERY_MAX) return GALLERY_TEXT.full;
+    const entry = { ...(typeof input === 'object' && input !== null ? input : {}), id: nextGalleryId(list) } as GalleryEntry;
+    const problem = galleryEntryProblem(entry);
+    if (problem) return GALLERY_TEXT.bad(problem);
+    const species = d.world.species.map((s) => s.id);
+    if (!species.includes(entry.speciesId) || entry.crop.sprites.some(([sp]) => sp >= species.length)) return GALLERY_TEXT.bad('a species this dish does not have');
+    if (entry.birthId >= d.world.counters.nextBirthId || entry.tick > d.world.tick) return GALLERY_TEXT.bad('an organism or a time this dish has not had');
+    d.notebook = { ...d.notebook, gallery: [...list, entry] };
+    return null;
   }
 
   private info(d: Dish): DishInfo {
