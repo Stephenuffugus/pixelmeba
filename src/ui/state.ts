@@ -32,14 +32,14 @@ import { audioPrefsOf } from '@audio/mix';
 import type { SessionSummary } from '@worker/protocol';
 import { thumbFromSnapshot } from '@worker/thumbnail';
 import { sessionMemoryLine } from './strings/home';
-import { importFailedText } from './strings/share';
+import { importFailedText, SHARE_TEXT } from './strings/share';
 import { wireFavorites } from './favorites';
 import { startGoal, wireGoals } from './goals';
 import { wireTry } from './tryDish';
 import { wireChallenge } from './challenge';
 import { VARIANT_PAIR_SECONDS, VARIANT_PAIR_UI } from './strings/variantPair';
 import { isNativePlatform } from '@platform/capacitor'; // P4.10 (saveTextFile)
-import { deliverFile, dishFile } from './share'; // P4.10 (saveTextFile on the Android app)
+import { deliverFile, dishFile, type ShareOutcome } from './share'; // P4.10 (saveTextFile on the Android app)
 
 export type Route =
   | { readonly name: 'home' }
@@ -484,7 +484,8 @@ export async function loadSlot(slotId: string, label = 'the saved dish'): Promis
       } else {
         const opened = usedPredecessor ? 'The latest save was damaged, so the previous copy was opened.' : `Opened “${info.name}” — paused where you left it.`;
         // Opening Continue itself writes no Continue first, so there is nothing to say about it.
-        showToast(withKeptLine(r.kept, opened, slotId !== 'autosave'), r.kept && keptLine(r.kept) ? 6000 : 3500);
+        // D-0096: the damaged-save line stays 6 s, like the other lines a player must not miss.
+        showToast(withKeptLine(r.kept, opened, slotId !== 'autosave'), usedPredecessor || (r.kept && keptLine(r.kept)) ? 6000 : 3500);
       }
       return { ok: true };
     });
@@ -576,13 +577,11 @@ export function latestDishSnapshots(): { readonly snap: SnapshotMsg; readonly ge
 }
 
 /** A dish file the player keeps: `text` offered as a download named `filename` (Export; the keep flow's export). */
-export function saveTextFile(text: string, filename: string): void {
+export function saveTextFile(text: string, filename: string): Promise<ShareOutcome> {
   // P4.10: a download does nothing in the Android WebView, so the app offers the file through the share
-  // sheet ("Save to Files" and Drive are among its targets; no storage permission). Cancelling changes nothing.
-  if (isNativePlatform()) {
-    void deliverFile(dishFile(text, filename, filename));
-    return;
-  }
+  // sheet ("Save to Files" and Drive are among its targets; no storage permission). Cancelling changes nothing,
+  // and D-0096: the outcome is returned, so a cancelled sheet is never reported as an export.
+  if (isNativePlatform()) return deliverFile(dishFile(text, filename, filename));
   const blob = new Blob([text], { type: 'application/vnd.pixelmeba+json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -592,27 +591,27 @@ export function saveTextFile(text: string, filename: string): void {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
+  return Promise.resolve('saved');
 }
 
 /**
- * Export a dish as a file the player keeps (no toast); resolves the file name. P4.1 fix round 1: a kept
- * file is the player's own copy of the dish (the keep flow, D-0033), so it keeps family nicknames as the
- * device saves do; More → Export is where a file to share leaves them out by default.
+ * Export a dish as a file the player keeps (no toast); resolves the file name, or null when the player
+ * cancelled the share sheet on the app (nothing was saved; D-0096). P4.1 fix round 1: a kept file is the
+ * player's own copy of the dish (the keep flow, D-0033), so it keeps family nicknames as the device saves do;
+ * More → Export is where a file to share leaves them out by default.
  */
-export async function exportDishFile(dishId: string, includeNicknames = true): Promise<string> {
+export async function exportDishFile(dishId: string, includeNicknames = true): Promise<string | null> {
   const { text, filename } = await getClient().exportDish(dishId, false, includeNicknames);
-  saveTextFile(text, filename);
-  return filename;
+  return (await saveTextFile(text, filename)) === 'cancelled' ? null : filename;
 }
 
 /**
  * Export the dish Continue holds, exactly as stored (the keep flow while no dish is open; D-0033 fix
- * round 1); resolves the file name.
+ * round 1); resolves the file name, or null when the share sheet was cancelled (D-0096).
  */
-export async function exportContinueFile(includeNicknames = true): Promise<string> {
+export async function exportContinueFile(includeNicknames = true): Promise<string | null> {
   const { text, filename } = await getClient().exportSave('autosave', includeNicknames);
-  saveTextFile(text, filename);
-  return filename;
+  return (await saveTextFile(text, filename)) === 'cancelled' ? null : filename;
 }
 
 /** The ten named slots as Saved dishes lists them (the autosave and checkpoints left out). */
@@ -626,8 +625,8 @@ export async function exportCurrent(strip: boolean, includeNicknames = false): P
   if (!info) return;
   try {
     const { text, filename } = await getClient().exportDish(info.dishId, strip, includeNicknames);
-    saveTextFile(text, filename);
-    showToast(`Exported ${filename}.`);
+    const outcome = await saveTextFile(text, filename);
+    showToast(outcome === 'cancelled' ? SHARE_TEXT.exportCancelled : `Exported ${filename}.`);
   } catch (e) {
     showToast(`Export failed: ${(e as Error).message}`, 4000);
   }
@@ -925,6 +924,11 @@ export async function exportBeforeKeep(): Promise<void> {
   keepBusy.value = true;
   try {
     const file = flow.dishId !== null ? await exportDishFile(flow.dishId) : await exportContinueFile();
+    if (file === null) {
+      // D-0096: the share sheet was cancelled, so no file exists: the choice stays open.
+      keepNotice.value = KEEP_TEXT.exportCancelled;
+      return;
+    }
     const now = keepFlow.value;
     if (now) keepFlow.value = { ...now, step: { stage: 'exported', file } };
   } catch (e) {

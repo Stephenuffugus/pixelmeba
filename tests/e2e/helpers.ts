@@ -112,8 +112,11 @@ export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
 /** Visible, inside the window once scrolled to (panels may scroll), and a 48 px touch target (UX §4.1). */
 export async function expectReachable(el: Locator): Promise<void> {
   await expect(el).toBeVisible();
-  await el.scrollIntoViewIfNeeded();
-  await expect(el).toBeInViewport({ ratio: 0.9 });
+  // Scroll again on each try: a late layout shift (a notice, a panel settling under load) can move it after one scroll.
+  await expect(async () => {
+    await el.scrollIntoViewIfNeeded();
+    await expect(el).toBeInViewport({ ratio: 0.9, timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
   const box = await el.boundingBox();
   expect(box && Math.min(box.width, box.height)).toBeGreaterThanOrEqual(47.5);
 }

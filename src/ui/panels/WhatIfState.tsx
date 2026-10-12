@@ -190,6 +190,11 @@ export async function exportBeforeStart(): Promise<void> {
   try {
     // With no dish open, the dish being kept is the one Continue holds (D-0033 fix round 1).
     const filename = info ? await exportDishFile(info.dishId) : await exportContinueFile();
+    if (filename === null) {
+      // D-0096: the share sheet was cancelled, so no file exists: the choice stays open.
+      whatIfNotice.value = WHATIF_TEXT.exportCancelled;
+      return;
+    }
     whatIfFull.value = { stage: 'exported', pick: step.pick, file: filename, ...(step.pair ? { pair: step.pair } : {}) };
   } catch (e) {
     whatIfNotice.value = WHATIF_TEXT.exportFailed((e as Error).message);

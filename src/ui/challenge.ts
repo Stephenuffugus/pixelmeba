@@ -354,8 +354,8 @@ export async function exportChallenge(challengeId: string): Promise<void> {
       showToast(CHALLENGE_TEXT.exportFailed(r.message), 6000);
       return;
     }
-    saveTextFile(r.text, r.filename);
-    showToast(CHALLENGE_TEXT.exported(r.filename));
+    const outcome = await saveTextFile(r.text, r.filename);
+    showToast(outcome === 'cancelled' ? CHALLENGE_TEXT.exportCancelled : CHALLENGE_TEXT.exported(r.filename));
   } catch (e) {
     showToast(CHALLENGE_TEXT.exportFailed(e instanceof Error ? e.message : String(e)), 6000);
   }

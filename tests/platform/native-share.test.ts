@@ -6,6 +6,7 @@
  * the web keeps the browser path.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 interface Written {
   path: string;
@@ -103,10 +104,25 @@ describe('native share (fake Filesystem + Share)', () => {
 
   it('saveTextFile on the native app offers the file through the share sheet (the plugins loaded on demand)', async () => {
     setNativePlatformForTests(true);
-    saveTextFile('{"format":"pixelmeba-save"}', 'kept.pixelmeba');
-    for (let i = 0; i < 200 && fake.state.shares.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(await saveTextFile('{"format":"pixelmeba-save"}', 'kept.pixelmeba')).toBe('shared');
     expect(fake.state.writes[0]).toMatchObject({ path: 'share/kept.pixelmeba', data: '{"format":"pixelmeba-save"}', encoding: 'utf8', directory: 'CACHE' });
     expect(fake.state.shares.length).toBe(1);
+  });
+
+  it('D-0096: a cancelled sheet is never reported as an export: saveTextFile resolves "cancelled", and every export checks it', async () => {
+    setNativePlatformForTests(true);
+    fake.state.cancel = true;
+    expect(await saveTextFile('{"format":"pixelmeba-save"}', 'kept.pixelmeba')).toBe('cancelled');
+    expect(fake.state.files).toEqual({});
+    // The callers: a null file name (exportDishFile / exportContinueFile) keeps the keep flow and What if? at their
+    // choice, and More → Export and Export challenge say "not exported" (src/ui/state.ts, WhatIfState.tsx, challenge.ts).
+    const state = readFileSync('src/ui/state.ts', 'utf8');
+    expect(state).toContain("return (await saveTextFile(text, filename)) === 'cancelled' ? null : filename;");
+    expect(state.match(/=== 'cancelled' \? null : filename;/g)).toHaveLength(2);
+    expect(state).toContain('keepNotice.value = KEEP_TEXT.exportCancelled;');
+    expect(state).toContain("showToast(outcome === 'cancelled' ? SHARE_TEXT.exportCancelled : `Exported ${filename}.`);");
+    expect(readFileSync('src/ui/panels/WhatIfState.tsx', 'utf8')).toContain('whatIfNotice.value = WHATIF_TEXT.exportCancelled;');
+    expect(readFileSync('src/ui/challenge.ts', 'utf8')).toContain("outcome === 'cancelled' ? CHALLENGE_TEXT.exportCancelled");
   });
 
   it('the web path is unchanged: the browser env (Web Share or a download), never the plugins', () => {

@@ -62,6 +62,8 @@ export const KEEP_TEXT = {
   close: 'Close without changing anything',
   cancelled: 'Nothing was changed.',
   exportFailed: (why: string) => `Export failed, so nothing was changed: ${why}`,
+  /** D-0096: the share sheet was closed without saving the file (the Android app). */
+  exportCancelled: 'Not exported, so nothing was changed.',
 } as const;
 
 /**

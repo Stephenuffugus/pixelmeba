@@ -44,3 +44,27 @@ NOTEs: (a) the APK and AAB were built before perf2-polish's last edits. The fina
 - Nine mutants, each restored after its run (scratchpad mutate.py): every one failed its test as listed above.
 - `npx tsc -p tsconfig.json --noEmit` and `npx eslint` on every changed file: clean.
 - `npm run check`, the fence, and the desktop journeys: results in the wave 7a commit message.
+
+## The integration verifier (run wf_f37f471b-538) and what the lead did (D-0096)
+
+The saves lens (integrate-verify-saves.md) was **ok**: 15,780 crash and relaunch cuts over the full-device and
+pending-journal paths, both rename modes, and the pending overlay equal to the applied view in every crafted journal.
+Its 2 MINOR and 4 NIT are accepted and stated in the docs (D-0096). The rules lens (integrate-verify-rules.md) found
+2 MAJOR and 3 MINOR; all fixed:
+
+| Finding | Fix | Proof |
+|---|---|---|
+| MAJOR: on the app a cancelled share was reported as exported, and the keep flow moved on with no file | `saveTextFile` resolves the outcome; `exportDishFile`/`exportContinueFile` resolve null on a cancel; More → Export, Export challenge, the keep flow and What if? say "not exported" and stay at their choice | native-share "D-0096 …"; mutant (outcome forced to 'shared') → `expected 'shared' to be 'cancelled'` |
+| MAJOR: the docs promised a return line after the in-app Share sheet, which pauses the dish itself | D-0095 (corrected), ARCH §12, ANDROID_SETUP §10.8.6/§11: the line follows More → Export's system sheet and the file picker | doc |
+| MINOR: a running comparison kept running on App 'pause' without the page going hidden | `pauseDishForBackground` calls `setCompareSpeed(0)` for a running comparison | lifecycle "D-0096 …"; mutant → `expected [] to deeply equal [ +0 ]` |
+| MINOR: main.tsx's half of the visibility fix had no test | `visibilityChanged` in src/platform/lifecycle.ts, tested; main.tsx calls it with no platform condition (source assertion) | lifecycle "visibilityChanged …" |
+| MINOR: "the worker calls performance.now() only while diagnostics are on" was false | D-0094, ARCH §7, perfCounters.ts comment | doc |
+| NITs: "30 s of running time", item 12 as a smoke check, the no-quota estimate, the web wording in ARCH §7, a source assertion for placeSpecimenTap | all corrected | placement-ring "placeSpecimenTap reports through …" |
+
+E2E batch 1 (desktop, the 06a25e9 tree, 36.9 min): 18 passed, 1 failed. android-storage's cut loop passed (13
+operations, commit point at 7: old ×8, new ×5), and the damaged record opened the previous moment. The 3.5 s
+"damaged" toast had gone before the assertion, under the verifiers' load. Fix: the line stays 6 s, and the spec watches
+for it from the Open click (D-0096). Rerun pending.
+
+Commands: `npx tsc --noEmit` clean; `npx eslint` on the 13 changed files clean;
+`npx vitest run tests/platform tests/ui tests/render/phase3.test.ts` → 38 files, 283 passed; two mutants caught (above).

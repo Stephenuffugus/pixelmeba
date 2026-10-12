@@ -7,7 +7,8 @@
  */
 import { signal } from '@preact/signals';
 import { describe, expect, it } from 'vitest';
-import { Lifecycle, LIFECYCLE_TEXT, pauseDishForBackground, wireNativeLifecycle, type AppEvents } from '../../src/platform/lifecycle';
+import { readFileSync } from 'node:fs';
+import { Lifecycle, LIFECYCLE_TEXT, pauseDishForBackground, visibilityChanged, wireNativeLifecycle, type AppEvents } from '../../src/platform/lifecycle';
 
 class FakeApp implements AppEvents {
   readonly listeners: Record<string, (() => void)[]> = {};
@@ -133,5 +134,56 @@ describe('the Android app lifecycle (fake App plugin)', () => {
     t.lc.background();
     expect(t.speeds).toEqual([0, 0, 0]);
     expect(t.autosaves()).toBe(3);
+  });
+
+  it('D-0096: a running comparison or experiment stops on App pause too (its screens stop it only when the page goes hidden); the return says it was paused', async () => {
+    const compareSpeeds: number[] = [];
+    let autosaves = 0;
+    const said: string[] = [];
+    const compareState = signal<{ priorSpeed: number; status: string; speed: number } | null>({ priorSpeed: 0, status: 'running', speed: 4 });
+    const lc = new Lifecycle({
+      pauseForBackground: () =>
+        pauseDishForBackground({
+          dishInfo: signal<unknown>({ dishId: 'd1' }),
+          meta: signal<{ speed: number } | null>({ speed: 0 }), // the dish itself waits while the comparison runs
+          compareState,
+          setSpeed: () => undefined,
+          setCompareSpeed: (s: 0) => {
+            compareSpeeds.push(s);
+            compareState.value = compareState.value ? { ...compareState.value, speed: s } : null;
+          },
+          autosave: () => {
+            autosaves++;
+            return Promise.resolve(true);
+          },
+        }),
+      announce: (t) => said.push(t),
+    });
+    const app = new FakeApp();
+    await wireNativeLifecycle(lc, {}, app);
+    app.fire('pause'); // e.g. split screen or a dialog over the app: the page stays visible
+    expect(compareSpeeds).toEqual([0]);
+    expect(autosaves).toBe(1);
+    app.fire('resume');
+    expect(said).toEqual([LIFECYCLE_TEXT.resumed]);
+    expect(compareState.value?.speed).toBe(0); // nothing runs by itself on return
+  });
+
+  it('visibilityChanged: hidden → background, visible → foreground(false) on every platform; main.tsx uses it with no platform condition', async () => {
+    const t = setup({ speed: 2 });
+    const app = new FakeApp();
+    await wireNativeLifecycle(t.lc, {}, app);
+    visibilityChanged(t.lc, true);
+    expect(t.speeds).toEqual([0]);
+    visibilityChanged(t.lc, false);
+    expect(t.lc.inBackground).toBe(false);
+    app.fire('resume');
+    expect(t.said).toEqual([LIFECYCLE_TEXT.resumed]); // the line stays owed after the silent 'visible'
+    t.meta.value = { speed: 2 };
+    visibilityChanged(t.lc, true); // a second absence pauses again
+    expect(t.speeds).toEqual([0, 0]);
+    const main = readFileSync('src/ui/main.tsx', 'utf8');
+    expect(main).toContain("visibilityChanged(lifecycle, document.visibilityState === 'hidden');");
+    expect(main).not.toMatch(/lifecycle\.(foreground|background)\(/u);
   });
 });

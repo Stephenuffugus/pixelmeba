@@ -3,6 +3,21 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑12 14:05 UTC — THE VERIFIER FIXES ARE MADE BUT NOT COMMITTED (D‑0096; both MAJORs, the MINORs,
+> the docs, the damaged-save line 6 s + the android-storage wait). Targeted evidence: tsc clean, eslint clean on the 13
+> changed files, `npx vitest run tests/platform tests/ui tests/render/phase3.test.ts` 38 files / 283 passed, two
+> mutants caught. The tree is pushed to wip/g4-wave-7a. START HERE.**
+> - E2E batch 1 on the 06a25e9 tree: 18 passed, 1 failed (android-storage: the damaged toast's timing; fixed).
+> - Next, in order: (1) full `npm run check` (~58 min; tmp/lead/check-7a.log pattern); (2) desktop e2e: android-storage
+>   (desktop AND phone-portrait), keep-dish, share, whatif, garden, compare, try-dish, observe-tools, keyboard,
+>   experiments, a11y-screens :422 :505 :634 :761 :798 :862 (batch 2); (3) commit "fix(p4): wave 7a integration verifier
+>   — …; D-0096" with the evidence; (4) `python3 tmp/lead/tick-7a.py <sha>`; (5) `python3 tmp/lead/insert-asbuilt-7a.py
+>   <sha> "<evidence>"` (add to tmp/lead/asbuilt-7a.txt first: saveTextFile returns Promise<ShareOutcome>,
+>   exportDishFile/exportContinueFile resolve string | null; D-0096); (6) build the 7b run file (keys web-arcade,store);
+>   (7) commit + push; backup loop → wip/g4-wave-7b; launch 7b.
+> - If the tree is somehow clean on restart: `git fetch origin wip/g4-wave-7a` and restore that tree (tmp/lead/backup
+>   scripts); the fixes are there.
+
 > **Update 2026‑10‑12 13:40 UTC — WAVE 7a CODE COMMITTED AND PUSHED: `06a25e9` (check 2022/2023 + the phase3 source-pin
 > fix rerun 11/11). P4.10 and P4.13 NOT TICKED YET: the integration verifier (run `wf_f37f471b-538`;
 > docs/reports/reviews/g4-wave-7a/integrate-verify-{saves,rules}.md) found 2 MAJOR to fix first. START HERE.**

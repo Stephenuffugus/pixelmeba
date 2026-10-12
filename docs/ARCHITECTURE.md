@@ -406,12 +406,13 @@ SnapshotMsg.perf?: PerfSample                            // only while diagnosti
   'platform' with 'filesystem' and a port opens `FilesystemBackend` over `PortFsOps` (the Android app, and
   the interruption harness build `VITE_FS_HARNESS=1`, never shipped); any other first message opens
   IndexedDB as before and is then handled; a later 'platform' is ignored. A store that fails to open falls
-  back to `MemoryBackend` with `persistent` false (Saved dishes then says saves last only until the app
-  closes; on the app it names its save folder, D-0095). The port carries the file operations to the main
+  back to `MemoryBackend` with `persistent` false (Saved dishes then says "This browser is not keeping saves
+  between visits."; on the app it names its save folder and says saves last only until the app closes, D-0095). The port carries the file operations to the main
   thread's `src/platform/fsHost.ts` (Capacitor Filesystem, `Directory.Data`); see §11.1.
 - `diagnostics` (P4.13; `src/worker/perfCounters.ts`): while on, the host times each `stepDish` and
   `sendSnapshot` with `performance.now()` into a ring of 300 and attaches `perf` to every snapshot; while
-  off it never calls `performance.now()`. Read-only: toggling it mid-run changes no state hash.
+  off none of these timers run (the host's pacing clock reads `performance.now()` either way). Read-only:
+  toggling it mid-run changes no state hash.
 - The relationship map's pool totals (D-0085, P4.13): the 'relationshipMap' request arms them for that dish
   in this session (a map opened before the first tick arms at the first tick); until then the watcher sums
   no pool. `RelationshipMapData.poolsRecordedSinceSecond` is the second the pools' own record starts (null
@@ -563,14 +564,17 @@ checkpoint ring and the shelf commit several at once). `SaveStore` keeps the pre
   effort; after it the commit is durable and is applied before the next operation or at the next open. Open
   re-applies a journal, removes `*.tmp` and removes records no slot names (a slot file that cannot be read
   keeps its records). While a committed journal cannot be applied (a full device), reads see the files
-  with the journal laid over them and writes are refused with `StorageFullError`; the store still opens.
+  with the journal laid over them and writes, a removal included, are refused with the error that stopped
+  it (`StorageFullError` when the device is full), so space must be freed outside Pixelmeba; the store
+  still opens. A power cut (not an app kill) is outside the tested crash points: `writeFile` does not fsync.
 - The worker reaches the files through `PortFsOps` (`src/persistence/fsPort.ts`), a MessagePort to the main
   thread's `src/platform/fsHost.ts`: errors keep their names (out of space → `StorageFullError`); each
   operation has 30 s, re-armed when its timer fires more than 5 s late (the app was frozen in the
   background); a real timeout stops the port, and every later operation is refused until a restart.
 - The storage estimate on the app (`src/worker/boot.ts` filesystemEstimate; the checkpoint ring's and the
-  shelf's preflight and the Storage panel): usage = the store's own files + the WebView's usage; quota = the
-  WebView's quota, or none (then the preflight is skipped and the store's own refusal keeps everything).
+  shelf's preflight and the Storage panel): with a WebView quota, usage = the store's own files + the
+  WebView's usage and quota = the WebView's quota; without one, usage = the store's own files and there is
+  no quota (the preflight is skipped and the store's own refusal keeps everything).
 - Settings, the device journal and relationship badges stay in WebView localStorage on both platforms (the
   app's private data; D-0093, owner review).
 
@@ -826,12 +830,17 @@ As built (P4.10; D-0091…D-0095; docs/ANDROID_SETUP.md):
   `pauseDishForBackground` (speed 0 when running, a comparison's prior speed 0, one autosave), once per
   absence; 'resume' never changes the speed and, when a dish had been running, says "Paused while Pixelmeba
   was in the background. No dish time passed."; the page visible again ends the absence silently (D-0095).
-  Pixelmeba's own share sheet and file picker also pause a running dish (D-0095).
+  A running comparison or experiment stops too (D-0096). The system share sheet (More → Export, the keep
+  flow's Export) and the file picker also pause a running dish and the return says so; the in-app Share
+  sheet pauses the dish itself while it is open and restores its speed on Close, so it shows no return line
+  (D-0095, D-0096).
 - Recovery on launch: `FilesystemBackend.open` (§11.1), then `SaveStore.load`'s predecessor fallback with
   "The latest save was damaged, so the previous copy was opened."
 - Share (`src/platform/nativeShare.ts`): the file goes to `Directory.Cache/share/<name>` and to the system
   share sheet by its uri; a cancel removes it at once, a completed share's file stays until the next share
-  starts. Every export on the app (`saveTextFile`) goes through the share sheet: no storage permission.
+  starts. Every export on the app (`saveTextFile`) goes through the share sheet: no storage permission. A
+  cancelled sheet is never reported as an export: `saveTextFile` resolves the outcome and the exports say
+  "Not exported" and keep the keep flow at its choice (D-0096).
   Import stays `<input type=file>`.
 - Icons and splash: `art/src/icons/appIcon.ts` compiled by `tools/android-icons.ts` (`npm run android:icons`,
   `--check`): 15 launcher PNGs, 11 splash PNGs, `ic_launcher_background` #14252D and
