@@ -3,6 +3,35 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑12 13:40 UTC — WAVE 7a CODE COMMITTED AND PUSHED: `06a25e9` (check 2022/2023 + the phase3 source-pin
+> fix rerun 11/11). P4.10 and P4.13 NOT TICKED YET: the integration verifier (run `wf_f37f471b-538`;
+> docs/reports/reviews/g4-wave-7a/integrate-verify-{saves,rules}.md) found 2 MAJOR to fix first. START HERE.**
+> - MAJOR 1 (docs): the in-app Share sheet already pauses the dish ("The dish is paused while this is open."), so the
+>   return line does NOT show after Share a picture / living dish; only More → Export (and the keep flow's Export) and
+>   the Import picker pause through App 'pause' and show it. Fix ANDROID_SETUP §10.8.6 and §11, D-0095, ARCH §12.
+> - MAJOR 2 (code): src/ui/state.ts saveTextFile's native branch drops deliverFile's 'cancelled' → "Exported X." and the
+>   keep flow moves on with no file. Make saveTextFile return the ShareOutcome; exportDishFile / exportContinueFile /
+>   exportCurrent / exportChallenge (src/ui/challenge.ts) / exportBeforeStart (WhatIfState.tsx) await it; on 'cancelled'
+>   show SHARE_TEXT.cancelled and keep the keep flow at its choice step; a unit test with a cancelling ShareEnv.
+> - MINORs: pauseDishForBackground also pauses a RUNNING comparison (CompareScreen/ExperimentRun pause only on hidden);
+>   move main.tsx's visibility handler into src/platform/lifecycle.ts (visibilityChanged) + test; "the worker calls
+>   performance.now() only while diagnostics are on" is false (pacing clock) → fix D-0094, ARCH §7, perfCounters.ts:7;
+>   docs: space must be freed outside Pixelmeba on a full phone (removes are refused while a journal is pending);
+>   saving over a hidden damaged slot lets the next open remove its old records (say so in D-0095); damaged checkpoint/
+>   shelf records are kept (accept); writes are refused with the replay's error (StorageFullError when full);
+>   ANDROID_SETUP §11 "30 s of running time" → "30 s after it started; a timer > 5 s late gets a fresh 30 s"; §10.8.12
+>   is a smoke check (the proof is the fs-bridge unit test); no-quota estimate = own files only (ARCH §11.1, D-0093);
+>   ARCH §7 boot bullet's web wording; the Share sheet's stored speed survives backgrounding (P4.6; note it); a source
+>   assertion that placeSpecimenTap calls reportSpecimenPlacement; one sentence: a power cut is outside the enumeration.
+> - Then: targeted tests → full `npm run check` → commit the fixes → `python3 tmp/lead/tick-7a.py <fix sha>` (ticks P4.10
+>   + P4.13; use the FIX commit's sha or 06a25e9 + fix) → `python3 tmp/lead/insert-asbuilt-7a.py <sha> "<evidence>"`
+>   (draft tmp/lead/asbuilt-7a.txt; mention saveTextFile's new return) → build the 7b run file with
+>   tools/lead/build-run-file.py (keys web-arcade,store; OWNER CONTEXT says "lets get started" = resume) → commit + push
+>   → backup loop on wip/g4-wave-7b → launch 7b.
+> - E2E: batch 1 (tmp/lead/e2e-7a-batch1.sh → tmp/lead/e2e-7a-desktop-1.log, started 13:17) ran on the 06a25e9 tree;
+>   batch 2 still to run on desktop: garden, keep-dish, whatif, compare, share, try-dish, observe-tools, keyboard,
+>   experiments and a11y-screens :422 :505 :634 :761 :798 :862 (after the MAJOR 2 fix: keep-dish and share cover it).
+
 > **Update 2026‑10‑12 12:25 UTC — WAVE 7a DONE (run `wf_77241b39-da5`: android + perf2-polish built, 3 verdicts ok,
 > 0 BLOCKER/MAJOR, 13 MINOR). LEAD INTEGRATION DONE IN THE TREE (uncommitted): all 13 MINORs fixed or decided
 > (docs/reports/reviews/g4-wave-7a/integrate-lead-7a.md; D‑0093/D‑0094/D‑0095 appended; ARCH §7/§11.1/§12/§13;
