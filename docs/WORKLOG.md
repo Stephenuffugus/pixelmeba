@@ -66,11 +66,11 @@ with the next task).
 - [x] (c3f214e; D-0076, D-0077, D-0079) P4.2 Story cards (4 templates) + notification limits + notebook tab
 - [x] (9b40210; D-0074; prompt progress per page session is an owner item) P4.3 Garden card, session memory, optional prompts
 - [x] (c3f214e; D-0078) P4.4 Objective engine (5 types) + 3 goals
-- [ ] P4.5 Paired Garden variants (R2)
+- [x] (52e6a27; D-0088) P4.5 Paired Garden variants (R2)
 - [x] (ca8c184; D-0080, D-0083; strict build match for recipe files is an owner item) P4.6 Share (Picture 1080², Starting recipe, Living dish, recipe IDs, stripped export)
 - [x] (ca8c184; D-0081, D-0082, D-0084; the Storage panel that empties the shelf ships with 6b in the same release) P4.7 Try my dish (R4)
-- [ ] P4.8 Observation tools (relationship map, region probes, follow family, bookmarks, recipe card, gallery, challenge editor, transfer preview)
-- [ ] P4.9 Narration (16 phrases), sound polish, reduced‑motion audit table
+- [x] (ca8c184 part a, 52e6a27 parts b–c; D-0085, D-0086, D-0087, D-0090; follow family = P2.3 + P4.1 favorites (D-0073), recipe card = the P4.6 Starting recipe (D-0080); transfer preview moves to Phase 5 with the gate structures, D-0082) P4.8 Observation tools (relationship map, region probes, follow family, bookmarks, recipe card, gallery, challenge editor, transfer preview)
+- [x] (52e6a27; D-0089; hearing the phrases on a device is an owner item) P4.9 Narration (16 phrases), sound polish, reduced‑motion audit table
 - [ ] P4.10 Android (Filesystem adapter, lifecycle, share/import, offline launch, debug build or documented blocker, ANDROID_SETUP.md signing)
 - [ ] P4.11 Web/arcade build (relative base, iframe‑safe, PWA offline, DEMO_MODE)
 - [ ] P4.12 Store readiness (icon, feature graphic, screenshots, listing text, PRIVACY_POLICY.md, data safety, checklist)
