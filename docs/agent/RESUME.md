@@ -28,6 +28,9 @@
 >   (draft tmp/lead/asbuilt-7a.txt; mention saveTextFile's new return) → build the 7b run file with
 >   tools/lead/build-run-file.py (keys web-arcade,store; OWNER CONTEXT says "lets get started" = resume) → commit + push
 >   → backup loop on wip/g4-wave-7b → launch 7b.
+> - Exact fix plan with file:line: tmp/lead/fix-plan-7a.md (gitignored, on disk). Also in it: e2e batch 1's one failure
+>   so far: android-storage desktop, the damaged-save line (a 3.5 s toast) expired under the verifiers' load before the
+>   assertion; the restore itself worked (fix: show it 6 s + wait for it alongside the Open click; rerun both projects).
 > - E2E: batch 1 (tmp/lead/e2e-7a-batch1.sh → tmp/lead/e2e-7a-desktop-1.log, started 13:17) ran on the 06a25e9 tree;
 >   batch 2 still to run on desktop: garden, keep-dish, whatif, compare, share, try-dish, observe-tools, keyboard,
 >   experiments and a11y-screens :422 :505 :634 :761 :798 :862 (after the MAJOR 2 fix: keep-dish and share cover it).
