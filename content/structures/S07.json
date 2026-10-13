@@ -1,0 +1,13 @@
+{
+  "id": "S07",
+  "name": "Nutrient basket",
+  "kind": "furnishing",
+  "guide": {
+    "summary": "A basket that holds one food object in place.",
+    "biology": "A mesh bag holds a lump of food so that it dissolves slowly where you put it.",
+    "rules": "A nutrient basket furnishes one open water, gel or sediment cell and holds the one food object on that cell (a pellet or a wafer). The object releases its food as usual; a Sample can take it only whole, never part of it. Removing the basket leaves the object where it is, and adds or removes no material. One furnishing or device per cell, and at most 256 furnishings and devices in a dish. No additional modeled reaction.",
+    "example": "Put a pellet in a basket at the edge of a colony and watch the food spread out from it."
+  },
+  "iconId": "structure_s07",
+  "phase": 5
+}

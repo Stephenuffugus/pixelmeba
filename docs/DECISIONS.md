@@ -1551,3 +1551,78 @@ Decision:
 - The Phase 5 runner names each saves verifier's scratch folder `tmp/verify-saves-<wave>-<i>/`, so waves cannot overwrite each other's probes.
 Reason: CLAUDE.md "Saves are sacred" and determinism; fast-track.md asks for a second lens "only for determinism- or save-critical work", and this task is that.
 Owner review: no.
+
+## D-0111 · 2026-10-13 · Phase 5 wave 8b · S01–S12 records, recipe structures and environment overrides as built
+Context: wave 8b task structure-content (run wf_0e4e70ee-540; docs/reports/reviews/g5-wave-8b/structure-content-build.md, saves-verify-structure-content.md, wave-verify.md). The builder's proposed decisions are accepted as recorded here; nothing is enabled (D-0104).
+Decision:
+- **Records.** content/structures/S01–S12.json (phase 5, CT §4 names and kinds, iconId structure_s01…s12), with each guide's rules stating its CT §4 / §5.3 / §12.2 numbers and the D-0106 rulings. content/tools/WET_BRUSH.json ("Wetting brush", phase 5, `requiresSystem: "climate"`, "Sets moisture to 0.9.").
+- **Tool `requiresSystem`.** ToolSchema gains `requiresSystem?: SystemFlag`. `enabledToolIds(tools, ids, buildPhase, enabledSystems)` drops a tool whose system the *build's* manifest lacks, so the Field Guide never lists the brush in a build without climate. It does not decide per dish: after the systems flip a v1.0 dish without 'climate' still sees the brush in the Field Guide, and the tool tray must gate on `worldHasSystem(dish, 'climate')` (wave 11, structure-ui).
+- **src/sim/content/structureRules.ts.** It holds:
+  - `STRUCTURE_KINDS` (edge S01–S04; furnishing S05–S07, S11, S12; device S08–S10);
+  - `STRUCTURE_SYSTEM_NEEDS` (S01–S04 → barriers; S05–S08, S11 → devices; S09, S10, S12 → devices + climate; the roof needs no climate because drying, which it stops, needs climate itself);
+  - `expectedStructureKind`, `placedStructureNeedProblem`, `climateNeedProblem`.
+
+  `IMPLEMENTED_STRUCTURES = []` (implemented.ts); the lead adds S01–S12 at the systems flip. The registry checks each record's kind, the implemented list (which allowUnimplemented skips) and each enabled structure's systems.
+- **Placement.** Optional `edges` and `devices` arrays on HabitatSchema and RecipeSchema (EdgePlacementSchema: inclusive cell rectangles of R or D edges; DevicePlacementSchema: one per `at`), not new GeometryOp variants:
+  - They have no default, so older records and files stay byte-identical.
+  - `recipeStructures` is pure. Ids run habitat edges, habitat devices, recipe edges, then recipe devices, and the stores are sorted.
+  - realizeRecipe places them after applyHabitat and sets `nextDeviceId`. It throws RecipeError, quoting the store sentence, when the world's recorded manifest lacks the system or the structure.
+  - It sets `settings.cycleStartTick = 0` only in cycle mode, and refuses a cycle or drying without 'climate'.
+  - It does not bump `grid.geometryVersion` (the realized world is new). Every later writer of edges or devices must bump it (wave 9 caches; carry-over to structure-commands).
+- **Content checks.** Geometry is checked for every habitat and for every recipe that touches structures. Needs and climate are checked for shipped records only, and a habitat's problems are reported on the habitat.
+- **Overrides.** RecipeOverridesRecord gains `lid`, `lightMode` and `drying`. `applyRecipeOverrides` (recipes.ts) is the ONE applier: build() and the What if? transform in host.ts use it, and recipeFile's recipeWithOverrides delegates to it. `hasRecipeChanges` is What if?'s `changed`.
+  - The recipe-file validator accepts the three keys. A file with lightMode 'cycle' or drying true in a build without 'climate' is refused as `damaged('overrides.lightMode' | 'overrides.drying')`. This is moot after the systems flip, when every v1.1 build has climate.
+- **Lead fix (both verifiers' MINOR):** `isAuthoredRecipe` (host.ts) now compares lid, lightMode and drying as `onlySeed` does. A recipe file that records another lid is a custom dish and gets no What if? ideas (tests/worker/whatif.test.ts; it fails without the fix).
+- **Guide copy** for the cycle, local warmth and canopy (the New Dish Environment group, inspector climate lines) belongs to structure-ui (wave 11).
+
+Carry-overs (g5-plan.md "Carry-overs"):
+- **Wave 10, structure-commands (saves verifier MINOR):** Lab edits (structures.ts applyHabitatEdit) ignore world.edges and world.devices today. A stone placed on a device cell, or gel painted under an S04, gives a world whose save is refused on import. It is not reachable before the systems flip, but it becomes a BLOCKER there. The Lab must refuse such cells (a skipped reason) or remove the structure by the SPEC §2.4 rules, with a save-loads test.
+- **Wave 11 (the protocol bump):** when the protocol's RecipeOverrides gains lid, lightMode and drying, build() must validate them and record them in recipeProvenance in the same change.
+- **Phase 7:** S07's text "(a pellet or a wafer)" adds the E17 cache when E17 ships.
+
+Evidence: the wave verifiers (rules lens ok; saves lens ok): all 18 shipped recipes realize byte-identically against HEAD (canonicalJson(serializeWorld) and stateHash at tick 0 and after 300 ticks); determinism with all 12 kinds (two realizations, 400 = 4 × 100, save → load at ticks 0, 1, 137, 399); recipe-file round trips; the fence unchanged, run with the migration, persistence, import, new and worker suites (20 files, 272 tests). Only contentHash moved: b8ddc0dd… → 67075b0e….
+Owner review: yes. The S04, warmth and wick rulings carried from D-0106, and the recipe-file wording for a cycle in a build without climate.
+
+## D-0112 · 2026-10-13 · Phase 5 wave 8b · The 32/48 px Phase 5 organism art as built
+Context: wave 8b task art-large (P5.7 large half; docs/reports/reviews/g5-wave-8b/art-large-build.md, wave-verify.md). Nothing is enabled.
+Decision:
+- **Sprites** (art/src/sprites/phase5_large.ts). P05 Shellglider, P06 Bellstalk and P09 Wheelgrazer are 32 px with 1 heading; P07 Dartfin is 32 px with 4 headings. P08 Waterbear and P10 Needlejaw are 48 px with 4 headings. Each has 6 move, 4 feed, 4 reproduction, 2 stress and 4 death frames per heading. P08 has its 3 still `dormant` poses (D-0109).
+- **Effect marks.** `handling_arc` (4 frames: handling quarters 1–4, frame 0 = up to a quarter done and including 0, so frame = min(3, max(0, ceil(4 × handlingProgress / handlingNeed) − 1)); progress can return to 0 mid-attempt, SPEC §7.3) and `trap_loop` (2 frames: closing, holding) are atlas marks keyed to recorded columns, not procedural effects. They are packed through `PHASE5_FEATURE_LAYERS` until org-ui (wave 13), as D-0109 did for glow_center, jacket_rim and mode_half.
+  - Their frame counts are in a separate `EFFECT_MARKS` table (tools/content-validate.ts), keyed by ability (HANDLING, TRAP), not in FEATURE_FRAMES, whose rows must be content visual layers or native marks. art-build refuses an atlas missing either.
+  - trap_loop has its own tones, not F03's #6B4A12.
+- **Atlas.** One 1024×2048 sheet (1678 frames, 136 of them feature-mark frames; organisms.png 453,280 bytes). The two 48 px four-heading sets need the second 1024 rows. The 1342 earlier frames are byte-identical. The 2048 height is an assumed safe WebGL texture height, unmeasured on a low-end device (owner device item, D-0109).
+- **The grit deposit glyph** stays procedural in src/render/layers.ts (org-ui).
+- **Wake cue audit: no audio change.** The generic dormancy step emits 'wake' for native resters (B12, F04, P08) too, and cues.ts coalesces wakes into one cue within the world budget.
+- art-large edited stage 1's tests/content/art-p5.test.ts to bound four "nothing after stage 1" pins to stage 1's entries; accepted (disclosed, no assertion weakened).
+Evidence: art:build --check up to date (1678 frames, 1024×2048, 695ad0f2554d); the verifier's independent probe found 1342 same / 0 differing / 0 missing frames against HEAD.
+Owner review: no. The low-end device check of the 1024×2048 texture is an owner device item.
+
+## D-0113 · 2026-10-13 · Phase 5 wave 9 · Wave 9 scope and the task writer's rulings (climate stage 2, movement through edges)
+Context: the wave 9 task writer (run wf_5b0fa7ad-dbf; docs/agent/g5-wave-9.tasks.js.txt; docs/reports/reviews/g5-wave-9/tasks-writer.md). The canonical docs are silent on each point below. A builder may still report evidence against a ruling.
+Decision:
+- **Scope.** Wave 9 is climate-stage2 (port 4271) and barrier-movement (4272), one stage, both `critical: 'own'`. e2-shells stays in wave 10, which runs two stages of two (barrier-transport + structure-commands, then e2-shells + e3-resters).
+  - climate-stage2 owns src/sim/climate.ts (new), transport.ts (stage 2 order, updateDerived, TransportCache fields; diffuseField untouched), suitability.ts (the warmth line), chemistry.ts (lightFactors) and constants.ts, plus one moisture-reset call in structures.ts paintSubstrate and 'CANOPY' appended to IMPLEMENTED_NATIVE_ABILITIES.
+  - barrier-movement owns movement.ts, crossing.ts (the shelter check), births.ts, fungi.ts, contacts.ts, parasites.ts, adhesion.ts (E12 links are "links" in D-0106), attachment.ts (SURF_MESH) and the new src/sim/edgePassage.ts. crossing.ts is P04's Phase 3 water crossing, so the edge helpers get a new file.
+  - The task file's header table is the full ownership list (it also gives climate-stage2 world.ts comments, tests/helpers/trajectory.ts and the chemistry test pin, and barrier-movement additive barriers.ts exports and tests/helpers/world.ts helpers).
+- **Light.** The cycle phase is (t − cycleStartTick) mod 2400. Stage 2 of tick T uses t = T. Every other `updateDerived` caller uses t = max(tick − 1, cycleStartTick), "the last completed stage 2".
+  - Canopy reads living CANOPY-ability biomass when light is computed. It feeds effective light for every reader (photosynthesis, E07, dormancy). After a reload the displayed canopy may differ for one tick; the state hash cannot.
+  - The roof's light rule is gated on the recorded S11 alone and recomputed when its cache key moves. A per-tick recompute sets `tc.lightVersion = −1`, so leaving the cycle or losing the last canopy organism recomputes once.
+  - `lightFactors` returns exactly its old three keys unless the world records climate, an S11 or a CANOPY species.
+- **Warmth.** Each tick: relax toward `settings.warmth` (SPEC §4.7 "toward ambient"; CT §12.2's 0.50 is the default ambient), diffuse with the existing diffuseField, apply devices, clamp.
+  - Heaters and coolers act on their own cell, and diffusion spreads the change.
+  - Warmth passes beads, S01, S02, an open S03 and S04. Stone, walls and a closed S03 stop it.
+  - The warmth array is allocated in stage 2 when an S09 or S10 is On.
+- **Moisture.**
+  - The array is allocated in stage 2 when drying is on, or by `ensureMoisture` for the wet brush. A wick or a roof alone allocates nothing. Climate arrays are never freed.
+  - Drying applies to every gel or sediment cell without an S11.
+  - A wick moves its 4-neighbour gel/sediment cells linearly toward 0.8 at 0.001 per tick, in both directions. Several wicks on one cell do not add, a wick does not wet its own cell, and "touches water" means water substrate that is not stone or wall.
+  - Repainting substrate resets that cell's moisture (one hook in structures.ts).
+- **Edges and organisms.**
+  - An exact diagonal corner crossing, and diagonal placement or contact, needs BOTH L-shaped paths to permit the class.
+  - A daughter is placed in her parent's class at birth. The F04 resting daughter's own class is e3-resters' carry-over.
+  - The S05 shelter rule is per species in `canOccupy`, so inoculation, founders, births and fungi inherit it; Small and Fixed organisms are unaffected.
+  - A hunter's target behind an edge that blocks the hunter's class is not acquired, and an existing one is cancelled at once (an edges-only check).
+  - Per-world caches are keyed on `grid.geometryVersion` plus the store array's identity. From wave 10 on, every writer of edges or devices bumps geometryVersion.
+  - Links that a later barrier crosses are severed, or the placement refused, in wave 10 (structure-commands decides).
+Reason: the "last completed stage 2" convention makes reload and uninterrupted runs agree for every simulation reader. The conservative corner rule makes tunnelling through a corner impossible. Lazy allocation tied to recorded state keeps replay, reload and 4× identical (g5-plan "Risks to watch").
+Owner review: no.

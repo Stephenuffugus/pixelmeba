@@ -1,0 +1,13 @@
+{
+  "id": "S03",
+  "name": "Shutter gate",
+  "kind": "edge",
+  "guide": {
+    "summary": "An edge that is either Open or Closed.",
+    "biology": "A sluice or valve between two tanks either lets water through or stops it.",
+    "rules": "A shutter gate sits on the edge between two cells and is Open or Closed. Open, it is no barrier at all: everything crosses as if the edge were empty. Closed, it blocks everything: dissolved things, activities, viruses, organisms, deposits and warmth. It cannot sit on the rim of the dish. A dish holds at most 512 edge barriers, and two barriers on one edge are refused. No additional modeled reaction.",
+    "example": "Close a shutter in a wall between two groups, let each side settle, then open it and watch them meet."
+  },
+  "iconId": "structure_s03",
+  "phase": 5
+}

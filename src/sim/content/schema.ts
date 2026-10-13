@@ -151,6 +151,12 @@ export const ToolSchema = z.object({
   watchFor: z.string().min(1),
   where: z.string().min(1).optional(),
   dose: z.string().min(1).optional(),
+  /**
+   * Phase 5 (D-0107; PROPOSED DECISION in the wave 8b structure-content report): a tool that works only
+   * in a dish whose rules include this system (the wetting brush needs 'climate'). enabledToolIds drops
+   * it while the manifest lacks the system, so the Field Guide never lists a tool the dish cannot use.
+   */
+  requiresSystem: SystemFlagSchema.optional(),
   phase: PhaseSchema,
 });
 export type ToolDef = z.infer<typeof ToolSchema>;
@@ -194,6 +200,56 @@ export const GeometryOpSchema = z.discriminatedUnion('op', [
 ]);
 export type GeometryOp = z.infer<typeof GeometryOpSchema>;
 
+const gridCoord = int.min(0).max(127);
+
+/**
+ * Phase 5 (P5.2, P5.4; CT §4; SPEC §2.4): edge barriers a habitat or recipe places, as an inclusive cell
+ * rectangle: every cell (x, y) with x0 ≤ x ≤ x1 and y0 ≤ y ≤ y1 gets the barrier on its R edge (to x + 1)
+ * or its D edge (to y + 1). `open` is the shutter's state (S03 only; absent = Closed); `flow` the
+ * channel's direction (S04 only, required: +1 = from the cell to its neighbour). Placed by
+ * src/sim/recipes.ts recipeStructures after all cell geometry; the store rules (src/sim/barriers.ts
+ * edgeStoreProblem) refuse a rim edge, two barriers on one edge and more than 512.
+ */
+export const EdgePlacementSchema = z
+  .object({
+    structure: z.enum(['S01', 'S02', 'S03', 'S04']),
+    dir: z.enum(['R', 'D']),
+    x0: gridCoord,
+    y0: gridCoord,
+    x1: gridCoord,
+    y1: gridCoord,
+    open: z.boolean().optional(),
+    flow: z.union([z.literal(1), z.literal(-1)]).optional(),
+  })
+  .strict()
+  .superRefine((e, ctx) => {
+    if (e.x0 > e.x1 || e.y0 > e.y1) ctx.addIssue({ code: 'custom', path: ['x1'], message: 'edge rectangle must have x0 ≤ x1 and y0 ≤ y1' });
+    if (e.open !== undefined && e.structure !== 'S03') ctx.addIssue({ code: 'custom', path: ['open'], message: 'only a shutter gate (S03) is open or closed' });
+    if (e.structure === 'S04' && e.flow === undefined) ctx.addIssue({ code: 'custom', path: ['flow'], message: 'a one-way channel (S04) needs its direction (1 or -1)' });
+    if (e.flow !== undefined && e.structure !== 'S04') ctx.addIssue({ code: 'custom', path: ['flow'], message: 'only a one-way channel (S04) has a direction' });
+  });
+export type EdgePlacement = z.infer<typeof EdgePlacementSchema>;
+
+/**
+ * Phase 5: one furnishing or device a habitat or recipe places on cell `at` (CT §4). `on` only for the
+ * heater and cooler (S09, S10; absent = Off: SPEC §10.4 "devices start Off"); `resinSelect` only for the
+ * adsorption resin (S08; absent = [] = Off), sorted and unique. The store rules (src/sim/devices.ts
+ * deviceStoreProblem) refuse a stone, wall or bead cell, two on one cell and more than 256.
+ */
+export const DevicePlacementSchema = z
+  .object({
+    structure: z.enum(['S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12']),
+    at: z.tuple([gridCoord, gridCoord]),
+    on: z.boolean().optional(),
+    resinSelect: z.array(z.enum(['inhBact', 'inhFung', 'inhPhoto', 'rival'])).optional(),
+  })
+  .strict()
+  .superRefine((d, ctx) => {
+    if (d.on !== undefined && d.structure !== 'S09' && d.structure !== 'S10') ctx.addIssue({ code: 'custom', path: ['on'], message: 'only a heater (S09) or a cooler (S10) is switched on or off' });
+    if (d.resinSelect !== undefined && d.structure !== 'S08') ctx.addIssue({ code: 'custom', path: ['resinSelect'], message: 'only an adsorption resin (S08) has a selection' });
+  });
+export type DevicePlacement = z.infer<typeof DevicePlacementSchema>;
+
 export const HabitatSchema = z.object({
   id: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
   name: z.string().min(1),
@@ -205,6 +261,10 @@ export const HabitatSchema = z.object({
   lid: z.enum(['open', 'closed']).default('open'),
   lightMode: z.enum(['fixed', 'cycle']).default('fixed'),
   drying: z.boolean().default(false),
+  /** Phase 5: edge barriers placed after all cell geometry (optional, no default: older records parse unchanged). */
+  edges: z.array(EdgePlacementSchema).optional(),
+  /** Phase 5: furnishings and devices placed after all cell geometry (optional, no default). */
+  devices: z.array(DevicePlacementSchema).optional(),
   guide: GuideSchema,
   phase: PhaseSchema,
 });
@@ -294,6 +354,13 @@ export const RecipeSchema = z.object({
    * patches and founders. recipeGrid() includes them, so previews and What if? see the same grid.
    */
   ops: z.array(GeometryOpSchema).default([]),
+  /**
+   * Phase 5: edge barriers and furnishings or devices the recipe places after its habitat's own, on the
+   * final grid (habitat and recipe ops), before background overrides, patches and founders. Optional
+   * with no default, so every earlier recipe parses and exports byte-identically.
+   */
+  edges: z.array(EdgePlacementSchema).optional(),
+  devices: z.array(DevicePlacementSchema).optional(),
   fieldPatches: z.array(FieldPatchSchema).default([]),
   founders: z.array(FounderSchema).default([]),
   scheduledCommands: z.array(ScheduledCommandSchema).default([]),

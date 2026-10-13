@@ -1,0 +1,13 @@
+{
+  "id": "S10",
+  "name": "Cooler",
+  "kind": "device",
+  "guide": {
+    "summary": "A small device that cools its own cell while it is On.",
+    "biology": "A cooling coil chills the water around it, and the cold spreads out and fades with distance.",
+    "rules": "A cooler is a device on one open water, gel or sediment cell. It starts Off. While On it lowers the warmth of its cell by 0.01 per second; warmth spreads between neighbouring cells, relaxes back toward the dish's warmth and stays between 0 and 1. Warmth is an index, not food or material: cooling removes nothing. Heaters and coolers near each other add up. One furnishing or device per cell, and at most 256 furnishings and devices in a dish. Removing it adds and removes no material. No additional modeled reaction.",
+    "example": "Turn on a cooler at one side of the dish and compare the organisms near it with those across the dish."
+  },
+  "iconId": "structure_s10",
+  "phase": 5
+}

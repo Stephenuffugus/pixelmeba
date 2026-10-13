@@ -13,7 +13,11 @@
  * members with transport links (SPEC §7.7).
  */
 import type { ContentRegistry } from './content/registry';
-import type { GeometryOp, HabitatDef, RecipeDef, Species } from './content/schema';
+import type { DevicePlacement, EdgePlacement, GeometryOp, HabitatDef, RecipeDef, Species } from './content/schema';
+import { climateNeedProblem, placedStructureNeedProblem, PLACEABLE_PHASE5_IDS, type PlacedStructures, type StructureRulesView } from './content/structureRules';
+import { edgeStoreProblem, sortEdges, type EdgeBarrier } from './barriers';
+import { deviceStoreProblem, sortDevices, type Device } from './devices';
+import { worldHasStructure, worldHasSystem } from './gates';
 import { FIELD_DEFS, FIELD_IDS, isFieldId, type FieldId } from './fields';
 import {
   cellIndex,
@@ -177,6 +181,45 @@ export interface RecipeOverridesRecord {
    * Sediment Edge'); absent = the recipe's own habitat. See withHabitatOverride.
    */
   readonly habitatId?: string;
+  /**
+   * P5.1 (UX §2.3, New Dish Environment; wave 8b): the lid, light mode and drying chosen at creation;
+   * absent = the recipe's (or else its habitat's) own. A light cycle or drying needs the 'climate'
+   * system (realizeRecipe refuses it otherwise).
+   */
+  readonly lid?: 'open' | 'closed';
+  readonly lightMode?: 'fixed' | 'cycle';
+  readonly drying?: boolean;
+}
+
+/**
+ * The recipe with recorded New Dish choices applied: THE one applier (P5.1; wave 8b). The worker's
+ * build() and What if? rebuild and the recipe file (recipeWithOverrides) all call it, so a dish, its
+ * rebuild and its recipe file can never apply the choices differently. With no choice it returns an
+ * equal copy of `r`.
+ */
+export function applyRecipeOverrides(r: RecipeDef, o: RecipeOverridesRecord): RecipeDef {
+  return {
+    ...withHabitatOverride(r, o.habitatId),
+    ...(o.mutationPreset ? { mutationPreset: o.mutationPreset } : {}),
+    ...(o.founderMode ? { founderMode: o.founderMode } : {}),
+    ...(o.empty ? { founders: [], fieldPatches: [], scheduledCommands: [] } : {}),
+    ...(o.lid !== undefined ? { lid: o.lid } : {}),
+    ...(o.lightMode !== undefined ? { lightMode: o.lightMode } : {}),
+    ...(o.drying !== undefined ? { drying: o.drying } : {}),
+  };
+}
+
+/** Whether recorded choices change anything but the seed (an empty start counts only when true). */
+export function hasRecipeChanges(o: RecipeOverridesRecord): boolean {
+  return (
+    o.mutationPreset !== undefined ||
+    o.founderMode !== undefined ||
+    o.empty === true ||
+    o.habitatId !== undefined ||
+    o.lid !== undefined ||
+    o.lightMode !== undefined ||
+    o.drying !== undefined
+  );
 }
 
 /**
@@ -210,7 +253,10 @@ export function recipeOverridesOf(world: World): RecipeOverridesRecord | null | 
     (r.mutationPreset === undefined || typeof r.mutationPreset === 'string') &&
     (r.founderMode === undefined || typeof r.founderMode === 'string') &&
     (r.empty === undefined || typeof r.empty === 'boolean') &&
-    (r.habitatId === undefined || typeof r.habitatId === 'string');
+    (r.habitatId === undefined || typeof r.habitatId === 'string') &&
+    (r.lid === undefined || r.lid === 'open' || r.lid === 'closed') &&
+    (r.lightMode === undefined || r.lightMode === 'fixed' || r.lightMode === 'cycle') &&
+    (r.drying === undefined || typeof r.drying === 'boolean');
   return ok ? o : null;
 }
 
@@ -327,6 +373,118 @@ export function founderCells(world: World, recipe: Pick<RecipeDef, 'id'>, f: Fou
   return eligible.slice(0, f.count);
 }
 
+// ------------------------------------------------------------------ Phase 5 placed structures (P5.2)
+
+function edgesOf(list: readonly EdgePlacement[] | undefined, out: EdgeBarrier[], nextId: () => number): void {
+  for (const p of list ?? []) {
+    for (let y = p.y0; y <= p.y1; y++) {
+      for (let x = p.x0; x <= p.x1; x++) {
+        out.push({
+          id: nextId(),
+          kind: p.structure,
+          cell: cellIndex(x, y),
+          dir: p.dir,
+          ...(p.structure === 'S03' ? { open: p.open ?? false } : {}),
+          ...(p.structure === 'S04' && p.flow !== undefined ? { flow: p.flow } : {}),
+        });
+      }
+    }
+  }
+}
+
+function devicesOf(list: readonly DevicePlacement[] | undefined, out: Device[], nextId: () => number): void {
+  for (const p of list ?? []) {
+    out.push({
+      id: nextId(),
+      kind: p.structure,
+      cell: cellIndex(p.at[0], p.at[1]),
+      ...(p.structure === 'S09' || p.structure === 'S10' ? { on: p.on ?? false } : {}),
+      ...(p.structure === 'S08' ? { resinSelect: [...(p.resinSelect ?? [])] } : {}),
+    });
+  }
+}
+
+/**
+ * The edge barriers and furnishings or devices a habitat and recipe place (Phase 5; CT §4): pure, no
+ * world. Ids run from 1 in this order: the habitat's edges, the habitat's devices, the recipe's edges,
+ * the recipe's devices (a rectangle's cells row-major); the stores are then sorted (sortEdges,
+ * sortDevices). Not validated here: realizeRecipe and the registry run the store checks on the grid.
+ */
+export function recipeStructures(
+  habitat: Pick<HabitatDef, 'edges' | 'devices'>,
+  recipe?: Pick<RecipeDef, 'edges' | 'devices'>,
+): { edges: EdgeBarrier[]; devices: Device[] } {
+  let id = 1;
+  const nextId = () => id++;
+  const edges: EdgeBarrier[] = [];
+  const devices: Device[] = [];
+  edgesOf(habitat.edges, edges, nextId);
+  devicesOf(habitat.devices, devices, nextId);
+  edgesOf(recipe?.edges, edges, nextId);
+  devicesOf(recipe?.devices, devices, nextId);
+  return { edges: sortEdges(edges), devices: sortDevices(devices) };
+}
+
+/**
+ * The first problem with placed structures on `grid` under `rules`, as a sentence, or null: the
+ * structures and systems they need (structureRules.ts), then the store rules (barriers.ts
+ * edgeStoreProblem, devices.ts deviceStoreProblem: the rim, two barriers on one edge, a channel between
+ * two open water cells, a device on a stone, wall or bead, two on one cell, the 512 and 256 caps).
+ * `rules` null checks geometry alone (every Phase 5 structure counts as included).
+ */
+export function placedStructureProblem(placed: PlacedStructures, grid: Grid, rules: StructureRulesView | null): string | null {
+  if (placed.edges.length === 0 && placed.devices.length === 0) return null;
+  if (rules !== null) {
+    const need = placedStructureNeedProblem(placed, rules);
+    if (need !== null) return need;
+  }
+  const enabledStructures = rules === null ? PLACEABLE_PHASE5_IDS : PLACEABLE_PHASE5_IDS.filter((id) => rules.hasStructure(id));
+  return edgeStoreProblem(placed.edges, grid, { enabledStructures }) ?? deviceStoreProblem(placed.devices, grid, { enabledStructures });
+}
+
+/**
+ * Content checks of a habitat's (and, with `recipe`, a recipe's) placed structures and climate
+ * settings (the registry runs them; realizeRecipe runs the same with the world's recorded manifest).
+ * `rules` null checks geometry alone (and no climate). `only` limits the checks to the placed
+ * structures or to the climate settings. Paths: 'edges', 'devices', 'lightMode', 'drying'.
+ */
+export function structurePlacementProblems(
+  habitat: HabitatDef,
+  recipe: RecipeDef | null,
+  rules: StructureRulesView | null,
+  only?: 'placement' | 'climate',
+): RecipeShapeProblem[] {
+  const out: RecipeShapeProblem[] = [];
+  if (only !== 'climate') out.push(...placementProblems(habitat, recipe, rules));
+  if (rules !== null && only !== 'placement') {
+    // A recipe is held to its own lightMode and drying; its habitat's are reported on the habitat.
+    const settings = recipe === null ? { lightMode: habitat.lightMode, drying: habitat.drying } : { lightMode: recipe.lightMode ?? 'fixed', drying: recipe.drying ?? false };
+    const climate = climateNeedProblem(settings, rules);
+    if (climate !== null) out.push({ path: settings.lightMode === 'cycle' ? 'lightMode' : 'drying', message: climate });
+  }
+  return out;
+}
+
+function placementProblems(habitat: HabitatDef, recipe: RecipeDef | null, rules: StructureRulesView | null): RecipeShapeProblem[] {
+  const out: RecipeShapeProblem[] = [];
+  const placed = recipeStructures(habitat, recipe ?? undefined);
+  const grid = placed.edges.length + placed.devices.length === 0 ? createGrid() : recipe === null ? habitatGrid(habitat) : recipeGrid(habitat, recipe);
+  const edgeProblem = placedStructureProblem({ edges: placed.edges, devices: [] }, grid, rules);
+  if (edgeProblem !== null) out.push({ path: 'edges', message: edgeProblem });
+  const deviceProblem = placedStructureProblem({ edges: [], devices: placed.devices }, grid, rules);
+  if (deviceProblem !== null) out.push({ path: 'devices', message: deviceProblem });
+  return out;
+}
+
+/**
+ * Whether a recipe's own records bear on its placed structures: it places its own, or it repaints the
+ * grid (ops, stone removal) under its habitat's. Otherwise its habitat's are checked on the habitat.
+ */
+export function recipeTouchesStructures(habitat: Pick<HabitatDef, 'edges' | 'devices'>, recipe: Pick<RecipeDef, 'edges' | 'devices' | 'ops' | 'removeStones'>): boolean {
+  if ((recipe.edges?.length ?? 0) > 0 || (recipe.devices?.length ?? 0) > 0) return true;
+  return (habitat.edges?.length ?? 0) + (habitat.devices?.length ?? 0) > 0 && (recipe.ops.length > 0 || recipe.removeStones);
+}
+
 export function realizeRecipe(registry: ContentRegistry, recipeOrId: string | RecipeDef, opts: RealizeOptions = {}): World {
   const base = typeof recipeOrId === 'string' ? registry.recipes[recipeOrId] : recipeOrId;
   if (!base) throw new RecipeError(`unknown recipe ${typeof recipeOrId === 'string' ? recipeOrId : recipeOrId.id}`);
@@ -343,24 +501,41 @@ export function realizeRecipe(registry: ContentRegistry, recipeOrId: string | Re
     },
   );
   const seed = opts.seed ?? recipe.seed;
+  const lightMode = recipe.lightMode ?? habitat.lightMode;
   const world = createEmptyWorld({
     worldId: opts.worldId ?? `${recipe.id}-r${recipe.revision}-s${seed}`,
     seed,
     settings: {
       lid: recipe.lid ?? habitat.lid,
-      lightMode: recipe.lightMode ?? habitat.lightMode,
+      lightMode,
       drying: recipe.drying ?? habitat.drying,
       warmth: habitat.warmth,
       mutationPreset: recipe.mutationPreset,
       founderMode: recipe.founderMode,
+      // Schema 5 (D-0106): the cycle starts at tick 0; present only in cycle mode.
+      ...(lightMode === 'cycle' ? { cycleStartTick: 0 } : {}),
     },
     content,
   });
+  // Phase 5 rules are gated on the world's recorded manifest (D-0103): a light cycle or drying needs 'climate'.
+  const recorded: StructureRulesView = { hasStructure: (id) => worldHasStructure(world, id), hasSystem: (sys) => worldHasSystem(world, sys) };
+  const climate = climateNeedProblem(world.settings, recorded);
+  if (climate !== null) throw new RecipeError(`recipe ${recipe.id}: ${climate}`);
   applyHabitat(world, habitat, {
     removeStones: recipe.removeStones,
     ...(recipe.baseLight !== undefined ? { baseLight: recipe.baseLight } : {}),
     ...(recipe.ops.length > 0 ? { ops: recipe.ops } : {}),
   });
+  // Phase 5 (P5.2, P5.4): edge barriers, furnishings and devices, placed on the final cell geometry. A
+  // recipe without any leaves the stores empty and nextDeviceId 1, so it realizes exactly as before.
+  const placed = recipeStructures(habitat, recipe);
+  if (placed.edges.length > 0 || placed.devices.length > 0) {
+    const problem = placedStructureProblem(placed, world.grid, recorded);
+    if (problem !== null) throw new RecipeError(`recipe ${recipe.id}: ${problem}`);
+    world.edges = placed.edges;
+    world.devices = placed.devices;
+    world.counters.nextDeviceId = 1 + placed.edges.length + placed.devices.length;
+  }
   const cells = maskCells();
   for (let k = 0; k < cells.length; k++) {
     const i = cells[k]!;

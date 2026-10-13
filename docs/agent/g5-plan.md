@@ -154,6 +154,17 @@ this plan and the relevant slice of g5-briefs.md, not the whole spec.
 - **Wave 10, structure-commands and barrier-transport:** the list in docs/agent/g5-wave-9.tasks.js.txt "LEAD AFTER 6"
   (geometryVersion bumps on every edges/devices write, link severing, wet brush and setLightMode through climate.ts,
   the Life brush preview, the S04 channel's class helpers, gate tallies).
+- **Wave 10, structure-commands (D-0111, saves verifier):** Lab edits (structures.ts applyHabitatEdit) must respect
+  world.edges and world.devices. Refuse an edit that would leave a device on a stone, wall or bead cell (devices.ts:69
+  wants ST_NONE), or an S04 whose two cells are not both open water (water substrate and ST_NONE, barriers.ts:209-210)
+  (a skipped reason), or remove the structure by the SPEC §2.4 rules, with a save-loads test.
+  Otherwise the game's own saves are refused once structures exist: a BLOCKER at the systems flip.
+- **Wave 11, the protocol bump (D-0111):** when the protocol's RecipeOverrides gains lid, lightMode and drying, build()
+  validates them and records them in recipeProvenance in the same change. The tool tray gates the wetting brush on
+  `worldHasSystem(dish, 'climate')` (the Field Guide filters by the build's manifest only).
+- **Wave 13, org-ui (D-0112):** handling_arc frame = min(3, max(0, ceil(4 × handlingProgress / handlingNeed) − 1)) (progress
+  can return to 0 mid-attempt, SPEC §7.3); trap_loop frame 0 closing, 1 holding; move handling_arc and trap_loop with the other Phase 5 marks into FEATURE_LAYERS.
+- **Phase 7 (E17):** S07's guide text "(a pellet or a wafer)" adds the E17 cache.
 - **Wave 11, structure-render-worker:** the inspector's warmth line and suitability breakdown must read local warmth
   (src/worker/snapshot.ts reads settings.warmth today), and the cell inspector shows lightFactors' cycle, roof and canopy.
 - **Wave 13, e3-traps (D-0108):**

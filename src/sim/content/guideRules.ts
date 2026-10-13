@@ -19,6 +19,7 @@
  * Content only: nothing here is read by the simulation of a world.
  */
 import type { ContentIssue } from './registry';
+import type { SystemFlag } from '../fields';
 import type { HabitatDef, Manifest, MaterialDef, ModuleDef, Species, StructureDef, ToolDef } from './schema';
 
 /** The sentence a material's rules end with when it takes part in no further modeled reaction (UX §5.7). */
@@ -67,9 +68,21 @@ export function speciesNamedIn(text: string, species: Readonly<Record<string, Sp
   return ids.filter((id) => speciesNamePattern(species[id]!.name).test(text));
 }
 
-/** The tools a manifest enables: every tool record whose phase ≤ the build phase (no manifest list). */
-export function enabledToolIds(tools: Readonly<Record<string, ToolDef>>, ids: readonly string[], buildPhase: number): string[] {
-  return ids.filter((id) => tools[id]!.phase <= buildPhase);
+/**
+ * The tools a manifest enables: every tool record whose phase ≤ the build phase (no manifest list) and
+ * whose `requiresSystem`, if any, the manifest enables (Phase 5: the wetting brush needs 'climate'), so
+ * the Field Guide never lists a tool the dish cannot use.
+ */
+export function enabledToolIds(
+  tools: Readonly<Record<string, ToolDef>>,
+  ids: readonly string[],
+  buildPhase: number,
+  enabledSystems: readonly SystemFlag[],
+): string[] {
+  return ids.filter((id) => {
+    const t = tools[id]!;
+    return t.phase <= buildPhase && (t.requiresSystem === undefined || enabledSystems.includes(t.requiresSystem));
+  });
 }
 
 export function guideProblems(input: GuideInput): ContentIssue[] {
@@ -123,7 +136,7 @@ export function guideProblems(input: GuideInput): ContentIssue[] {
   guided(input.modules, m.enabledModules);
   guided(input.habitats, m.enabledHabitats);
   guided(input.structures, m.enabledStructures ?? []);
-  guided(input.tools, enabledToolIds(input.tools.map, input.tools.ids, m.buildPhase), (tool, file) => {
+  guided(input.tools, enabledToolIds(input.tools.map, input.tools.ids, m.buildPhase, m.enabledSystems), (tool, file) => {
     for (const f of TOOL_FIELDS) if (tool[f].trim() === '') err(file, f, 'enabled tool needs Field Guide text here');
     nameCheck(
       file,

@@ -32,6 +32,8 @@ const LUMA_STEP = 32;
 const SAME_OUTLINE = new Set(['B03|B07', 'B01|B06']);
 /** Phase 5 small sprites (P5.7 art-small): every one is held to the alpha rule; none shares an outline. */
 const P5_SMALL = ['A02', 'A03', 'A04', 'A05', 'B09', 'B10', 'B11', 'B12', 'B13', 'F03', 'F04', 'V02', 'X02'];
+/** Phase 5 large sprites (P5.7 art-large): P05–P07 and P09 join the 32 px group, P08 and P10 form the 48 px one; all held to the alpha rule. */
+const P5_LARGE = ['P05', 'P06', 'P07', 'P08', 'P09', 'P10'];
 
 function representative(def: SpriteDef): Px {
   const a = def.form === 'fungus' ? def.animations.mask : def.form === 'virus' ? def.animations.glyph : (def.animations.move ?? def.animations.idle);
@@ -90,10 +92,10 @@ const stats = (a: SpriteDef, b: SpriteDef) => compare(gray(a, representative(a))
 describe('silhouettes and grayscale patterns (UX §6.1, §6.3)', () => {
   it('covers every Phase 1, Phase 3 and Phase 5 sprite, grouped by frame size', () => {
     expect(SPRITES.map((d) => d.speciesId).sort()).toEqual(
-      ['A01', 'B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'F01', 'F02', 'P01', 'P02', 'P03', 'P04', 'V01', 'X01', 'Y01', 'Y02', ...P5_SMALL].sort(),
+      ['A01', 'B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'F01', 'F02', 'P01', 'P02', 'P03', 'P04', 'V01', 'X01', 'Y01', 'Y02', ...P5_SMALL, ...P5_LARGE].sort(),
     );
-    // 15 + 13 small (16×16) → 378 pairs; 4 large (32×32) → 6 pairs.
-    expect(pairs).toHaveLength((28 * 27) / 2 + 6);
+    // 15 + 13 small (16×16) → 378 pairs; 4 + 4 large (32×32) → 28 pairs; 2 at 48×48 (P08, P10) → 1 pair.
+    expect(pairs).toHaveLength((28 * 27) / 2 + (8 * 7) / 2 + 1);
     for (const k of SAME_OUTLINE) expect(pairs.some(([a, b]) => key(a, b) === k), k).toBe(true);
   });
 

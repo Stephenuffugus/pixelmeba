@@ -30,10 +30,11 @@ import {
   type ToolDef,
   type VariantDef,
 } from './schema';
-import { IMPLEMENTED_MODULES, IMPLEMENTED_NATIVE_ABILITIES } from './implemented';
+import { IMPLEMENTED_MODULES, IMPLEMENTED_NATIVE_ABILITIES, IMPLEMENTED_STRUCTURES } from './implemented';
+import { expectedStructureKind, rulesOfManifest, STRUCTURE_SYSTEM_NEEDS } from './structureRules';
 import { MODULE_NATIVE_ABILITY, missingModuleParams, moduleSetProblem } from './moduleRules';
 import { MAX_WHAT_IF_CHOICES, variantPatchProblems } from '../variants';
-import { recipeShapeProblems } from '../recipes';
+import { recipeShapeProblems, recipeTouchesStructures, structurePlacementProblems } from '../recipes';
 import { experimentProblems } from '../experiments';
 import { objectivePredicateProblem } from '../objectives';
 import { PAINT_TARGETS, STRUCTURE_RECORD_IDS } from '../grid';
@@ -284,6 +285,16 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
     h.ops.forEach((op, i) => {
       if (op.op === 'rect' && (op.x0 > op.x1 || op.y0 > op.y1)) err(habitats.files[id]!, `ops.${i}`, 'rect must have x0 ≤ x1 and y0 ≤ y1');
     });
+    // Phase 5 (P5.2): the habitat's placed edges and devices on its own grid (geometry alone; what they
+    // need from the manifest is checked below for shipped habitats).
+    for (const p of structurePlacementProblems(h, null, null)) err(habitats.files[id]!, p.path, p.message);
+  }
+  // Phase 5 (CT §4): every structure record has the kind the simulation gives its id.
+  for (const id of structures.ids) {
+    const want = expectedStructureKind(id);
+    const st = structures.map[id]!;
+    const kindWords = { cell: 'a cell structure', edge: 'an edge barrier', furnishing: 'a furnishing', device: 'a device' } as const;
+    if (want !== undefined && st.kind !== want) err(structures.files[id]!, 'kind', `${id} is ${kindWords[want]} in the simulation (CT §4), not ${kindWords[st.kind]}`);
   }
   for (const id of recipes.ids) {
     const r = recipes.map[id]!;
@@ -304,6 +315,9 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
     });
     // P3.9: the recipe's own ops and founder placement, cells, initial values and links.
     for (const p of recipeShapeProblems(r, habitats.map[r.habitatId], species.map)) err(file, p.path, p.message);
+    // Phase 5 (P5.2): the recipe's placed edges and devices (with its habitat's) on its final grid.
+    const rh = habitats.map[r.habitatId];
+    if (rh && recipeTouchesStructures(rh, r)) for (const p of structurePlacementProblems(rh, r, null)) err(file, p.path, p.message);
   }
   for (const id of experiments.ids) {
     const e = experiments.map[id]!;
@@ -405,14 +419,29 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
       }
     });
     // Structures (ARCH §2; CT §4; P2.7): known, shipped by this phase, and implemented by the simulation.
-    const implementedStructures: readonly string[] = Object.values(STRUCTURE_RECORD_IDS);
+    // Phase 5: S01–S12 count as implemented once listed in IMPLEMENTED_STRUCTURES (the systems flip,
+    // D-0104; tests may skip this one check with allowUnimplemented, as for abilities), have their CT §4
+    // kind (checked for every record above) and need their systems.
+    const cellStructures: readonly string[] = Object.values(STRUCTURE_RECORD_IDS);
     (m.enabledStructures ?? []).forEach((id, i) => {
       const st = structures.map[id];
       if (st === undefined) return err(mf, `enabledStructures.${i}`, `unknown structure "${id}"`);
       if (st.phase > m.buildPhase) err(mf, `enabledStructures.${i}`, `"${id}" belongs to phase ${st.phase} (build phase ${m.buildPhase})`);
-      if (!implementedStructures.includes(id)) err(mf, `enabledStructures.${i}`, `"${id}" is not implemented by the simulation yet`);
-      else if (st.kind !== 'cell') err(structures.files[id]!, 'kind', `${id} is a cell structure in the simulation`);
+      if (expectedStructureKind(id) === undefined) return err(mf, `enabledStructures.${i}`, `"${id}" is not a structure the simulation knows`);
+      if (!allowUnimplemented && !cellStructures.includes(id) && !IMPLEMENTED_STRUCTURES.includes(id))
+        err(mf, `enabledStructures.${i}`, `"${id}" is not implemented by the simulation yet`);
+      for (const sys of STRUCTURE_SYSTEM_NEEDS[id] ?? []) {
+        if (!m.enabledSystems.includes(sys)) err(mf, `enabledStructures.${i}`, `enabled structure "${id}" (${st.name}) needs the "${sys}" system (not in enabledSystems)`);
+      }
     });
+    // Phase 5 (P5.2, P5.4): a shipped habitat's placed structures and climate settings need what they use.
+    const rules = rulesOfManifest(m);
+    for (const id of m.enabledHabitats) {
+      const h = habitats.map[id];
+      if (h === undefined || h.phase > m.buildPhase) continue;
+      const file = habitats.files[id]!;
+      for (const p of structurePlacementProblems(h, null, rules)) if (!issues.some((x) => x.file === file && x.path === p.path && x.message === p.message)) err(file, p.path, p.message);
+    }
     m.enabledHabitats.forEach((id, i) => {
       if (habitats.map[id] === undefined) err(mf, `enabledHabitats.${i}`, `unknown habitat "${id}"`);
     });
@@ -422,6 +451,16 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
       if (r.phase > m.buildPhase) continue;
       const file = recipes.files[id]!;
       if (!m.enabledHabitats.includes(r.habitatId)) err(file, 'habitatId', `habitat "${r.habitatId}" is not enabled in this build`);
+      // Phase 5: its placed structures (with its habitat's) and its own light cycle or drying need what
+      // they use (a habitat's own are reported on the habitat; a geometry problem only once).
+      const h = habitats.map[r.habitatId];
+      if (h) {
+        const found = [
+          ...(recipeTouchesStructures(h, r) ? structurePlacementProblems(h, r, rules, 'placement') : []),
+          ...(r.lightMode !== undefined || r.drying !== undefined ? structurePlacementProblems(h, r, rules, 'climate') : []),
+        ];
+        for (const p of found) if (!issues.some((x) => x.file === file && x.path === p.path && x.message === p.message)) err(file, p.path, p.message);
+      }
       r.founders.forEach((f, i) => {
         if (!m.enabledSpecies.includes(f.species)) err(file, `founders.${i}.species`, `"${f.species}" is not enabled in this build`);
         f.modules.forEach((mod) => {

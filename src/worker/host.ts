@@ -9,7 +9,7 @@
 import { applyNow, type CommandPayload } from '@sim/commands';
 import type { ContentRegistry } from '@sim/content/registry';
 import type { RecipeDef } from '@sim/content/schema';
-import { realizeRecipe, recipeGrid, recipeOverridesOf, withHabitatOverride, type RecipeOverridesRecord, type RecipeWorldProvenance } from '@sim/recipes';
+import { applyRecipeOverrides, hasRecipeChanges, realizeRecipe, recipeGrid, recipeOverridesOf, type RecipeOverridesRecord, type RecipeWorldProvenance } from '@sim/recipes';
 import { deserializeWorld, serializeWorld, stateHash, type WorldState } from '@sim/serialize';
 import { canonicalJson } from '@sim/hash';
 import { step } from '@sim/tick';
@@ -2162,16 +2162,7 @@ export class DishHost {
       return realizeRecipe(this.registry, source.recipeId, {
         worldId: dishId,
         ...(source.seed !== undefined ? { seed: source.seed } : {}),
-        ...(o
-          ? {
-              transform: (r) => ({
-                ...withHabitatOverride(r, o.habitatId),
-                ...(o.mutationPreset ? { mutationPreset: o.mutationPreset } : {}),
-                ...(o.founderMode ? { founderMode: o.founderMode } : {}),
-                ...(o.empty ? { founders: [], fieldPatches: [], scheduledCommands: [] } : {}),
-              }),
-            }
-          : {}),
+        ...(o ? { transform: (r) => applyRecipeOverrides(r, o) } : {}),
         // What if? (D09 §4): record exactly what was applied above, so the world says whether it IS the authored recipe.
         provenance: this.recipeProvenance(source),
       });
@@ -2235,7 +2226,10 @@ export class DishHost {
       (o.habitatId ?? recipe.habitatId) === recipe.habitatId &&
       (o.seed ?? recipe.seed) === recipe.seed &&
       (o.mutationPreset ?? recipe.mutationPreset) === recipe.mutationPreset &&
-      (o.founderMode ?? recipe.founderMode) === recipe.founderMode
+      (o.founderMode ?? recipe.founderMode) === recipe.founderMode &&
+      (o.lid ?? recipe.lid) === recipe.lid &&
+      (o.lightMode ?? recipe.lightMode) === recipe.lightMode &&
+      (o.drying ?? recipe.drying) === recipe.drying
     );
   }
 
@@ -2351,20 +2345,11 @@ export class DishHost {
     // Undefined overrides: an older save that did not record its choices. Its start is only guessed at
     // here, and any difference (a custom seed or setting) makes the comparison below fail: it is kept.
     if (!recipe || p.recipeRevision !== recipe.revision || o === null) return null;
-    const changed = o !== undefined && (o.mutationPreset !== undefined || o.founderMode !== undefined || o.empty === true || o.habitatId !== undefined);
+    const changed = o !== undefined && hasRecipeChanges(o);
     return realizeRecipe(this.registry, recipe.id, {
       worldId: w.worldId,
       ...(o?.seed !== undefined ? { seed: o.seed } : {}),
-      ...(changed
-        ? {
-            transform: (r: RecipeDef): RecipeDef => ({
-              ...withHabitatOverride(r, o.habitatId),
-              ...(o.mutationPreset ? { mutationPreset: o.mutationPreset } : {}),
-              ...(o.founderMode ? { founderMode: o.founderMode } : {}),
-              ...(o.empty ? { founders: [], fieldPatches: [], scheduledCommands: [] } : {}),
-            }),
-          }
-        : {}),
+      ...(changed ? { transform: (r: RecipeDef): RecipeDef => applyRecipeOverrides(r, o) } : {}),
       // Recorded as the dish recorded it: provenance is compared too, never assumed.
       provenance: JSON.parse(JSON.stringify(p)) as World['content']['provenance'],
     });

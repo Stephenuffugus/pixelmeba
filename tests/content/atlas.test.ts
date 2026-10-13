@@ -229,7 +229,8 @@ describe('atlas completeness (P1.4)', () => {
       const markFrames = Object.values(a.manifest.features).reduce((n, f) => n + f.frames * f.headings, 0);
       expect(firstTile - firstMark).toBe(markFrames);
       // 10 Phase 2–3 layers (80 frames) + Phase 5 glow_center 2, jacket_rim 4, mode_half 2, in four headings.
-      expect(markFrames).toBe(80 + (2 + 4 + 2) * 4);
+      // + the Phase 5 effect marks (art-large, wave 8b): handling_arc 4, trap_loop 2, in four headings.
+      expect(markFrames).toBe(80 + (2 + 4 + 2) * 4 + (4 + 2) * 4);
       expect(a.manifest.frames.length - firstTile).toBe(Object.values(a.manifest.tiles).reduce((n, t) => n + t.frames, 0));
     });
   });

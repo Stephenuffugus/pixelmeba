@@ -14,7 +14,7 @@
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { validateContent, type ContentIssue, type RawPacks } from '../../src/sim/content/registry';
-import { GUIDE_FIELDS, hostsOf, NO_REACTION_SENTENCE, parasitesOf, predatorsOf, preyOf, TOOL_FIELDS } from '../../src/sim/content/guideRules';
+import { enabledToolIds, GUIDE_FIELDS, hostsOf, NO_REACTION_SENTENCE, parasitesOf, predatorsOf, preyOf, TOOL_FIELDS } from '../../src/sim/content/guideRules';
 import { stateHash } from '../../src/sim/serialize';
 import { DishHost } from '../../src/worker/host';
 import { MemoryBackend, SaveStore } from '../../src/persistence/store';
@@ -61,7 +61,8 @@ describe('P3.8 every enabled record has Field Guide text (validator)', () => {
     expect(errors(patchedRawPacks(G2_LISTS))).toEqual([]);
     expect(() => registryWith(G2_LISTS)).not.toThrow();
     const reg = registry();
-    expect(reg.toolIds).toEqual(['CLEAN_WATER', 'COMPARE', 'DUPLICATE', 'ERASE_STRUCTURE', 'INSPECT', 'OVERLAYS', 'SAMPLE', 'SNAPSHOT', 'TRANSFER', 'UNDO']);
+    // Phase 5 (wave 8b): WET_BRUSH is a record, enabled only with the 'climate' system (tests/content/structures-p5.test.ts).
+    expect(reg.toolIds).toEqual(['CLEAN_WATER', 'COMPARE', 'DUPLICATE', 'ERASE_STRUCTURE', 'INSPECT', 'OVERLAYS', 'SAMPLE', 'SNAPSHOT', 'TRANSFER', 'UNDO', 'WET_BRUSH']);
   });
 
   for (const [kind, id] of ENABLED) {
@@ -269,7 +270,7 @@ describe('P3.8 the guide’s predators, prey and hosts equal CT §3.2–§3.3 (e
     expect(model.species.map((s) => s.id)).toEqual(reg.manifest.enabledSpecies);
     expect(model.modules.map((s) => s.id)).toEqual(reg.manifest.enabledModules);
     expect(model.materials.map((s) => s.id)).toEqual(reg.manifest.enabledMaterials);
-    expect(model.equipment.map((e) => e.id)).toEqual([...reg.manifest.enabledStructures!, ...reg.toolIds, ...reg.manifest.enabledHabitats]);
+    expect(model.equipment.map((e) => e.id)).toEqual([...reg.manifest.enabledStructures!, ...enabledToolIds(reg.tools, reg.toolIds, reg.manifest.buildPhase, reg.manifest.enabledSystems), ...reg.manifest.enabledHabitats]);
     // Modules appear in each species entry they can appear in (PROPOSED DECISION, G17 22).
     expect(model.species.find((s) => s.id === 'B01')!.abilities.map((a) => a.id)).toEqual(
       reg.manifest.enabledModules.filter((m) => reg.modules[m]!.eligibleAncestors.includes('B01')),

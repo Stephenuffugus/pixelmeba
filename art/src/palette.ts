@@ -206,6 +206,26 @@ export const P = {
   // P10 Needlejaw
   needlejawBlue: '#3B5FB4',
   needlejawFork: '#B7C6EE',
+  // Phase 5 large consumers' local shades (art-large, wave 8b; the six accents above stay the only
+  // UX §6.1 colours, each drawn only in the part §6.1 names: tests/content/art-p5-large.test.ts)
+  shellgliderDeep: '#D2C4A4',
+  shellgliderLobe: '#F8F3E7',
+  shellgliderVacuole: '#6F6248',
+  bellstalkDeep: '#7FA3C9',
+  bellstalkLight: '#E6F0FA',
+  bellstalkVacuole: '#3E5878',
+  dartfinDeep: '#3A9DAE',
+  dartfinLight: '#B5ECF3',
+  waterbearDeep: '#7C6C52',
+  waterbearLight: '#C9BBA0',
+  waterbearClaw: '#2E261C',
+  waterbearGut: '#6E8A3E',
+  wheelgrazerDeep: '#B25F80',
+  wheelgrazerLight: '#EAA7BF',
+  wheelgrazerGut: '#7A3352',
+  needlejawDeep: '#2A4385',
+  needlejawLight: '#6F8BD0',
+  needlejawGut: '#1C2C57',
 
   // Feature layers
   reserveAmber: '#E0A53A',
@@ -235,6 +255,11 @@ export const P = {
   glowHalo: '#E4F7A6',
   jacketRim: '#C7D0D4',
   jacketRimDeep: '#7D8A91',
+  // Phase 5 effect marks (UX §6.5 "handling arc, trap loop"; art-large): keyed to recorded columns
+  handlingArc: '#C8553D',
+  handlingTick: '#2C3F49',
+  trapLoopHeld: '#5C3F0E',
+  trapLoopLight: '#C9A25E',
 
   // World tiles (UX §6.2 film textures, §6.5 food object outlines; wave 2 art-features)
   filmTeal: '#7FB9AB',

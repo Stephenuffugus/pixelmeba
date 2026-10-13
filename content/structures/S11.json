@@ -1,0 +1,13 @@
+{
+  "id": "S11",
+  "name": "Shade roof",
+  "kind": "furnishing",
+  "guide": {
+    "summary": "A roof over one cell that dims its light and keeps it from drying.",
+    "biology": "A floating leaf shades the water below it and keeps the mud underneath from drying out.",
+    "rules": "A shade roof furnishes one open water, gel or sediment cell. Light on that cell is multiplied by 0.25, and while Drying is on that cell does not dry. It shelters nothing from chemistry and adds no food; organisms stay visible under its outline. Drying never concentrates chemicals: amounts are kept per cell, so a drying cell holds exactly what it held. One furnishing or device per cell, and at most 256 furnishings and devices in a dish. Removing it adds and removes no material. No additional modeled reaction.",
+    "example": "On a drying gel dish, put a roof over part of a colony and compare the cells under it with those beside it."
+  },
+  "iconId": "structure_s11",
+  "phase": 5
+}

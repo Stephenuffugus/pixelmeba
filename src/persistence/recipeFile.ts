@@ -23,10 +23,10 @@ import type { HabitatDef, RecipeDef } from '@sim/content/schema';
 import { canonicalJson, sha256Hex } from '@sim/hash';
 import { isMutationPreset } from '@sim/mutation';
 import {
+  applyRecipeOverrides,
   realizeRecipe,
   recipeOverridesOf,
   RecipeError,
-  withHabitatOverride,
   type RecipeOverridesRecord,
   type RecipeWorldProvenance,
 } from '@sim/recipes';
@@ -156,14 +156,12 @@ function versionsOf(registry: ContentRegistry): RecipeVersions {
   };
 }
 
-/** The recipe with recorded New Dish choices applied, exactly as the worker's build() applies them. */
+/**
+ * The recipe with recorded New Dish choices applied, exactly as the worker's build() applies them: the
+ * one applier, @sim/recipes applyRecipeOverrides (P5.1).
+ */
 export function recipeWithOverrides(r: RecipeDef, o: RecipeOverridesRecord): RecipeDef {
-  return {
-    ...withHabitatOverride(r, o.habitatId),
-    ...(o.mutationPreset ? { mutationPreset: o.mutationPreset } : {}),
-    ...(o.founderMode ? { founderMode: o.founderMode } : {}),
-    ...(o.empty ? { founders: [], fieldPatches: [], scheduledCommands: [] } : {}),
-  };
+  return applyRecipeOverrides(r, o);
 }
 
 /** Whether recorded choices change nothing but (possibly) the seed: the start is a bundled recipe id. */
@@ -172,7 +170,10 @@ function onlySeed(r: RecipeDef, o: RecipeOverridesRecord): boolean {
     o.empty !== true &&
     (o.habitatId ?? r.habitatId) === r.habitatId &&
     (o.mutationPreset ?? r.mutationPreset) === r.mutationPreset &&
-    (o.founderMode ?? r.founderMode) === r.founderMode
+    (o.founderMode ?? r.founderMode) === r.founderMode &&
+    (o.lid ?? r.lid) === r.lid &&
+    (o.lightMode ?? r.lightMode) === r.lightMode &&
+    (o.drying ?? r.drying) === r.drying
   );
 }
 
@@ -504,7 +505,7 @@ export function recipeFileProblem(raw: unknown, registry: ContentRegistry): Reci
     if (!isUint(s.seed, RECIPE_SEED_MAX)) return damaged('seed');
     const o = s.overrides;
     if (!isObj(o)) return damaged('overrides');
-    const okeys = ['empty', 'founderMode', 'habitatId', 'mutationPreset', 'seed'];
+    const okeys = ['drying', 'empty', 'founderMode', 'habitatId', 'lid', 'lightMode', 'mutationPreset', 'seed'];
     if (Object.keys(o).some((k) => !okeys.includes(k))) return damaged('overrides');
     if (o.seed !== undefined && (!isUint(o.seed, RECIPE_SEED_MAX) || o.seed !== s.seed))
       return damaged('seed');
@@ -513,6 +514,13 @@ export function recipeFileProblem(raw: unknown, registry: ContentRegistry): Reci
       return damaged('overrides.mutationPreset');
     if (o.founderMode !== undefined && !['identical', 'varied', 'diverse'].includes(o.founderMode as string))
       return damaged('overrides.founderMode');
+    // P5.1: the New Dish environment. A light cycle or drying needs this build's 'climate' system.
+    if (o.lid !== undefined && o.lid !== 'open' && o.lid !== 'closed') return damaged('overrides.lid');
+    if (o.lightMode !== undefined && o.lightMode !== 'fixed' && o.lightMode !== 'cycle')
+      return damaged('overrides.lightMode');
+    if (o.lightMode === 'cycle' && !m.enabledSystems.includes('climate')) return damaged('overrides.lightMode');
+    if (o.drying !== undefined && typeof o.drying !== 'boolean') return damaged('overrides.drying');
+    if (o.drying === true && !m.enabledSystems.includes('climate')) return damaged('overrides.drying');
     if (
       o.habitatId !== undefined &&
       (!isStr(o.habitatId, 64) ||

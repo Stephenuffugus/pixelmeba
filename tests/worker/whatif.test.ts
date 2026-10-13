@@ -23,6 +23,7 @@ import { GRID_W } from '../../src/sim/constants';
 import { MemoryBackend, SaveStore } from '../../src/persistence/store';
 import { buildSaveFile, loadSaveFile, saveMetaVariant } from '../../src/persistence/saveFile';
 import { realizeRecipe } from '../../src/sim/recipes';
+import { buildRecipeFile, realizeRecipeSource } from '../../src/persistence/recipeFile';
 import { DishHost } from '../../src/worker/host';
 import type {
   DishInfo,
@@ -33,6 +34,8 @@ import type {
   WhatIfPick,
 } from '../../src/worker/protocol';
 import { registry } from '../helpers/world';
+import { registryWith } from '../helpers/registry';
+import type { SystemFlag } from '../../src/sim/fields';
 
 const REG = registry();
 const GARDEN = { kind: 'recipe', recipeId: 'FIRST_DISH_V1' } as const;
@@ -550,6 +553,42 @@ describe('What if? is offered only for the authored recipe or a variant dish (D0
     const text = ((await h.ask({ type: 'exportDish', dishId: 'c', strip: false })) as Of<'exported'>).text;
     const back = (await h.ask({ type: 'importDish', text, newDishId: 'c-back' })) as Of<'loaded'>;
     expect(back.info.whatIfSourceId).toBeNull();
+  });
+
+  it('a recipe file that records another lid is a custom dish: no ideas (wave 8b verifiers, D-0111)', async () => {
+    // The recipe-file validator accepts lid / lightMode / drying from wave 8b on; isAuthoredRecipe compares them as onlySeed does.
+    const rec = REG.recipes.FIRST_DISH_V1!;
+    const fileWith = async (overrides: Record<string, unknown>) => {
+      const w = await realizeRecipeSource(REG, { kind: 'recipe', recipeId: rec.id, revision: rec.revision, seed: rec.seed, overrides: { seed: rec.seed, ...overrides } } as never, 'src');
+      return (await buildRecipeFile(REG, w)).text;
+    };
+    const h = harness();
+    const lid = rec.lid === 'closed' ? 'open' : 'closed';
+    const custom = (await h.ask({ type: 'recipeImport', text: await fileWith({ lid }), newDishId: 'lid' })) as Of<'loaded'>;
+    expect(custom.type).toBe('loaded');
+    expect(h.world('lid').settings.lid).toBe(lid);
+    expect(custom.info.whatIfSourceId).toBeNull();
+    // The same file with the authored lid is the authored recipe and keeps the ideas.
+    const same = (await h.ask({ type: 'recipeImport', text: await fileWith({}), newDishId: 'same' })) as Of<'loaded'>;
+    expect(same.info.whatIfSourceId).toBe('FIRST_DISH_V1');
+  });
+
+  it('in a build with climate, a recipe file that records a light cycle or drying is a custom dish too (D-0111)', async () => {
+    // The shipped build refuses such files (no 'climate'), so this needs a build whose manifest records climate.
+    const reg = registryWith({ enabledSystems: [...REG.manifest.enabledSystems, 'climate'].sort() as SystemFlag[] }, { allowUnimplemented: true });
+    const rec = reg.recipes.FIRST_DISH_V1!;
+    const fileWith = async (overrides: Record<string, unknown>) => {
+      const w = await realizeRecipeSource(reg, { kind: 'recipe', recipeId: rec.id, revision: rec.revision, seed: rec.seed, overrides: { seed: rec.seed, ...overrides } } as never, 'src');
+      return (await buildRecipeFile(reg, w)).text;
+    };
+    const h = harness(reg);
+    for (const [id, o] of [['cycle', { lightMode: 'cycle' }], ['drying', { drying: true }]] as const) {
+      const r = (await h.ask({ type: 'recipeImport', text: await fileWith(o), newDishId: id })) as Of<'loaded'>;
+      expect(r.type, id).toBe('loaded');
+      expect(r.info.whatIfSourceId, id).toBeNull();
+    }
+    const same = (await h.ask({ type: 'recipeImport', text: await fileWith({}), newDishId: 'same' })) as Of<'loaded'>;
+    expect(same.info.whatIfSourceId).toBe('FIRST_DISH_V1');
   });
 
   it('the authored recipe itself (Play → Start, or New Dish with exactly its seed and settings) gets the ideas', async () => {

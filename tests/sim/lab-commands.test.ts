@@ -62,7 +62,7 @@ import { phageCellAccepts } from '../../src/sim/viruses';
 import { run, step } from '../../src/sim/tick';
 import { transportCache } from '../../src/sim/transport';
 import type { World } from '../../src/sim/world';
-import { validateContent, type RawFile, type RawPacks } from '../../src/sim/content/registry';
+import { validateContent, type RawPacks } from '../../src/sim/content/registry';
 import { loadRawPacksFs } from '../../tools/lib/content-fs';
 import { FakeClockHost } from '../helpers/host';
 import { aliveOf, clearWater, place, registry, setField } from '../helpers/world';
@@ -865,12 +865,13 @@ describe('Lab content comes from the world (P2.7)', () => {
       expect(reg.materials[id]!.phase).toBe(2);
     }
     expect(reg.manifest.enabledStructures).toEqual(['BEAD', 'STONE', 'WALL']);
-    expect(reg.structureIds).toEqual(['BEAD', 'STONE', 'WALL']);
+    // Phase 5 (wave 8b): S01–S12 are records too (phase 5, not enabled; tests/content/structures-p5.test.ts).
+    expect(reg.structureIds.filter((id) => reg.structures[id]!.phase <= 2)).toEqual(['BEAD', 'STONE', 'WALL']);
     // CT §4 names.
     expect(reg.structures.STONE!.name).toBe('Stone');
     expect(reg.structures.WALL!.name).toBe('Impermeable wall');
     expect(reg.structures.BEAD!.name).toBe('Porous bead');
-    for (const id of reg.structureIds) {
+    for (const id of ['BEAD', 'STONE', 'WALL']) {
       expect(reg.structures[id]!.kind).toBe('cell');
       expect(reg.structures[id]!.phase).toBe(2);
     }
@@ -890,7 +891,6 @@ describe('Lab content comes from the world (P2.7)', () => {
       ...r,
       manifest: { ...r.manifest, data: { ...(r.manifest.data as object), ...patch } },
     });
-    const withStructure = (r: RawPacks, file: RawFile): RawPacks => ({ ...r, structures: [...r.structures, file] });
     const stone = base.structures.find((f) => f.file.endsWith('STONE.json'))!.data as Record<string, unknown>;
     expect(errors((r) => withManifest(r, { enabledStructures: ['BEAD', 'LAVA', 'STONE', 'WALL'] }))).toEqual([
       'content/manifest.json → enabledStructures.1: unknown structure "LAVA"',
@@ -898,11 +898,11 @@ describe('Lab content comes from the world (P2.7)', () => {
     expect(errors((r) => withManifest(r, { enabledStructures: ['STONE', 'BEAD'] }))).toEqual([
       'content/manifest.json → enabledStructures: must be sorted ascending',
     ]);
-    // A record the simulation does not implement yet (a Phase 5 membrane) may exist but not be enabled.
-    const membrane = { file: 'content/structures/S01.json', data: { ...stone, id: 'S01', name: 'Fine membrane', kind: 'edge', phase: 2 } };
-    expect(errors((r) => withStructure(r, membrane))).toEqual([]);
-    expect(errors((r) => withManifest(withStructure(r, membrane), { enabledStructures: ['BEAD', 'S01', 'STONE', 'WALL'] }))).toEqual([
+    // A record the simulation does not implement yet (the Phase 5 membrane, content/structures/S01.json
+    // since wave 8b) may exist but not be enabled; enabling it also needs its system (structureRules.ts).
+    expect(errors((r) => withManifest(r, { enabledStructures: ['BEAD', 'S01', 'STONE', 'WALL'] }))).toEqual([
       'content/manifest.json → enabledStructures.1: "S01" is not implemented by the simulation yet',
+      'content/manifest.json → enabledStructures.1: enabled structure "S01" (Fine membrane) needs the "barriers" system (not in enabledSystems)',
     ]);
     // A phase later than the build: buildPhase + 1 read from the manifest (it moves with each phase; D-0105).
     const buildPhase = (base.manifest.data as { buildPhase: number }).buildPhase;
