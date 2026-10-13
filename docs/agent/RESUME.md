@@ -3,6 +3,17 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑13 19:45 UTC — WAVE 8b COMMITTED `e25cd77` (check 226 files / 2589 tests; e2e 70/70 desktop +
+> phone-portrait; D‑0111, D‑0112; integration verifier wf_df98133f-a7c, its MAJOR (handling_arc formula) and MINORs fixed).
+> Wave 8 is done. WAVE 9 RUNNING from docs/agent/g5-wave-9.run.workflow.js.txt (climate-stage2 4271, barrier-movement
+> 4272, both critical 'own'; D‑0113). Backups → `wip/g5-wave-9` (pid tmp/lead/backup-9.pid). START HERE.**
+> - If the session died mid-9: if `git status` is clean, restore the tree from `wip/g5-wave-9`; read
+>   docs/reports/reviews/g5-wave-9/ and the run journal (see the 19:45 note in memory for the run id); rerun only unfinished
+>   tasks (A.only + finish notes).
+> - After 9: LEAD AFTER WAVE 9 in docs/agent/g5-wave-9.tasks.js.txt (MINORs, D‑numbers, check, fence + both corpora, perf note
+>   docs/reports/perf-g5.md, ARCH as built, WORKLOG notes, commit) → wave 10 task writer (two stages of two; carry-overs in
+>   g5-plan.md and the wave 9 LEAD AFTER 6 list).
+
 > **Update 2026‑10‑13 16:35 UTC — WAVE 8a COMMITTED `60a4731` (check 222 files / 2514 tests; e2e 76/76 desktop +
 > phone-portrait; D‑0108, D‑0109; integration verifier wf_4596eb7b-bc0, its MAJOR (E14 is Phase 7) and NITs fixed).
 > WAVE 8b RUNNING (run wf_0e4e70ee-540, launched 16:37) from docs/agent/g5-wave-8b.run.workflow.js.txt (structure-content critical → own saves lens, D‑0110;
