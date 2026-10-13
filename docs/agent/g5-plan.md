@@ -97,8 +97,8 @@ chemistry.ts, commands.ts, content/schema.ts, recipes.ts, protocol.ts, snapshot.
 |---|---|---|---|
 | Preflight (lead + 1) | rc1-corpus; release/1.0; buildPhase 5, contentVersion 3; D-0101… | rc1-corpus | Before any Phase 5 code. Full check. |
 | 8 Foundation (D-0107: two stages, two run files 8a / 8b) | 8a: schema5 (all stores and columns, barriers.ts table, trajectory registrations, migration tests), art-small · 8b: structure-content, art-large | schema5 | art-small owns art/src/index.ts and sprite.ts in 8a; art-large appends in 8b. PROTOCOL_VERSION 3 moves to wave 11's structure-render-worker. |
-| 9 Climate and barriers | climate-stage2, barrier-movement | climate, movement | climate owns transport.ts, suitability.ts and chemistry.ts; movement owns movement.ts, births.ts, contacts.ts, fungi.ts and parasites.ts. |
-| 10 Transport and commands | barrier-transport, structure-commands, e2-shells, e3-resters | all four | transport.ts passes to barrier-transport, intake.ts to e2-shells, and births.ts to e3-resters. |
+| 9 Climate and barriers | climate-stage2, barrier-movement (one stage; docs/agent/g5-wave-9.tasks.js.txt) | climate, movement (each its own saves lens) | climate owns transport.ts, suitability.ts and chemistry.ts; movement owns movement.ts, births.ts, contacts.ts, fungi.ts, parasites.ts, adhesion.ts, attachment.ts and the new edgePassage.ts (crossing.ts is P04's Phase 3 water crossing). |
+| 10 Transport and commands | stage 1: barrier-transport, structure-commands · stage 2: e2-shells, e3-resters | all four | transport.ts passes to barrier-transport, intake.ts to e2-shells, and births.ts to e3-resters. Two stages of two, so no stage runs a lone builder. |
 | 11 Structures on screen; signals | structure-render-worker, structure-ui, e2-signals, region-charts-gates | e2-signals | Then the lead's **systems flip**. |
 | 12 Algae and predation | e2-light-algae, e3-predation, structures-art-audio (P5.7b) | algae, predation | The task file splits movement.ts and phenotype.ts between the two sim tasks, or moves one of them to wave 13. |
 | 13 Traps and jacket | e3-traps, e3-jacket, org-ui, relmatrix | traps, jacket | Then the lead's **organism flip** (moduleRegistryVersion 3, fence re-record). Ticks P5.3 and P5.5. |
@@ -148,6 +148,14 @@ this plan and the relevant slice of g5-briefs.md, not the whole spec.
 - **Wave 11, e2-signals (D-0108):** the import refuses glowState 1 on an organism that is not Active (D-0106), so the
   code that moves an organism out of Active (dormancy entry, resting newborns) must clear glowState in the same tick, or
   the game's own saves are refused. Add a test that saves and reloads a glowing organism right after it starts Preparing.
+- **Wave 10, e3-resters:** wave 9's placement rule puts a daughter in her parent's class at birth. An F04 resting
+  daughter is Small while resting (D-0106), so her placement must use her own class (pass it to the placement helpers in
+  edgePassage.ts), and waking re-checks attachability.
+- **Wave 10, structure-commands and barrier-transport:** the list in docs/agent/g5-wave-9.tasks.js.txt "LEAD AFTER 6"
+  (geometryVersion bumps on every edges/devices write, link severing, wet brush and setLightMode through climate.ts,
+  the Life brush preview, the S04 channel's class helpers, gate tallies).
+- **Wave 11, structure-render-worker:** the inspector's warmth line and suitability breakdown must read local warmth
+  (src/worker/snapshot.ts reads settings.warmth today), and the cell inspector shows lightFactors' cycle, roof and canopy.
 - **Wave 13, e3-traps (D-0108):**
   - Count trapReserveC/N in computeTotals and sampleTotals (a +0 term keeps older sums bit-identical) and drop the
     import's reserve refusal (src/persistence/phase5State.ts).
