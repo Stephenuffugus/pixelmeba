@@ -3,6 +3,24 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑13 23:35 UTC — SAFE REFRESH POINT (the owner refreshes the codespace after wave 9, before wave 10).
+> WAVE 9 COMMITTED `3d2a1d8` (check 235 files / 2679 tests incl. the fence and both corpora; art and contentHash
+> unchanged; D‑0115 classOf, D‑0116 as built; integration verifier's MAJOR + MINORs fixed). WAVE 10 IS READY BUT NOT
+> LAUNCHED: task file filled for 3d2a1d8, D‑0117 recorded (owner flag: the native dry trigger), run file
+> docs/agent/g5-wave-10.run.workflow.js.txt built with verifyGroups. Nothing is running; main clean and pushed. START HERE.**
+> - On "lets get started":
+>   1. `git status` clean and `git log -1` = the resume commit (or later).
+>   2. Ports: `for p in 4271 4272 4273 4274 4390 4391 4394 4396 4397 4398; do lsof -t -i :$p | xargs -r kill; done`.
+>   3. Backups: `nohup tools/lead/backup-loop.sh wip/g5-wave-10 "wip: wave 10 in flight" >/dev/null 2>&1 & echo $! >
+>      tmp/lead/backup-10.pid`.
+>   4. Launch: copy docs/agent/g5-wave-10.run.workflow.js.txt into the session scratchpad as g5-wave-10.run.workflow.js
+>      and run it with the Workflow tool (scriptPath). Within minutes, read the first agents' transcripts
+>      (subagents/workflows/<run>/agent-*.jsonl) to see they are on task. Record the run id here.
+>   5. While it runs (≈ 5–6 h: stage 1 barrier-transport + structure-commands, stage 2 e2-shells + e3-resters, then
+>      verification): the wave 11 task writer (structure-render-worker, structure-ui, e2-signals, region-charts-gates;
+>      then the lead's systems flip), using the g5-plan carry-overs.
+> - After 10: LEAD AFTER WAVE 10 in docs/agent/g5-wave-10.tasks.js.txt.
+
 > **Update 2026‑10‑13 22:25 UTC — WAVE 9 BUILT AND VERIFIED (run wf_ef7f09c2-fbe, 141 min: climate-stage2's MAJOR (a
 > test timeout) fixed in round 1 and re-verified; the world-stores-5 MAJOR was the lead's). LEAD INTEGRATION IS IN THE TREE,
 > UNCOMMITTED (backup loop → `wip/g5-wave-9`, pid tmp/lead/backup-9.pid; builders' final state = local ref

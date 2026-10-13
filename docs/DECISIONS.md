@@ -1689,3 +1689,34 @@ Decision:
   - 512 edges plus 256 devices: about +0.3 to +0.55 ms per tick in stage 4 at about 530 organisms.
 Reason: each builder ruling keeps replay, reload and 4× identical or keeps a displayed number traceable to the value the simulation used. The content-keyed climate caches and the mesh fix close the only reload divergences the saves verifiers found.
 Owner review: no.
+
+## D-0117 · 2026-10-13 · Phase 5 wave 10 · Wave 10 scope and the task writer's rulings (barrier transport, structure commands, shells, resters)
+Context: the wave 10 task writer (run wf_3eee27c3-2a4; docs/agent/g5-wave-10.tasks.js.txt; docs/reports/reviews/g5-wave-10/tasks-writer.md). The canonical docs are silent on each point below. A builder may still report evidence against a ruling. Contradictions 1 and 3 of the writer's report are already ruled (D-0114, D-0115).
+Decision:
+- **Scope.** Two stages of two. Stage 1 is barrier-transport (port 4271) and structure-commands (4272), each `critical: 'own'`. Stage 2 is e2-shells (4273) and e3-resters (4274), `critical: true`, sharing one saves verifier. `A.verifyGroups` = [[barrier-transport, structure-commands], [e2-shells, e3-resters]]: rules verifiers on 4390/4391, saves verifiers on 4396/4397/4398, re-verify on 4394, never 4290. The task file's header table is the full ownership list.
+- **Nothing is enabled** (D-0104). No schema bump. `PROTOCOL_VERSION` stays 2 although the `CommandPayload` union the protocol carries grows (wave 11 bumps it). Builders do not edit `implemented.ts`: the lead appends DORMANCY, RESTING_DAUGHTER and SHELL at integration, as the briefs say (the runner's "add what you implement" yields to them).
+- **Barrier transport.**
+  - Dissolved and activity fields share one barrier-adjusted coefficient pair. The viral pair is the same array unless an S01 exists. The cache rebuilds when `geometryVersion` or the `world.edges` array identity moves. Film halves the coefficient after the barrier factor (SPEC §4.1 states both).
+  - Gate tallies add |flux| per field in field units, using the kernel's own expression on pre-step values. S04 is excluded from diffusion tallies; its channel moves are tallied. Organism crossings are counted by tracing each organism's straight path from the start to the end of stage 4 (in `tick.ts`); an attached parasite counts as its own crossing.
+  - The S04 channel moves dissolved and viral pools only, never activity fields. It moves one organism only if `classOf` is Small and the organism is free: not attached, not a host or an attached parasite, not linked, not anchored, not held. Any life state qualifies; the lowest birthId goes first. The destination must pass `canOccupy`, except that a resting newborn needs only her habitat. The organism moves by an exact integer offset, and `nextOrganismTick` = tick + 10 is set only after a move.
+  - Resin: the last selected target takes the exact remainder; `bound` is created lazily; no ledger line (activity is not a conserved material).
+  - Every command write to edges or devices bumps `geometryVersion` exactly once. Stage writes (`nextOrganismTick`, a resin's `bound`) do not, and no cache may key on them.
+- **Structure commands.**
+  - Eight command kinds, added flat like the habitat edits: `placeEdges`, `placeDevice`, `removeStructures`, `moveDevice`, `setDevice`, `wetBrush`, `setLightMode`, `setDrying`. New optional result keys (`ids`, `refused`, `exported`, `severed`, and `device` and `barrier` skip counts) keep older command logs byte-identical.
+  - An S03 is placed with its open state in the payload, an S04 with its flow. An edge is refused on the rim, next to a stone or wall, on an edge that already has one, for an S04 that does not join two open water cells, and at the cap.
+  - A removed resin's bound activity is exported in the command result only.
+  - Moving a basket moves its food object too. CT §4's "prevents partial sampling" already holds, because objects always sample whole.
+  - `moveDevice` is atomic on both the paused and the queued path; "paused only" is the UI's offer in wave 11.
+  - A barrier placed across a link, or a shutter closed across one, cuts the link with a `linkBroken` event (cause 'barrier'); it is not refused. A released sample block whose link or host pair would straddle a refusing edge follows the same rule (D-0116).
+  - Lab edits skip device cells and S04 sides (new skip reasons `device` and `barrier`) rather than removing the structure.
+  - In the Life brush preview a shelter cell returns 'structure'; the new mesh and shelter inputs are optional, so today's results are unchanged.
+  - Challenges: structure commands and the wetting brush count as 'habitat'; light mode and drying count as 'lid'. `setDevice`, `setLightMode` and `setDrying` use up no action.
+  - Sample Transfer checks the destination with `canOccupy`, so the shelter rule applies.
+- **Shells and resters.**
+  - Grit dissolution scans every cell while the grit field exists, because the code that writes grit never marks the field active. No threshold zeroing.
+  - An F04 resting daughter is placed under her parent's Fixed class (D-0114, D-0115); her candidate cells stay attachable ones. She is unlinked, her birth event detail gets `resting: 1`, and no rest event fires at birth. Being able to attach is an optional wake condition, and FLAG.restNewborn clears in the tick she becomes Active.
+  - `RESTING_NEWBORN` is appended to the reasons, with the copy "Resting since it formed."; the Lab line names the wake conditions.
+  - V02's film minimum is a constant in `viruses.ts`, and a host is skipped before its draw. V02's half-speed diffusion already exists (`viralHalf`), so e3-resters only tests it.
+- **Owner flag (contradiction 2).** The brief's "dry-trigger fixture uses P5.1 moisture" cannot fire for B12, F04 or P08. With CT's numbers (moisture minimum 0.2, shoulder 0.2, drying floor 0.1) their moisture suitability never drops below 0.5, so dryness never makes them rest. The canonical numbers are implemented unchanged. The e3-resters fixture proves the dry trigger with an E03 carrier (B01) instead. The owner may want a lower drying floor, a higher moisture minimum for these species, or a dryness trigger that does not go through suitability.
+Reason: each ruling keeps v1.0 worlds and older command logs byte-identical, or keeps saves, replay and 4× identical. The rulings follow the closest canonical text where one exists.
+Owner review: yes (contradiction 2 only).
