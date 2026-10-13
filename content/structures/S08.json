@@ -1,0 +1,13 @@
+{
+  "id": "S08",
+  "name": "Adsorption resin",
+  "kind": "device",
+  "guide": {
+    "summary": "A resin bead that soaks up the inhibitors and RIVAL you select until it is full.",
+    "biology": "Activated carbon and resin beads bind some dissolved chemicals and hold them until they are full.",
+    "rules": "An adsorption resin is a device on one open water, gel or sediment cell. It starts Off: you choose which inhibitors (bacterial, fungal or photosynthesis) and RIVAL it removes. From its own cell it removes the selected ones at up to 0.05 units per second, shared in proportion, until 5 units are bound; then it does nothing more and never empties itself. It never touches organisms, food, oxygen or enzymes. It darkens as it fills. Removing it takes the bound activity out of the dish as a logged export. One furnishing or device per cell, and at most 256 furnishings and devices in a dish. No additional modeled reaction.",
+    "example": "Set a resin to the bacterial inhibitor inside an inhibitor patch, and compare the bacteria near it with those farther away."
+  },
+  "iconId": "structure_s08",
+  "phase": 5
+}

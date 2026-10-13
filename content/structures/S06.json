@@ -1,0 +1,13 @@
+{
+  "id": "S06",
+  "name": "Attachment mesh",
+  "kind": "furnishing",
+  "guide": {
+    "summary": "A fine mesh that some organisms can attach to.",
+    "biology": "Many microbes grow on surfaces; a mesh in the water gives them somewhere to hold on.",
+    "rules": "An attachment mesh furnishes one open water, gel or sediment cell. Velvet, Rampart, fungi and Bellstalk can attach on it as on any other attachment surface. It gives no protection from inhibitors and adds no food or nutrient. Organisms and dissolved things pass through it as usual. One furnishing or device per cell, and at most 256 furnishings and devices in a dish. Removing it adds and removes no material. No additional modeled reaction.",
+    "example": "Lay a strip of mesh across open water and see which organisms settle on it."
+  },
+  "iconId": "structure_s06",
+  "phase": 5
+}

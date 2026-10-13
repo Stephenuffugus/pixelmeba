@@ -1,0 +1,13 @@
+{
+  "id": "S04",
+  "name": "One-way channel",
+  "kind": "edge",
+  "guide": {
+    "summary": "A directed edge between two water cells that carries a little in one direction only.",
+    "biology": "A slow current along a narrow passage carries dissolved things and tiny swimmers one way, from one pool into the next.",
+    "rules": "A one-way channel joins two open water cells, and its arrow points to the receiving cell. Each second it moves 2 % of each dissolved and viral pool of the source cell into the receiving cell, and at most one Small free organism, kept exactly as it was. Nothing else crosses that edge: ordinary spreading of dissolved things and activities does not, and neither do other organisms, deposits, film or food objects. What moves leaves the source, so nothing is made or lost, and nothing is carried two cells in one step. It cannot sit on the rim of the dish. A dish holds at most 512 edge barriers, and two barriers on one edge are refused. No additional modeled reaction.",
+    "example": "Run a channel from a sugar patch into an empty pool and watch the sugar overlay grow on the arrow side only."
+  },
+  "iconId": "structure_s04",
+  "phase": 5
+}

@@ -165,7 +165,7 @@ export function guideModel(reg: ContentRegistry): GuideModel {
         watchFor: st.guide.example,
       };
     }),
-    ...enabledToolIds(reg.tools, reg.toolIds, m.buildPhase).map((id): EquipmentEntry => {
+    ...enabledToolIds(reg.tools, reg.toolIds, m.buildPhase, m.enabledSystems).map((id): EquipmentEntry => {
       const t = reg.tools[id]!;
       return {
         kind: 'tool',

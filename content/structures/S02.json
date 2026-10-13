@@ -1,0 +1,13 @@
+{
+  "id": "S02",
+  "name": "Small gate",
+  "kind": "edge",
+  "guide": {
+    "summary": "An edge with small slots: small free cells and dissolved things pass, larger bodies do not.",
+    "biology": "A filter with narrow slots sorts by size: tiny bacteria fit through, bigger cells do not.",
+    "rules": "A small gate sits on the edge between two cells, not on a cell. Dissolved things, activities and viruses spread across it at 50 % of their ordinary rate. Small free organisms cross it as if the edge were open. Medium and Large organisms, attached life, deposits, film and food objects are blocked. Warmth passes it as it passes open water. It cannot sit on the rim of the dish. A dish holds at most 512 edge barriers, and two barriers on one edge are refused. No additional modeled reaction.",
+    "example": "Split the dish with a wall that has a small gate in it, and see which organisms turn up on the far side."
+  },
+  "iconId": "structure_s02",
+  "phase": 5
+}

@@ -1,0 +1,17 @@
+{
+  "id": "WET_BRUSH",
+  "name": "Wetting brush",
+  "guide": {
+    "summary": "Wet the gel and sediment under the brush.",
+    "biology": "Misting a drying culture plate brings back its moisture without washing anything away.",
+    "rules": "Each covered gel or sediment cell has its moisture set to 0.9; water cells always have moisture 1 and are left alone. It adds no water and dilutes nothing: every amount in the cell stays the same. Drying never concentrates chemicals: amounts are kept per cell, so a drying cell holds exactly what it held.",
+    "example": "Wet a strip of drying gel and compare the organisms on it with those beside it."
+  },
+  "where": "Gel and sediment cells (water cells are always fully wet and are left alone).",
+  "dose": "Sets moisture to 0.9.",
+  "changes": "Only the moisture of each covered gel and sediment cell.",
+  "doesNotChange": "Adds no water and dilutes nothing: every amount in the cell stays the same. Drying never concentrates chemicals: amounts are kept per cell, so a drying cell holds exactly what it held.",
+  "watchFor": "Whether organisms that were slowing down on drying gel or sediment pick up again.",
+  "requiresSystem": "climate",
+  "phase": 5
+}

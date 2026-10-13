@@ -70,7 +70,7 @@ export type FeatureLayerId =
  * pinned by tests/sim/module-visuals.test.ts). Org-ui moves them into FeatureLayerId and
  * FEATURE_LAYERS (appended in this order, so the atlas does not move) and empties this type.
  */
-export type Phase5FeatureLayerId = 'glow_center' | 'jacket_rim' | 'mode_half';
+export type Phase5FeatureLayerId = 'glow_center' | 'jacket_rim' | 'mode_half' | 'handling_arc' | 'trap_loop';
 
 /** Every mark the atlas packs: the renderer's layers and the Phase 5 marks awaiting it. */
 export type AtlasFeatureLayerId = FeatureLayerId | Phase5FeatureLayerId;
@@ -317,6 +317,67 @@ const MODE_HALF: FeatureLayerDef<Phase5FeatureLayerId> = {
   frames: [modeFrame(true, 1, 2), modeFrame(false, 3, 4)],
 };
 
+// ------------------------------------------------------- Phase 5 effect marks (art-large, wave 8b)
+//
+// UX §6.5 lists "handling arc, trap loop" among the effects; they are atlas marks keyed to recorded
+// entity columns (schema 5, D-0108), so each is drawn only while its state exists (CLAUDE.md "every
+// visible feature maps to real state") and the renderer (org-ui, wave 13) needs no procedural effect:
+//
+//   handling_arc   on a handling predator (P10, native HANDLING) while an attempt runs (UX §7.2
+//                  'handling'; SPEC §7.3): frame k = the quarter of handlingProgress / handlingNeed
+//                  reached (0: up to a quarter … 3: above three quarters). A ring with four fixed
+//                  progress ticks (also the reduced-motion form, UX §7.4 "static ring with progress
+//                  ticks": the frames are still) and an arc that grows clockwise from the front.
+//   trap_loop      on the held P04 while heldBySlot >= 0 (UX §7.2 'held'; SPEC §7.17): frame 0
+//                  'closing' (an open loop round its waist, the first tick of the hold), 1 'holding'
+//                  (the loop closed and cinched, with its knot). Its tones are the mark's own, not F03's
+//                  #6B4A12, which belongs to the trapper's own trap frames (D-0046).
+
+/** handling_arc quarter k (0–3): ticks at the four quarter points, the arc over the first (k + 1) quarters, clockwise from East. */
+function handlingFrame(k: number): Px {
+  const p = new Px(16, 16);
+  for (let y = 0; y < 16; y++)
+    for (let x = 0; x < 16; x++) {
+      const d = dist(x, y);
+      if (d < 6.0 || d >= 7.6) continue;
+      const deg = ((Math.atan2(y + 0.5 - 8, x + 0.5 - 8) * 180) / Math.PI + 360) % 360; // clockwise on screen (y down)
+      const tick = Math.min(deg % 90, 90 - (deg % 90)) < 7;
+      if (tick) p.set(x, y, 2);
+      else if (deg < (k + 1) * 90) p.set(x, y, 1);
+    }
+  return p;
+}
+
+const HANDLING_ARC: FeatureLayerDef<Phase5FeatureLayerId> = {
+  id: 'handling_arc',
+  palette: ['', P.handlingArc, P.handlingTick],
+  frameNames: ['handling up to a quarter done', 'handling up to a half done', 'handling up to three quarters done', 'handling above three quarters done'],
+  frames: [handlingFrame(0), handlingFrame(1), handlingFrame(2), handlingFrame(3)],
+};
+
+/** trap_loop: an elliptical band round the waist (rx × ry); `open` leaves the top of it unclosed, `knot` marks where it is tied. */
+function loopFrame(rx: number, ry: number, open: boolean, tone: number): Px {
+  const fill = new Px(16, 16).fillEllipse(8, 8, rx, ry, 1);
+  const p = new Px(16, 16);
+  // The ellipse's rim: filled pixels with an empty 4-neighbour.
+  for (let y = 0; y < 16; y++)
+    for (let x = 0; x < 16; x++) {
+      if (!fill.get(x, y) || (fill.get(x + 1, y) && fill.get(x - 1, y) && fill.get(x, y + 1) && fill.get(x, y - 1))) continue;
+      if (open && y < 6 && x >= 8) continue;
+      p.set(x, y, tone);
+    }
+  const top = p.bounds()!.y0;
+  if (!open) p.set(9, top - 1, 2).set(10, top - 2, 2);
+  return p;
+}
+
+const TRAP_LOOP: FeatureLayerDef<Phase5FeatureLayerId> = {
+  id: 'trap_loop',
+  palette: ['', P.trapLoopHeld, P.trapLoopLight],
+  frameNames: ['closing (the loop forming round the held worm)', 'holding (the loop closed and tied)'],
+  frames: [loopFrame(3, 5.4, true, 2), loopFrame(2.4, 4.4, false, 1)],
+};
+
 /** The renderer's layers in canonical order (atlas layout and manifest order). Phase 3 layers follow the Phase 2 three. */
 export const FEATURE_LAYERS: readonly FeatureLayerDef[] = [
   STARCH_NOTCH,
@@ -332,7 +393,7 @@ export const FEATURE_LAYERS: readonly FeatureLayerDef[] = [
 ];
 
 /** The Phase 5 marks, packed after the renderer's layers (see Phase5FeatureLayerId). */
-export const PHASE5_FEATURE_LAYERS: readonly FeatureLayerDef<Phase5FeatureLayerId>[] = [GLOW_CENTER, JACKET_RIM, MODE_HALF];
+export const PHASE5_FEATURE_LAYERS: readonly FeatureLayerDef<Phase5FeatureLayerId>[] = [GLOW_CENTER, JACKET_RIM, MODE_HALF, HANDLING_ARC, TRAP_LOOP];
 
 /** Every mark tools/art-build.ts packs, in atlas order: the renderer's layers, then the Phase 5 marks. */
 export const ATLAS_FEATURE_LAYERS: readonly FeatureLayerDef<AtlasFeatureLayerId>[] = [...FEATURE_LAYERS, ...PHASE5_FEATURE_LAYERS];

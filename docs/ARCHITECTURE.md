@@ -100,6 +100,21 @@ the sim registry is "unavailable" (error if enabled); non‑finite or negative v
 duplicate IDs error; every enabled entry needs `guideText` and (from Phase 1) required assets.
 `contentHash` = SHA‑256 over canonical JSON (sorted keys, no whitespace) of all packs.
 
+As built, Phase 5 wave 8b (D-0111; `src/sim/content/structureRules.ts`, `schema.ts`, `recipes.ts`):
+- **Structure records.** content/structures/S01–S12.json carry CT §4's kind, checked against `STRUCTURE_KINDS` (edge
+  S01–S04; furnishing S05–S07, S11, S12; device S08–S10). An enabled structure needs its systems
+  (`STRUCTURE_SYSTEM_NEEDS`: barriers for edges; devices for furnishings and devices; also climate for S09, S10, S12)
+  and a place in `IMPLEMENTED_STRUCTURES` (empty until the systems flip).
+- **Habitat and Recipe placements.** Both gain optional `edges` (structure S01–S04, dir R or D, an inclusive cell
+  rectangle, `open` for S03, `flow` for S04) and `devices` (structure S05–S12, `at`, `on` for S09/S10, `resinSelect`
+  for S08), with no default. `recipeStructures` gives them ids (habitat edges, habitat devices, recipe edges, recipe
+  devices). realizeRecipe places them after applyHabitat, sets `nextDeviceId`, and refuses a structure or system the
+  world's manifest does not record.
+- **Overrides.** `RecipeOverridesRecord` gains `lid`, `lightMode` and `drying`. `applyRecipeOverrides` is the one
+  applier (build(), What if?, recipe files) and `hasRecipeChanges` is What if?'s `changed`.
+- **Tools.** A tool record may name `requiresSystem`, and `enabledToolIds` drops it when the build's manifest lacks
+  that system.
+
 ## 5. Data layout (performance‑critical)
 
 - **Fields**: one `Float64Array(16384)` per allocated field, plus a second buffer for transport.
@@ -504,6 +519,14 @@ packed after the renderer's 10 layers through `PHASE5_FEATURE_LAYERS` / `ATLAS_F
 moves them into `FEATURE_LAYERS` and `FEATURE_LAYER_IDS`. The sheet is 1024 wide; its height is the next power of two
 of the packed shelves, capped at 2048 (`ATLAS_MAX_H`: an assumed safe WebGL texture height for low-end Android, not yet
 measured on a device): 1024×1024 with 1342 frames after 8a.
+
+As built, Phase 5 wave 8b (D-0112):
+- **Sprites.** The 32 px P05, P06, P09 (1 heading) and P07 (4 headings), and the 48 px four-heading P08 (with
+  `dormant`) and P10 are in art/src/sprites/phase5_large.ts.
+- **Effect marks.** `handling_arc` (4 handling quarters) and `trap_loop` (closing, holding) are atlas marks keyed to
+  recorded columns. They are packed through `PHASE5_FEATURE_LAYERS`, and their counts live in `EFFECT_MARKS`
+  (tools/content-validate.ts), by ability.
+- **Atlas.** The sheet is 1024×2048 with 1678 frames (organisms.png 453,280 bytes).
 
 ### 10.2 UI icons
 Inline SVG components (24 px glyph in 48 px target), single color via `currentColor`, with

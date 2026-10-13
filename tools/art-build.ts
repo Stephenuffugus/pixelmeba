@@ -30,7 +30,7 @@ import {
 } from '../art/src/sprite';
 import { blit, createImage, encodePng } from './lib/png';
 import { REPO_ROOT, loadRegistryFs } from './lib/content-fs';
-import { ALL_TILES, atlasSpeciesRef, checkAtlas, enabledMarks, enabledTiles, FEATURE_HEADINGS, FEATURE_SIZE, featureFrameKey, NATIVE_MARKS, TILE_SIZE, tileFrameKey } from './content-validate';
+import { ALL_TILES, atlasSpeciesRef, checkAtlas, EFFECT_MARKS, enabledMarks, enabledTiles, FEATURE_HEADINGS, FEATURE_SIZE, featureFrameKey, NATIVE_MARKS, TILE_SIZE, tileFrameKey } from './content-validate';
 
 /** A packed mark: the renderer's layers and the Phase 5 marks awaiting it (art/src/layers/modules.ts). */
 type FeatureLayerDef = AnyLayerDef<AtlasFeatureLayerId>;
@@ -238,6 +238,8 @@ export function buildAtlas(sources: AtlasSources = {}): { png: Buffer; manifest:
   // Every enabled module needs its feature mark (content visualLayer → art/src/layers).
   const marks = enabledMarks(reg);
   for (const m of marks) if (!FEATURE_LAYERS.some((l) => l.id === m.layer)) errors.push(`enabled module ${m.moduleId} has no feature mark "${m.layer}" in art/src/layers`);
+  // Every effect mark is packed whatever is enabled (UX §6.5 "handling arc, trap loop"; the flip needs no art change).
+  for (const [id, m] of Object.entries(EFFECT_MARKS)) if (!FEATURE_LAYERS.some((l) => l.id === id)) errors.push(`effect mark "${id}" (${m.frames} frames: ${m.states}; drawn on ${m.drawnOn}) is missing from art/src/layers`);
   // Every enabled system or material that draws a world tile needs it (film textures, food objects).
   for (const t of enabledTiles(reg)) if (!TILES.some((d) => d.id === t.tile)) errors.push(`${t.owner} has no world tile "${t.tile}" in art/src/tiles`);
 

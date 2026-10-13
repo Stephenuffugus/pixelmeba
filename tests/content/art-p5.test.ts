@@ -61,8 +61,8 @@ function framesUsing(hex: string): string[] {
 describe('Phase 5 small sprites agree with their species records and the validator (P5.7)', () => {
   it('registers exactly the 13 art-small sprites after the Phase 1 and Phase 3 ones, by species id', () => {
     const ids = SPRITES.map((d) => d.speciesId);
-    expect(ids.slice(19)).toEqual(P5_IDS);
-    expect(Object.keys(P5_SPRITES).sort()).toEqual(P5_IDS);
+    expect(ids.slice(19, 19 + P5_IDS.length)).toEqual(P5_IDS);
+    expect(Object.entries(P5_SPRITES).filter(([, spec]) => spec.size === 16).map(([id]) => id).sort()).toEqual(P5_IDS);
     // Nothing here is enabled: the organism flip (D-0104) turns them on.
     for (const id of P5_IDS) expect(reg.manifest.enabledSpecies, id).not.toContain(id);
   });
@@ -209,7 +209,7 @@ describe('Phase 5 feature marks map to recorded facts (ARCH §10.1, UX §6.2/§6
     // tests/sim/module-visuals.test.ts pins FEATURE_LAYERS to src/render FEATURE_LAYER_IDS (type and
     // order); appending the Phase 5 marks to it broke npm run check (wave 8a verify, MAJOR).
     expect(FEATURE_LAYERS.map((l) => l.id)).toEqual([...FEATURE_LAYER_IDS]);
-    expect(PHASE5_FEATURE_LAYERS.map((l) => l.id)).toEqual(['glow_center', 'jacket_rim', 'mode_half']);
+    expect(PHASE5_FEATURE_LAYERS.map((l) => l.id).slice(0, 3)).toEqual(['glow_center', 'jacket_rim', 'mode_half']);
     for (const l of PHASE5_FEATURE_LAYERS) expect(FEATURE_LAYER_IDS as readonly string[], l.id).not.toContain(l.id);
     // The atlas packs both, the renderer's layers first, so the shipped marks keep their positions.
     expect(ATLAS_FEATURE_LAYERS).toEqual([...FEATURE_LAYERS, ...PHASE5_FEATURE_LAYERS]);
@@ -218,7 +218,7 @@ describe('Phase 5 feature marks map to recorded facts (ARCH §10.1, UX §6.2/§6
   });
 
   it('the three marks are packed with their validator frame counts and names', () => {
-    expect(ATLAS_FEATURE_LAYERS.slice(-3).map((l) => l.id)).toEqual(['glow_center', 'jacket_rim', 'mode_half']);
+    expect(ATLAS_FEATURE_LAYERS.slice(FEATURE_LAYERS.length, FEATURE_LAYERS.length + 3).map((l) => l.id)).toEqual(['glow_center', 'jacket_rim', 'mode_half']);
     for (const id of ['glow_center', 'jacket_rim', 'mode_half']) {
       expect(layer(id).frames, id).toHaveLength(FEATURE_FRAMES[id]!.frames);
       expect(layer(id).frameNames, id).toHaveLength(FEATURE_FRAMES[id]!.frames);

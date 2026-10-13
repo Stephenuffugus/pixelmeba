@@ -138,6 +138,16 @@ export const P5_SPRITES: Readonly<Record<string, SpriteSpec>> = {
   F03: { size: 16, headings: 1, extra: [{ anims: ['trap'], frames: 3, rule: 'ARCH §10.1 "trap open/holding/cooldown"' }] },
   F04: { size: 16, headings: 1, extra: [{ anims: ['dormant'], frames: 3, rule: 'ARCH §10.1 "dormancy prepare/rest/wake"' }] },
   V02: { size: 16, headings: 1 },
+  // Large consumers (P5.7 art-large; UX §6.2 "Large (P01–P07, P09): 32×32 … P08/P10: 48×48", P5.5
+  // "48x48 frames for P08/P10"; headings as CT §1.3 motion gives them: P05, P06 and P09 one, P07, P08
+  // and P10 four). P06 (speed 0, attached) still has the large `move` set: a bell contraction on a
+  // still stalk. P08 (native DORMANCY) adds `dormant` 3 (SPEC §7.6, D-0106).
+  P05: { size: 32, headings: 1, loop: 'move' },
+  P06: { size: 32, headings: 1, loop: 'move' },
+  P07: { size: 32, headings: 4, loop: 'move' },
+  P08: { size: 48, headings: 4, loop: 'move', extra: [{ anims: ['dormant'], frames: 3, rule: 'ARCH §10.1 "dormancy prepare/rest/wake"; P5.7 "dormancy Prepare/Rest/Wake"' }] },
+  P09: { size: 32, headings: 1, loop: 'move' },
+  P10: { size: 48, headings: 4, loop: 'move' },
 };
 
 /** The independent size/heading/loop spec for a species, and the document it comes from. */
@@ -206,6 +216,28 @@ export const NATIVE_MARKS: Readonly<Record<string, string>> = {
   SIGNAL_GLOW: 'glow_center',
   MIXOTROPHY: 'mode_half',
 };
+
+/**
+ * Effect marks (UX §6.5 "handling arc, trap loop"; UX §7.2 'handling', 'held'; P5.7 art-large): atlas
+ * marks keyed to a recorded entity column rather than to a module or a body ability, so they are listed
+ * apart from FEATURE_FRAMES (whose rows are content visualLayers and native marks). Each is needed once
+ * a species with `ability` is enabled (effectMarks), and tools/art-build.ts packs and checks them always.
+ */
+export const EFFECT_MARKS: Readonly<Record<string, { readonly frames: number; readonly states: string; readonly ability: string; readonly drawnOn: string }>> = {
+  handling_arc: { frames: 4, states: 'handling quarters 1–4', ability: 'HANDLING', drawnOn: 'the predator while a handling attempt runs (handlingProgress / handlingNeed, SPEC §7.3)' },
+  trap_loop: { frames: 2, states: 'closing, holding', ability: 'TRAP', drawnOn: 'the held P04 while heldBySlot >= 0 (SPEC §7.17)' },
+};
+
+/** The effect marks the enabled species need (EFFECT_MARKS by ability), by species id, then mark. */
+export function effectMarks(registry: { readonly manifest: { readonly enabledSpecies: readonly string[] }; readonly species: Readonly<Record<string, { readonly nativeAbilities: readonly string[] }>> }): AtlasMarkRef[] {
+  const out: AtlasMarkRef[] = [];
+  for (const id of [...registry.manifest.enabledSpecies].sort()) {
+    for (const [layer, m] of Object.entries(EFFECT_MARKS).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+      if (registry.species[id]!.nativeAbilities.includes(m.ability)) out.push({ moduleId: `${id} ${m.ability}`, layer, kind: 'species' });
+    }
+  }
+  return out;
+}
 export const FEATURE_SIZE = 16;
 export const FEATURE_HEADINGS = 4;
 
@@ -397,7 +429,7 @@ export function checkAtlas(
   for (const mark of opts.marks ?? []) {
     const who = `${mark.moduleId} (${mark.layer})`;
     const base = `features.${mark.layer}`;
-    const need = FEATURE_FRAMES[mark.layer];
+    const need = FEATURE_FRAMES[mark.layer] ?? EFFECT_MARKS[mark.layer];
     const entry = features?.[mark.layer];
     if (!isObj(entry)) {
       err(base, `enabled ${mark.kind === 'species' ? 'species' : 'module'} ${who} has no feature mark in the atlas (run npm run art:build)`);
@@ -494,7 +526,7 @@ async function main(): Promise<void> {
         const pngPath = join(dirname(atlasPath), image);
         const png = existsSync(pngPath) ? new Uint8Array(readFileSync(pngPath)) : null;
         const refs = registry.manifest.enabledSpecies.map((id) => atlasSpeciesRef(registry.species[id]!));
-        marks = [...enabledMarks(registry), ...nativeMarks(registry)];
+        marks = [...enabledMarks(registry), ...nativeMarks(registry), ...effectMarks(registry)];
         tilesNeeded = enabledTiles(registry);
         issues.push(...checkAtlas(atlas, refs, { file: atlasFile, png, marks, tiles: tilesNeeded }));
         atlasFrames = isObj(atlas) && Array.isArray(atlas.frames) ? atlas.frames.length : 0;

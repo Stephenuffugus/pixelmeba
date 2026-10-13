@@ -1,0 +1,13 @@
+{
+  "id": "S05",
+  "name": "Porous shelter",
+  "kind": "furnishing",
+  "guide": {
+    "summary": "A cell with holes that only small free cells can get into.",
+    "biology": "Porous grains give tiny cells hiding places that larger grazers cannot reach into.",
+    "rules": "A porous shelter furnishes one open water, gel or sediment cell. Small free organisms can enter and cross it; Medium and Large organisms cannot. Dissolved things, activities and viruses spread through it as usual, and it adds no food. One furnishing or device per cell, and at most 256 furnishings and devices in a dish. Removing it adds and removes no material. No additional modeled reaction.",
+    "example": "Put shelters beside a group of small bacteria with grazers nearby, then compare how many bacteria are left inside and outside them."
+  },
+  "iconId": "structure_s05",
+  "phase": 5
+}

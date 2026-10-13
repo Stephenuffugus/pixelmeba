@@ -1,0 +1,13 @@
+{
+  "id": "S12",
+  "name": "Moisture wick",
+  "kind": "furnishing",
+  "guide": {
+    "summary": "A woven strip that keeps the gel and sediment beside it moist.",
+    "biology": "A wet cloth strip draws water along it and keeps the soil it touches damp.",
+    "rules": "A moisture wick furnishes one open water, gel or sediment cell. While the wick's cell or one of its four neighbours is water, each gel and sediment cell among its four neighbours moves toward moisture 0.8 by 0.01 per second. Wicks do not chain: a wick counts only water that touches it. It moves no food and no dissolved things. Drying never concentrates chemicals: amounts are kept per cell, so a drying cell holds exactly what it held. One furnishing or device per cell, and at most 256 furnishings and devices in a dish. Removing it adds and removes no material. No additional modeled reaction.",
+    "example": "On a drying gel dish, lay a wick at the bank of a water channel and compare the moisture beside it with the moisture farther away."
+  },
+  "iconId": "structure_s12",
+  "phase": 5
+}

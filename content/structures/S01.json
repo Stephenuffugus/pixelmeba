@@ -1,0 +1,13 @@
+{
+  "id": "S01",
+  "name": "Fine membrane",
+  "kind": "edge",
+  "guide": {
+    "summary": "A thin membrane on one edge: dissolved things seep through slowly, nothing living crosses.",
+    "biology": "Dialysis membranes have pores small enough to let dissolved molecules through while holding back cells and viruses.",
+    "rules": "A fine membrane sits on the edge between two cells, not on a cell. Dissolved things (food, gases, nutrient, salt, acid, base, buffer, silicate, metabolite, inhibitors) and activities (enzymes, signal, RIVAL and the like) spread across it at 25 % of their ordinary rate. Viruses, organisms and deposits never cross it. Warmth passes it as it passes open water. It cannot sit on the rim of the dish. A dish holds at most 512 edge barriers, and two barriers on one edge are refused. No additional modeled reaction.",
+    "example": "Put a line of membranes across a sugar patch: the sugar seeps through, while the swimmers stay on their own side."
+  },
+  "iconId": "structure_s01",
+  "phase": 5
+}
