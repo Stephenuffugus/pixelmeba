@@ -450,7 +450,9 @@ C / full inventory. VisualEvent types add `objectEmptied` (a fading stain).
   deposits and food objects, organism bodies, feature rims (module/size layers), status marks,
   links/bonds, selection, camera‑space HUD is HTML.
 - Camera: pan, pinch/wheel zoom, presets, follow (middle‑half rule), Find, Spotlight. Camera
-  state lives in UI, never in the sim.
+  state lives in UI, never in the sim. The inspector's reveal pan (UX §4.1) is undone, eased, when a
+  key closes the inspector (no other sheet in its place) with the dish focused and nothing has moved the
+  view since (`revealOnSheetChange`, `Camera.undoReveal`, D‑0099); every other close keeps the view.
 - Selection: ring/bracket outside the body; candidate list for ambiguous taps (proximity, then
   id). Selection radius is separate from collision.
 - Effects: particles are cosmetic, budgeted, and dropped first under load.

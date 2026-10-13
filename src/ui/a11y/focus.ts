@@ -36,3 +36,16 @@ export function restoreFocus(el: HTMLElement | null, doc: Document = document): 
   el.focus({ preventScroll: true });
   return doc.activeElement === el;
 }
+
+/**
+ * D-0099: what happens to the inspector's reveal pan (UX §4.1) when the open sheet changes from `prev` to
+ * `next`. Only a key that closes the inspector, with no other sheet taking its place, while the dish holds
+ * focus undoes the pan ('undo'): the view eases back and the centre reticle is on the dish again. Every
+ * other change away from the inspector keeps the view and forgets the pan ('forget'). That covers a pointer
+ * close, a key that opens another sheet (Add Life, Feed) and a sheet that opens by itself (the Try horizon
+ * card). null: the inspector was not closed.
+ */
+export function revealOnSheetChange(prev: string, next: string, keyboard: boolean, dishFocused: boolean): 'undo' | 'forget' | null {
+  if (prev !== 'inspect' || next === 'inspect') return null;
+  return next === 'none' && keyboard && dishFocused ? 'undo' : 'forget';
+}

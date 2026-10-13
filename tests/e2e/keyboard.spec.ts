@@ -218,6 +218,13 @@ test('keyboard: arrows pan the dish under the reticle, Esc closes the candidate 
           await expectDishFocused(page);
           return { x: Number(m[1]), y: Number(m[2]) };
         }
+        // D-0099: the inspector's reveal pan moved the view; Esc eases it back, so Enter at the reticle
+        // inspects the same organism again (the dish is paused).
+        await page.keyboard.press('Escape');
+        await expect(insp).toHaveCount(0);
+        await expectDishFocused(page);
+        await page.keyboard.press('Enter');
+        await expect(insp.getByRole('heading', { level: 2 })).toHaveText(heading, { useInnerText: true });
         await page.keyboard.press('Escape');
         await expect(insp).toHaveCount(0);
         await expectDishFocused(page);

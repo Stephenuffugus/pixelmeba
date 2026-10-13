@@ -106,3 +106,79 @@ describe('camera easing (P4.13)', () => {
     expect(pose(c)).toEqual(target);
   });
 });
+
+/**
+ * D-0099 (v1.0 gate): the inspector's reveal pan moves the view so the organism shows beside the panel. A
+ * key closing the inspector undoes it (eased), so the keyboard reticle is again where Enter inspected; any
+ * other move since the reveal (pan, zoom, preset, Find, follow) keeps the view where the player put it.
+ */
+describe('undoing the reveal pan (D-0099)', () => {
+  it('undo eases back to the view before the reveal, exactly, and only once', () => {
+    const clock = { t: 0 };
+    const c = cam(clock);
+    c.centerOn(50, 60, 8);
+    c.settle();
+    const before = pose(c);
+    c.revealAt(50, 60, 100); // the organism at the reticle goes up, above a bottom sheet
+    c.settle();
+    expect(c.cy).not.toBe(before.cy);
+    expect(c.undoReveal()).toBe(true);
+    expect(c.moving).toBe(true); // eased like the reveal (P4.13)
+    clock.t = CAMERA_EASE_MS;
+    c.step(clock.t);
+    expect(pose(c)).toEqual(before);
+    expect(c.undoReveal()).toBe(false); // forgotten
+    expect(pose(c)).toEqual(before);
+  });
+
+  it('a pan, zoom, preset, Find or follow after the reveal keeps the view; a forgotten reveal is not undone', () => {
+    const moves: Array<(c: Camera) => void> = [
+      (c) => c.panBy(40, 0),
+      (c) => c.zoomBy(1.25),
+      (c) => c.zoomAt(400, 300, 2),
+      (c) => c.fit(),
+      (c) => c.centerOn(30, 30),
+      (c) => {
+        c.followEntityId = 7;
+      },
+      (c) => c.forgetReveal(),
+    ];
+    for (const move of moves) {
+      const c = cam(null);
+      c.centerOn(50, 60, 8);
+      c.revealAt(50, 60, 100);
+      move(c);
+      c.settle();
+      const after = pose(c);
+      expect(c.undoReveal()).toBe(false);
+      expect(pose(c)).toEqual(after);
+    }
+  });
+
+  it('a run of reveals (the inspector changes organism, collapses, expands) undoes to the view before the first', () => {
+    const c = cam(null);
+    c.centerOn(50, 60, 8);
+    const before = pose(c);
+    c.revealAt(50, 60, 100);
+    c.revealAt(55, 62, 120);
+    expect(c.undoReveal()).toBe(true);
+    expect(pose(c)).toEqual(before);
+    // A reveal after another move starts a new run from that view.
+    c.revealAt(50, 60, 100);
+    c.panBy(0, 40);
+    const moved = pose(c);
+    c.revealAt(52, 61, 100);
+    expect(c.undoReveal()).toBe(true);
+    expect(pose(c)).toEqual(moved);
+  });
+
+  it('reduced motion: the undo is instant', () => {
+    const c = cam({ t: 0 }, true);
+    c.centerOn(50, 60, 8);
+    const before = pose(c);
+    c.revealAt(50, 60, 100);
+    expect(c.undoReveal()).toBe(true);
+    expect(c.moving).toBe(false);
+    expect(pose(c)).toEqual(before);
+  });
+});

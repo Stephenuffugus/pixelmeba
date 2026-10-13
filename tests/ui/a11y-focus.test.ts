@@ -4,7 +4,7 @@
  * later Enter would tap at a hidden centre. Node environment: a minimal document stand-in.
  */
 import { describe, expect, it } from 'vitest';
-import { lastInputWasKeyboard, restoreFocus } from '../../src/ui/a11y/focus';
+import { lastInputWasKeyboard, restoreFocus, revealOnSheetChange } from '../../src/ui/a11y/focus';
 
 function fakeDoc() {
   const listeners: Record<string, (() => void)[]> = {};
@@ -46,5 +46,31 @@ describe('restoreFocus follows the input modality', () => {
     const { doc, el, raw } = fakeDoc();
     raw.activeElement = { isConnected: true };
     expect(restoreFocus(el, doc)).toBe(false);
+  });
+});
+
+/**
+ * D-0099 (v1.0 gate): the inspector's reveal pan is undone only when a key closes the inspector, with no other
+ * sheet in its place, while the dish holds focus. A pointer close, a key that opens another sheet and a sheet
+ * that opens by itself keep the view (UX §7.1 "Camera never jumps on its own").
+ */
+describe('revealOnSheetChange (D-0099)', () => {
+  it('a key that closes the inspector with the dish focused undoes the reveal pan', () => {
+    expect(revealOnSheetChange('inspect', 'none', true, true)).toBe('undo');
+  });
+  it('every other way out of the inspector keeps the view and forgets the pan', () => {
+    expect(revealOnSheetChange('inspect', 'none', false, true)).toBe('forget'); // a pointer close
+    expect(revealOnSheetChange('inspect', 'none', false, false)).toBe('forget');
+    expect(revealOnSheetChange('inspect', 'none', true, false)).toBe('forget'); // focus went elsewhere
+    expect(revealOnSheetChange('inspect', 'addLife', true, true)).toBe('forget'); // L in Explore
+    expect(revealOnSheetChange('inspect', 'feed', true, true)).toBe('forget'); // F in Explore
+    expect(revealOnSheetChange('inspect', 'more', true, true)).toBe('forget');
+    expect(revealOnSheetChange('inspect', 'tryHorizon', true, true)).toBe('forget'); // opens by itself
+  });
+  it('nothing happens while the inspector stays open or was not open', () => {
+    expect(revealOnSheetChange('inspect', 'inspect', true, true)).toBeNull();
+    expect(revealOnSheetChange('none', 'none', true, true)).toBeNull();
+    expect(revealOnSheetChange('more', 'none', true, true)).toBeNull();
+    expect(revealOnSheetChange('none', 'inspect', true, true)).toBeNull();
   });
 });

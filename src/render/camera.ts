@@ -42,6 +42,10 @@ export function easePose(from: CameraPose, to: CameraPose, t: number): CameraPos
   return { cx: from.cx + (to.cx - from.cx) * k, cy: from.cy + (to.cy - from.cy) * k, zoom };
 }
 
+function samePose(a: CameraPose, b: CameraPose): boolean {
+  return a.cx === b.cx && a.cy === b.cy && a.zoom === b.zoom;
+}
+
 export class Camera {
   cx = DISH_CENTER;
   cy = DISH_CENTER;
@@ -55,6 +59,8 @@ export class Camera {
   /** P4.13: reduced motion makes every move instant (UX §7.4). */
   reducedMotion = false;
   private easing: { readonly from: CameraPose; readonly to: CameraPose; readonly start: number } | null = null;
+  /** The view before the latest reveal pan(s) and where that pan went (D-0099). */
+  private revealed: { readonly before: CameraPose; readonly after: CameraPose } | null = null;
 
   /** Whether an eased move is under way. */
   get moving(): boolean {
@@ -220,6 +226,8 @@ export class Camera {
    * apply, so the point may stop short of the target near the dish edge.
    */
   revealAt(x: number, y: number, targetSy: number, targetSx = this.viewW / 2): void {
+    const from = this.target();
+    const last = this.revealed;
     this.followEntityId = null;
     // P4.13: the inspector's reveal pan eases (zoom unchanged).
     this.eased(() => {
@@ -227,5 +235,30 @@ export class Camera {
       this.cy = y - (targetSy - this.viewH / 2) / this.zoom;
       this.clampCenter();
     });
+    // D-0099: a run of reveal pans with no other move between them keeps the view from before the first.
+    this.revealed = { before: last !== null && samePose(last.after, from) ? last.before : from, after: this.target() };
+  }
+
+  /**
+   * D-0099: a key closed the inspector and the dish has focus. If the view is still where the reveal pan
+   * left it (no pan, zoom, preset, Find or follow since), it eases back to the view before the reveal
+   * pan(s), so the centre reticle is where the player left it. Returns whether it moved; either way the
+   * reveal is forgotten.
+   */
+  undoReveal(): boolean {
+    const r = this.revealed;
+    this.revealed = null;
+    if (r === null || this.followEntityId !== null || !samePose(r.after, this.target())) return false;
+    this.eased(() => {
+      this.cx = r.before.cx;
+      this.cy = r.before.cy;
+      this.zoom = r.before.zoom;
+    });
+    return true;
+  }
+
+  /** D-0099: the inspector closed some other way (a pointer, another sheet, focus elsewhere): the view stays. */
+  forgetReveal(): void {
+    this.revealed = null;
   }
 }

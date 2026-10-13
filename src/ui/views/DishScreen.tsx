@@ -67,7 +67,7 @@ import { SamplePanel } from '../panels/SamplePanel';
 import type { Speed } from '@worker/protocol';
 import { DishSummary } from '../a11y/DishSummary';
 import { CellDescription, CELL_DESCRIPTION_ID } from '../a11y/CellDescription';
-import { lastInputWasKeyboard, restoreFocus } from '../a11y/focus';
+import { lastInputWasKeyboard, restoreFocus, revealOnSheetChange } from '../a11y/focus';
 import { NoticeHost } from './NoticeHost';
 import { TryBadge } from '../panels/TryBadge';
 import { TrySetupSheet } from '../panels/TrySetup';
@@ -166,9 +166,18 @@ export function DishScreen() {
   const openCandidates = candidates.value;
   const openTray = labTray.value;
   const currentTool = tool.value;
+  // D-0099: the inspector's reveal pan (UX §4.1) moved the view so the organism shows beside the panel.
+  // When a key closes the inspector (no other sheet takes its place) and the dish has focus, the view eases
+  // back to where the player left it, so the reticle is on the dish again and the next Enter acts there.
+  // Any other change (a pointer close, another sheet such as Add Life or the Try horizon card) keeps the view.
+  const prevSheet = useRef(openSheet);
   useEffect(() => void lastInputWasKeyboard(), []);
   useEffect(() => {
     restoreFocus(dishFocus.current);
+    const reveal = revealOnSheetChange(prevSheet.current, openSheet, lastInputWasKeyboard(), document.activeElement === dishFocus.current);
+    prevSheet.current = openSheet;
+    if (reveal === 'undo') getRenderer()?.camera.undoReveal();
+    else if (reveal === 'forget') getRenderer()?.camera.forgetReveal();
   }, [openSheet, openCandidates, openTray, currentTool]);
 
   // Autosave every 30 real seconds while this dish is open (SPEC §14.2).
