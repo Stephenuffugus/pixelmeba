@@ -3,6 +3,15 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑13 13:00 UTC — WAVE 8a RUNNING (run `wf_af23c8d6-dba`, session 462cefc8, launched 12:59 from
+> docs/agent/g5-wave-8a.run.workflow.js.txt; codespace was restarted ≈ 12:55). Backups every 30 min to `wip/g5-wave-8a`
+> (pid tmp/lead/backup-8a.pid, log tmp/lead/backup-g5-wave-8a.log). START HERE.**
+> - If the session died mid-8a: if `git status` is clean, restore the tree from `wip/g5-wave-8a`; read
+>   docs/reports/reviews/g5-wave-8a/ and the run journal
+>   ~/.claude/projects/-workspaces-pixelmeba/462cefc8-e202-4f25-900b-45a0b3a85625/subagents/workflows/wf_af23c8d6-dba/journal.jsonl;
+>   rerun only unfinished tasks (A.only + finish notes), or resume the run with resumeFromRunId if it is the same session.
+> - After 8a: step 4 of the 12:45 banner below (LEAD AFTER in docs/agent/g5-wave-8.tasks.js.txt), then 8b.
+
 > **Update 2026‑10‑13 12:45 UTC — SAFE REFRESH POINT. v1.0.0-rc1 tagged (b7f1245); Phase 5 preflight committed
 > (`4e6fa77`: rc1 save corpus, buildPhase 5 / contentVersion 3, D‑0101…D‑0107); wave 8a run file committed. Nothing
 > runs. START HERE.**
