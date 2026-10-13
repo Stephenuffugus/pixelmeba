@@ -3,6 +3,24 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑13 14:45 UTC — WAVE 8a BUILT AND VERIFIED (wf_af23c8d6-dba, 83 min: no BLOCKER/MAJOR left; the
+> art-small MAJOR was fixed in round 1 and re-verified). LEAD INTEGRATION IS IN THE TREE, UNCOMMITTED (backup loop →
+> `wip/g5-wave-8a`, pid tmp/lead/backup-8a.pid). START HERE.**
+> - Done in the tree: D‑0108 (schema 5 as built + the import fixes) and D‑0109 (16 px art) in DECISIONS.md; phase5State.ts
+>   refuses glowing while not Active, a self-holding trap, a trap reserve (not counted yet), null nextDeviceId, malformed
+>   present stores; saveFile.ts the null nextObjectId; tests in phase5-import + two --rc1 success-path tests in
+>   tests/tools/fence-update.test.ts (targeted 5 files / 98 tests; mutant: 5 fail); ARCH "As built, Phase 5 wave 8a"
+>   (§5, §10.1, §11.3); g5-plan.md "Carry-overs"; structure-content marked critical in the wave 8 task file (D‑0110 to
+>   write); runner: saves verifier scratch tmp/verify-saves-<wave>-<i>.
+> - Running: `npm run check` (tmp/lead/check-8a.log) → then tmp/lead/e2e-8a.sh by itself (8 journeys, desktop +
+>   phone-portrait, port 4271, tmp/lead/e2e-8a.log); integration verifier wf_4596eb7b-bc0 →
+>   docs/reports/reviews/g5-wave-8a/integrate-verify.md.
+> - Next: fix its findings → commit 8a WITHOUT docs/agent/g5-wave-8.tasks.js.txt and the runner → WORKLOG note (P5.2/P5.3/
+>   P5.5/P5.7 stay [ ], dated note) → `python3 tools/lead/append-as-built.py docs/agent/g5-wave-8.tasks.js.txt
+>   tmp/lead/asbuilt-8a.txt SHA=<sha> EVIDENCE="…"` → D‑0110 → replace "<lead: 8a commit>" → build the 8b run file
+>   (keys structure-content,art-large; runner docs/agent/g5-runner-ft.workflow.js.txt) → commit + push → backup loop on
+>   wip/g5-wave-8b → launch 8b.
+
 > **Update 2026‑10‑13 13:00 UTC — WAVE 8a RUNNING (run `wf_af23c8d6-dba`, session 462cefc8, launched 12:59 from
 > docs/agent/g5-wave-8a.run.workflow.js.txt; codespace was restarted ≈ 12:55). Backups every 30 min to `wip/g5-wave-8a`
 > (pid tmp/lead/backup-8a.pid, log tmp/lead/backup-g5-wave-8a.log). START HERE.**
