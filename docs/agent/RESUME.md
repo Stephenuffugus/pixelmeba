@@ -8,7 +8,7 @@
 > Wave 8 is done. WAVE 9 RUNNING from docs/agent/g5-wave-9.run.workflow.js.txt (climate-stage2 4271, barrier-movement
 > 4272, both critical 'own'; D‑0113). Backups → `wip/g5-wave-9` (pid tmp/lead/backup-9.pid). START HERE.**
 > - If the session died mid-9: if `git status` is clean, restore the tree from `wip/g5-wave-9`; read
->   docs/reports/reviews/g5-wave-9/ and the run journal (see the 19:45 note in memory for the run id); rerun only unfinished
+>   docs/reports/reviews/g5-wave-9/ and the run journal (run wf_ef7f09c2-fbe, session 462cefc8); rerun only unfinished
 >   tasks (A.only + finish notes).
 > - After 9: LEAD AFTER WAVE 9 in docs/agent/g5-wave-9.tasks.js.txt (MINORs, D‑numbers, check, fence + both corpora, perf note
 >   docs/reports/perf-g5.md, ARCH as built, WORKLOG notes, commit) → wave 10 task writer (two stages of two; carry-overs in
