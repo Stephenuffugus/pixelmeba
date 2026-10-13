@@ -398,10 +398,12 @@ describe('invalid variants are refused by content validation, with the file and 
   });
 
   it('a shipped variant cannot start from a later-phase recipe', () => {
-    const errs = errorsOf(mutateRaw(RAW, 'recipes', 'FIRST_DISH_V1.json', (d) => (d.phase = 5)));
+    // A phase later than the build: buildPhase + 1 read from the manifest (it moves with each phase; D-0105).
+    const later = REG.manifest.buildPhase + 1;
+    const errs = errorsOf(mutateRaw(RAW, 'recipes', 'FIRST_DISH_V1.json', (d) => (d.phase = later)));
     expect(errs.filter((e) => e.file.startsWith('content/variants/'))).toHaveLength(4);
     // The build phase comes from the shipped manifest (Phase 3 preflight, W1-09: it moves with each phase).
-    expect(errs).toContainEqual({ severity: 'error', file: G1, path: 'sourceId', message: `source recipe "FIRST_DISH_V1" belongs to phase 5 (build phase ${REG.manifest.buildPhase})` });
+    expect(errs).toContainEqual({ severity: 'error', file: G1, path: 'sourceId', message: `source recipe "FIRST_DISH_V1" belongs to phase ${later} (build phase ${REG.manifest.buildPhase})` });
   });
 });
 

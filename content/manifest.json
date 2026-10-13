@@ -3,9 +3,9 @@
   "evolutionRulesVersion": 1,
   "moduleRegistryVersion": 2,
   "phenotypeMappingVersion": 1,
-  "contentVersion": 2,
-  "contentHash": "d3fbd36c4a5e03468389b02508f2a3ecc1ce8d04b25cba5dd5e5be18f184a8bf",
-  "buildPhase": 4,
+  "contentVersion": 3,
+  "contentHash": "b8ddc0ddf59d2711e43432fdaabdd37d12f8824972677f21f0511cf2c80dcd57",
+  "buildPhase": 5,
   "enabledSpecies": [
     "A01",
     "B01",

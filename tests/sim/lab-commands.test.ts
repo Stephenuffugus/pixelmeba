@@ -904,9 +904,11 @@ describe('Lab content comes from the world (P2.7)', () => {
     expect(errors((r) => withManifest(withStructure(r, membrane), { enabledStructures: ['BEAD', 'S01', 'STONE', 'WALL'] }))).toEqual([
       'content/manifest.json → enabledStructures.1: "S01" is not implemented by the simulation yet',
     ]);
-    const late = { file: 'content/structures/STONE.json', data: { ...stone, phase: 5 } };
+    // A phase later than the build: buildPhase + 1 read from the manifest (it moves with each phase; D-0105).
+    const buildPhase = (base.manifest.data as { buildPhase: number }).buildPhase;
+    const late = { file: 'content/structures/STONE.json', data: { ...stone, phase: buildPhase + 1 } };
     expect(errors((r) => ({ ...r, structures: r.structures.map((f) => (f.file.endsWith('STONE.json') ? late : f)) }))).toEqual([
-      `content/manifest.json → enabledStructures.1: "STONE" belongs to phase 5 (build phase ${(base.manifest.data as { buildPhase: number }).buildPhase})`,
+      `content/manifest.json → enabledStructures.1: "STONE" belongs to phase ${buildPhase + 1} (build phase ${buildPhase})`,
     ]);
     const bad = { file: 'content/structures/STONE.json', data: { ...stone, guide: { summary: '' } } };
     expect(errors((r) => ({ ...r, structures: r.structures.map((f) => (f.file.endsWith('STONE.json') ? bad : f)) })).length).toBeGreaterThan(0);

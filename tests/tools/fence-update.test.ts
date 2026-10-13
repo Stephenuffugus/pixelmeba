@@ -4,17 +4,33 @@
  * decision, refuses a g2 re-record under a decision that does not state a landed version bump and the
  * g2 re-record itself (fix round 1: merely mentioning a version field was enough), writes nothing when
  * it refuses, never touches g2Digest outside --g2, --add records only a current digest, and a --g2
- * re-record that changes expected.json leaves a changedBy trail there.
+ * re-record that changes expected.json leaves a changedBy trail there. The --rc1 mode (g5-plan lead call 1)
+ * does the same for the rc1 corpus (tests/fixtures/saves-rc1/expected.json): a landed bump above the rc1
+ * manifest's value and a decision that names the rc1 re-record, a changedBy trail, nothing written on a
+ * refusal, and fence.json never touched.
  */
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { decisionText, g2DecisionProblem, main, parseArgs, recordG2Expected, Refusal, statedBumps, VERSION_FIELDS, type VersionStamps } from '../../tools/fence-update';
+import {
+  decisionText,
+  g2DecisionProblem,
+  main,
+  parseArgs,
+  rc1DecisionProblem,
+  recordG2Expected,
+  recordRc1Expected,
+  Refusal,
+  statedBumps,
+  VERSION_FIELDS,
+  type VersionStamps,
+} from '../../tools/fence-update';
 import { REPO_ROOT } from '../../tools/lib/content-fs';
 import { FENCE_PATH, fenceText, readFence, type FenceFile } from '../helpers/fence';
-import { EXPECTED_PATH, expectedText, readExpected, type G2Expected } from '../helpers/g2-saves';
+import { EXPECTED_PATH, expectedText, readExpected, SAVES_DIR, type G2Expected } from '../helpers/g2-saves';
+import { RC1_EXPECTED_PATH, RC1_SAVES_DIR, rc1ExpectedText, readRc1Expected, type Rc1Expected } from '../helpers/rc1-saves';
 
 const DECISIONS = join(REPO_ROOT, 'docs', 'DECISIONS.md');
 
@@ -41,6 +57,18 @@ describe('fence-update argument refusals', () => {
     expect(parseArgs(['--g2', '--reason', 'D-0036']).mode).toEqual({ kind: 'g2', reason: 'D-0036' });
     expect(parseArgs(['--add', 'NEW_V1']).mode).toEqual({ kind: 'add', recipe: 'NEW_V1', ticks: 1200 });
     expect(parseArgs(['--add', 'NEW_V1', '--ticks', '900']).mode).toEqual({ kind: 'add', recipe: 'NEW_V1', ticks: 900 });
+  });
+
+  it('--rc1 needs --reason D-00xx, goes alone, and defaults to the rc1 corpus (the other modes to the g2 saves)', () => {
+    expect(() => parseArgs(['--rc1'])).toThrow(/--rc1 refuses to run without --reason/);
+    expect(() => parseArgs(['--g2', '--rc1', '--reason', 'D-0036'])).toThrow(/one mode at a time \(--g2, --rc1\)/);
+    expect(() => parseArgs(['--rc1', '--reason', 'D-0036', '--ticks', '600'])).toThrow(/only goes with --add/);
+    const rc1 = parseArgs(['--rc1', '--reason', 'D-0036']);
+    expect(rc1.mode).toEqual({ kind: 'rc1', reason: 'D-0036' });
+    expect({ expected: rc1.paths.expected, saves: rc1.paths.saves }).toEqual({ expected: RC1_EXPECTED_PATH, saves: RC1_SAVES_DIR });
+    const g2 = parseArgs(['--g2', '--reason', 'D-0036']).paths;
+    expect({ expected: g2.expected, saves: g2.saves }).toEqual({ expected: EXPECTED_PATH, saves: SAVES_DIR });
+    expect(parseArgs(['--rc1', '--reason', 'D-0036', '--expected', '/tmp/x.json']).paths.expected).toBe('/tmp/x.json');
   });
 
   it('the reason must be a decision recorded in docs/DECISIONS.md (its text runs to the next decision)', () => {
@@ -98,6 +126,63 @@ describe('fence-update argument refusals', () => {
   });
 });
 
+describe('an rc1 re-record needs a decision that states a bump landed above the rc1 manifest and the rc1 re-record', () => {
+  // The rc1 manifest's stamps (evolution rules 1, module registry 2, phenotype mapping 1, content 2).
+  const rc1: VersionStamps = { evolutionRulesVersion: 1, moduleRegistryVersion: 2, phenotypeMappingVersion: 1, contentVersion: 2 };
+  const shipped = (field: string, value: number): VersionStamps => ({ ...rc1, [field]: value });
+  const RECORDS = 'It re-records the rc1 saves (fence-update --rc1).';
+
+  it('accepts each rules or content version bump that has landed above rc1, named with the re-record', () => {
+    for (const field of VERSION_FIELDS) {
+      const to = rc1[field] + 1;
+      expect(rc1DecisionProblem('D-0101', `## D-0101 · x\nDecision: ${field} ${rc1[field]} → ${to}. ${RECORDS}`, shipped(field, to), rc1), field).toBeNull();
+      expect(rc1DecisionProblem('D-0101', `## D-0101 · x\nDecision: ${field} ${rc1[field]} -> ${to}; tools/fence-update.ts --rc1 re-records tests/fixtures/saves-rc1/expected.json.`, shipped(field, to), rc1), field).toBeNull();
+    }
+  });
+
+  it('refuses a decision that states no bump, a bump not above the rc1 value, or one that has not landed', () => {
+    expect(rc1DecisionProblem('D-0100', `## D-0100 · a label\nNo version changes. ${RECORDS}`, shipped('contentVersion', 3), rc1)).toMatch(/^D-0100 does not state which rules or content version it bumps.*rc1 save values change only with a version bump/);
+    // D-0036's contentVersion 1 → 2 is the rc1 value itself, not a bump above it.
+    expect(rc1DecisionProblem('D-0103', `## D-0103 · x\ncontentVersion 1 → 2. ${RECORDS}`, rc1, rc1)).toMatch(/^D-0103 states contentVersion 1 → 2, but no such bump has landed: content\/manifest.json holds contentVersion 2 \(rc1: 2\)/);
+    expect(rc1DecisionProblem('D-0104', `## D-0104 · x\nmoduleRegistryVersion 2 → 3. ${RECORDS}`, rc1, rc1)).toMatch(/no such bump has landed: content\/manifest.json holds moduleRegistryVersion 2 \(rc1: 2\)/);
+  });
+
+  it('refuses a landed bump whose decision does not name the rc1 re-record (a g2 re-record is not one)', () => {
+    const bump = 'Decision: contentVersion 2 → 3 at the Phase 5 preflight.';
+    expect(rc1DecisionProblem('D-0105', `## D-0105 · x\n${bump}`, shipped('contentVersion', 3), rc1)).toMatch(/^D-0105 does not say that it re-records the rc1 corpus: name "fence-update --rc1"/);
+    // A decision that names the corpus only to say it is unchanged never authorizes a re-record (rc1-corpus verifier MINOR).
+    expect(rc1DecisionProblem('D-0105', `## D-0105 · x\n${bump}\nEvidence: rc1-replay passes; tests/fixtures/saves-rc1/ unchanged (no re-record).`, shipped('contentVersion', 3), rc1)).toMatch(/does not say that it re-records the rc1 corpus/);
+    expect(rc1DecisionProblem('D-0105', `## D-0105 · x\n${bump} It re-records every g2Digest (fence-update --g2).`, shipped('contentVersion', 3), rc1)).toMatch(/does not say that it re-records the rc1 corpus/);
+    expect(rc1DecisionProblem('D-0105', `## D-0105 · x\n${bump} ${RECORDS}`, shipped('contentVersion', 3), rc1)).toBeNull();
+  });
+});
+
+describe('an --rc1 re-record leaves a changedBy trail in saves-rc1/expected.json', () => {
+  const recorded = readRc1Expected().saves;
+  const text = rc1ExpectedText(recorded);
+  const held = 'first-dish-lab-food-sample-held-t1500.pixelmeba.gz';
+  const shelter = 'borrowed-shelter-velvet-t1500.pixelmeba.gz';
+
+  it('rc1ExpectedText writes the committed file and no changedBy key while there is no trail', () => {
+    expect(Object.keys(JSON.parse(text) as object)).toEqual(['about', 'replayTicks', 'saves']);
+    expect(text).toBe(readFileSync(RC1_EXPECTED_PATH, 'utf8'));
+  });
+
+  it('unchanged values leave the file byte-identical; any changed value appends {decision, saves}, oldest first', () => {
+    expect(recordRc1Expected(text, recorded, 'D-0101')).toBe(text);
+    const first: Record<string, Rc1Expected> = { ...recorded, [held]: { ...recorded[held]!, hashAfterResume: '00000000000000aa' } };
+    const once = recordRc1Expected(text, first, 'D-0101');
+    expect(JSON.parse(once)).toEqual({ ...JSON.parse(text), saves: first, changedBy: [{ decision: 'D-0101', saves: [held] }] });
+    const second: Record<string, Rc1Expected> = { ...first, [shelter]: { ...first[shelter]!, notebookChecksum: 'sha256:00' } };
+    const twice = recordRc1Expected(once, second, 'D-0102');
+    expect((JSON.parse(twice) as { changedBy: unknown }).changedBy).toEqual([
+      { decision: 'D-0101', saves: [held] },
+      { decision: 'D-0102', saves: [shelter] },
+    ]);
+    expect(recordRc1Expected(twice, second, 'D-0103')).toBe(twice);
+  });
+});
+
 describe('a --g2 re-record leaves a changedBy trail in expected.json', () => {
   const recorded = readExpected().saves;
   // expected.json as the g2 build writes it: these values, no trail (whatever trail the committed file gains later).
@@ -128,6 +213,7 @@ describe('fence-update writes nothing when it refuses, and keeps g2Digest outsid
   let fencePath = '';
   let expectedPath = '';
   let decisionsPath = '';
+  let rc1ExpectedPath = '';
   const errors: string[] = [];
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'fence-update-'));
@@ -136,6 +222,8 @@ describe('fence-update writes nothing when it refuses, and keeps g2Digest outsid
     decisionsPath = join(dir, 'DECISIONS.md');
     copyFileSync(FENCE_PATH, fencePath);
     copyFileSync(EXPECTED_PATH, expectedPath);
+    rc1ExpectedPath = join(dir, 'rc1-expected.json');
+    copyFileSync(RC1_EXPECTED_PATH, rc1ExpectedPath);
     // A decisions file of its own, with one decision that bumps no version.
     writeFileSync(decisionsPath, '# Decisions\n\n## D-0100 · 2026-10-01 · test · A label change\nDecision: a label.\n');
     errors.length = 0;
@@ -148,6 +236,7 @@ describe('fence-update writes nothing when it refuses, and keeps g2Digest outsid
   it('every refusal exits 2, says why, and leaves fence.json and expected.json byte-identical', async () => {
     const fenceBefore = readFileSync(fencePath, 'utf8');
     const expectedBefore = readFileSync(expectedPath, 'utf8');
+    const rc1Before = readFileSync(rc1ExpectedPath, 'utf8');
     const cases: [string[], RegExp][] = [
       [[], /no mode given/],
       [['--all'], /without --reason/],
@@ -171,8 +260,22 @@ describe('fence-update writes nothing when it refuses, and keeps g2Digest outsid
       expect(errors.join('\n'), argv.join(' ')).toMatch(/^fence-update refused: /);
       expect(errors.join('\n'), argv.join(' ')).toMatch(why);
     }
+    // --rc1, against a copy of the rc1 corpus' expected.json (and the same fence copy, which it never touches).
+    const rc1Cases: [string[], RegExp][] = [
+      [['--rc1'], /--rc1 refuses to run without --reason/],
+      [['--rc1', '--reason', 'D-9999'], /D-9999 is not in/],
+      [['--rc1', '--reason', 'D-0100', '--decisions', decisionsPath], /D-0100 does not state which rules or content version it bumps/],
+      // The real D-0036 states contentVersion 1 → 2: the rc1 value itself, never a bump above the rc1 manifest.
+      [['--rc1', '--reason', 'D-0036'], /^fence-update refused: D-0036 states .*no such bump has landed/],
+    ];
+    for (const [argv, why] of rc1Cases) {
+      errors.length = 0;
+      expect(await main([...argv, '--fence', fencePath, '--expected', rc1ExpectedPath]), argv.join(' ')).toBe(2);
+      expect(errors.join('\n'), argv.join(' ')).toMatch(why);
+    }
     expect(readFileSync(fencePath, 'utf8')).toBe(fenceBefore);
     expect(readFileSync(expectedPath, 'utf8')).toBe(expectedBefore);
+    expect(readFileSync(rc1ExpectedPath, 'utf8')).toBe(rc1Before);
   });
 
   it('--recipe re-records currentDigest under its decision and never touches g2Digest', async () => {

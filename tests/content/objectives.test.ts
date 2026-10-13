@@ -41,7 +41,7 @@ function errorsFor(id: string, packs: RawPacks): string[] {
 describe('content/objectives', () => {
   it('the three shipped goals validate, with CT §10.5 titles, offered on the Garden', () => {
     const reg = registry();
-    expect(reg.manifest.buildPhase).toBe(4);
+    expect(reg.manifest.buildPhase).toBeGreaterThanOrEqual(4); // the goals are phase 4 (D-0072), offered from buildPhase 4 on
     const shipped = objectiveCatalog(reg);
     expect(shipped.map((o) => [o.id, o.title])).toEqual([
       ['KEEP_SPRINTERS_GOING', 'Keep Sprinters going'],
@@ -87,14 +87,14 @@ describe('content/objectives', () => {
 
   it('a phase 5 objective is skipped under buildPhase 4: no error, not in the catalog', () => {
     const later = goal('T_LATER', { type: 'transferAcrossGate', params: { gate: 'S02', field: 'sugar', threshold: 1 } }, { phase: 5 });
-    const res = validateContent(packsWith([later]));
+    const res = validateContent(packsWith([later], { buildPhase: 4 })); // the build it means (the shipped one is 5 since D-0105)
     expect(res.issues.filter((i) => i.severity === 'error')).toEqual([]);
     expect(res.registry).not.toBeNull();
     expect(res.registry!.objectives.T_LATER).toBeDefined();
     expect(objectiveCatalog(res.registry!).map((o) => o.id)).not.toContain('T_LATER');
     // Its shape is still checked: a later objective that is malformed is an error.
     const broken = goal('T_LATER_BAD', { type: 'custom', params: {} }, { phase: 5 });
-    expect(errorsFor('T_LATER_BAD', packsWith([broken])).join('\n')).toMatch(/custom/);
+    expect(errorsFor('T_LATER_BAD', packsWith([broken], { buildPhase: 4 })).join('\n')).toMatch(/custom/);
   });
 
   it('registryWith(G2_LISTS) (buildPhase 2) still validates and ships no goal', () => {

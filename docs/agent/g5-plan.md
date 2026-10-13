@@ -28,7 +28,8 @@ Builders run new or changed e2e journeys on desktop and phone-portrait only. The
 2. **One schema bump, unconditional; one protocol bump.**
    - World SCHEMA_VERSION 4 → 5 once (wave 8, task `schema5`) for every Phase 5 store and entity column. The stores
      are edges, devices, climate arrays (null = ambient), nextDeviceId and gateTally (saved, not hashed). The columns
-     are glow, trap, dormancy-native, metabolic mode, handling, jacket and held state.
+     are glow, trap, metabolic mode, handling need and held state. The jacket, shell, handling progress and the
+     dormancy machine reuse existing columns; wave 8's task file names the exact list.
    - Every new store or column is hash-neutral while empty (the D-0035 rule), and `COLUMNS_ADDED_IN[4]` is frozen
      before columns are appended.
    - Every world is written as schema 5, so a v1.0 build refuses a v1.1 dish ("needs a newer version") instead of
@@ -95,8 +96,8 @@ chemistry.ts, commands.ts, content/schema.ts, recipes.ts, protocol.ts, snapshot.
 | Wave | Tasks (keys from g5-briefs.md) | Critical | Notes |
 |---|---|---|---|
 | Preflight (lead + 1) | rc1-corpus; release/1.0; buildPhase 5, contentVersion 3; D-0101… | rc1-corpus | Before any Phase 5 code. Full check. |
-| 8 Foundation | schema5 (all stores and columns, barriers.ts table, protocol 3 constants, trajectory registrations, migration tests), art-small | schema5 | art-small owns art/src/index.ts and sprite.ts this wave. |
-| 9 Climate and barriers | climate-stage2, barrier-movement, structure-content, art-large | climate, movement | climate owns transport.ts, suitability.ts and chemistry.ts; movement owns movement.ts, births.ts, contacts.ts, fungi.ts and parasites.ts. |
+| 8 Foundation (D-0107: two stages, two run files 8a / 8b) | 8a: schema5 (all stores and columns, barriers.ts table, trajectory registrations, migration tests), art-small · 8b: structure-content, art-large | schema5 | art-small owns art/src/index.ts and sprite.ts in 8a; art-large appends in 8b. PROTOCOL_VERSION 3 moves to wave 11's structure-render-worker. |
+| 9 Climate and barriers | climate-stage2, barrier-movement | climate, movement | climate owns transport.ts, suitability.ts and chemistry.ts; movement owns movement.ts, births.ts, contacts.ts, fungi.ts and parasites.ts. |
 | 10 Transport and commands | barrier-transport, structure-commands, e2-shells, e3-resters | all four | transport.ts passes to barrier-transport, intake.ts to e2-shells, and births.ts to e3-resters. |
 | 11 Structures on screen; signals | structure-render-worker, structure-ui, e2-signals, region-charts-gates | e2-signals | Then the lead's **systems flip**. |
 | 12 Algae and predation | e2-light-algae, e3-predation, structures-art-audio (P5.7b) | algae, predation | The task file splits movement.ts and phenotype.ts between the two sim tasks, or moves one of them to wave 13. |
