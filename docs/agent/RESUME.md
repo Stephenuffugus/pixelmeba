@@ -11,8 +11,12 @@
 >   docs/reports/reviews/g5-wave-9/ and the run journal (run wf_ef7f09c2-fbe, session 462cefc8); rerun only unfinished
 >   tasks (A.only + finish notes).
 > - After 9: LEAD AFTER WAVE 9 in docs/agent/g5-wave-9.tasks.js.txt (MINORs, D‑numbers, check, fence + both corpora, perf note
->   docs/reports/perf-g5.md, ARCH as built, WORKLOG notes, commit) → wave 10 task writer (two stages of two; carry-overs in
->   g5-plan.md and the wave 9 LEAD AFTER 6 list).
+>   docs/reports/perf-g5.md, ARCH as built, WORKLOG notes, commit). ALSO at this integration: the D‑0114 classOf fix in
+>   src/sim/barriers.ts ownClass rule (e) (`consumer ? 'medium' : 'fixed'`, drop the bacterium → small branch; re-pin
+>   tests/sim/barriers-table.test.ts). Wave 10's task file is ALREADY WRITTEN (087b1ce, docs/agent/g5-wave-10.tasks.js.txt):
+>   fill its "<lead: wave 9 as built …>" placeholders, record the writer's decisions (docs/reports/reviews/g5-wave-10/
+>   tasks-writer.md) as a D-number, build the run file (keys barrier-transport,structure-commands,e2-shells,e3-resters) and
+>   add A.verifyGroups = [['barrier-transport','structure-commands'],['e2-shells','e3-resters']], then launch.
 
 > **Update 2026‑10‑13 16:35 UTC — WAVE 8a COMMITTED `60a4731` (check 222 files / 2514 tests; e2e 76/76 desktop +
 > phone-portrait; D‑0108, D‑0109; integration verifier wf_4596eb7b-bc0, its MAJOR (E14 is Phase 7) and NITs fixed).
