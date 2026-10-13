@@ -1,0 +1,41 @@
+{
+  "about": "Recorded by the v1.0.0-rc1 build (tools/make-rc1-saves.ts) through loadSaveFile: stateHash at load, the notebook record's checksum as read back, stateHash after the resume step (Cancel of a held Sample), stateHash after replayTicks more ticks, and trajectoryDigest(world, \"full\") at that tick. Re-recorded only by tools/fence-update.ts --rc1 --reason D-00xx.",
+  "replayTicks": 1000,
+  "saves": {
+    "first-dish-diverse-notebook-t3000.pixelmeba.gz": {
+      "hashAtLoad": "3cd5b66c9280d503",
+      "notebookChecksum": "sha256:fb02a6064863496afaa0250b49ea92150d4cc37c91f872b9550d4bdf2ebb9cfa",
+      "hashAfterResume": null,
+      "hashPlus1000": "427728064f59550f",
+      "digestPlus1000": "15f00c5f9a78878e"
+    },
+    "first-dish-lab-food-sample-held-t1500.pixelmeba.gz": {
+      "hashAtLoad": "71aff808da3b445d",
+      "notebookChecksum": "sha256:4f226cff6b4f5e5bdfa01385d0663f939de3fc739e769e3261e2fbd3a2eb60d8",
+      "hashAfterResume": "69f025e2ea056b5b",
+      "hashPlus1000": "7f77c7c1dbe56a75",
+      "digestPlus1000": "6d06c72bea8d1e8d"
+    },
+    "borrowed-shelter-velvet-t1500.pixelmeba.gz": {
+      "hashAtLoad": "0b4d6a8aefce2aac",
+      "notebookChecksum": "sha256:91c00d1c9b1565fdc22423cdb90294ee0aec1b27a9a28b11f558228cf0cdf67b",
+      "hashAfterResume": null,
+      "hashPlus1000": "d5c6f6071fc7e81b",
+      "digestPlus1000": "ba44d5ec01c18d4c"
+    },
+    "fungal-supply-line-t900.pixelmeba.gz": {
+      "hashAtLoad": "d395b0893dc83ae3",
+      "notebookChecksum": null,
+      "hashAfterResume": null,
+      "hashPlus1000": "0cc030f219860362",
+      "digestPlus1000": "48569cc3cf8e1a0f"
+    },
+    "one-host-pinphage-t300.pixelmeba.gz": {
+      "hashAtLoad": "19fe0def828fd576",
+      "notebookChecksum": null,
+      "hashAfterResume": null,
+      "hashPlus1000": "97b133d9e401042d",
+      "digestPlus1000": "8ee2dafa33792456"
+    }
+  }
+}

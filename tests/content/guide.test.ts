@@ -106,11 +106,14 @@ describe('P3.8 "No additional modeled reaction." (UX §5.7)', () => {
 
 describe('P3.8 summary and example never name a species that is not enabled', () => {
   it('failing case: naming a later-phase species (plural too) in a summary or an example is an error', () => {
-    const s = errors(edit(raw, 'species', 'B01', (d) => (guideOf(d).summary = 'A quick swimmer that races Lanterns to sugar.')));
+    // A phase 4 build, where Lanterns, Brinecoils and Needlejaws (phase 5) are later-phase: from buildPhase 5 on no species
+    // is later than the build (D-0105), so the rule is pinned on the build it means.
+    const b4 = patchedRawPacks({ buildPhase: 4 });
+    const s = errors(edit(b4, 'species', 'B01', (d) => (guideOf(d).summary = 'A quick swimmer that races Lanterns to sugar.')));
     expect(s).toContainEqual(expect.objectContaining({ file: 'content/species/B01.json', path: 'guide.summary' }));
-    const e = errors(edit(raw, 'materials', 'SUGAR', (d) => (guideOf(d).example = 'Put sugar beside a Brinecoil.')));
+    const e = errors(edit(b4, 'materials', 'SUGAR', (d) => (guideOf(d).example = 'Put sugar beside a Brinecoil.')));
     expect(e).toContainEqual(expect.objectContaining({ file: 'content/materials/SUGAR.json', path: 'guide.example' }));
-    const t = errors(edit(raw, 'tools', 'UNDO', (d) => (d.watchFor = 'A Needlejaw coming back.')));
+    const t = errors(edit(b4, 'tools', 'UNDO', (d) => (d.watchFor = 'A Needlejaw coming back.')));
     expect(t).toContainEqual(expect.objectContaining({ file: 'content/tools/UNDO.json', path: 'watchFor' }));
   });
   it('passing cases: enabled names are fine; in rules text it is only a warning', () => {

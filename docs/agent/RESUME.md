@@ -3,6 +3,19 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑13 12:00 UTC — PHASE 5 PREFLIGHT BUILT, `npm run check` RUNNING (tmp/g5pre/check.log). START HERE.**
+> - In the tree (uncommitted; backup wip/g5-preflight): the rc1 save corpus (tools/make-rc1-saves.ts, tests/fixtures/
+>   saves-rc1/ ×5, tests/helpers/rc1-saves.ts, tests/fixtures/rc1-replay.test.ts, fence-update --rc1; built + verified
+>   by wf_f5c6143d-dbc, its 2 MINORs fixed); content/manifest.json buildPhase 5, contentVersion 3, contentHash b8ddc0dd…;
+>   three pinned content tests re-pinned to buildPhase 4 test manifests; D‑0101…D‑0107 (D‑0105 evidence placeholder
+>   MANIFEST_BUMP_EVIDENCE); docs/agent/g5-wave-8.tasks.js.txt (filled except PREFLIGHT_SHA and 8b's "<lead: 8a commit>");
+>   docs/agent/g5-runner-ft.workflow.js.txt; tools/lead/build-run-file.py takes the runner path as arg 7.
+> - Next: check green → fill D‑0105 evidence → commit "chore(p5): Phase 5 preflight — …" → replace PREFLIGHT_SHA in the
+>   wave 8 task file → build docs/agent/g5-wave-8a.run.workflow.js.txt (python3 tools/lead/build-run-file.py
+>   docs/agent/g5-wave-8.tasks.js.txt g5-wave-8a "<desc>" "<owner context>" schema5,art-small
+>   docs/agent/g5-wave-8a.run.workflow.js.txt docs/agent/g5-runner-ft.workflow.js.txt) → commit + push → SAFE REFRESH
+>   POINT → launch 8a at the start of a session (≈ 3.5 h builders + verify), backup loop on wip/g5-wave-8a.
+
 > **Update 2026‑10‑13 10:55 UTC — v1.0 GATE PASSED. Tag `v1.0.0-rc1` = the gate commit "gate(v1.0): Phase 4 — …"
 > (on top of `1eb42c6` D‑0100 and `c001a94` D‑0099; pushed with the tag). Phases 0–4 are complete. START HERE.**
 > - Evidence: docs/EXPANSION_RESPONSE.md §4 (check 216/2088 at 1eb42c6; e2e 359/360 at 17ad62f + keyboard 6/6 after

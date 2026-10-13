@@ -1388,3 +1388,91 @@ Evidence: tests/tools/android-build.test.ts (2 cases). The release AAB rebuilt w
 Reason: a smaller download of the same app; nothing ships that the app does not use.
 Affects: tools/android-build.ts, tests/tools/android-build.test.ts, docs/ANDROID_SETUP.md §8, §9.3.
 Owner review: no.
+
+## D-0101 · 2026-10-13 · Phase 5 preflight · v1.0 saves are captured as fixtures before any Phase 5 edit
+Context: g5-plan.md lead call 1. Only the g2 saves were fenced as files (tests/fixtures/saves/, D-0035). Phase 3–4 state (film, F02 links, X01 and V01, food objects, a held Sample, the notebook record) had no old-save fixture, and Phase 5 will change the world schema (D-0102). Real Play Store users will hold v1.0 saves.
+Decision:
+- The v1.0.0-rc1 code writes an rc1 save corpus before any Phase 5 code lands: tools/make-rc1-saves.ts → tests/fixtures/saves-rc1/ (gzipped real saves, rc1-manifest.json, expected.json with the hash at load, the hash 1,000 ticks later, the trajectory digest and the notebook record's sha256), replayed by tests/fixtures/rc1-replay.test.ts. The tool refuses any manifest but rc1's.
+- Every later build must reproduce every recorded value. Only `tools/fence-update.ts --rc1 --reason D-00xx` re-records expected.json, under a decision that names a version bump (the --g2 rule, D-0042).
+Evidence: built and verified this session (runs wf_f5c6143d-dbc; docs/reports/reviews/g5-preflight/rc1-corpus-{build,verify}.md). There are five saves, 2,470,105 bytes, all made through the host's own export path:
+- first-dish-diverse-notebook-t3000: Phase 3 carriers E06 59, E10 2, E12 2; X01 39 attached; a notebook with favorites, stories, a settled and a running goal, a bookmark and a gallery specimen.
+- first-dish-lab-food-sample-held-t1500: Lab chemistry, a gel stroke and a wall; M10 and M11 objects partly released; a Sample held at save time.
+- borrowed-shelter-velvet-t1500: film over 717 cells.
+- fungal-supply-line-t900: three F02 links.
+- one-host-pinphage-t300: 11 infected and 19 lysed.
+
+The held Sample is cancelled with cancelSample before the 1,000 ticks, because the app never runs time while a sample is held. Its hash is recorded as hashAfterResume and equals the Sample Begin hash, so Cancel after a reload is exact.
+
+The generator ran twice with byte-identical output, and its guard refuses a non-rc1 manifest. rc1-replay passed 6/6 and fence-update 19/19. The verifier returned ok. Its two MINORs were fixed by the lead: the --rc1 decision must name "fence-update --rc1", since a bare corpus-path mention no longer authorizes a re-record; and the Phase 3 module set is now E06, E07, E10 and E12.
+Reason: saves are sacred; old saves keep their recorded ruleset and new rules never rewrite an old world.
+Affects: tools/make-rc1-saves.ts, tools/fence-update.ts, tests/helpers/rc1-saves.ts, tests/fixtures/rc1-replay.test.ts, tests/fixtures/saves-rc1/**, tests/tools/fence-update.test.ts.
+Owner review: no.
+
+## D-0102 · 2026-10-13 · Phase 5 preflight · One schema bump for all of Phase 5, written unconditionally; one protocol bump
+Context: g5-plan.md lead call 2; the three mapping briefs (docs/agent/g5-briefs.md) each need new world stores or entity columns.
+Decision:
+- World SCHEMA_VERSION 4 → 5 once, in wave 8's `schema5` task. It covers every Phase 5 store (edges, devices, climate arrays with null meaning ambient, nextDeviceId, gateTally saved but not hashed) and every new entity column (glow, trap, metabolic mode, handling need, held; the jacket, shell, handling progress and the dormancy machine reuse existing columns, and wave 8's task file names the exact list).
+- New stores and columns are hash-neutral while empty (the D-0035 rule), and `COLUMNS_ADDED_IN[4]` is frozen before columns are appended. Old saves migrate by copy.
+- Every save is written as schema 5, including dishes that use no Phase 5 state, so a v1.0 build refuses a v1.1 dish ("This dish needs a newer version of Pixelmeba") instead of running a Phase 5 organism without its rules.
+- PROTOCOL_VERSION 2 → 3 once, by one owner. simulationVersion stays 3 (CR R03). evolutionRulesVersion and phenotypeMappingVersion stay. moduleRegistryVersion moves only at the organism flip (D-0104). NOTEBOOK_VERSION moves only for the succession kind.
+Reason: saves are sacred in both directions. One bump keeps one migration to prove against both corpora.
+Owner review: no.
+
+## D-0103 · 2026-10-13 · Phase 5 preflight · Every Phase 5 rule is gated on the world's recorded manifest; the fence and both corpora hold in every wave
+Context: g5-plan.md lead call 3; D-0035, D-0042, D-0059, D-0072.
+Decision:
+- Each Phase 5 rule runs only when the world records it: the systems 'climate', 'barriers' and 'devices' plus the organism systems, enabledStructures, or the abilities of enabled species. A world that records none of them behaves and hashes exactly as before. Hot paths keep only multiplications by exactly 1, and diffusion keeps its operation order.
+- Until a flip, Phase 5 code is reached only through test registries (`registryWith(...)`).
+- tests/fixtures/g2-replay.test.ts, the four trajectory-fence files and tests/fixtures/rc1-replay.test.ts pass unchanged in every wave. A digest moves only at a flip, through fence-update under that flip's decision.
+Reason: determinism and old-world integrity are non-negotiable, and gating keeps each wave's diff provably inert for shipped dishes.
+Owner review: no.
+
+## D-0104 · 2026-10-13 · Phase 5 preflight · Two flips; habitats after the organism flip
+Context: g5-plan.md lead calls 4 and 5.
+Decision:
+- **Systems flip** (lead, after the climate and structure waves): 'climate', 'barriers', 'devices' and S01–S12 enabled. No fence digest may move, since no shipped recipe uses them. Then `fence-update --add` for one cycle dish and one barrier dish.
+- **Organism flip** (lead, after every E2 and E3 organism, E02, E11, their art and RELMATRIX): species, modules, materials and systems enabled, moduleRegistryVersion 2 → 3. E02 joins the gain lists of B01–B08 and E11 those of P01–P02, so module draws move as at D-0059: `fence-update --all --reason` names this bump, and pinned trajectory tests are re-pinned. P5.3 and P5.5 are ticked at this flip.
+- **P5.4 habitats come after the organism flip**, then P5.6 and P5.8. H07, H09 and H11 use E3 species, and the validator refuses shipped recipes with disabled species. This reorders WORKLOG's P5.3 → P5.4 → P5.5.
+Reason: the flips are the only points where shipped dishes can change, so each gets its own decision and fence record.
+Owner review: no.
+
+## D-0105 · 2026-10-13 · Phase 5 preflight · `release/1.0` is frozen at v1.0.0-rc1; main moves to buildPhase 5 and contentVersion 3
+Context: g5-plan.md lead call 6; D-0036 (the same bump at Phase 3's start).
+Decision:
+- Branch `release/1.0` points at the v1.0.0-rc1 commit `b7f1245` and is pushed. It takes store-blocking hotfixes only: versions 1.0.x, versionCode 10001–10099, no rule or content changes. A hotfix lands on main first and is cherry-picked.
+- content/manifest.json buildPhase 4 → 5 and contentVersion 2 → 3, with `content-validate --write`. Every Phase 5 record is phase 5, and validateContent refuses it while buildPhase is 4. Phase 5 species, modules, structures and systems stay off through the manifest's explicit enable lists until the flips (D-0104).
+- Tests that pin the shipped manifest read the lists they mean (the G2_LISTS / rc1-manifest pattern), not the moving manifest.
+Evidence: MANIFEST_BUMP_EVIDENCE
+Reason: the RC stays reproducible and patchable while main builds v1.1.
+Owner review: no.
+
+## D-0106 · 2026-10-13 · Phase 5 preflight · Rulings on the Phase 5 mapping briefs' open questions
+Context: docs/agent/g5-briefs.md "Open questions" (three slices); g5-plan.md lead call 7. The canonical docs are silent or ambiguous on each of these.
+Decision:
+- **S04 channel:** the channel edge is closed to ordinary diffusion and movement; only the directed transfer crosses it, so it is honestly one-way. Owner flag.
+- **Barriers and contacts:** predation claims, parasite attachment, links, and daughter or fungal placement never cross an edge that blocks either party's class (SPEC §4.9; E209 "no organisms cross").
+- **Warmth:** a closed shutter, walls and stone stop it; S01 and S02 pass it fully (SPEC §4.7 "passable edges").
+- **Light and cycle:** New Dish light defaults to Fixed (CT §8.1); Cycle is a choice that recipes turn on. The phase is `settings.cycleStartTick`, present only in cycle mode.
+- **Wick:** works when the wick cell or one of its 4 neighbours is water, and relaxes its 4-neighbour gel and sediment cells. Wicks do not chain.
+- **Drawing barriers:** edge barriers are tapped or dragged, snapped to the nearest edge, with a refusal preview before commit.
+- **Device cap:** furnishings and devices share the one 256 cap, checked at content time.
+- **Habitat geometry:** H10's impermeable wall is WALL cells in column x = 64 except y 61–66, with S01 on those six edges (no new edge kind). H09's wick sits at the channel bank. H11's fungi are F02 ×5, and its perimeter is the disk cells with a water 4-neighbour. Suggested-community regions are authored per habitat in content.
+- **F04 resting daughters** are unattached, unlinked and Small while resting, with a new reason RESTING_NEWBORN (honest label). Attachability is part of waking.
+- **A04 modes:** Photo mode scores light and Sugar mode scores sugar. A newborn takes its mode from local light (≥ 0.35 Photo, ≤ 0.25 Sugar, else the parent's).
+- **Glow** is off in any non-Active state. Emission and glow are charged in stage 8 under one ledger category, 'signal'.
+- **Traps:** a sampled F03 carries its reserve, and its held P04 is released alive at commit. A held P04 may still make contact captures. P06 captures within a Euclidean centre distance ≤ 1.0, never across a prohibiting edge.
+- **Play prompts** extend the five SPEC §13.5 predicates with parameters; no new types. The six D02 prompts and "sustain three species" ship. "Branching around a barrier" and "rescue a stressed dish" have no measure and are owner items.
+- **v1.1 compatibility:** v1.1 offers no "converted copy" of a v1.0 dish (SPEC §14.5), and refuses v1.0 Starting-recipe files once versions move (SPEC §15). Both are owner items.
+Reason: decide, log, continue (CLAUDE.md). Each ruling is the option most consistent with honest labels, isolation and saves, and each wave's verifier holds the builders to it.
+Owner review: yes — the S04 one-way edge, the v1.1 compatibility pair and the two unmeasurable prompts.
+
+## D-0107 · 2026-10-13 · Phase 5 wave 8 · Wave 8 runs in two stages and absorbs structure-content and art-large
+Context: the wave 8 task writer (run wf_4743ff8a-c91; docs/agent/g5-wave-8.tasks.js.txt). Stage 2 builds on stage 1's store types, animation names and validator tables, so it must start from an integrated, verified stage 1.
+Decision:
+- Wave 8 runs as two run files. **8a** is schema5 (critical, saves lens) and art-small. **8b** is structure-content and art-large.
+- 8a is integrated and committed, with `npm run check` green, before 8b launches.
+- Wave 9 keeps climate-stage2 and barrier-movement. g5-plan.md's wave table says so.
+- PROTOCOL_VERSION stays 2 in wave 8. The single bump to 3 goes to wave 11's structure-render-worker (D-0102).
+- The writer's proposed decisions (the column list, one id space for edges and devices, which devices store `on`, edge-code arrays edgeR/edgeD, `edges`/`devices` arrays on habitats and recipes, `requiresSystem` on tool records, the atlas cap of 1024×2048) are accepted at wave 8a's integration as D-numbers. A builder may still report evidence against them.
+Reason: fewer waves and integration cycles (fast-track.md); one owner per file per stage.
+Owner review: no.

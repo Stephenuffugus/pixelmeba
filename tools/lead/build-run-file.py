@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Build a wave run file from a tasks file and the Phase 4 runner (lead tool).
 
-Usage: python3 tools/lead/build-run-file.py <tasks file> <wave id> <description> <owner context> <key,key,...> <out file>
+Usage: python3 tools/lead/build-run-file.py <tasks file> <wave id> <description> <owner context> <key,key,...> <out file> [runner file]
+
+The runner defaults to docs/agent/g4-runner-ft.workflow.js.txt (Phase 4); Phase 5 passes docs/agent/g5-runner-ft.workflow.js.txt.
 
 The run file is: the meta block; the tasks file with "export " removed (STATE, TASKS, WAVE_TASKS); WAVE_ID,
 OWNER_CONTEXT and ag(); then docs/agent/g4-runner-ft.workflow.js.txt from "// ---- runner" on, with agent( -> ag(
@@ -13,6 +15,7 @@ import subprocess
 import sys
 
 tasks_path, wave_id, description, owner_context, keys, out_path = sys.argv[1:7]
+runner_path = sys.argv[7] if len(sys.argv) > 7 else 'docs/agent/g4-runner-ft.workflow.js.txt'
 keys = [k for k in keys.split(',') if k]
 tasks = open(tasks_path).read()
 tasks = re.sub(r'^export ', '', tasks, flags=re.M)
@@ -21,7 +24,7 @@ if len(re.findall(r'^const TASKS = \[', tasks, flags=re.M)) != 1 or len(re.finda
     sys.exit('refused: the tasks file must have one "const TASKS = [" and one "const WAVE_TASKS = TASKS"')
 tasks = re.sub(r'^const WAVE_TASKS = TASKS\s*$\n?', '', tasks, flags=re.M)
 tasks = re.sub(r'^const TASKS = \[', 'const WAVE_TASKS = [', tasks, flags=re.M)
-runner_src = open('docs/agent/g4-runner-ft.workflow.js.txt').read()
+runner_src = open(runner_path).read()
 runner = runner_src[runner_src.index('// ---- runner'):]
 runner = re.sub(r'\bagent\(', 'ag(', runner)
 old_a = 'const A = { wave: WAVE_ID, state: STATE, tasks: WAVE_TASKS }'

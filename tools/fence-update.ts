@@ -1,6 +1,7 @@
 /**
- * The only writer of the Phase 3 trajectory fence (tests/fixtures/fence.json) and of the g2 saves'
- * expected.json (g3-plan lines 132–134; g3-plan-recheck P-23; D-0035, D-0036).
+ * The only writer of the Phase 3 trajectory fence (tests/fixtures/fence.json), of the g2 saves'
+ * expected.json (g3-plan lines 132–134; g3-plan-recheck P-23; D-0035, D-0036) and of the rc1 saves'
+ * expected.json (g5-plan lead call 1).
  *
  *   npx tsx tools/fence-update.ts --add <recipeId> [--ticks N]
  *       Adds a fence entry for a recipe created after g2 and records its currentDigest
@@ -18,10 +19,18 @@
  *       above the g2 manifest's value; and (2) say that it re-records the g2 fence (name g2Digest or
  *       "fence-update --g2"). A changed value appends {decision, field: 'g2Digest'} to the entry's
  *       changedBy, and {decision, saves} to expected.json's changedBy.
+ *   npx tsx tools/fence-update.ts --rc1 --reason D-00xx
+ *       The one path that re-records tests/fixtures/saves-rc1/expected.json (each v1.0.0-rc1 save loaded
+ *       through loadSaveFile; tests/helpers/rc1-saves.ts). Never touches fence.json. The decision must
+ *       (1) state a landed rules or content version bump "<field> N → M" as for --g2, with M above the
+ *       rc1 manifest's value (saves-rc1/rc1-manifest.json); and (2) say that it re-records the rc1 corpus
+ *       (name "fence-update --rc1" or saves-rc1). A changed value appends {decision, saves} to the file's
+ *       changedBy.
  *
  * Every mode but --add refuses to run without --reason naming an entry that exists in
  * docs/DECISIONS.md ("## D-00xx · …"); a refusal writes nothing and exits 2.
- * Paths (for tests): --fence <file> --expected <file> --saves <dir> --decisions <file>.
+ * Paths (for tests): --fence <file> --expected <file> --saves <dir> --decisions <file> (--expected and
+ * --saves default to the rc1 corpus under --rc1, to the g2 saves otherwise).
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -30,6 +39,18 @@ import { ManifestSchema } from '../src/sim/content/schema';
 import { CONTENT_DIR, loadRegistryFs, REPO_ROOT } from './lib/content-fs';
 import { describeEntry, fenceDigest, FENCE_PATH, readFence, writeFence, type FenceEntry, type FenceFile } from '../tests/helpers/fence';
 import { EXPECTED_PATH, expectedText, G2_MANIFEST_PATH, G2_SAVE_FILES, measureSave, readG2SaveText, SAVES_DIR, type ExpectedChange, type G2Expected } from '../tests/helpers/g2-saves';
+import {
+  measureRc1Save,
+  RC1_EXPECTED_PATH,
+  RC1_MANIFEST_PATH,
+  RC1_SAVE_FILES,
+  RC1_SAVES_DIR,
+  rc1ExpectedText,
+  readRc1SaveText,
+  sameRc1Expected,
+  type Rc1Expected,
+  type Rc1ExpectedChange,
+} from '../tests/helpers/rc1-saves';
 
 export const DEFAULT_FENCE_TICKS = 1200;
 /** The rules and content versions a decision may bump (simulationVersion is pinned to 3). */
@@ -39,7 +60,12 @@ export type VersionStamps = Readonly<Record<VersionField, number>>;
 
 export class Refusal extends Error {}
 
-export type Mode = { kind: 'add'; recipe: string; ticks: number } | { kind: 'recipe'; id: string; reason: string } | { kind: 'all'; reason: string } | { kind: 'g2'; reason: string };
+export type Mode =
+  | { kind: 'add'; recipe: string; ticks: number }
+  | { kind: 'recipe'; id: string; reason: string }
+  | { kind: 'all'; reason: string }
+  | { kind: 'g2'; reason: string }
+  | { kind: 'rc1'; reason: string };
 
 export interface Paths {
   readonly fence: string;
@@ -57,17 +83,18 @@ function value(argv: readonly string[], name: string): string | undefined {
 }
 
 const USAGE =
-  'usage: npx tsx tools/fence-update.ts --add <recipeId> [--ticks N] | --recipe <entryId> --reason D-00xx | --all --reason D-00xx | --g2 --reason D-00xx';
+  'usage: npx tsx tools/fence-update.ts --add <recipeId> [--ticks N] | --recipe <entryId> --reason D-00xx | --all --reason D-00xx | --g2 --reason D-00xx | --rc1 --reason D-00xx';
 
 /** Parse the command line; throws Refusal for anything malformed (never guesses). */
 export function parseArgs(argv: readonly string[]): { mode: Mode; paths: Paths } {
-  const modes = ['--add', '--recipe', '--all', '--g2'].filter((m) => argv.includes(m));
+  const modes = ['--add', '--recipe', '--all', '--g2', '--rc1'].filter((m) => argv.includes(m));
   if (modes.length !== 1) throw new Refusal(`${modes.length === 0 ? 'no mode given' : `one mode at a time (${modes.join(', ')})`}. ${USAGE}`);
   const reason = value(argv, '--reason');
+  const rc1 = modes[0] === '--rc1';
   const paths: Paths = {
     fence: resolve(value(argv, '--fence') ?? FENCE_PATH),
-    expected: resolve(value(argv, '--expected') ?? EXPECTED_PATH),
-    saves: resolve(value(argv, '--saves') ?? SAVES_DIR),
+    expected: resolve(value(argv, '--expected') ?? (rc1 ? RC1_EXPECTED_PATH : EXPECTED_PATH)),
+    saves: resolve(value(argv, '--saves') ?? (rc1 ? RC1_SAVES_DIR : SAVES_DIR)),
     decisions: resolve(value(argv, '--decisions') ?? join(REPO_ROOT, 'docs', 'DECISIONS.md')),
   };
   const mode = modes[0]!;
@@ -84,6 +111,7 @@ export function parseArgs(argv: readonly string[]): { mode: Mode; paths: Paths }
   if (!/^D-\d{4}$/.test(reason)) throw new Refusal(`--reason must be a decision id like D-0040, not "${reason}"`);
   if (mode === '--recipe') return { mode: { kind: 'recipe', id: value(argv, '--recipe')!, reason }, paths };
   if (mode === '--all') return { mode: { kind: 'all', reason }, paths };
+  if (mode === '--rc1') return { mode: { kind: 'rc1', reason }, paths };
   return { mode: { kind: 'g2', reason }, paths };
 }
 
@@ -127,16 +155,40 @@ export function versionStamps(m: VersionStamps): VersionStamps {
  * "fence-update --g2". Mentioning a version field (a hypothetical bump, a later plan) is not enough.
  */
 export function g2DecisionProblem(id: string, text: string, shipped: VersionStamps, g2: VersionStamps): string | null {
+  return recordDecisionProblem(G2_RECORD, id, text, shipped, g2);
+}
+
+/**
+ * Why decision `id` cannot carry an rc1 re-record (tests/fixtures/saves-rc1/expected.json), or null: as
+ * g2DecisionProblem, against the rc1 manifest (`rc1`, saves-rc1/rc1-manifest.json), and the decision
+ * must name "fence-update --rc1" or saves-rc1.
+ */
+export function rc1DecisionProblem(id: string, text: string, shipped: VersionStamps, rc1: VersionStamps): string | null {
+  return recordDecisionProblem(RC1_RECORD, id, text, shipped, rc1);
+}
+
+/** A recorded fence a decided version bump may re-record: its name, what changes, and how a decision names the re-record. */
+interface RecordedFence {
+  readonly base: string;
+  readonly values: string;
+  readonly fence: string;
+  readonly named: RegExp;
+  readonly how: string;
+}
+
+const G2_RECORD: RecordedFence = { base: 'g2', values: 'g2 digests', fence: 'the g2 fence', named: /\bg2Digest\b|fence-update(?:\.ts)?\s+--g2\b/, how: 'name g2Digest or "fence-update --g2"' };
+const RC1_RECORD: RecordedFence = { base: 'rc1', values: 'rc1 save values', fence: 'the rc1 corpus', named: /fence-update(?:\.ts)?\s+--rc1\b/, how: 'name "fence-update --rc1"' };
+
+function recordDecisionProblem(r: RecordedFence, id: string, text: string, shipped: VersionStamps, base: VersionStamps): string | null {
   const bumps = statedBumps(text);
   if (bumps.length === 0)
-    return `${id} does not state which rules or content version it bumps (write "<field> N → M" for one of ${VERSION_FIELDS.join(', ')}); g2 digests change only with a version bump (simulationVersion is pinned to 3)`;
-  if (!bumps.some((b) => shipped[b.field] === b.to && b.to > g2[b.field])) {
+    return `${id} does not state which rules or content version it bumps (write "<field> N → M" for one of ${VERSION_FIELDS.join(', ')}); ${r.values} change only with a version bump (simulationVersion is pinned to 3)`;
+  if (!bumps.some((b) => shipped[b.field] === b.to && b.to > base[b.field])) {
     const said = bumps.map((b) => `${b.field} ${b.from} → ${b.to}`).join(', ');
-    const now = [...new Set(bumps.map((b) => b.field))].map((f) => `${f} ${shipped[f]} (g2: ${g2[f]})`).join(', ');
+    const now = [...new Set(bumps.map((b) => b.field))].map((f) => `${f} ${shipped[f]} (${r.base}: ${base[f]})`).join(', ');
     return `${id} states ${said}, but no such bump has landed: content/manifest.json holds ${now}. Bump the manifest under ${id} first`;
   }
-  if (!/\bg2Digest\b|fence-update(?:\.ts)?\s+--g2\b/.test(text))
-    return `${id} does not say that it re-records the g2 fence: name g2Digest or "fence-update --g2" in the decision`;
+  if (!r.named.test(text)) return `${id} does not say that it re-records ${r.fence}: ${r.how} in the decision`;
   return null;
 }
 
@@ -151,6 +203,18 @@ export function recordG2Expected(oldText: string | null, saves: Readonly<Record<
   const changed = old === null ? [] : G2_SAVE_FILES.filter((f) => !same(old.saves?.[f], saves[f]!));
   if (changed.length > 0) changedBy.push({ decision, saves: changed });
   return expectedText(saves, changedBy);
+}
+
+/**
+ * saves-rc1/expected.json's next text after an --rc1 re-record: the new values, and the old file's
+ * changedBy plus {decision, saves} when any save's values changed (the file is byte-identical when none did).
+ */
+export function recordRc1Expected(oldText: string | null, saves: Readonly<Record<string, Rc1Expected>>, decision: string): string {
+  const old = oldText === null ? null : (JSON.parse(oldText) as { saves?: Record<string, Rc1Expected>; changedBy?: Rc1ExpectedChange[] });
+  const changedBy = [...(old?.changedBy ?? [])];
+  const changed = old === null ? [] : RC1_SAVE_FILES.filter((f) => !sameRc1Expected(old.saves?.[f], saves[f]!));
+  if (changed.length > 0) changedBy.push({ decision, saves: changed });
+  return rc1ExpectedText(saves, changedBy);
 }
 
 function entryRow(e: FenceEntry): string {
@@ -174,12 +238,30 @@ export async function main(argv: readonly string[]): Promise<number> {
   try {
     if (mode.kind !== 'add') {
       const text = decisionText(paths.decisions, mode.reason);
+      const manifestAt = (path: string) => versionStamps(ManifestSchema.parse(JSON.parse(readFileSync(path, 'utf8'))));
       if (mode.kind === 'g2') {
-        const manifestAt = (path: string) => versionStamps(ManifestSchema.parse(JSON.parse(readFileSync(path, 'utf8'))));
         if (!existsSync(G2_MANIFEST_PATH)) throw new Refusal(`the g2 manifest ${G2_MANIFEST_PATH} is missing`);
         const problem = g2DecisionProblem(mode.reason, text, manifestAt(join(CONTENT_DIR, 'manifest.json')), manifestAt(G2_MANIFEST_PATH));
         if (problem) throw new Refusal(problem);
       }
+      if (mode.kind === 'rc1') {
+        if (!existsSync(RC1_MANIFEST_PATH)) throw new Refusal(`the rc1 manifest ${RC1_MANIFEST_PATH} is missing`);
+        const problem = rc1DecisionProblem(mode.reason, text, manifestAt(join(CONTENT_DIR, 'manifest.json')), manifestAt(RC1_MANIFEST_PATH));
+        if (problem) throw new Refusal(problem);
+      }
+    }
+    if (mode.kind === 'rc1') {
+      // --rc1: only the rc1 saves' expected values (fence.json is not read or written).
+      const saves: Record<string, Rc1Expected> = {};
+      for (const f of RC1_SAVE_FILES) {
+        if (!existsSync(join(paths.saves, f))) throw new Refusal(`rc1 save ${f} is missing from ${paths.saves}`);
+        saves[f] = (await measureRc1Save(f, readRc1SaveText(f, paths.saves))).expected;
+      }
+      const old = existsSync(paths.expected) ? readFileSync(paths.expected, 'utf8') : null;
+      const next = recordRc1Expected(old, saves, mode.reason); // throws on a malformed file before anything is written
+      writeFileSync(paths.expected, next);
+      console.log(`${old === next ? 'unchanged' : 'rewrote'} ${paths.expected}`);
+      return 0;
     }
     const fence: FenceFile = readFence(paths.fence);
     if (mode.kind === 'add') {
