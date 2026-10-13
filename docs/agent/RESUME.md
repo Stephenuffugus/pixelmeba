@@ -3,6 +3,42 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑13 10:40 UTC — THE v1.0 GATE IS COMPLETE IN THE TREE; ONLY THE GATE COMMIT + TAG REMAIN. START HERE.**
+> - Committed and pushed this session: `c001a94` D‑0099 (keyboard reticle after the inspector's reveal pan; the gate's
+>   one e2e failure) and `1eb42c6` D‑0100 (a release AAB carries no source maps; 6.26 MB → 3.81 MB). Checks: 215/2086
+>   at c001a94, 216/2088 at 1eb42c6; keyboard.spec 6/6 on all three projects.
+> - Uncommitted gate edition: EXPANSION_RESPONSE (every `<gate:` filled), README, WORKLOG (P4.14 + v1.0 evidence ticked),
+>   ANDROID_SETUP §9.3, perf-rc1.md "Gate re-measure, quiet", docs/reports/tune-rc1.md (tables == tune-g3.md with hashes
+>   and wall-clock masked), store/ images from 17ad62f, checklist wording. Message: tmp/gate4b/commit-B.txt.
+> - Running: read-only verification wf_9f98a855-39a (evidence auditor + completeness critic). Then: fix findings →
+>   `git add -A` (store/ too) → commit with tmp/gate4b/commit-B.txt → `git tag -a v1.0.0-rc1` → push main + tag →
+>   memory → Phase 5 plan (docs/agent/g5-plan.md, like g4-plan.md).
+> - If the session died: the tree is on wip/g4-gate4; if verification has no journal result, rerun it (script under
+>   ~/.claude/projects/-workspaces-pixelmeba/94ea1166-…/workflows/scripts/) or commit after your own read.
+
+> **Update 2026‑10‑13 04:40 UTC — RESUMED AFTER THE CODESPACE CLOSED (≈ 03:04). THE GATE RUN FINISHED: store-assets,
+> content, fixtures, perf (stress, heap, web, web-gc) all rc=0; full e2e 359/360 at 17ad62f (4.2 h). The 1 failure
+> (keyboard.spec.ts:174, phone-portrait) was a real keyboard defect → FIXED (D‑0099: a key closing the inspector, no
+> sheet after, dish focused, undoes its reveal pan; Camera.undoReveal + revealOnSheetChange in src/ui/a11y/focus.ts;
+> reviewed by wf_d7cf7aeb-5d1 = ok, its MINOR fixed; docs/reports/reviews/v1-gate/d0099-review.md). START HERE.**
+> - Running: `npm run check` (started 04:31; tmp/gate4b/check.log + tmp/gate4b/vitest-report.json; pid tmp/gate4b/check.pid).
+> - Then, in order: keyboard.spec on all three projects (final code) → commit A from tmp/gate4b/commit-A.txt (fill
+>   CHECK_LINE/E2E_LINE) → `nohup tmp/gate4b/post.sh` (art check, build, build:demo, android debug + release) and
+>   `nohup tmp/gate4b/tune.sh` (→ docs/reports/tune-rc1.md; diff against tune-g3.md) → fill the remaining `<gate: …>`
+>   placeholders of docs/EXPANSION_RESPONSE.md (per-row evidence: scratchpad rows.py over vitest-report.json + the e2e
+>   log) + ANDROID_SETUP §9.3 → read-only verification of the filled report → gate commit B (store/, docs, WORKLOG
+>   P4.14) → tag v1.0.0-rc1 → push. perf-rc1.md already has the quiet "Gate re-measure" section.
+> - If the session died: restore from wip/g4-gate4 if `git status` is clean; rerun whichever step has no END line.
+
+> **Update 2026‑10‑12 21:40 UTC — WAVE 7b COMMITTED `487a152` (worklog `17ad62f`, pushed; D‑0097, D‑0098; check 215 files /
+> 2079 tests; desktop e2e 29/29). P4.1–P4.13 all ticked. THE v1.0 GATE (P4.14) IS RUNNING. START HERE.**
+> - tmp/lead/gate4.sh (pid tmp/lead/gate4.pid; progress tmp/gate4/steps.log, logs tmp/gate4/*.log): store:assets on the
+>   clean commit → content:validate → fixtures → quiet perf (tmp/perf-gate4/*.json) → full three-project e2e.
+> - A read-only agent is drafting EXPANSION_RESPONSE v1.0 + README with "<gate: …>" placeholders.
+> - Then: fill the placeholders from the gate logs, update perf-rc1.md with the quiet numbers, commit store/ (new buildCommit)
+>   + docs as "gate(v1.0): …" with the evidence, tag v1.0.0-rc1, push. Any e2e failure: fix, rerun that spec on all three projects.
+> - If the session died: check tmp/gate4/steps.log; rerun only the steps without an END line (the script's lines).
+
 > **Update 2026‑10‑12 17:20 UTC — WAVE 7a DONE: fixes committed `ed374ba` (D‑0096; check 208 files / 2027 tests;
 > desktop e2e batch 2 52/53 + whatif:237 rerun green after expectReachable re-scrolls; android-storage phone 2/2).
 > P4.10 + P4.13 ticked; WAVE 7a AS BUILT in docs/agent/g4-wave-7.tasks.js.txt STATE. 7b run file

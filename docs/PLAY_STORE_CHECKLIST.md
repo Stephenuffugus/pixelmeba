@@ -246,7 +246,7 @@ is present for every child and gives consent.
 - **D-0092** keep the Filesystem save store or flip back to IndexedDB after the device test (B6.7).
 - **D-0093** allowBackup; settings in localStorage instead of Preferences; INTERNET; the icon art.
 - **D-0094** the open performance criteria and their D-0066 options; the device steps.
-- **P4.12** (this stage; `docs/reports/reviews/g4-wave-7b/store-build.md`): the store icon at 75 % of the
+- **D-0098 / P4.12** (`docs/reports/reviews/g4-wave-7b/store-build.md`): the store icon at 75 % of the
   square; tablet screenshots in 9:16; the listing text; `allowBackup` stated in the privacy policy (D-0098).
 - **D-0097** the arcade's manifest/offline rules; full or demo build; the demo's store link (§B10).
 
