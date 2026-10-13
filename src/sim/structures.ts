@@ -59,6 +59,7 @@ import {
 import { profileOf } from './profiles';
 import { entityCell } from './spatial';
 import { markField } from './transport';
+import { moistureOnRepaint } from './climate';
 import type { World } from './world';
 
 /**
@@ -302,6 +303,7 @@ export function applyHabitatEdit(world: World, p: HabitatEditPayload): HabitatEd
     case 'paintSubstrate': {
       const code = SUBSTRATE_CODES[p.substrate];
       for (const cell of ok) {
+        moistureOnRepaint(world, cell, code); // Phase 5: a cell whose substrate changes restarts its moisture (climate.ts)
         if (g.substrate[cell] !== code) changed = true;
         g.substrate[cell] = code;
       }

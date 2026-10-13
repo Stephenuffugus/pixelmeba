@@ -24,6 +24,7 @@ import { FIELD_DEFS, FIELD_IDS, type FieldId } from './fields';
 import { LIFE_ACTIVE } from './entities';
 import { FILM_DECAY_PER_SECOND } from './film';
 import { diffusionCoefficient, inMask, maskCells, SUB_SEDIMENT, SUB_WATER, transportOpen } from './grid';
+import { climateStep, deriveClimateLight, deriveClimateMoisture, lightNeutral } from './climate';
 import type { World } from './world';
 
 export const FIELD_INDEX: Readonly<Record<FieldId, number>> = Object.fromEntries(FIELD_IDS.map((id, i) => [id, i])) as Record<FieldId, number>;
@@ -46,10 +47,39 @@ export interface TransportCache {
   lightVersion: number;
   /**
    * Per-cell attachment surfaces (src/sim/attachment.ts SURF_* bits; SPEC §2.2, D-0006), built lazily
-   * for this world only and rebuilt when its grid.geometryVersion moves past `attachVersion`.
+   * for this world only and rebuilt when its grid.geometryVersion moves past `attachVersion`, or when
+   * world.devices is not the store (identity and length) the mask's S06 mesh bits were built from
+   * (`attachMeshFrom`, null when it was built with no devices; Phase 5 wave 9).
    */
   readonly attach: Uint8Array;
   attachVersion: number;
+  attachMeshFrom: readonly unknown[] | null;
+  attachMeshLen: number;
+  /**
+   * Climate caches (src/sim/climate.ts; Phase 5, P5.1). All derived, never saved or hashed.
+   * - lightRoofStamp: tc.roofStamp at the last keyed light recompute (with lightVersion, the key of a
+   *   world whose light depends on S11 roofs only);
+   * - moistureVersion: geometryVersion of the last substrate-default moisture write outside the fast path;
+   * - roof / roofKey / roofStamp: cells under an S11 roof, the S11 cells (world.devices order) they were
+   *   built from, and a counter bumped on every rebuild. Keyed on content, compared every call, so a
+   *   device writer that skips the geometryVersion bump (or realizeRecipe's new array) cannot leave a
+   *   stale roof;
+   * - canopy / canopyLive: per-cell CANOPY biomass of the last light computation, and whether a living
+   *   CANOPY organism existed then (lightFactors reads them, so it equals derived.light);
+   * - warmthR / warmthD / warmthVersion / warmthShutters: warmth diffusion coefficients, keyed on
+   *   geometryVersion and the closed S03 shutters' edge keys (content, compared every call).
+   */
+  lightRoofStamp: number;
+  moistureVersion: number;
+  roof: Uint8Array | null;
+  readonly roofKey: number[];
+  roofStamp: number;
+  canopy: Float64Array | null;
+  canopyLive: boolean;
+  warmthR: Float64Array | null;
+  warmthD: Float64Array | null;
+  warmthVersion: number;
+  readonly warmthShutters: number[];
 }
 
 const scratch = new Float64Array(CELL_COUNT);
@@ -83,6 +113,19 @@ function createCache(): TransportCache {
     lightVersion: -1,
     attach: new Uint8Array(CELL_COUNT),
     attachVersion: -1,
+    attachMeshFrom: null,
+    attachMeshLen: 0,
+    lightRoofStamp: -1,
+    moistureVersion: -1,
+    roof: null,
+    roofKey: [],
+    roofStamp: 0,
+    canopy: null,
+    canopyLive: false,
+    warmthR: null,
+    warmthD: null,
+    warmthVersion: -1,
+    warmthShutters: [],
   };
 }
 
@@ -324,8 +367,13 @@ function neutralize(world: World): void {
   }
 }
 
-/** Derived per-cell values used by suitability, photosynthesis and inspectors. */
-export function updateDerived(world: World): void {
+/**
+ * Derived per-cell values used by suitability, photosynthesis and inspectors. `lightTick` is the tick
+ * whose light cycle phase light is computed for: stage 2 passes world.tick; every other caller omits it
+ * and gets the last completed stage 2, max(tick − 1, cycleStartTick) (climate.ts; D-0113). A world with
+ * no active cycle, no CANOPY species and no recorded S11 roof keeps the v1.0 fast path below exactly.
+ */
+export function updateDerived(world: World, lightTick?: number): void {
   const d = world.derived;
   const g = world.grid;
   const cells = maskCells();
@@ -342,7 +390,8 @@ export function updateDerived(world: World): void {
     d.phUniform = !chem;
   }
   const tc = transportCache(world);
-  if (tc.lightVersion !== g.geometryVersion) {
+  if (!lightNeutral(world)) deriveClimateLight(world, tc, lightTick);
+  else if (tc.lightVersion !== g.geometryVersion) {
     for (let k = 0; k < cells.length; k++) {
       const i = cells[k]!;
       const light = g.lightBase[i]! * g.shade[i]!;
@@ -351,10 +400,17 @@ export function updateDerived(world: World): void {
     }
     tc.lightVersion = g.geometryVersion;
   }
+  if (world.climate.moisture !== null) deriveClimateMoisture(world);
 }
 
+/**
+ * Stage 2 (SPEC §3.2): climate (cycle phase is read by updateDerived; local warmth, then moisture;
+ * climate.ts, inert without 'climate'), transport of every diffusing field, gas exchange, decays, film,
+ * neutralization, then derived pH, light (with canopy) and moisture for this tick.
+ */
 export function stageEnvironment(world: World): void {
   const tc = transportCache(world);
+  climateStep(world, tc);
   const { kR, kD } = filmCoefficients(world, tc);
   const active = world.derived.fieldActive;
   for (let fi = 0; fi < FIELD_IDS.length; fi++) {
@@ -365,6 +421,7 @@ export function stageEnvironment(world: World): void {
     if (cls === 'none') continue;
     if (!diffuseField(arr, tc, kR, kD, cls !== 'normal')) active[fi] = 0;
   }
+  // Wave 10 (barrier-transport): the S04 channel's directed transfers go here, after diffusion.
   gasExchange(world, tc);
   // Decays (SPEC §4.3, §5.3, §7.5). Per-second rates × dt; inhibitors decay per tick.
   decayActivity(world, 'inhBact', 0.002);
@@ -379,9 +436,10 @@ export function stageEnvironment(world: World): void {
   decayActivity(world, 'rival', 0.02 * DT);
   decayViral(world, 'v01');
   decayViral(world, 'v02');
+  // Wave 10 (barrier-transport): the S08 resin step goes here, after decays.
   filmStage(world);
   neutralize(world);
-  updateDerived(world);
+  updateDerived(world, world.tick);
 }
 
 /** Test support: every inactive allocated field must be exactly zero. Returns offending field ids. */

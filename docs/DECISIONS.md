@@ -1632,7 +1632,60 @@ Context: the wave 10 task writer (run wf_3eee27c3-2a4; docs/agent/g5-wave-10.tas
 - Births never set FLAG.attached on a daughter; only introduction does (commands.ts, `sp.attached`). So barriers.ts `classOf` rule (e) classes every newborn B02 or B13 colony member as Small, because the species record says Fixed and the category is bacterium. CT §5.3 says "attached colonies" are Fixed. The "B02 disperser" it lists as Small is the dispersal module E14 (CT D503, Phase 7), which nothing in Phase 5 has. Left as is, a second-generation B02 would place daughters across an S02, and wave 10's S04 channel would carry colony members.
 - My g5-plan carry-over (wave 9 integration) said an F04 resting daughter is placed in her own Small class. D-0106 says daughter placement never crosses an edge that blocks EITHER party's class, and the parent F04 is Fixed.
 Decision:
-- **`classOf` rule (e).** A species recorded Fixed whose organism lacks FLAG.attached is Medium if it is a consumer (a free P06), and otherwise Fixed (colony bacteria stay where they are born). The resting-newborn Small rule (c) and the fungus rule (d) are unchanged. E14 (Phase 7) adds the dispersing daughter's Small class with its own flag. The lead makes this change at wave 9's integration (barriers.ts plus the barriers-table pin). It moves no hash: classOf is reached only by Phase 5 code through test registries.
+- **`classOf` rule (e).** A species recorded Fixed whose organism lacks FLAG.attached is Medium if it is a consumer (a free P06), and otherwise Fixed (colony bacteria stay where they are born). (Refined by D-0115: a born P06 is Fixed too; every species that lives attached is Fixed.) The resting-newborn Small rule (c) and the fungus rule (d) are unchanged. E14 (Phase 7) adds the dispersing daughter's Small class with its own flag. The lead makes this change at wave 9's integration (barriers.ts plus the barriers-table pin). It moves no hash: classOf is reached only by Phase 5 code through test registries.
 - **F04 placement.** A resting daughter's placement keeps wave 9's parent-class edge check (D-0106 either-party): no edge may stand between the parent's cell and hers. Her own Small class applies only after birth, for example to wave 10's S04 channel. g5-plan.md's carry-over and the wave 10 e3-resters prompt are corrected.
 Reason: CT §5.3's classes and D-0106's conservative contact rule. "No organisms cross" (E209) holds without special cases.
+Owner review: no.
+
+## D-0115 · 2026-10-13 · Phase 5 wave 9 integration · Every organism of a species that lives attached is Fixed (refines D-0114)
+Context: D-0114 ruled that `classOf` classes an organism of a Fixed-record species without FLAG.attached as Medium when it is a consumer ("a free P06"), and Fixed otherwise. Wave 9's verifier then found (docs/reports/reviews/g5-wave-9/wave-verify.md):
+- The S05 shelter rule, which is per species (edgePassage.ts `shelterRefuses`), refused P06. CT §5.3 lists "attached P06" as Fixed, and D-0113 says Fixed life is unaffected by a shelter.
+- A born P06 lacks FLAG.attached, because births never copy it, so it would be Medium although it lives attached on its surface.
+
+movement.ts's prey rule (`PREY_FREE`) already treats every organism of an attached species as attached, flag or not. No Phase 5 rule detaches a P06. The wave 10 task writer reached the same rule on its own (barrier-transport's item 0).
+Decision:
+- **`classOf`** (barriers.ts), in order:
+  - (a) a parasite on a host takes the host's class;
+  - (b) FLAG.attached is Fixed;
+  - (c) a resting F04 newborn (FLAG.restNewborn, not Active) is Small;
+  - (d) a fungus, or any species whose record has an attachment (B02, B13, F01–F04, P06), is Fixed whatever the flag says;
+  - (e) otherwise the record's transportClass.
+- **The CT §5.3 states nothing produces yet.** CT's "B02 disperser" (Small) and "P06 (free)" (Medium) are states no Phase 5 rule produces. A later rule that makes them adds its own flag (E14 is Phase 7).
+- **`freeClassOfSpecies`** holds rules (d)–(e) in one place. The shelter (`canOccupy`) reads it, so P06 and B02 may be placed in a shelter cell that offers their surface (S05 itself is no attachment surface).
+- **`placementClassOf` is removed** (edgePassage.ts). With rule (d) it equals `classOf` for every parent, since only Active organisms divide. births.ts `findPlacement` and fungi.ts `fungalPlacement` call `classOf`.
+- **Wave 10.** barrier-transport's item 0 is done; its S04 channel reads `classOf`.
+- **No hash moves.** `classOf` and the shelter are reached only through edges or devices, which only test registries hold; the fence passes unchanged.
+- **Proof.** barriers-table re-pins rule (d) and adds `freeClassOfSpecies`; barrier-placement admits P06 and B02 to a stone-edge shelter cell. A mutant restoring the wave 8a rule (e) (consumer Medium, bacterium Small) fails 4 tests, among them wave 9's "an attached B02 never places a daughter across an S02, over generations", which `placementClassOf` used to carry. D-0114's rule (consumer Medium only) would fail the P06 shelter test and the re-pinned barriers-table cases.
+Reason: CT §5.3's Fixed row ("attached colonies, active fungi, attached P06"), the existing prey rule, and the shelter's purpose: a refuge from Medium and Large swimmers, not from life fixed in place.
+Owner review: no.
+
+## D-0116 · 2026-10-13 · Phase 5 wave 9 · Climate stage 2 and movement through edge barriers as built
+Context: wave 9, run wf_ef7f09c2-fbe: climate-stage2 and barrier-movement, both critical with their own saves verifier, then one fix round for climate-stage2. Sources: docs/reports/reviews/g5-wave-9/ (both build reports, the fix report, wave-verify, both saves verifiers and the reverify). D-0113 holds the task writer's rulings; this entry records what the builders and the lead added.
+Decision:
+- **Climate, the builders' rulings.**
+  - `setLightMode('cycle')` on a dish that already cycles changes nothing and keeps cycleStartTick (as `setMutationPreset`: "choosing the current one changes nothing").
+  - The moisture reset on repaint acts only when a cell's substrate changes. Painting over the same substrate keeps its moisture, so paint is not a free re-wetting tool and a no-op paint changes no hashed state.
+  - Drying lowers only values above the 0.1 floor and never raises one (an imported value below 0.1 stays).
+  - `lightFactors`' canopy is the canopy of the last light computation, so its `effective` equals derived.light between steps.
+  - The wick loop runs only when the world records S12.
+  - Suitability reads the local warmth array when it exists, else `settings.warmth` (the v1.0 branch, unchanged).
+- **Climate caches compare content (fix round 1).** The roof cells, the keyed light and the warmth coefficients compare the S11 cells and the closed S03 edges on every call, as well as geometryVersion where it applies. A writer that changes a device or a shutter in place without a bump cannot make these caches diverge from a reload. The edgePassage.ts and attachment-mesh caches still need the bump (below).
+- **Movement through edges.** D-0113's rulings were built as specified: the corner rule, targets, contacts, placement and the shelter in `canOccupy`. Also:
+  - The corner rule over-blocks only at an open barrier end.
+  - An organism already standing in a shelter cell is not harmed (suitability uses `habitatCompatible`): it may leave but not come back.
+  - crossing.ts `enterCell` refuses a shelter cell to P04.
+  - edgePassage.ts caches key on geometryVersion plus the store's identity and length. EdgeBarrier.open and Device.cell now say that an in-place writer must bump geometryVersion.
+- **Lead integration fixes.**
+  - world-stores-5's warmth assertion became a 1× = 4× comparison, because the climate stage now evolves that world's warmth.
+  - The S06 mesh record moved from a module `WeakMap` onto `TransportCache` (`attachMeshFrom`, `attachMeshLen`), and an emptied device store now rebuilds the attachment mask. This was the barrier saves verifier's divergence repro: emptied without a bump, the running dish kept its mesh and its reload did not.
+  - D-0115.
+  - New tests, each proven by a mutant: nearestHost's edge skip, segmentPermitted's corner rule, the lightVersion reset with no geometry bump, the emptied mesh store, and P06/B02 in a shelter.
+- **Carried forward** (g5-plan "Carry-overs"):
+  - Wave 10 structure-commands: sample release uses `canOccupy` (already its item 13). A released block whose links or host pair would straddle a refusing edge at the destination is refused or severed, by the same rule as a barrier placed across a link.
+  - Wave 11: the inspector's warmth reads local warmth (src/worker/snapshot.ts still reads settings.warmth).
+  - Habitat and recipe content: a recipe founder chain (`links: 'chain'`) across an edge in the recipe's own structures.
+- **Performance** (docs/reports/perf-g5.md, indicative):
+  - the cycle, two heaters, four roofs and drying: about +0.1 to +0.25 ms per tick in stage 2;
+  - 512 edges plus 256 devices: about +0.3 to +0.55 ms per tick in stage 4 at about 530 organisms.
+Reason: each builder ruling keeps replay, reload and 4× identical or keeps a displayed number traceable to the value the simulation used. The content-keyed climate caches and the mesh fix close the only reload divergences the saves verifiers found.
 Owner review: no.

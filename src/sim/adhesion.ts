@@ -37,7 +37,9 @@
  *
  * Every path leaves links symmetric and valid at the end of the tick (links.ts linksValid).
  */
+import { classOf } from './barriers';
 import { DT, GRID_H, GRID_W } from './constants';
+import { pairPermitted } from './edgePassage';
 import { FLAG, LIFE_ACTIVE } from './entities';
 import { emit } from './events';
 import { cellIndex } from './grid';
@@ -255,6 +257,7 @@ export function formAdhesionLinks(world: World): void {
   }
   // 2. Each times its lowest-birthId neighbour in reach (same ancestor, also pairable, not yet linked).
   const reach2 = rules.linkDistance * rules.linkDistance;
+  const edgesOn = world.edges.length > 0; // wave 9 gate: edges exist only where 'barriers' is recorded
   const pairs: [number, number, number, number][] = [];
   if (any) {
     for (let i = 0; i < hw; i++) {
@@ -264,12 +267,17 @@ export function formAdhesionLinks(world: World): void {
       const sp = c.species[i]!;
       const cx = Math.floor(px);
       const cy = Math.floor(py);
+      // Wave 9 (D-0106): no link across an edge that refuses either member's class.
+      const cls = edgesOn ? classOf(world, i) : null;
+      const own = cellIndex(cx, cy);
       let best = -1;
       let bestBirth = Infinity;
       for (let y = Math.max(0, cy - 1); y <= Math.min(GRID_H - 1, cy + 1); y++) {
         for (let x = Math.max(0, cx - 1); x <= Math.min(GRID_W - 1, cx + 1); x++) {
-          forEachInCell(world, cellIndex(x, y), (s) => {
+          const cell = cellIndex(x, y);
+          forEachInCell(world, cell, (s) => {
             if (s === i || c.alive[s] !== 1 || canPair[s] !== 1 || c.species[s] !== sp) return;
+            if (cls !== null && !pairPermitted(world, own, cell, cls, classOf(world, s))) return;
             const b = c.birthId[s]!;
             if (b >= bestBirth) return;
             if ((c.x[s]! - px) ** 2 + (c.y[s]! - py) ** 2 > reach2) return;

@@ -1,7 +1,7 @@
 /**
  * Edge barriers and devices as pure tables (Phase 5 foundation; src/sim/barriers.ts, src/sim/devices.ts;
  * CT §4, §5.3, §14; D-0106): the whole CT §5.3 permission matrix, the edge-code arrays, the transport
- * class of an organism (rules (a)–(f) of classOf, on real species records), and every refusal of the two
+ * class of an organism (rules (a)–(e) of classOf, on real species records), and every refusal of the two
  * store validators the import uses.
  */
 import { describe, expect, it } from 'vitest';
@@ -21,6 +21,7 @@ import {
   edgeNeighbour,
   edgePermits,
   edgeStoreProblem,
+  freeClassOfSpecies,
   sortEdges,
   type EdgeBarrier,
   type TransportClass,
@@ -122,7 +123,7 @@ describe('edge keys, neighbours and code arrays', () => {
 
 // ---- classOf -----------------------------------------------------------------------------------------
 
-describe('classOf: the transport class of an organism (rules (a)–(f))', () => {
+describe('classOf: the transport class of an organism (rules (a)–(e))', () => {
   // F04 and P06 natives (RESTING_DAUGHTER, RADIUS_CAPTURE) are implemented by later Phase 5 waves (allowUnimplemented).
   const reg = registryWith({ enabledSpecies: [...registry().manifest.enabledSpecies, 'F04', 'P06'].sort() }, { allowUnimplemented: true });
   const fakeFixedAlga: Species = { ...reg.species.A01!, id: 'A99', transportClass: 'fixed' };
@@ -142,18 +143,26 @@ describe('classOf: the transport class of an organism (rules (a)–(f))', () => 
     expect(ids.map((id) => reg.species[id]!.transportClass)).toEqual(['small', 'fixed', 'fixed', 'fixed', 'small', 'medium', 'large', 'fixed']);
   });
 
-  it('(f) the record: B01 Small, A01 Medium, P04 Large', () => {
+  it('(e) the record: B01 Small, A01 Medium, P04 Large', () => {
     expect(classOf(world, add('B01'))).toBe('small');
     expect(classOf(world, add('A01'))).toBe('medium');
     expect(classOf(world, add('P04'))).toBe('large');
   });
 
-  it('(b) attached is Fixed; (e) a Fixed record not attached moves by category: B02 disperser Small, free P06 Medium, else Fixed', () => {
+  // Re-pinned at wave 9's integration (D-0114, D-0115): a born B02 or P06 lacks FLAG.attached (births never
+  // copy it) and still lives attached, so it is Fixed; CT §5.3's "B02 disperser" and "P06 (free)" are
+  // states no Phase 5 rule produces. Before, rule (e) classed them Small and Medium by category.
+  it('(b) attached is Fixed; (d) a species that lives attached is Fixed without the flag too (born B02, P06); a Fixed record stays Fixed', () => {
     expect(classOf(world, add('B02', FLAG.attached))).toBe('fixed');
-    expect(classOf(world, add('B02'))).toBe('small');
+    expect(classOf(world, add('B02'))).toBe('fixed');
     expect(classOf(world, add('P06', FLAG.attached))).toBe('fixed');
-    expect(classOf(world, add('P06'))).toBe('medium');
+    expect(classOf(world, add('P06'))).toBe('fixed');
     expect(classOf(world, add('A99'))).toBe('fixed');
+  });
+
+  it('freeClassOfSpecies (the shelter rule’s class): attached species and fungi Fixed, else the record', () => {
+    const cls = (id: string) => freeClassOfSpecies(species.find((x) => x.id === id)!);
+    expect(['B01', 'B02', 'P06', 'F04', 'X01', 'A01', 'P04', 'F02', 'A99'].map(cls)).toEqual(['small', 'fixed', 'fixed', 'fixed', 'small', 'medium', 'large', 'fixed', 'fixed']);
   });
 
   it('(d) a fungal segment is Fixed; (c) a resting F04 newborn is Small, and Fixed again once Active', () => {

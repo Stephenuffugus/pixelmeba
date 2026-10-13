@@ -3,12 +3,15 @@
  *
  * A species whose record has `attachment !== null` may live only in a cell that offers one of its
  * listed surfaces: gel cells, sediment cells, passable cells four-adjacent to stone ("stone edge",
- * grid.ts isStoneEdge), porous bead cells; attachment mesh arrives with its structure in Phase 5, so
- * no cell offers it yet. Free-living species (attachment null) are not affected at all.
+ * grid.ts isStoneEdge), porous bead cells, and cells holding an S06 attachment mesh (Phase 5 wave 9;
+ * CT §4 "attachment for B02, B13, fungi, P06; no protection": the mesh adds the surface and nothing
+ * else). Free-living species (attachment null) are not affected at all.
  *
  * The per-cell surface mask is derived state of ONE world: it lives on that world's transport cache
  * (world.derived.transport, never saved, never hashed) and is rebuilt when that world's
- * grid.geometryVersion moves. It is never kept in a module-level cache keyed by geometryVersion alone:
+ * grid.geometryVersion moves, or when world.devices is not the store (identity and length) its S06 mesh
+ * bits were built from (a store replaced or emptied without a bump). It is never kept in a module-level
+ * cache keyed by geometryVersion alone:
  * every freshly realized world starts at geometryVersion 1 and one worker holds several worlds.
  *
  * Gate: the rule concerns only organisms whose species record lists attachment surfaces, so a world
@@ -23,7 +26,7 @@ export const SURF_GEL = 1;
 export const SURF_SEDIMENT = 2;
 export const SURF_STONE_EDGE = 4;
 export const SURF_BEAD = 8;
-/** Attachment mesh (S06, Phase 5): no cell offers it yet. */
+/** Attachment mesh (S06, Phase 5): offered by every cell holding an S06 (world.devices; attachmentMask). */
 export const SURF_MESH = 16;
 
 export type SurfaceName = 'gel' | 'sediment' | 'stoneEdge' | 'bead' | 'mesh';
@@ -73,11 +76,17 @@ export function cellSurfaces(g: Grid, i: number): number {
 /**
  * This world's attachable-surface mask (SURF_* bits per cell; 0 outside the dish), rebuilt when its
  * geometry changed since the mask was built. Derived; the returned array is owned by the cache.
+ * Wave 9: SURF_MESH on every cell holding an S06. Every writer of world.devices bumps geometryVersion
+ * (wave 10's contract); the store's identity and length are also checked, so a store replaced
+ * (realizeRecipe assigns new arrays) or emptied without a bump still rebuilds the mask.
+ * With no devices the mask is cellSurfaces' alone, byte for byte as before.
  */
 export function attachmentMask(world: World): Uint8Array {
   const tc = transportCacheObject(world);
   const g = world.grid;
-  if (tc.attachVersion === g.geometryVersion) return tc.attach;
+  const devices = world.devices;
+  const from = devices.length === 0 ? null : devices;
+  if (tc.attachVersion === g.geometryVersion && tc.attachMeshFrom === from && tc.attachMeshLen === devices.length) return tc.attach;
   const mask = tc.attach;
   mask.fill(0);
   const cells = maskCells();
@@ -85,6 +94,12 @@ export function attachmentMask(world: World): Uint8Array {
     const i = cells[k]!;
     mask[i] = cellSurfaces(g, i);
   }
+  for (let k = 0; k < devices.length; k++) {
+    const d = devices[k]!;
+    if (d.kind === 'S06') mask[d.cell] = mask[d.cell]! | SURF_MESH;
+  }
+  tc.attachMeshFrom = from;
+  tc.attachMeshLen = devices.length;
   tc.attachVersion = g.geometryVersion;
   return mask;
 }

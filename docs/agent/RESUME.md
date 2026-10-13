@@ -3,6 +3,21 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑13 22:25 UTC — WAVE 9 BUILT AND VERIFIED (run wf_ef7f09c2-fbe, 141 min: climate-stage2's MAJOR (a
+> test timeout) fixed in round 1 and re-verified; the world-stores-5 MAJOR was the lead's). LEAD INTEGRATION IS IN THE TREE,
+> UNCOMMITTED (backup loop → `wip/g5-wave-9`, pid tmp/lead/backup-9.pid; builders' final state = local ref
+> refs/lead/wave9-builders = 7980065). START HERE.**
+> - Done in the tree: D‑0115 (classOf: every species that lives attached is Fixed; placementClassOf removed; the shelter
+>   admits P06), D‑0116 (wave 9 as built); attachment.ts mesh record on TransportCache + the emptied-store fix; comments on
+>   EdgeBarrier.open / Device.cell; world-stores-5 re-pin; 5 new mutant-proven tests; ARCH §5/§13 "As built, Phase 5 wave
+>   9"; docs/reports/perf-g5.md (quiet re-measure); g5-plan carry-overs.
+> - Running: `npm run check` + art:build --check + content:validate (tmp/lead/check-9.sh → tmp/lead/check-9.log, EXIT
+>   lines); the integration verifier → docs/reports/reviews/g5-wave-9/integrate-verify.md.
+> - Next: fix its findings → commit wave 9 → push → `python3 tmp/lead/fill-wave10.py <sha>` (dry-run OK) → append
+>   tmp/lead/d0117.md to DECISIONS (wave 10 calls; owner flag: the native dry trigger) → `python3 tmp/lead/worklog-9.py <sha>`
+>   → LEAD PRE-LAUNCH 3–5 of docs/agent/g5-wave-10.tasks.js.txt (ports, backup loop wip/g5-wave-10, run file + verifyGroups)
+>   → commit + push → launch wave 10 → then the wave 11 task writer while 10 runs.
+
 > **Update 2026‑10‑13 19:45 UTC — WAVE 8b COMMITTED `e25cd77` (check 226 files / 2589 tests; e2e 70/70 desktop +
 > phone-portrait; D‑0111, D‑0112; integration verifier wf_df98133f-a7c, its MAJOR (handling_arc formula) and MINORs fixed).
 > Wave 8 is done. WAVE 9 RUNNING from docs/agent/g5-wave-9.run.workflow.js.txt (climate-stage2 4271, barrier-movement

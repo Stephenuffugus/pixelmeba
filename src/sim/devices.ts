@@ -32,6 +32,11 @@ export const RESIN_CAPACITY = 5;
 export interface Device {
   readonly id: number;
   readonly kind: DeviceKind;
+  /**
+   * Mutable (a device can be moved). A writer that changes it in place must bump grid.geometryVersion:
+   * edgePassage.ts and attachment.ts cache per-cell views on that version and the store's identity and
+   * length (climate.ts's caches compare content instead; `on` is read afresh every tick).
+   */
   cell: number;
   /** S09/S10 only (required there): on or off. */
   on?: boolean;

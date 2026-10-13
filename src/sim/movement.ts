@@ -46,6 +46,8 @@ import { isAnchored } from './anchor';
 import { adhesionLinked } from './adhesion';
 import { brightEnough, lightScore } from './lightSeeker';
 import { withDebrisScore } from './debrisFeeder';
+import { classOf, edgeCodeBetween, edgePermits } from './barriers';
+import { cornerPermits, edgeCodesOf, markRefusedEdges, segmentPermitted, shelterRefuses, type PassageClass } from './edgePassage';
 import type { World } from './world';
 
 const HEADING_E = 0;
@@ -57,9 +59,14 @@ export function avail(a: number): number {
   return a <= 0 ? 0 : a / (a + AVAIL_K);
 }
 
-/** Can a (non-attached) organism of this species occupy the cell? */
+/**
+ * Can a (non-attached) organism of this species occupy the cell? Its habitat (suitability.ts
+ * habitatCompatible), and no S05 porous shelter in the cell when the species' free class is Medium or
+ * Large (CT §5.3; edgePassage.ts shelterRefuses; gated on the world holding devices). The shared
+ * occupancy rule of decisions, traces, births, fungal growth, inoculation, recipe founders and specimens.
+ */
 export function canOccupy(world: World, sp: SpeciesRT, cell: number): boolean {
-  return habitatCompatible(world, sp, cell);
+  return habitatCompatible(world, sp, cell) && (world.devices.length === 0 || !shelterRefuses(world, sp.def, cell));
 }
 
 const EPS = 1e-6;
@@ -72,9 +79,15 @@ let traceCount = 0;
  * cannot occupy. Grid DDA over every crossed cell. `cross` ≥ 0 makes it a crossing trace for a
  * SEDIMENT_WATER_CROSSING species starting from that crossing state (crossing.ts enterCell decides
  * each cell, so a third water cell is refused); −1 (the default) is the habitat rule exactly.
+ *
+ * `cls` (Phase 5, wave 9): the mover's transport class (barriers.ts classOf). When it is given and the
+ * world holds edge barriers, every crossed edge must permit it (CT §5.3), and at an exact corner both
+ * L-paths must (edgePassage.ts cornerPermits); a refused edge ends the trace exactly as a refused cell
+ * does, strictly inside the last cell. With `cls` null or no edges the arithmetic is exactly as before.
  */
-export function traceFraction(world: World, sp: SpeciesRT, x0: number, y0: number, x1: number, y1: number, cross = -1): number {
+export function traceFraction(world: World, sp: SpeciesRT, x0: number, y0: number, x1: number, y1: number, cross = -1, cls: PassageClass | null = null): number {
   traceCount = cross;
+  const edges = cls !== null ? edgeCodesOf(world) : null;
   let cx = Math.floor(x0);
   let cy = Math.floor(y0);
   const ex = Math.floor(x1);
@@ -95,6 +108,8 @@ export function traceFraction(world: World, sp: SpeciesRT, x0: number, y0: numbe
   for (let guard = 0; guard < 64; guard++) {
     let t: number;
     let dir: number;
+    const prevX = cx;
+    const prevY = cy;
     if (tMaxX < tMaxY) {
       t = tMaxX;
       cx += stepX;
@@ -102,12 +117,15 @@ export function traceFraction(world: World, sp: SpeciesRT, x0: number, y0: numbe
       dir = stepX > 0 ? STEP_E : STEP_W;
     } else {
       t = tMaxY;
+      // An exact corner (the Y step is taken first, as for cells): both L-paths must permit the class.
+      if (edges !== null && tMaxX === tMaxY && t <= 1 && !cornerPermits(edges, cx, cy, stepX, stepY, cls!, cls!)) return Math.max(0, t - EPS / Math.hypot(dx, dy));
       cy += stepY;
       tMaxY += tDeltaY;
       dir = stepY > 0 ? STEP_S : STEP_N;
     }
     if (t > 1) return 1;
     if (!inBounds(cx, cy) || !inMask(cx, cy)) return Math.max(0, t - EPS / Math.hypot(dx, dy));
+    if (edges !== null && !edgePermits(edgeCodeBetween(edges, cellIndex(prevX, prevY), cellIndex(cx, cy)), cls!)) return Math.max(0, t - EPS / Math.hypot(dx, dy));
     if (cross < 0) {
       if (!canOccupy(world, sp, cellIndex(cx, cy))) return Math.max(0, t - EPS / Math.hypot(dx, dy));
     } else {
@@ -143,7 +161,7 @@ export function preyAllowed(world: World, pred: SpeciesRT, preySlot: number): bo
   return false;
 }
 
-function acquirePrey(world: World, slot: number, sp: SpeciesRT, radius: number): number {
+function acquirePrey(world: World, slot: number, sp: SpeciesRT, radius: number, cls: PassageClass | null): number {
   const c = world.ents.cols;
   const px = c.x[slot]!;
   const py = c.y[slot]!;
@@ -157,6 +175,8 @@ function acquirePrey(world: World, slot: number, sp: SpeciesRT, radius: number):
       forEachInCell(world, cellIndex(x, y), (s) => {
         if (s === slot || c.alive[s] !== 1) return;
         if (!preyAllowed(world, sp, s)) return;
+        // Wave 9: prey whose straight segment crosses an edge refusing the hunter's class is not a target.
+        if (cls !== null && !segmentPermitted(world, px, py, startX[s]!, startY[s]!, cls)) return;
         const d = (startX[s]! - px) ** 2 + (startY[s]! - py) ** 2;
         const b = c.birthId[s]!;
         if (d < bestD || (d === bestD && b < bestBirth)) {
@@ -238,6 +258,13 @@ const CELL_SCRATCH = new Int32Array(13 * 13);
  */
 const WIN_MAX = 13;
 const WIN_BLOCKED = new Uint8Array(WIN_MAX * WIN_MAX);
+/**
+ * Wave 9: per window cell 1 when it borders an in-window edge barrier that refuses the mover's class
+ * (edgePassage.ts markRefusedEdges). Folded into the prefix sums only (never into WIN_BLOCKED), so a
+ * rectangle holding such an edge always runs the full trace while candidate selection is unchanged.
+ * Built only when the world holds edges; without them the prefix sums are exactly WIN_BLOCKED's.
+ */
+const WIN_MARK = new Uint8Array(WIN_MAX * WIN_MAX);
 const WIN_PREFIX = new Int32Array((WIN_MAX + 1) * (WIN_MAX + 1));
 
 /** Whether the window rectangle [x0, x1] × [y0, y1] (window coordinates, inclusive) holds no blocked cell. */
@@ -247,7 +274,7 @@ function windowClear(W: number, x0: number, y0: number, x1: number, y1: number):
   return P[(y1 + 1) * S + x1 + 1]! - P[y0 * S + x1 + 1]! - P[(y1 + 1) * S + x0]! + P[y0 * S + x0]! === 0;
 }
 
-function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile): void {
+function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile, cls: PassageClass | null): void {
   const c = world.ents.cols;
   const px = c.x[slot]!;
   const py = c.y[slot]!;
@@ -276,6 +303,8 @@ function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile): void 
   const W = 2 * r + 1;
   const win = cross < 0 && Number.isInteger(r) && W <= WIN_MAX;
   if (win) {
+    const edges = cls !== null ? edgeCodesOf(world) : null;
+    if (edges !== null) markRefusedEdges(edges, cx, cy, r, W, cls!, WIN_MARK);
     const P = WIN_PREFIX;
     for (let k = 0; k <= W; k++) P[k] = 0;
     for (let wy = 0; wy < W; wy++) {
@@ -286,7 +315,7 @@ function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile): void 
         const x = cx - r + wx;
         const blocked = !inBounds(x, y) || !inMask(x, y) || !canOccupy(world, sp, cellIndex(x, y)) ? 1 : 0;
         WIN_BLOCKED[wy * W + wx] = blocked;
-        row += blocked;
+        row += edges !== null ? blocked | WIN_MARK[wy * W + wx]! : blocked;
         P[(wy + 1) * (W + 1) + wx + 1] = P[wy * (W + 1) + wx + 1]! + row;
       }
     }
@@ -300,7 +329,7 @@ function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile): void 
         if (cell === own && !crossingCompatible(world, slot, sp, cell)) continue;
       }
       if (seeker && cell !== own && !brightEnough(world, prof, own, cell)) continue;
-      if (cell !== own && !(win && windowClear(W, r + Math.min(x - cx, 0), r + Math.min(y - cy, 0), r + Math.max(x - cx, 0), r + Math.max(y - cy, 0))) && traceFraction(world, sp, px, py, x + 0.5, y + 0.5, cross) < 1) continue;
+      if (cell !== own && !(win && windowClear(W, r + Math.min(x - cx, 0), r + Math.min(y - cy, 0), r + Math.max(x - cx, 0), r + Math.max(y - cy, 0))) && traceFraction(world, sp, px, py, x + 0.5, y + 0.5, cross, cls) < 1) continue;
       const F = seeker ? lightScore(world, cell) : foodScoreAt(world, prof, cell);
       // A non-crosser reaches here only for a cell it can occupy (canOccupy is habitatCompatible), so the
       // habitat factor is passed as known instead of re-derived (P3.12; same value).
@@ -347,7 +376,7 @@ function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile): void 
   c.targetY[slot] = Math.floor(chosen / GRID_W) + 0.5;
 }
 
-function moveToward(world: World, slot: number, sp: SpeciesRT, tx: number, ty: number, maxStep: number, stopWithin: number): void {
+function moveToward(world: World, slot: number, sp: SpeciesRT, tx: number, ty: number, maxStep: number, stopWithin: number, cls: PassageClass | null): void {
   const c = world.ents.cols;
   const x0 = c.x[slot]!;
   const y0 = c.y[slot]!;
@@ -361,14 +390,14 @@ function moveToward(world: World, slot: number, sp: SpeciesRT, tx: number, ty: n
   const step = Math.min(maxStep, dist - stopWithin);
   const x1 = x0 + (dx / dist) * step;
   const y1 = y0 + (dy / dist) * step;
-  applyStep(world, slot, sp, x0, y0, x1, y1);
+  applyStep(world, slot, sp, x0, y0, x1, y1, cls);
 }
 
-function applyStep(world: World, slot: number, sp: SpeciesRT, x0: number, y0: number, x1: number, y1: number): void {
+function applyStep(world: World, slot: number, sp: SpeciesRT, x0: number, y0: number, x1: number, y1: number, cls: PassageClass | null): void {
   const c = world.ents.cols;
   const from = entityCell(x0, y0);
   const cross = crossesWater(sp) ? startCount(world, slot, sp, from) : -1;
-  const t = traceFraction(world, sp, x0, y0, x1, y1, cross);
+  const t = traceFraction(world, sp, x0, y0, x1, y1, cross, cls);
   let nx = x0 + (x1 - x0) * t;
   let ny = y0 + (y1 - y0) * t;
   // Stay strictly inside the last valid cell.
@@ -395,6 +424,8 @@ export function stageSenseAndMove(world: World): void {
   const c = e.cols;
   startX.set(c.x.subarray(0, e.highWater));
   startY.set(c.y.subarray(0, e.highWater));
+  // Wave 9 gate: edge barriers exist only in a world whose recorded manifest enables 'barriers'.
+  const edgesOn = world.edges.length > 0;
   for (let i = 0; i < e.highWater; i++) {
     if (c.alive[i] !== 1) continue;
     const sp = world.species[c.species[i]!]!;
@@ -451,20 +482,27 @@ export function stageSenseAndMove(world: World): void {
     }
 
     const step = prof.speed * DT;
+    // The mover's transport class (CT §5.3), read once per organism and only when edges exist.
+    const cls = edgesOn ? classOf(world, i) : null;
     // X01 parasites (parasites.ts): an attached one rides its host; a free one pursues a host in range.
-    if (isParasiteSpecies(sp) && parasiteMove(world, i, sp, prof, startX, startY, (tx, ty, stop) => moveToward(world, i, sp, tx, ty, step, stop), DECISION_INTERVAL_TICKS)) continue;
+    if (isParasiteSpecies(sp) && parasiteMove(world, i, sp, prof, startX, startY, (tx, ty, stop) => moveToward(world, i, sp, tx, ty, step, stop, cls), DECISION_INTERVAL_TICKS)) continue;
 
     // Predators pursue a valid target every tick; decisions re-acquire on schedule.
     if (sp.isPredator) {
       const hungry = hungryPredator(world, i, prof);
       let target = c.preySlot[i]!;
-      if (target >= 0 && (!hungry || !e.refValid(target, c.preyBirthId[i]!) || !preyAllowed(world, sp, target))) {
+      // Wave 9 (SPEC §6.4 "invalid targets cancel immediately"): a target behind an edge refusing the
+      // hunter's class is dropped at once.
+      if (
+        target >= 0 &&
+        (!hungry || !e.refValid(target, c.preyBirthId[i]!) || !preyAllowed(world, sp, target) || (cls !== null && !segmentPermitted(world, c.x[i]!, c.y[i]!, startX[target]!, startY[target]!, cls)))
+      ) {
         target = -1;
         c.preySlot[i] = -1;
         c.preyBirthId[i] = 0;
       }
       if (c.decisionTimer[i] === 0 && hungry) {
-        const found = acquirePrey(world, i, sp, Math.max(1, prof.sensing));
+        const found = acquirePrey(world, i, sp, Math.max(1, prof.sensing), cls);
         if (found >= 0) {
           target = found;
           c.preySlot[i] = found;
@@ -475,7 +513,7 @@ export function stageSenseAndMove(world: World): void {
         c.flags[i] = c.flags[i]! | FLAG.hunting;
         c.moveMode[i] = MOVE_PURSUE;
         c.limitCode[i] = R.PRED_OUT_OF_CONTACT;
-        moveToward(world, i, sp, startX[target]!, startY[target]!, step, CONTACT_DISTANCE * 0.5);
+        moveToward(world, i, sp, startX[target]!, startY[target]!, step, CONTACT_DISTANCE * 0.5, cls);
         c.decisionTimer[i] = c.decisionTimer[i] === 0 ? DECISION_INTERVAL_TICKS - 1 : c.decisionTimer[i]! - 1;
         continue;
       }
@@ -483,7 +521,7 @@ export function stageSenseAndMove(world: World): void {
     }
 
     if (c.decisionTimer[i] === 0) {
-      decide(world, i, sp, prof);
+      decide(world, i, sp, prof, cls);
       c.decisionTimer[i] = DECISION_INTERVAL_TICKS - 1;
     } else {
       c.decisionTimer[i] = c.decisionTimer[i]! - 1;
@@ -491,12 +529,12 @@ export function stageSenseAndMove(world: World): void {
 
     const mode = c.moveMode[i]!;
     if (mode === MOVE_TARGET) {
-      moveToward(world, i, sp, c.targetX[i]!, c.targetY[i]!, step, 0.02);
+      moveToward(world, i, sp, c.targetX[i]!, c.targetY[i]!, step, 0.02, cls);
     } else if (mode === MOVE_WANDER) {
       const angle = detFloat(world.seed, STREAMS.wander, Math.floor(world.tick / WANDER_HOLD_TICKS), c.birthId[i]!) * Math.PI * 2;
       const x0 = c.x[i]!;
       const y0 = c.y[i]!;
-      applyStep(world, i, sp, x0, y0, x0 + Math.cos(angle) * step, y0 + Math.sin(angle) * step);
+      applyStep(world, i, sp, x0, y0, x0 + Math.cos(angle) * step, y0 + Math.sin(angle) * step, cls);
     }
     // E07: the seeking cue (FLAG.moving) shows only on a tick it actually moved.
     if (prof.lightSeeker !== null && c.movedThisTick[i] === 0) c.flags[i] = c.flags[i]! & ~FLAG.moving;
