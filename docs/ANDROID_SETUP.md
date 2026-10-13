@@ -222,15 +222,19 @@ to upload a second build of the same release candidate, bump `patch` (1.0.1 → 
 ```bash
 npm ci
 npm run check                 # typecheck + lint + unit tests (android:build:* does not typecheck)
-npm run android:build:release # vite build + cap sync android + ./gradlew bundleRelease on a JDK 21
+npm run android:build:release # vite build (no source maps) + cap sync android + ./gradlew bundleRelease on a JDK 21
 ```
 
 The script prints the AAB's path, size and sha256 and runs `jarsigner -verify` on it. Without
 `android/keystore.properties` it also prints "UNSIGNED: Google Play rejects this file. Create the upload key
-(npm run android:keystore) and android/keystore.properties (docs/ANDROID_SETUP.md §5-§6)." By hand:
+(npm run android:keystore) and android/keystore.properties (docs/ANDROID_SETUP.md §5-§6)." A release bundle carries
+no source maps (D-0100): the app never loads them, and they made up 2.45 MB of the 6.26 MB bundle. The script builds
+the web app with `--sourcemap false` and stops if dist/ still holds a map. The debug build keeps them for
+chrome://inspect on a phone. By hand:
 
 ```bash
-npm run build
+npx tsc -p tsconfig.json --noEmit
+npx vite build --sourcemap false
 npx cap sync android
 cd android
 ./gradlew bundleRelease       # Windows: gradlew.bat bundleRelease

@@ -7,7 +7,8 @@
  * bytes, sha256, and for an APK the `aapt2 dump badging` lines (package, versionCode, versionName, sdkVersion,
  * targetSdkVersion, every uses-permission). A release bundle is checked with `jarsigner -verify`; without
  * android/keystore.properties it is unsigned and this says so. Nothing here writes android/local.properties
- * (the SDK is passed to Gradle as ANDROID_HOME) or touches a keystore.
+ * (the SDK is passed to Gradle as ANDROID_HOME) or touches a keystore. A release build carries no source maps
+ * (D-0100); a debug build keeps them.
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -91,6 +92,20 @@ function run(label: string, command: string, args: readonly string[], opts: { cw
   if (r.status !== 0) fail(`${label}: "${command} ${args.join(' ')}" exited with code ${r.status ?? r.signal ?? 'unknown'}.`);
 }
 
+/**
+ * D-0100: the web build's arguments for each mode. A release bundle carries no source maps: the app never loads
+ * them, and at the v1.0 gate they were 2.45 MB of the 6.26 MB bundle. A debug build keeps them for chrome://inspect
+ * on a device. dist/ for the web keeps them (`build.sourcemap` in vite.config.ts); the arcade deploy leaves them out.
+ */
+export function webBuildArgs(mode: 'debug' | 'release'): string[] {
+  return mode === 'release' ? ['vite', 'build', '--sourcemap', 'false'] : ['vite', 'build'];
+}
+
+/** The source-map files under `dir` (recursive), as paths relative to it. */
+export function sourceMaps(dir: string): string[] {
+  return (readdirSync(dir, { recursive: true }) as string[]).filter((f) => f.endsWith('.map'));
+}
+
 function main(): void {
   const mode = process.argv[2];
   if (mode !== 'debug' && mode !== 'release') fail('usage: tsx tools/android-build.ts debug|release');
@@ -102,8 +117,10 @@ function main(): void {
   console.log(`JDK 21: ${jdk}\nAndroid SDK: ${sdk}`);
 
   // The steps of tools/android-sync.ts: the web build, then the copy into the Android project.
-  run('web build', 'npx', ['vite', 'build']);
+  run('web build', 'npx', webBuildArgs(mode));
   if (!existsSync(join(REPO_ROOT, 'dist', 'index.html'))) fail('the web build finished but dist/index.html does not exist.');
+  const maps = mode === 'release' ? sourceMaps(join(REPO_ROOT, 'dist')) : [];
+  if (maps.length > 0) fail(`a release bundle must carry no source maps (D-0100), but dist/ holds ${maps.join(', ')}.`);
   run('capacitor sync', 'npx', ['cap', 'sync', 'android']);
 
   const env = { ...process.env, JAVA_HOME: jdk, ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk, PATH: `${join(jdk, 'bin')}:${process.env.PATH ?? ''}` };

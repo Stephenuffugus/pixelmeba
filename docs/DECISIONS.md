@@ -1377,3 +1377,14 @@ Evidence: tests/render/camera-easing.test.ts "undoing the reveal pan (D-0099)" (
 Reason: keyboard access is a v1.0 acceptance item (P3.11, UX §4.2, §9), and a keyboard player must not lose the dish after one inspection. The fix is UI-only and keyboard-scoped, which keeps the release-gate change small.
 Affects: src/render/camera.ts, src/ui/a11y/focus.ts, src/ui/views/DishScreen.tsx, tests/render/camera-easing.test.ts, tests/ui/a11y-focus.test.ts, tests/e2e/keyboard.spec.ts, docs/UX_SPEC.md §4.2 and §7.4 (camera easing row), docs/ARCHITECTURE.md §9.
 Owner review: no.
+
+## D-0100 · 2026-10-13 · P4.14 · A release bundle carries no source maps
+Context: the gate's Android builds at c001a94 (tmp/gate4b/android-{debug,release}.log). The unsigned release AAB was 6,260,412 bytes and the debug APK 9,828,992 bytes. Both held the web build's 17 source maps (`build.sourcemap: true` in vite.config.ts since P0.1): 9,452,439 bytes uncompressed, and 2,447,428 bytes compressed inside the AAB, which is 39 % of it. The app never loads them: a WebView fetches a map only while devtools are attached. The service worker never precaches them (D-0097), and the arcade deploy already leaves them out (tools/deploy-arcade.mjs).
+Decision:
+- **`npm run android:build:release` builds the web app with `vite build --sourcemap false`** and stops if dist/ still holds a map (`webBuildArgs`, `sourceMaps` in tools/android-build.ts). ANDROID_SETUP §8's by-hand steps say the same.
+- **The debug build keeps the maps**, for chrome://inspect on the owner's test phone. dist/ for the web keeps them too, for e2e traces and local debugging; the arcade deploy strips them as before.
+- No code the app runs changes, so `npm run check` and the e2e suite cover it as they are. The build's output is the evidence.
+Evidence: tests/tools/android-build.test.ts (2 cases). The release AAB rebuilt with the script: ANDROID_SETUP §9.3.
+Reason: a smaller download of the same app; nothing ships that the app does not use.
+Affects: tools/android-build.ts, tests/tools/android-build.test.ts, docs/ANDROID_SETUP.md §8, §9.3.
+Owner review: no.
