@@ -355,6 +355,45 @@ The version now comes from `package.json` (§7). Still **no emulator or device**
 - The release bundle was not rebuilt in this stage (no keystore here; §9.1 has the unsigned `bundleRelease`);
   it reads the same version lines.
 
+### 9.3 v1.0 gate (P4.14), 2026‑10‑13 05:39–05:42 UTC (same codespace, JDK 21, `~/android-sdk`; commit `c001a94`, clean code tree)
+
+Still **no emulator or device**. The rebuild after D-0100 is the last item below.
+
+- `npm run android:build:debug` (05:39:30–05:41:03 UTC): `vite build` ✓, `cap sync android` ✓ (6 plugins: app 8.1.1,
+  filesystem 8.1.3, preferences 8.0.1, share 8.0.2, splash-screen 8.0.2, status-bar 8.0.3), `./gradlew assembleDebug`
+  → **`BUILD SUCCESSFUL in 1m 12s`** (274 actionable tasks: 27 executed, 247 up-to-date). Output
+  `android/app/build/outputs/apk/debug/app-debug.apk`, **9,828,992 bytes**, sha256
+  `37a85c2c3bc75df9c869a6d6d7c97d72ce42c303278a19ee6ce0b0f9e39ad010`. `aapt2 dump badging` (build-tools 36.0.0):
+  `package: name='com.lucidwinds.pixelmeba' versionCode='10000' versionName='1.0.0' … compileSdkVersion='36'`,
+  `targetSdkVersion:'36'`, uses-permission INTERNET, VIBRATE and
+  `com.lucidwinds.pixelmeba.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`, `application-label:'Pixelmeba'`. Warnings as
+  before (flatDir, SDK XML version 4).
+- `npm run android:build:release` (05:41:03–05:42:07 UTC, no `keystore.properties`): `./gradlew bundleRelease` →
+  **`BUILD SUCCESSFUL in 46s`** (335 actionable tasks: 46 executed, 289 up-to-date). Output
+  `android/app/build/outputs/bundle/release/app-release.aab`, **6,260,412 bytes**, sha256
+  `28e5f429ef4400e3c8d1079ea5d76a946d6bf2d438d343d2cd148091ce964956`; the UNSIGNED line; `jarsigner -verify` →
+  **`jar is unsigned.`**
+- The bundle's own manifest, read in this session with the bundletool that Gradle caches (bundletool 1.18.1 under
+  `~/.gradle/caches/modules-2/…/com.android.tools.build/bundletool/`, run on JDK 21 with its guava, failureaccess,
+  protobuf-java, jopt-simple, dagger, javax.inject, auto-value-annotations, jose4j and aapt2-proto jars on the class
+  path), `bundletool dump manifest --bundle app-release.aab`: `android:versionCode="10000" android:versionName="1.0.0"
+  package="com.lucidwinds.pixelmeba"`, `<uses-sdk android:minSdkVersion="24" android:targetSdkVersion="36"/>`. This is the
+  first bundle built here that carries the 1.0.0 version (§9.1's was versionCode 1; §9.2 rebuilt only the debug APK).
+  This dump was read on screen and not saved; the D-0100 rebuild below overwrote that AAB. The same dump of the rebuilt
+  AAB is logged in tmp/gate4b/bundletool-1eb42c6.log on the build machine.
+- Both outputs carried the web build's 17 source maps (`assets/public/assets/*.map`, 9,452,439 bytes uncompressed;
+  2,447,428 bytes compressed in the AAB, 39 % of it, summed from `unzip -lv` before the rebuild). The app never loads them. **D-0100:** a release bundle is now
+  built with `vite build --sourcemap false`, and the script stops if dist/ still holds a map; the debug build keeps
+  them for chrome://inspect.
+- **After D-0100**, at `1eb42c6` (10:34:39–10:35:46 UTC): `npm run android:build:release` → `vite build --sourcemap
+  false`, `cap sync android`, `./gradlew bundleRelease` → **`BUILD SUCCESSFUL in 53s`** (335 actionable tasks: 38
+  executed, 297 up-to-date). Output `app-release.aab`, **3,808,774 bytes** (39 % smaller), sha256
+  `3a943c691bb6925fb06345e4eb59e60ded50a044b47b0851580b972c4ab02e3d`; UNSIGNED line; `jarsigner -verify` → `jar is
+  unsigned.` The bundle holds 0 `.map` files, and its main script has no `sourceMappingURL`. `bundletool dump
+  manifest` (tmp/gate4b/bundletool-1eb42c6.log): `versionCode="10000" versionName="1.0.0"`, minSdk 24, targetSdk 36,
+  package `com.lucidwinds.pixelmeba`.
+  The debug APK above stands: D-0100 leaves the debug build as it was.
+
 ## 10. Open items for the owner
 
 1. Use **JDK 21** for Gradle. JDK 25 fails with this Gradle version (§9).

@@ -6,9 +6,9 @@ pulse timing, camera easing)", with the P3.12 criteria D-0066 left open (1× tic
 heap slope over minutes 5–15 < 1 %/min) and D-0085's cost (+0.3 ms per tick).
 
 Measured 2026-10-12, 08:22–11:10 UTC, on the shared 2-vCPU codespace while another agent ran Gradle and
-Playwright. **Every number below is "under load"**: each row carries the 1-minute load average before and
-after. The lead re-measures on a quiet machine with the commands at the end. Nothing is reported as met
-that was not measured as met.
+Playwright. **Every number in the P4.13 sections is "under load"**: each row carries the 1-minute load average before
+and after. The lead re-measured on a quiet machine at the v1.0 gate with the commands at the end; see "Gate
+re-measure, quiet" below. Nothing is reported as met that was not measured as met.
 
 ## Verdict
 
@@ -25,6 +25,30 @@ that was not measured as met.
 | ARCH §13 / UX §2: opt-in diagnostics overlay | Settings → "Show performance numbers": tick p50/p95, effective speed, snapshot ms, fps, memory, detail level. | **Done.** |
 | SPEC §16: under load reduce cosmetics first | Renderer degrade ladder (effects, stains, marker redraw, overlay/aggregation refresh). Reached level 3 under SwiftShader in every web run. | **Done** (renderer only; never the worker). |
 | Hash neutrality of everything above | Stress world stateHash and snapshot digests at ticks 0/600/1,500/3,000/9,000 identical before and after; fence, determinism and conservation tests pass. | **Proven** (below). |
+
+## Gate re-measure, quiet (v1.0 gate, P4.14)
+
+Measured by the lead 2026-10-12 21:57–22:45 UTC at commit `17ad62f` (wave 7b `487a152` + the WORKLOG tick; the
+gate's D-0099 fix touches only the camera and the dish screen, never the worker or the simulation). The commands
+were the steps of tmp/lead/gate4.sh (on the build machine, not committed): `perf-stress`, `perf-heap`, `perf-web` and `perf-web-gc` (the same commands as
+"Commands" below, with `--out tmp/perf-gate4/…`). They ran **alone on the machine**: the gate's store:assets,
+content and fixture steps had ended, and no other agent, Gradle or Playwright job ran. The browser's own load (Chromium +
+SwiftShader at about 1.7 of 2 cores) is in the web rows' load averages.
+
+| Criterion | Gate, quiet | Load (1-min, before → after) | Status |
+|---|---|---|---|
+| SPEC §16 / P3.12: 1× tick < 10 ms at 6,000 agents (2,000 fungal), headless, 9,000 ticks | tick-loop CPU p50 **11.10 ms**, p95 **20.30**, p99 39.38 (wall p50 11.04, p95 20.88, p99 31.57). Stage means: sense/move 4.47, intake 2.83, environment 1.70, structures 1.57 ms | 2.22 → 1.71 | **NOT MET** (G3 quiet 12.0 / 20.8 / 39.8; perf-rc1 under load 12.78 / 21.34 / 39.84). |
+| The same run's hashes | save at tick 3,000 `621471caf21cfee8`, reload hash matches; tick 9,000 `8564b87b9251fd32`; ledger relErr C 5.2e-16, N 5.1e-14; `capacityLimitedTicks` 8,827 | — | **Equal to this report's "after" run** (the simulation did not move after P4.13). |
+| P3.12: heap slope over minutes 5–15 < 1 %/min, no save in the window (41-minute run, forced GC) | **0.204 MB/min = 0.825 %/min**; after minute 31 0.028 MB/min = 0.089 %/min; tick 9,000 `8564b87b9251fd32` (no save) and end `a1a1b90af259e1aa`, both equal to perf-rc1's | 1.71 → 2.26 | **MET.** |
+| The same with a save and reload at tick 3,000 inside the window (the 9,000-tick run) | **0.427 MB/min = 1.721 %/min** | 2.22 → 1.71 | **NOT MET** (the one-time step after building and parsing a 10.7 MB save). |
+| SPEC §16 in the web build's worker: the imported 6,000-organism stress dish, 360×800, SwiftShader | at 1×: worker tick p50 **32.2 ms**, p95 50.5 (medians of 31 samples); effective speed median 1.0× (it keeps 1×). At 4×: tick p50 31.7, effective speed median **2.1×** (min 1.0); the badge showed in 12 of 13 samples | 4.67 → 4.36 (1×), 4.36 → 5.75 (4×) | **NOT MET** (the worker shares 2 threads with software rasterization). |
+| P4.13: web build, Garden at 4× for 15 real minutes (timing run) | worker tick p50 14.1 ms (median of 89 samples; max 16.8), p95 22.5; effective speed median 4.0× (min 1.5); 14 fps median; snapshot 3.4 ms median; dish 0:00 → 57:03, 2,838 organisms | 2.22 → 5.78 | Recorded. |
+| P4.13: the same, memory (`--gc`: a garbage collection before each heap reading) | post-GC heap slope over minutes 5–15: worker **0.195 MB/min = 1.84 %/min** of 10.56 MB (0.080 MB/min = 0.65 %/min over minutes 10–15); main thread **0.062 MB/min = 0.47 %/min**; browser CPU 1.70–1.74 cores of 2 every minute | 5.18 → 5.16 | Main thread **MET**; worker **NOT MET** at 4× (lower than perf-rc1's 2.20 %/min). Heat: **OWNER DEVICE ITEM**. |
+| SPEC §16: touch feedback p95 < 100 ms | 20 Feed taps on the running Garden at 1×: p50 109.1, **p95 127.6**, max 166.9 ms | 5.96 → 4.67 | **NOT MET here** (SwiftShader ≈ 14 fps); **OWNER DEVICE ITEM**. |
+
+Raw output: tmp/perf-gate4/{stress-9000,heap-24600,perf-web,perf-web-gc}.json and tmp/gate4/perf-*.log on the
+build machine (not committed). The ratios are computed exactly as tools/perf-stress.ts and tools/perf-web.ts do
+(least-squares slope over the window, as a % of the first reading in it).
 
 ## Machine and load
 

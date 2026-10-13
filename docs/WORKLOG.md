@@ -75,8 +75,8 @@ with the next task).
 - [x] (487a152; D-0097; offline from its own folder; the stamped arcade deploy plays online until the owner's embedding rules) P4.11 Web/arcade build (relative base, iframe‑safe, PWA offline, DEMO_MODE)
 - [x] (487a152; D-0098; screenshots regenerated on the clean commit; owner items in PLAY_STORE_CHECKLIST §B) P4.12 Store readiness (icon, feature graphic, screenshots, listing text, PRIVACY_POLICY.md, data safety, checklist)
 - [x] (ed374ba; D-0094, D-0095; measured under load: the 1× tick < 10 ms at 6,000 agents, the heap slope with a save in the window and the web worker heap at 4× NOT MET, quiet re-measure at P4.14; heat, frame rate and touch latency are owner device items) P4.13 Performance pass 2 + first‑minute polish (docs/reports/perf-rc1.md)
-- [ ] P4.14 Release candidate: full suite, EXPANSION_RESPONSE complete, README updated → tag `v1.0.0-rc1`
-- [ ] v1.0 gate evidence recorded (all fixtures, full‑journey e2e, axe, perf, Android result, store assets, owner usability gates listed)
+- [x] (c001a94, 1eb42c6, gate commit; tag `v1.0.0-rc1`; e2e 359/360 at 17ad62f, the one failure fixed by D-0099 and keyboard.spec 6/6 after it; check 216/2088 at 1eb42c6; D-0099, D-0100) P4.14 Release candidate: full suite, EXPANSION_RESPONSE complete, README updated → tag `v1.0.0-rc1`
+- [x] (gate commit; EXPANSION_RESPONSE §4, §7, §8; perf-rc1.md quiet re-measure; tune-rc1.md; ANDROID_SETUP §9.3) v1.0 gate evidence recorded (all fixtures, full‑journey e2e, axe, perf, Android result, store assets, owner usability gates listed)
 
 ## Phase 5 — Expanded Ecology → v1.1.0
 - [ ] P5.1 Climate: day/night, local warmth, moisture/drying, canopy, New Dish options

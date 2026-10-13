@@ -23,11 +23,14 @@ screenshots for each supported device type"; games' large-format eligibility "th
       without it (§B6, ANDROID_SETUP §10 item 6).
 - [x] `targetSdkVersion`/`compileSdkVersion` 36 = Capacitor 8.5.2's template = Play's requirement for new apps
       since 2026-08-31 (read 2026-09-27 and 2026-10-12; ANDROID_SETUP §1). Re-check at submission (§B5).
-- [x] Release build path documented in `docs/ANDROID_SETUP.md` §2–§8 (JDK 21, SDK, `npm run build`,
-      `npx cap sync android`, `npm run android:build:release` / `./gradlew bundleRelease`, `keystore.properties`,
-      `npm run android:keystore`, Play App Signing).
+- [x] Release build path documented in `docs/ANDROID_SETUP.md` §2–§8 (JDK 21, SDK, `npx vite build --sourcemap
+      false`, `npx cap sync android`, `npm run android:build:release` / `./gradlew bundleRelease`,
+      `keystore.properties`, `npm run android:keystore`, Play App Signing).
 - [x] Debug APK built: `npm run android:build:debug` on 2026-10-12, versionCode 10000 / versionName 1.0.0
-      (ANDROID_SETUP §9.2: bytes, sha256, aapt badging). Never installed here: no device (§B6).
+      (ANDROID_SETUP §9.2: bytes, sha256, aapt badging); rebuilt at the v1.0 gate at `c001a94` (§9.3). Never
+      installed here: no device (§B6).
+- [x] Unsigned release AAB built at the v1.0 gate at `1eb42c6` (ANDROID_SETUP §9.3): 3,808,774 bytes with no source
+      maps (D-0100); bundletool reads versionCode 10000 / versionName 1.0.0, minSdk 24, targetSdk 36. Signing is §B5.
 - [x] `store/icon-512.png` (512 × 512, 32-bit RGBA with every pixel opaque, full square, no text, no rounded
       corners), `store/icon-foreground-512.png` + `store/icon-background-512.png` (the adaptive layers),
       `store/feature-1024x500.png` (24-bit RGB, drawn from a real Share → Picture of the Garden at a recorded
@@ -172,7 +175,8 @@ measured device.
 3. Phone screenshots: `store/screenshots/phone/01-…06-…png` in that order. 7-inch tablet:
    `store/screenshots/tablet7/`. 10-inch tablet: `store/screenshots/tablet10/`. Captions are not uploaded
    (Play has no caption field); the optional captions in `store/listing.md` are for the website.
-4. Before uploading, regenerate them on the final tree: `npm run store:assets` (about 30–60 minutes on a
+4. The committed set was made at `17ad62f` for v1.0.0-rc1; the gate's code changes after it, D-0099 and D-0100, alter no
+   capture. Before uploading, regenerate them on the release commit: `npm run store:assets` (about 30–60 minutes on a
    2-core machine; it builds `tmp/dist-store` and serves it on port 5284), check
    `store/screenshots/manifest.json` names the commit you release, and look at every image.
 5. Store settings → App category: **Games › Simulation**; tags (up to 5) from `store/listing.md`; contact
@@ -246,7 +250,7 @@ is present for every child and gives consent.
 - **D-0092** keep the Filesystem save store or flip back to IndexedDB after the device test (B6.7).
 - **D-0093** allowBackup; settings in localStorage instead of Preferences; INTERNET; the icon art.
 - **D-0094** the open performance criteria and their D-0066 options; the device steps.
-- **P4.12** (this stage; `docs/reports/reviews/g4-wave-7b/store-build.md`): the store icon at 75 % of the
+- **D-0098 / P4.12** (`docs/reports/reviews/g4-wave-7b/store-build.md`): the store icon at 75 % of the
   square; tablet screenshots in 9:16; the listing text; `allowBackup` stated in the privacy policy (D-0098).
 - **D-0097** the arcade's manifest/offline rules; full or demo build; the demo's store link (§B10).
 
