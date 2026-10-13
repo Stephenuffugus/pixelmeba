@@ -104,7 +104,7 @@ Try to REFUTE that each assignment is done correctly, completely and honestly â€
   ),
   // Saves/determinism lens: one verifier per task marked critical: 'own'; one shared verifier for every task marked critical: true.
   ...[...TASKS.filter((t) => t.critical === 'own').map((t) => [t]), ...(TASKS.some((t) => t.critical === true) ? [TASKS.filter((t) => t.critical === true)] : [])].map((group, i) => () =>
-    agent(`You are an adversarial saves/determinism verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-saves-${i}`, 4396 + i)}
+    agent(`You are an adversarial saves/determinism verifier for Pixelmeba (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE(`verify-saves-${WAVE}-${i}`, 4396 + i)}
 Task(s) ${group.map((t) => t.key).join(', ')} of wave ${WAVE}; their work is uncommitted in the tree with other builders' work.
 ${group.map((t) => `=== TASK ${t.key} ===\nASSIGNMENT:\n${t.prompt}\n\nBUILDER REPORT:\n${built[t.key]}`).join('\n\n')}
 

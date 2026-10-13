@@ -80,12 +80,12 @@ with the next task).
 
 ## Phase 5 — Expanded Ecology → v1.1.0
 - [ ] P5.1 Climate: day/night, local warmth, moisture/drying, canopy, New Dish options
-- [ ] P5.2 Structures S01–S12, edge barriers, transport classes, directed channel, resin, gate preview, regions
-- [ ] P5.3 Wave E2 organisms B09, B10, B11, B13, A02, A03, A04, A05 + E02 + inhibitor category extension
+- [ ] P5.2 Structures S01–S12, edge barriers, transport classes, directed channel, resin, gate preview, regions (2026-10-13 wave 8a 60a4731: schema 5 stores and the CT §5.3 barrier table; not enabled)
+- [ ] P5.3 Wave E2 organisms B09, B10, B11, B13, A02, A03, A04, A05 + E02 + inhibitor category extension (2026-10-13 wave 8a 60a4731: schema 5 columns and 16 px sprites; not enabled)
 - [ ] P5.4 Habitat recipes H04–H11 (Empty / Suggested Community)
-- [ ] P5.5 Wave E3 organisms B12, F03, F04, P05, P06, P07, P08, P09, P10, X02, V02 + E11 + food‑web extensions
+- [ ] P5.5 Wave E3 organisms B12, F03, F04, P05, P06, P07, P08, P09, P10, X02, V02 + E11 + food‑web extensions (2026-10-13 wave 8a 60a4731: schema 5 columns and 16 px sprites for B12, F03, F04, X02, V02; not enabled)
 - [ ] P5.6 Experiments E205–E211, E213–E218; L302, L305; play prompts; succession notebook
-- [ ] P5.7 Art and audio for the expansion
+- [ ] P5.7 Art and audio for the expansion (2026-10-13 wave 8a 60a4731: 16 px organism art, dormant/trap poses, glow/mode/jacket marks; not enabled)
 - [ ] P5.8 Regression and D02 §25 acceptance → tag `v1.1.0`
 
 ## Phase 6 — Living Lab → v1.2.0

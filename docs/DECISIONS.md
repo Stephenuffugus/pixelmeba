@@ -1538,3 +1538,16 @@ Decision:
 - **Taste note** for the art polish pass: V02's glyph reads as a spiked, filled capsid more than UX §6.3's "lace glyph". The alpha difference from V01 holds.
 Evidence: art:build --check up to date (1342 frames, 112 feature-mark frames, 1024×1024); content:validate ok, contentHash b8ddc0dd… unchanged, 19 species enabled; art and renderer tests 11 files / 531 tests at re-verify.
 Owner review: no.
+
+## D-0110 · 2026-10-13 · Phase 5 wave 8b · structure-content is critical; each saves verifier gets its own scratch folder
+Context: the wave 8 task file left it to the lead whether structure-content gets a saves lens (LEAD PRE-LAUNCH 5). At wave 8a, the saves verifier's scratch folder `tmp/verify-saves-0/` already held an earlier verifier's files and was partly overwritten (docs/reports/reviews/g5-wave-8a/saves-verify-schema5.md).
+Decision:
+- structure-content runs as `critical: 'own'` and gets its own saves/determinism verifier. It changes three save- and determinism-critical things:
+  - realizeRecipe, which builds every new dish (structures are placed after applyHabitat, and nextDeviceId is set);
+  - the recipe-file validator, which gains overrides for lid, lightMode and drying;
+  - the What if? and Try my dish override transforms in src/worker/host.ts, now one applier, `applyRecipeOverrides`.
+
+  The fence protects shipped recipes. The saves lens also covers recipe-file round trips, the What if? rebuild and the byte-identity of a recipe without structures.
+- The Phase 5 runner names each saves verifier's scratch folder `tmp/verify-saves-<wave>-<i>/`, so waves cannot overwrite each other's probes.
+Reason: CLAUDE.md "Saves are sacred" and determinism; fast-track.md asks for a second lens "only for determinism- or save-critical work", and this task is that.
+Owner review: no.
