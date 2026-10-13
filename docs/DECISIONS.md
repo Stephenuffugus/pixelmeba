@@ -1626,3 +1626,13 @@ Decision:
   - Links that a later barrier crosses are severed, or the placement refused, in wave 10 (structure-commands decides).
 Reason: the "last completed stage 2" convention makes reload and uninterrupted runs agree for every simulation reader. The conservative corner rule makes tunnelling through a corner impossible. Lazy allocation tied to recorded state keeps replay, reload and 4× identical (g5-plan "Risks to watch").
 Owner review: no.
+
+## D-0114 · 2026-10-13 · Phase 5 waves 9–10 · Unattached colony bacteria are Fixed; an F04 resting daughter is placed under the parent's class
+Context: the wave 10 task writer (run wf_3eee27c3-2a4; docs/agent/g5-wave-10.tasks.js.txt; docs/reports/reviews/g5-wave-10/tasks-writer.md, its "contradictions" 1 and 3).
+- Births never set FLAG.attached on a daughter; only introduction does (commands.ts, `sp.attached`). So barriers.ts `classOf` rule (e) classes every newborn B02 or B13 colony member as Small, because the species record says Fixed and the category is bacterium. CT §5.3 says "attached colonies" are Fixed. The "B02 disperser" it lists as Small is the dispersal module E14 (CT D503, Phase 7), which nothing in Phase 5 has. Left as is, a second-generation B02 would place daughters across an S02, and wave 10's S04 channel would carry colony members.
+- My g5-plan carry-over (wave 9 integration) said an F04 resting daughter is placed in her own Small class. D-0106 says daughter placement never crosses an edge that blocks EITHER party's class, and the parent F04 is Fixed.
+Decision:
+- **`classOf` rule (e).** A species recorded Fixed whose organism lacks FLAG.attached is Medium if it is a consumer (a free P06), and otherwise Fixed (colony bacteria stay where they are born). The resting-newborn Small rule (c) and the fungus rule (d) are unchanged. E14 (Phase 7) adds the dispersing daughter's Small class with its own flag. The lead makes this change at wave 9's integration (barriers.ts plus the barriers-table pin). It moves no hash: classOf is reached only by Phase 5 code through test registries.
+- **F04 placement.** A resting daughter's placement keeps wave 9's parent-class edge check (D-0106 either-party): no edge may stand between the parent's cell and hers. Her own Small class applies only after birth, for example to wave 10's S04 channel. g5-plan.md's carry-over and the wave 10 e3-resters prompt are corrected.
+Reason: CT §5.3's classes and D-0106's conservative contact rule. "No organisms cross" (E209) holds without special cases.
+Owner review: no.

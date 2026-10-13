@@ -148,9 +148,10 @@ this plan and the relevant slice of g5-briefs.md, not the whole spec.
 - **Wave 11, e2-signals (D-0108):** the import refuses glowState 1 on an organism that is not Active (D-0106), so the
   code that moves an organism out of Active (dormancy entry, resting newborns) must clear glowState in the same tick, or
   the game's own saves are refused. Add a test that saves and reloads a glowing organism right after it starts Preparing.
-- **Wave 10, e3-resters:** wave 9's placement rule puts a daughter in her parent's class at birth. An F04 resting
-  daughter is Small while resting (D-0106), so her placement must use her own class (pass it to the placement helpers in
-  edgePassage.ts), and waking re-checks attachability.
+- **Wave 10, e3-resters (corrected by D-0114):** wave 9's placement rule puts a daughter in her parent's class at birth,
+  which is D-0106's either-party rule. An F04 resting daughter is Small while resting, but her PLACEMENT stays bounded by
+  the parent's Fixed class (no edge between parent and daughter cell); her Small class applies after birth (the S04
+  channel). Waking re-checks attachability.
 - **Wave 10, structure-commands and barrier-transport:** the list in docs/agent/g5-wave-9.tasks.js.txt "LEAD AFTER 6"
   (geometryVersion bumps on every edges/devices write, link severing, wet brush and setLightMode through climate.ts,
   the Life brush preview, the S04 channel's class helpers, gate tallies).
