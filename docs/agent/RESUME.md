@@ -5,11 +5,11 @@
 >
 > **Update 2026‑10‑13 16:35 UTC — WAVE 8a COMMITTED `60a4731` (check 222 files / 2514 tests; e2e 76/76 desktop +
 > phone-portrait; D‑0108, D‑0109; integration verifier wf_4596eb7b-bc0, its MAJOR (E14 is Phase 7) and NITs fixed).
-> WAVE 8b RUNNING from docs/agent/g5-wave-8b.run.workflow.js.txt (structure-content critical → own saves lens, D‑0110;
+> WAVE 8b RUNNING (run wf_0e4e70ee-540, launched 16:37) from docs/agent/g5-wave-8b.run.workflow.js.txt (structure-content critical → own saves lens, D‑0110;
 > art-large). Backups → `wip/g5-wave-8b` (pid tmp/lead/backup-8b.pid). START HERE.**
 > - If the session died mid-8b: if `git status` is clean, restore the tree from `wip/g5-wave-8b`; read
 >   docs/reports/reviews/g5-wave-8b/ and the run journal under
->   ~/.claude/projects/-workspaces-pixelmeba/462cefc8-e202-4f25-900b-45a0b3a85625/subagents/workflows/<run>/journal.jsonl;
+>   ~/.claude/projects/-workspaces-pixelmeba/462cefc8-e202-4f25-900b-45a0b3a85625/subagents/workflows/wf_0e4e70ee-540/journal.jsonl;
 >   rerun only unfinished tasks (A.only + finish notes).
 > - After 8b: LEAD AFTER 1–4 of docs/agent/g5-wave-8.tasks.js.txt for 8b (MINORs; PROPOSED DECISIONs → D‑0111…; check;
 >   fence + both corpora unchanged; art:build --check; content:validate; journeys desktop + phone-portrait on 4271: field-guide
