@@ -3,7 +3,7 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
-> **Update 2026‑10‑13 23:35 UTC — SAFE REFRESH POINT (the owner refreshes the codespace after wave 9, before wave 10).
+> **Update 2026‑10‑13 23:25 UTC — SAFE REFRESH POINT (the owner refreshes the codespace after wave 9, before wave 10).
 > WAVE 9 COMMITTED `3d2a1d8` (check 235 files / 2679 tests incl. the fence and both corpora; art and contentHash
 > unchanged; D‑0115 classOf, D‑0116 as built; integration verifier's MAJOR + MINORs fixed). WAVE 10 IS READY BUT NOT
 > LAUNCHED: task file filled for 3d2a1d8, D‑0117 recorded (owner flag: the native dry trigger), run file
