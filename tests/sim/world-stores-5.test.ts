@@ -7,7 +7,8 @@
  * - Hash-neutral only while empty (the D-0035 rule): each store, counter and column changes stateHash
  *   when set and gives it back when cleared; gateTally (observation only) never changes it.
  * - A held sample hashes as before the columns existed until a held row holds a Phase 5 value.
- * - 4× equals 1×: nothing reads the stores yet, so this proves only that they are carried.
+ * - 4× equals 1×: the edge and device stores are carried unchanged; since wave 9 the climate stage reads the
+ *   warmth store and its On heater, so warmth evolves, identically at 1× and 4×.
  * Worlds record the 'climate', 'barriers' and 'devices' systems through registryWith, and S01–S12
  * directly on the world's recorded manifest (the registry cannot enable S-structures before wave 8b).
  */
@@ -219,7 +220,9 @@ describe('schema 5 state is hash-neutral only while empty (D-0035 rule)', () => 
   });
 });
 
-describe('the stores are carried, not read, by the simulation', () => {
+// Wave 9's climate stage reads this world's warmth store and its On heater (the world records 'climate'),
+// so warmth now evolves; the edge and device stores are still carried unchanged (lead, wave 9 integration).
+describe('the stores are carried, and 4× equals 1×', () => {
   it('4× equals 1×: run(400) and four run(100) give the same hash on a world holding every store', () => {
     const a = storesWorld();
     const b = deserializeWorld(serializeWorld(a));
@@ -230,6 +233,7 @@ describe('the stores are carried, not read, by the simulation', () => {
     expect(a.edges).toEqual(EDGES);
     expect(a.devices).toEqual(DEVICES);
     expect(a.gateTally).toEqual(TALLY);
-    expect(a.climate.warmth![cellIndex(74, 70)]).toBe(0.75);
+    expect(Array.from(b.climate.warmth!)).toEqual(Array.from(a.climate.warmth!));
+    expect(a.climate.warmth![cellIndex(74, 70)]).not.toBe(0.75); // the climate stage acted on it
   });
 });

@@ -11,6 +11,7 @@
  * most one barrier per edge (CT §4 "two barriers per edge invalid").
  */
 import { CELL_COUNT, EDGE_BARRIER_CAP, GRID_W } from './constants';
+import type { Species } from './content/schema';
 import { FLAG, LIFE_ACTIVE } from './entities';
 import type { BarrierClass } from './fields';
 import { cellX, cellY, inBounds, inMask, ST_NONE, SUB_WATER, type Grid } from './grid';
@@ -27,7 +28,12 @@ export interface EdgeBarrier {
   /** The lower cell of the edge (the left cell for 'R', the upper cell for 'D'). */
   readonly cell: number;
   readonly dir: EdgeDir;
-  /** S03 only (required there): true = open (no barrier), false = closed (blocks everything). */
+  /**
+   * S03 only (required there): true = open (no barrier), false = closed (blocks everything). A writer that
+   * changes it in place must bump grid.geometryVersion: edgePassage.ts caches per-cell edge codes on that
+   * version and the store's identity and length (climate.ts's warmth coefficients compare the closed
+   * shutters' content instead).
+   */
   open?: boolean;
   /** S04 only (required there): +1 = from `cell` to its neighbour, −1 = from the neighbour to `cell`. */
   flow?: 1 | -1;
@@ -114,10 +120,11 @@ export function edgePermits(code: number, cls: TransportClass): boolean {
  *  (a) a parasite attached to a host (hostSlot ≥ 0) moves as one unit in its host's class (SPEC §4.9);
  *  (b) an attached organism (FLAG.attached) is Fixed;
  *  (c) an F04 daughter that began Resting at birth (FLAG.restNewborn) is Small while not Active (D-0106);
- *  (d) any other fungus is Fixed ("active fungi");
- *  (e) a record whose class is Fixed but which is not attached moves by its category: a consumer is
- *      Medium ("P06 (free)"), a bacterium Small ("B02 disperser"), anything else stays Fixed;
- *  (f) otherwise the species record's transportClass.
+ *  (d) any other fungus, and any organism of a species that lives attached (record attachment ≠ null:
+ *      B02, B13, P06), is Fixed whatever FLAG.attached says: births never copy the flag to a daughter,
+ *      so a born colony member or Bellstalk lacks it (D-0114, D-0115). CT §5.3's "B02 disperser" (Small)
+ *      and "P06 (free)" (Medium) are states no Phase 5 rule produces;
+ *  (e) otherwise the species record's transportClass.
  * An E04-anchored organism keeps its class (anchor.ts: FLAG.attached is never set for it).
  */
 export function classOf(world: Pick<World, 'ents' | 'content'>, slot: number): OrganismClass | 'viral' {
@@ -133,9 +140,17 @@ function ownClass(world: Pick<World, 'ents' | 'content'>, slot: number): Organis
   if ((flags & FLAG.attached) !== 0) return 'fixed';
   const sp = world.content.species[c.species[slot]!]!;
   if ((flags & FLAG.restNewborn) !== 0 && c.lifeState[slot] !== LIFE_ACTIVE) return 'small';
-  if (sp.category === 'fungus') return 'fixed';
-  if (sp.transportClass === 'fixed') return sp.category === 'consumer' ? 'medium' : sp.category === 'bacterium' ? 'small' : 'fixed';
-  return sp.transportClass;
+  return freeClassOfSpecies(sp);
+}
+
+/**
+ * The class an organism of species record `def` has when no flag decides it (classOf's rules (d)–(e),
+ * the one place they live): a fungus or a species that lives attached is Fixed; otherwise the record's
+ * transportClass. The S05 shelter rule (edgePassage.ts shelterRefuses) reads it per species.
+ */
+export function freeClassOfSpecies(def: Pick<Species, 'category' | 'transportClass' | 'attachment'>): OrganismClass | 'viral' {
+  if (def.category === 'fungus' || def.attachment !== null) return 'fixed';
+  return def.transportClass;
 }
 
 // ---- Edge code arrays --------------------------------------------------------------------------------

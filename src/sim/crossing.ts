@@ -16,12 +16,14 @@
  * column's empty value), and resets to 0 as soon as the worm is back on a compatible cell.
  *
  * Only movement uses this rule. `canOccupy`/`habitatCompatible` stay the record's habitats, so
- * inoculation, births and the Life brush keep refusing water for P04.
+ * inoculation, births and the Life brush keep refusing water for P04. An S05 porous shelter refuses the
+ * (Large) crosser in any cell (enterCell; wave 9, gated on the world holding devices).
  *
  * Gating: the rule reads the species' own recorded abilities, so it applies only to organisms that
  * carry it (no g2 world holds one); `waterCrossed` stays 0 everywhere else and the column stays
  * hash-neutral.
  */
+import { shelterRefuses } from './edgePassage';
 import { SUB_WATER, ST_NONE } from './grid';
 import type { Profile } from './phenotype';
 import type { SpeciesRT } from './species';
@@ -67,6 +69,8 @@ export function crossableWater(world: World, cell: number): boolean {
  * the way it came returns to the previous water cell with count 1; anything else is refused.
  */
 export function enterCell(world: World, sp: SpeciesRT, cell: number, state: number, dir: number): number {
+  // Wave 9: an S05 porous shelter refuses a Medium or Large free organism (CT §5.3), in water or on its habitat.
+  if (world.devices.length > 0 && shelterRefuses(world, sp.def, cell)) return -1;
   if (habitatCompatible(world, sp, cell)) return 0;
   if (!crossableWater(world, cell)) return -1;
   const count = state & COUNT_MASK;

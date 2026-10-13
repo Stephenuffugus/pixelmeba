@@ -152,6 +152,37 @@ As built, Phase 5 wave 8a (world schema 5; D-0102, D-0108; `src/sim/world.ts`, `
 - **Nothing reads them yet.** No stage reads these stores or columns before wave 9; Phase 5 rules are gated on the
   world's recorded manifest (`src/sim/gates.ts`: `worldHasSystem`, `worldHasStructure`, …; D-0103).
 
+As built, Phase 5 wave 9 (P5.1 climate, P5.2 organisms and edges; D-0113, D-0115, D-0116; `src/sim/climate.ts`,
+`edgePassage.ts`, `barriers.ts`, `movement.ts`, `attachment.ts`). Nothing is enabled (D-0104):
+- **Lazy climate arrays.** `world.climate.warmth` is allocated in stage 2, filled with `settings.warmth`, once an
+  S09 or S10 is On; `world.climate.moisture` (water 1, other cells 0.8) in stage 2 once drying is on, or by
+  `ensureMoisture` (wave 10's wet brush). Readers (`lightFactors`, `localWarmthAt`, `moistureAt`, `updateDerived`)
+  never allocate, and an allocated array is never freed. Suitability reads the local warmth when the array exists,
+  else `settings.warmth` (the v1.0 branch, unchanged).
+- **Derived light.** Stage 2 of tick T computes light for t = T. Every other `updateDerived` caller (realize,
+  load, a paused command, sample, experiments) uses "the last completed stage 2", t = max(tick − 1,
+  cycleStartTick), so a reloaded or paused dish shows what the running dish showed. With no cycle, no recorded
+  S11 and no CANOPY species, the v1.0 fast path runs byte for byte (recomputed when `grid.geometryVersion`
+  moves). While the cycle runs or a CANOPY organism lives, light is recomputed every tick and `lightVersion` is
+  set to −1, so leaving that state recomputes once on whichever path runs next (the keyed path while a CANOPY
+  species or an S11 is recorded, else the fast path).
+- **Per-world caches (derived, never saved or hashed).** Climate's caches live on `TransportCache` and compare
+  store content on every call: the roof cells key on the S11 cells, the keyed light on `grid.geometryVersion`
+  and the roof, the warmth coefficients on `geometryVersion` and the closed S03 edges. `edgePassage.ts` (edge codes and device kinds per cell; a `WeakMap` per world object) and
+  `attachment.ts` (the S06 mesh bit, on `TransportCache`) key on `grid.geometryVersion` plus the store's
+  identity and length, so a store replaced or emptied without a bump still rebuilds them, while a writer that
+  changes an edge or a device in place must bump `geometryVersion` (wave 10's commands).
+- **Movement through edges.** `traceFraction(…, cls)` checks every crossed edge, and both L-paths at an exact
+  corner, when it is given a class and the world holds edges. `decide`'s window fast path folds marks of
+  refusing edges into its prefix sums only. A prey or host target behind a refusing edge is not acquired, and
+  an existing one is cancelled at once (`segmentPermitted`). Predation claims, parasite attachment, E12 links,
+  and daughter and fungal placement use `pairPermitted` (both classes; the corner rule for diagonals).
+  `canOccupy` adds the S05 shelter per species (`shelterRefuses`), and `crossing.ts` `enterCell` refuses a
+  shelter cell. `classOf`: an attached parasite takes its host's class; FLAG.attached is Fixed; a resting F04
+  newborn is Small; fungi and every species that lives attached are Fixed; otherwise the record's class.
+- **Gates.** Each rule returns at once when the world holds no edges or no devices. Only a world whose recorded
+  manifest enables 'barriers' or 'devices' can hold them, so a v1.0 world never reaches the new code.
+
 ## 6. Determinism primitives
 ```ts
 // 32-bit mixer (murmur3 fmix / splitmix32 style) over canonical encoding of args
@@ -951,6 +982,13 @@ As built (P3.12, P4.13; D-0066, D-0085, D-0094; docs/reports/perf-g3.md, perf-rc
 - `tools/perf-stress.ts` (headless 6,000 agents; `--hashes` neutrality probe; `--save-out` the stress dish
   as a save) and `tools/perf-web.ts` (the web build: Garden at 4× for 15 min, the stress dish imported,
   touch latency; worker heap through CDP).
+
+As built, Phase 5 wave 9 (docs/reports/perf-g5.md; indicative, through test registries): while the light cycle
+runs or a CANOPY organism lives, stage 2 recomputes light over every dish cell each tick, and allocated climate
+arrays add warmth relax, diffusion and clamp and the drying pass. The cycle, two heaters, four roofs and drying
+cost stage 2 about +0.1 to +0.25 ms per tick; 512 edge barriers plus 256 devices cost stage 4 about +0.3 to
++0.55 ms per tick at about 530 organisms (expected to grow with the number of movers). The systems flip measures
+both at 6,000 agents.
 
 ## 14. Web and arcade build
 - `npm run build` → `dist/` with relative asset URLs; works from any subpath and inside an

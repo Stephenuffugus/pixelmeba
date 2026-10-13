@@ -30,6 +30,8 @@
  * world) never reaches it.
  */
 import { CELL_COUNT, CELL_SOFT_CAPACITY, FUNGAL_CAP } from './constants';
+import { classOf } from './barriers';
+import { pairPermitted } from './edgePassage';
 import { edibleFilmAt } from './film';
 import { cellIndex, inBounds, inMask } from './grid';
 import { emit } from './events';
@@ -161,6 +163,10 @@ export function fungalPlacement(
   const cx = Math.floor(c.x[i]!);
   const cy = Math.floor(c.y[i]!);
   const load = world.derived.cellLoad;
+  // Wave 9 (D-0106): a new segment (and so its branch link, joinBranch) never crosses an edge that
+  // refuses the fungus's class (Fixed: every barrier refuses it).
+  const cls = world.edges.length > 0 ? classOf(world, i) : null;
+  const own = cellIndex(cx, cy);
   let best = -1;
   let bestFood = -Infinity;
   let bestSuit = -Infinity;
@@ -172,6 +178,7 @@ export function fungalPlacement(
     const cell = cellIndex(x, y);
     if (state.occupied[cell] === 1) continue;
     if (!canOccupy(world, sp, cell)) continue;
+    if (cls !== null && !pairPermitted(world, own, cell, cls, cls)) continue;
     if (load[cell]! + daughterLoad > CELL_SOFT_CAPACITY) continue;
     const food = usableFood(world, sp, cell);
     const suit = suitabilityAt(world, sp, prof, cell).value;

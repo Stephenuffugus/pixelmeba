@@ -121,3 +121,32 @@ export const LEDGER_RELATIVE_TOLERANCE = 1e-5;
 export const EVENT_RING_SIZE = 500;
 export const HISTORY_SECONDS = 1800;
 export const HISTORY_MINUTES = 360;
+
+/**
+ * Climate (Phase 5, P5.1; SPEC §4.4, §4.6–§4.8, §4.10; CT §4, §12.2; src/sim/climate.ts). Per-second
+ * rates are converted to per-tick amounts once (rate × DT) in climate.ts.
+ */
+/** Day/night cycle (CT §12.2): 240 s = 2400 ticks, day 90 s, dusk 30 s, night 90 s, dawn 30 s. */
+export const CYCLE_PERIOD_TICKS = 2400;
+export const CYCLE_DAY_TICKS = 900;
+export const CYCLE_DUSK_TICKS = 300;
+export const CYCLE_NIGHT_TICKS = 900;
+export const CYCLE_DAWN_TICKS = 300;
+/** Light factor at night (CT §12.2 "night 0.05"). */
+export const CYCLE_NIGHT_FACTOR = 0.05;
+/** Light factor under an S11 shade roof (CT §4, §12.2). */
+export const ROOF_SHADE = 0.25;
+/** Canopy factor 1/(1 + Σ CANOPY biomass / 10) over a cell and its four neighbours (CT §12.2). */
+export const CANOPY_BIOMASS_SCALE = 10;
+/** Local warmth (CT §12.2, §13): relax 1 % per tick toward ambient, diffuse 0.05, heater/cooler ±0.01/s. */
+export const WARMTH_RELAX_PER_TICK = 0.01;
+export const WARMTH_DIFFUSION = 0.05;
+export const WARMTH_DEVICE_PER_SECOND = 0.01;
+/** Moisture index (CT §12.2): water 1, gel/sediment start 0.8, drying −0.001/s to 0.1, wetting 0.9, wick → 0.8 at 0.01/s. */
+export const MOISTURE_WATER = 1;
+export const MOISTURE_START = 0.8;
+export const DRYING_PER_SECOND = 0.001;
+export const MOISTURE_FLOOR = 0.1;
+export const WETTING_MOISTURE = 0.9;
+export const WICK_TARGET = 0.8;
+export const WICK_PER_SECOND = 0.01;

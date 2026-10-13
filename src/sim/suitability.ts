@@ -77,7 +77,9 @@ export function suitabilityAt(world: World, sp: SpeciesRT, prof: Profile, cell: 
   }
   const d = world.derived;
   const rPh = response(d.ph[cell]!, prof.ph[0], prof.ph[1], SHOULDER_PH);
-  const warmth = world.settings.warmth;
+  // Local warmth (SPEC §4.7, Phase 5) once the climate stage allocated it; the ambient setting until then.
+  const wa = world.climate.warmth;
+  const warmth = wa === null ? world.settings.warmth : wa[cell]!;
   const rWarm = response(warmth, prof.warmth[0], prof.warmth[1], SHOULDER_WARMTH);
   const salt = world.fields.salt![cell]!;
   const rSal = response(salt, prof.salinity[0], prof.salinity[1], SHOULDER_SALINITY);

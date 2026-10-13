@@ -144,14 +144,15 @@ this plan and the relevant slice of g5-briefs.md, not the whole spec.
 
 - **Wave 8b, art-large:** give P08 its `dormant` ×3 (native DORMANCY), or art-build refuses the P08 sprite (D-0109).
 - **Wave 9, climate-stage2:** suitability reads `settings.warmth` only. The ambient (null) branch of `world.climate`
-  must stay bit-identical (D-0108).
+  must stay bit-identical (D-0108). Done in wave 9 (D-0116): suitability reads the local warmth array when it exists.
 - **Wave 11, e2-signals (D-0108):** the import refuses glowState 1 on an organism that is not Active (D-0106), so the
   code that moves an organism out of Active (dormancy entry, resting newborns) must clear glowState in the same tick, or
   the game's own saves are refused. Add a test that saves and reloads a glowing organism right after it starts Preparing.
 - **Wave 10, e3-resters (corrected by D-0114):** wave 9's placement rule puts a daughter in her parent's class at birth,
   which is D-0106's either-party rule. An F04 resting daughter is Small while resting, but her PLACEMENT stays bounded by
   the parent's Fixed class (no edge between parent and daughter cell); her Small class applies after birth (the S04
-  channel). Waking re-checks attachability.
+  channel). Waking re-checks attachability. `classOf` itself was fixed at wave 9's integration (D-0115): every species
+  that lives attached is Fixed whatever FLAG.attached says, so barrier-transport's item 0 is done.
 - **Wave 10, structure-commands and barrier-transport:** the list in docs/agent/g5-wave-9.tasks.js.txt "LEAD AFTER 6"
   (geometryVersion bumps on every edges/devices write, link severing, wet brush and setLightMode through climate.ts,
   the Life brush preview, the S04 channel's class helpers, gate tallies).
@@ -160,6 +161,12 @@ this plan and the relevant slice of g5-briefs.md, not the whole spec.
   wants ST_NONE), or an S04 whose two cells are not both open water (water substrate and ST_NONE, barriers.ts:209-210)
   (a skipped reason), or remove the structure by the SPEC §2.4 rules, with a save-loads test.
   Otherwise the game's own saves are refused once structures exist: a BLOCKER at the systems flip.
+- **Wave 10, structure-commands (D-0116):** besides sample release through `canOccupy` (its item 13), a released
+  block whose fungal or adhesion link, or host and parasite pair, would straddle a refusing edge at the destination
+  follows the same rule as a barrier placed across a link (sever with a logged reason, or refuse).
+- **Habitat and recipe content (wave 12 or the organism flip; D-0116):** a recipe founder chain (`links: 'chain'`,
+  recipes.ts) is authored, not checked against edges. The content validator should refuse a chain whose consecutive
+  founders straddle a refusing edge of the recipe's or habitat's own structures.
 - **Wave 11, the protocol bump (D-0111):** when the protocol's RecipeOverrides gains lid, lightMode and drying, build()
   validates them and records them in recipeProvenance in the same change. The tool tray gates the wetting brush on
   `worldHasSystem(dish, 'climate')` (the Field Guide filters by the build's manifest only).

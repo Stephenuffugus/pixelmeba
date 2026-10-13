@@ -31,6 +31,8 @@
  *   the retained half and its offspring is free.
  */
 import { CONTACT_DISTANCE, DT, GRID_H, GRID_W, METABOLITE_FRACTION, NUTRIENT_PER_CARBON, BIOMASS_FRACTION, CO2_FRACTION, USABLE_INTAKE_FRACTION, AGENT_CAP } from './constants';
+import { classOf } from './barriers';
+import { pairPermitted, segmentPermitted } from './edgePassage';
 import { FLAG, LIFE_ACTIVE } from './entities';
 import { cellIndex } from './grid';
 import { subtractPool } from './ledger';
@@ -163,6 +165,8 @@ function nearestHost(world: World, i: number, sp: SpeciesRT, radius: number, sta
   const py = c.y[i]!;
   const cx = Math.floor(px);
   const cy = Math.floor(py);
+  // Wave 9: a host whose straight segment crosses an edge refusing the parasite's class is no target.
+  const cls = world.edges.length > 0 ? classOf(world, i) : null;
   let best = -1;
   let bestD = Infinity;
   let bestBirth = Infinity;
@@ -170,6 +174,7 @@ function nearestHost(world: World, i: number, sp: SpeciesRT, radius: number, sta
     for (let x = Math.max(0, cx - radius); x <= Math.min(GRID_W - 1, cx + radius); x++) {
       forEachInCell(world, cellIndex(x, y), (s) => {
         if (!validHost(world, sp, i, s)) return;
+        if (cls !== null && !segmentPermitted(world, px, py, startX[s]!, startY[s]!, cls)) return;
         const d = (startX[s]! - px) ** 2 + (startY[s]! - py) ** 2;
         const b = c.birthId[s]!;
         if (d < bestD || (d === bestD && b < bestBirth)) {
@@ -239,6 +244,7 @@ export function attachParasites(world: World): void {
   const c = e.cols;
   const hw = e.highWater;
   const contact2 = CONTACT_DISTANCE * CONTACT_DISTANCE;
+  const edgesOn = world.edges.length > 0; // wave 9 gate: edges exist only where 'barriers' is recorded
   let any = false;
   for (let i = 0; i < hw; i++) {
     claimOf[i] = -1;
@@ -252,13 +258,18 @@ export function attachParasites(world: World): void {
     const py = c.y[i]!;
     const cx = Math.floor(px);
     const cy = Math.floor(py);
+    // Wave 9 (D-0106): no attachment across an edge that refuses the parasite's or the host's class.
+    const cls = edgesOn ? classOf(world, i) : null;
+    const own = cellIndex(cx, cy);
     let best = -1;
     let bestD = Infinity;
     let bestBirth = Infinity;
     for (let y = Math.max(0, cy - 1); y <= Math.min(GRID_H - 1, cy + 1); y++) {
       for (let x = Math.max(0, cx - 1); x <= Math.min(GRID_W - 1, cx + 1); x++) {
-        forEachInCell(world, cellIndex(x, y), (s) => {
+        const cell = cellIndex(x, y);
+        forEachInCell(world, cell, (s) => {
           if (!validHost(world, sp, i, s)) return;
+          if (cls !== null && !pairPermitted(world, own, cell, cls, classOf(world, s))) return;
           const d = (c.x[s]! - px) ** 2 + (c.y[s]! - py) ** 2;
           if (d > contact2) return;
           const b = c.birthId[s]!;

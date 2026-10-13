@@ -7,9 +7,12 @@ import { realizeRecipe } from '../../src/sim/recipes';
 import { rebuildIndex } from '../../src/sim/spatial';
 import { speciesIndex, type World } from '../../src/sim/world';
 import { loadRegistryFs } from '../../tools/lib/content-fs';
-import { FIELD_DEFS, type FieldId } from '../../src/sim/fields';
+import { FIELD_DEFS, type FieldId, type SystemFlag } from '../../src/sim/fields';
+import { registryWith } from './registry';
 import { markField, updateDerived } from '../../src/sim/transport';
-import { maskCells } from '../../src/sim/grid';
+import { inMask, maskCells } from '../../src/sim/grid';
+import { sortEdges, type EdgeBarrier } from '../../src/sim/barriers';
+import { sortDevices, type Device } from '../../src/sim/devices';
 import { initializeLedger } from '../../src/sim/ledger';
 import { addAdhesionLink, addFungalLink, LINK_TRANSPORT, type FungalLinkKind } from '../../src/sim/links';
 import { createObject, objectTotals, type FoodObject, type FoodObjectKind } from '../../src/sim/objects';
@@ -145,4 +148,72 @@ export function placeWith(world: World, speciesId: string, x: number, y: number,
   }
   rebuildIndex(world);
   return slot;
+}
+
+// ---- Phase 5 wave 9 (barrier-movement): edge barriers and devices pushed straight into a world's stores.
+
+/** Every Phase 5 structure id (S01–S12). */
+export const PHASE5_STRUCTURE_IDS = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12'] as const;
+
+/**
+ * Push edge barriers into `world.edges` (test setup, before a run): ids from counters.nextDeviceId, the
+ * store re-sorted by edgeKey (one barrier per edge, as the import requires), geometryVersion bumped as
+ * every edge writer must. Each entry's `cell` is the edge's lower cell (the left cell for 'R', the upper
+ * cell for 'D'). Returns the ids given, in input order.
+ */
+export function pushEdges(world: World, edges: readonly Omit<EdgeBarrier, 'id'>[]): number[] {
+  const ids: number[] = [];
+  const added: EdgeBarrier[] = edges.map((e) => {
+    const id = world.counters.nextDeviceId++;
+    ids.push(id);
+    return { ...e, id };
+  });
+  const sorted = sortEdges([...world.edges, ...added]);
+  world.edges.length = 0;
+  world.edges.push(...sorted);
+  world.grid.geometryVersion++;
+  return ids;
+}
+
+/** Edge barriers of one kind on the R edges of cells (x, y0 … y1) (a vertical line between x and x + 1). */
+export function verticalLine(kind: EdgeBarrier['kind'], x: number, y0: number, y1: number, extra: Partial<Omit<EdgeBarrier, 'id' | 'kind' | 'cell' | 'dir'>> = {}): Omit<EdgeBarrier, 'id'>[] {
+  const out: Omit<EdgeBarrier, 'id'>[] = [];
+  for (let y = y0; y <= y1; y++) if (inMask(x, y) && inMask(x + 1, y)) out.push({ kind, cell: cellIndex(x, y), dir: 'R', ...extra });
+  return out;
+}
+
+/**
+ * Push furnishings/devices into `world.devices` (test setup): ids from counters.nextDeviceId, the store
+ * re-sorted by cell, geometryVersion bumped. Toggled kinds start off unless `on` is given.
+ */
+export function pushDevices(world: World, devices: readonly Omit<Device, 'id'>[]): number[] {
+  const ids: number[] = [];
+  const added: Device[] = devices.map((d) => {
+    const id = world.counters.nextDeviceId++;
+    ids.push(id);
+    const rec: Device = { ...d, id };
+    if ((d.kind === 'S09' || d.kind === 'S10') && rec.on === undefined) rec.on = false;
+    if (d.kind === 'S08' && rec.resinSelect === undefined) rec.resinSelect = [];
+    return rec;
+  });
+  const sorted = sortDevices([...world.devices, ...added]);
+  world.devices.length = 0;
+  world.devices.push(...sorted);
+  world.grid.geometryVersion++;
+  return ids;
+}
+
+/**
+ * The content registry of the wave 9 barrier tests: the shipped manifest plus the 'barriers', 'climate'
+ * and 'devices' systems and S01–S12 (allowUnimplemented: the lead lists the structures as implemented at
+ * the Phase 5 systems flip, D-0104), as tests/content/recipe-structures.test.ts WITH_ALL does.
+ */
+export function barrierRegistry(): ContentRegistry {
+  const systems = [...registry().manifest.enabledSystems, 'barriers', 'climate', 'devices'].sort() as SystemFlag[];
+  return registryWith({ enabledSystems: systems, enabledStructures: ['BEAD', ...PHASE5_STRUCTURE_IDS, 'STONE', 'WALL'] }, { allowUnimplemented: true });
+}
+
+/** A clear-water dish (clearWater) that records the Phase 5 systems and S01–S12. */
+export function barrierDish(overrides: Partial<RecipeDef> = {}): World {
+  return clearWater(overrides, barrierRegistry());
 }

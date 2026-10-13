@@ -49,7 +49,10 @@ export interface WorldSettings {
   lid: 'open' | 'closed';
   lightMode: 'fixed' | 'cycle';
   drying: boolean;
-  /** Uniform dish warmth index until local warmth is enabled (Phase 5). */
+  /**
+   * The dish's ambient warmth index. Suitability reads it while world.climate.warmth is null; local warmth
+   * relaxes toward it once a heater or cooler allocated the array (Phase 5; src/sim/climate.ts).
+   */
   warmth: number;
   mutationPreset: MutationPreset;
   founderMode: FounderMode;
@@ -80,9 +83,9 @@ export interface WorldContent {
 export interface Derived {
   /** Display/tolerance pH per cell. */
   readonly ph: Float64Array;
-  /** Effective light per cell. */
+  /** Effective light per cell (SPEC §4.4: baseline × cycle, shade, S11 roof, canopy; src/sim/climate.ts). */
   readonly light: Float64Array;
-  /** Moisture index per cell (water 1.0; gel/sediment 0.8 until climate is enabled). */
+  /** Moisture index per cell: water 1.0; gel/sediment 0.8, or world.climate.moisture once allocated. */
   readonly moisture: Float64Array;
   /** Transport cache (per-cell edge coefficients, gas rates, row spans); rebuilt on geometry change. */
   transport: TransportCache | null;
@@ -112,9 +115,10 @@ export interface Counters {
 
 /**
  * Local warmth and moisture per cell (SPEC §4.7–§4.8; schema 5). null = the ambient value
- * (settings.warmth) or the substrate default (derived.moisture). Allocated lazily by the climate stage
- * when a heater or cooler is switched on, drying starts, the wet brush is used or a wick is placed;
- * never by observation.
+ * (settings.warmth) or the substrate default (derived.moisture). Allocated lazily (src/sim/climate.ts,
+ * D-0113): warmth in stage 2 once an S09 or S10 is On; moisture in stage 2 once drying is on, or by the
+ * wet brush (ensureMoisture). A wick or roof alone allocates nothing; nothing allocates by observation;
+ * an allocated array is never freed. Every value is in [0, 1].
  */
 export interface Climate {
   warmth: Float64Array | null;

@@ -17,6 +17,8 @@
  * 5. Then E12 link formation (adhesion.ts formAdhesionLinks).
  */
 import { CONTACT_DISTANCE, GRID_H, GRID_W, MEAL_CAP_MULTIPLE } from './constants';
+import { classOf } from './barriers';
+import { pairPermitted } from './edgePassage';
 import { emit } from './events';
 import { cellIndex } from './grid';
 import { recordDeath } from './lineage';
@@ -52,6 +54,7 @@ function predationContacts(world: World): void {
   const c = e.cols;
   const hw = e.highWater;
   const contact2 = CONTACT_DISTANCE * CONTACT_DISTANCE;
+  const edgesOn = world.edges.length > 0; // wave 9 gate: edges exist only where 'barriers' is recorded
   let anyClaim = false;
   for (let i = 0; i < hw; i++) {
     claimOf[i] = -1;
@@ -69,14 +72,19 @@ function predationContacts(world: World): void {
     const py = c.y[i]!;
     const cx = Math.floor(px);
     const cy = Math.floor(py);
+    // Wave 9 (D-0106): no claim across an edge that refuses the predator's or the prey's class.
+    const cls = edgesOn ? classOf(world, i) : null;
+    const own = cellIndex(cx, cy);
     let best = -1;
     let bestD = Infinity;
     let bestBirth = Infinity;
     for (let y = Math.max(0, cy - 1); y <= Math.min(GRID_H - 1, cy + 1); y++) {
       for (let x = Math.max(0, cx - 1); x <= Math.min(GRID_W - 1, cx + 1); x++) {
-        forEachInCell(world, cellIndex(x, y), (s) => {
+        const cell = cellIndex(x, y);
+        forEachInCell(world, cell, (s) => {
           if (s === i || c.alive[s] !== 1) return;
           if (!preyAllowed(world, sp, s)) return;
+          if (cls !== null && !pairPermitted(world, own, cell, cls, classOf(world, s))) return;
           const d = (c.x[s]! - px) ** 2 + (c.y[s]! - py) ** 2;
           if (d > contact2) return;
           const b = c.birthId[s]!;

@@ -11,11 +11,14 @@
  *   the sum of the inhibitors that target it, × 0.5 once when its cell holds film (D-0008); its growth
  *   is × 1/(1 + exposure) and it loses 8 × exposure health per second (suitability.ts, maintenance.ts).
  * - Light factors (SPEC §4.4): effective light = clamp(habitat baseline × painted shade, 0, 1) while
- *   there is no light cycle, lamp, roof or canopy (Phase 5–6).
+ *   there is no light cycle, lamp, roof or canopy; the Phase 5 cycle, S11 roof and canopy factors come
+ *   from src/sim/climate.ts (lamps: Phase 6).
  */
+import { climateLightAt, hasCanopySpecies, type CyclePhaseName } from './climate';
 import { INHIBITOR_DAMAGE } from './constants';
 import type { Species } from './content/schema';
 import type { FieldId } from './fields';
+import { worldHasStructure, worldHasSystem } from './gates';
 import type { World } from './world';
 
 export const PH_MIN = 2;
@@ -105,14 +108,31 @@ export interface LightFactors {
   readonly baseline: number;
   /** The painted shade factor (1.0, or the dish's shade paint factor). */
   readonly shade: number;
-  /** The light organisms receive: clamp(baseline × shade, 0, 1). */
+  /**
+   * Phase 5 (climate.ts), present only in a world that records 'climate', an S11 roof or a CANOPY species:
+   * the light cycle (cycle mode only), the roof factor (0.25 under an S11, else 1) and the canopy factor.
+   */
+  readonly cycle?: { readonly phase: CyclePhaseName; readonly factor: number; readonly secondsIntoPhase: number };
+  readonly roof?: number;
+  readonly canopy?: number;
+  /**
+   * The light organisms receive: clamp(clamp(baseline × cycle, 0, 1) × shade × roof × canopy, 0, 1)
+   * (SPEC §4.4), which is clamp(baseline × shade, 0, 1) without a cycle, roof or canopy. Between steps it
+   * equals world.derived.light[cell] exactly (the same function and light tick as updateDerived).
+   */
   readonly effective: number;
 }
 
-/** The light factors of a cell (SPEC §4.4). */
+/** The light factors of a cell (SPEC §4.4: "the inspector shows every factor"). */
 export function lightFactors(world: World, cell: number): LightFactors {
   const baseline = world.grid.lightBase[cell]!;
   const shade = world.grid.shade[cell]!;
-  const l = baseline * shade;
-  return { baseline, shade, effective: l < 0 ? 0 : l > 1 ? 1 : l };
+  if (!worldHasSystem(world, 'climate') && !worldHasStructure(world, 'S11') && !hasCanopySpecies(world)) {
+    const l = baseline * shade;
+    return { baseline, shade, effective: l < 0 ? 0 : l > 1 ? 1 : l };
+  }
+  const c = climateLightAt(world, cell);
+  return c.cycle !== undefined
+    ? { baseline, shade, cycle: c.cycle, roof: c.roof, canopy: c.canopy, effective: c.effective }
+    : { baseline, shade, roof: c.roof, canopy: c.canopy, effective: c.effective };
 }

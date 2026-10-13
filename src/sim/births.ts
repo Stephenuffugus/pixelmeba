@@ -31,6 +31,8 @@ import { profileOf } from './profiles';
 import { R } from './reasons';
 import { detFloat, STREAMS } from './rng';
 import { entityCell, rebuildIndex } from './spatial';
+import { classOf } from './barriers';
+import { pairPermitted } from './edgePassage';
 import { onAnchorDivision } from './anchor';
 import { onAdhesionDivision } from './adhesion';
 import type { World } from './world';
@@ -101,6 +103,10 @@ function findPlacement(world: World, i: number, daughterLoad: number): number {
   const cx = Math.floor(c.x[i]!);
   const cy = Math.floor(c.y[i]!);
   const load = world.derived.cellLoad;
+  // Wave 9 (D-0106): a daughter is never placed across an edge that refuses its parent's class at the
+  // moment of birth; a parent of a species that lives attached is Fixed (barriers.ts classOf, D-0115).
+  const cls = world.edges.length > 0 ? classOf(world, i) : null;
+  const own = cellIndex(cx, cy);
   let best = -1;
   let bestLoad = Infinity;
   for (const [dx, dy] of NEIGHBORS) {
@@ -109,6 +115,7 @@ function findPlacement(world: World, i: number, daughterLoad: number): number {
     if (!inBounds(x, y) || !inMask(x, y)) continue;
     const cell = cellIndex(x, y);
     if (!canOccupy(world, sp, cell)) continue;
+    if (cls !== null && !pairPermitted(world, own, cell, cls, cls)) continue;
     const l = load[cell]!;
     // The parent's own cell keeps the same load after a split (its biomass is only divided).
     const after = dx === 0 && dy === 0 ? l : l + daughterLoad;
