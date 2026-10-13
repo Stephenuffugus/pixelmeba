@@ -3,6 +3,19 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑13 16:35 UTC — WAVE 8a COMMITTED `60a4731` (check 222 files / 2514 tests; e2e 76/76 desktop +
+> phone-portrait; D‑0108, D‑0109; integration verifier wf_4596eb7b-bc0, its MAJOR (E14 is Phase 7) and NITs fixed).
+> WAVE 8b RUNNING from docs/agent/g5-wave-8b.run.workflow.js.txt (structure-content critical → own saves lens, D‑0110;
+> art-large). Backups → `wip/g5-wave-8b` (pid tmp/lead/backup-8b.pid). START HERE.**
+> - If the session died mid-8b: if `git status` is clean, restore the tree from `wip/g5-wave-8b`; read
+>   docs/reports/reviews/g5-wave-8b/ and the run journal under
+>   ~/.claude/projects/-workspaces-pixelmeba/462cefc8-e202-4f25-900b-45a0b3a85625/subagents/workflows/<run>/journal.jsonl;
+>   rerun only unfinished tasks (A.only + finish notes).
+> - After 8b: LEAD AFTER 1–4 of docs/agent/g5-wave-8.tasks.js.txt for 8b (MINORs; PROPOSED DECISIONs → D‑0111…; check;
+>   fence + both corpora unchanged; art:build --check; content:validate; journeys desktop + phone-portrait on 4271: field-guide
+>   (no wetting brush, no S01–S12), whatif, try-dish, compare, keep-dish, garden, launch-ecology; ARCH §4 + §10.1 as built;
+>   WORKLOG notes for 8b) → commit 8b → wave 9 task writer (LEAD AFTER 5; carry-overs in g5-plan.md).
+
 > **Update 2026‑10‑13 14:45 UTC — WAVE 8a BUILT AND VERIFIED (wf_af23c8d6-dba, 83 min: no BLOCKER/MAJOR left; the
 > art-small MAJOR was fixed in round 1 and re-verified). LEAD INTEGRATION IS IN THE TREE, UNCOMMITTED (backup loop →
 > `wip/g5-wave-8a`, pid tmp/lead/backup-8a.pid). START HERE.**
