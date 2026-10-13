@@ -6,7 +6,7 @@
  * can influence future simulation, so equal hashes mean equal futures under equal commands.
  */
 import { CELL_COUNT } from './constants';
-import { emptyValueOf, ENTITY_COLUMNS, FIRST_HASH_NEUTRAL_COLUMN } from './entities';
+import { emptyValueOf, ENTITY_COLUMNS, FIRST_HASH_NEUTRAL_COLUMN, type ColumnName } from './entities';
 import { allocatedFieldIds, isFieldId } from './fields';
 import { genomeKey, type Genome } from './genome';
 import { base64ToBytes, canonicalJson, StateHasher, typedToBase64 } from './hash';
@@ -18,10 +18,12 @@ import { createLedger, type Ledger } from './ledger';
 import type { Lineage } from './lineage';
 import type { BranchBook } from './branches';
 import type { FoodObject } from './objects';
-import { decodeSample, encodeSample, type SavedSample } from './sampleSlot';
+import { decodeSample, encodeSample, type SavedSample, type SavedTyped } from './sampleSlot';
+import type { EdgeBarrier } from './barriers';
+import type { Device } from './devices';
 import { rebuildIndex } from './spatial';
 import { updateDerived } from './transport';
-import { createEmptyWorld, SCHEMA_VERSION, type World, type WorldContent, type WorldSettings } from './world';
+import { createEmptyWorld, SCHEMA_VERSION, type GateTally, type World, type WorldContent, type WorldSettings } from './world';
 
 type DType = 'f64' | 'f32' | 'i32' | 'u32' | 'u16' | 'u8';
 export interface EncodedArray {
@@ -93,6 +95,14 @@ export interface WorldState {
   readonly objects?: readonly FoodObject[];
   /** Schema 4: the held sample with its rows as typed payloads (absent before; the migration adds null). */
   readonly sample?: SavedSample | null;
+  /** Schema 5: edge barriers (absent before; the migration adds []). */
+  readonly edges?: readonly EdgeBarrier[];
+  /** Schema 5: furnishings and devices (absent before; the migration adds []). */
+  readonly devices?: readonly Device[];
+  /** Schema 5: local warmth and moisture as typed payloads, null = ambient (absent before; the migration adds nulls). */
+  readonly climate?: { readonly warmth: EncodedArray | null; readonly moisture: EncodedArray | null };
+  /** Schema 5: gate crossing totals, observation only (absent before; the migration adds []). */
+  readonly gateTally?: readonly GateTally[];
 }
 
 function sliceTo<T extends ArrayBufferView & { subarray(a: number, b: number): T; length: number }>(arr: T, n: number): T {
@@ -145,15 +155,68 @@ export function serializeWorld(world: World): WorldState {
     branches: clone(world.branches),
     objects: clone(world.objects),
     sample: world.sample === null ? null : encodeSample(world.sample),
+    edges: clone(world.edges),
+    devices: clone(world.devices),
+    climate: {
+      warmth: world.climate.warmth === null ? null : encodeArray(world.climate.warmth),
+      moisture: world.climate.moisture === null ? null : encodeArray(world.climate.moisture),
+    },
+    gateTally: clone(world.gateTally),
   };
 }
 
-/** Entity columns added at each world schema version (filled with emptyValueOf when migrating older states). */
-export const COLUMNS_ADDED_IN: Readonly<Record<number, readonly (typeof ENTITY_COLUMNS)[number][0][]>> = {
+/**
+ * Entity columns added at each world schema version (filled with emptyValueOf when migrating older
+ * states). Every list is a frozen literal: a version means exactly the columns it added, so appending a
+ * column can never silently change what an older schema holds (D-0102).
+ */
+export const COLUMNS_ADDED_IN: Readonly<Record<number, readonly ColumnName[]>> = {
   2: ['dryTimer'],
-  // Schema 4 (Phase 3 foundation; D-0035): every column from `filmSeconds` on.
-  4: ENTITY_COLUMNS.slice(FIRST_HASH_NEUTRAL_COLUMN).map(([n]) => n),
+  // Schema 4 (Phase 3 foundation; D-0035): `filmSeconds` … `aLinkB1`.
+  4: [
+    'filmSeconds',
+    'anchorState',
+    'anchorSeconds',
+    'anchorLockout',
+    'adhPartner',
+    'adhSeconds',
+    'adhLockout',
+    'waterCrossed',
+    'noUsableIntakeSeconds',
+    'fLink0',
+    'fLink1',
+    'fLink2',
+    'fLink3',
+    'fLinkB0',
+    'fLinkB1',
+    'fLinkB2',
+    'fLinkB3',
+    'fLinkKind0',
+    'fLinkKind1',
+    'fLinkKind2',
+    'fLinkKind3',
+    'aLink0',
+    'aLink1',
+    'aLinkB0',
+    'aLinkB1',
+  ],
+  // Schema 5 (Phase 5 foundation; D-0102): `glowState` … `handlingNeed`.
+  5: ['glowState', 'glowDwell', 'metabolicMode', 'trapReserveC', 'trapReserveN', 'trapSlot', 'trapBirthId', 'trapTimer', 'trapCooldown', 'heldBySlot', 'heldByBirthId', 'handlingNeed'],
 };
+
+const ARRAY_CTOR = { f64: Float64Array, f32: Float32Array, i32: Int32Array, u32: Uint32Array, u16: Uint16Array, u8: Uint8Array } as const;
+
+function dtypeOfColumn(name: ColumnName): DType {
+  return ENTITY_COLUMNS.find(([n]) => n === name)![1];
+}
+
+/** A typed array of `length` slots holding column `name`'s empty value. */
+function emptyColumn(name: ColumnName, length: number): ArrayBufferView & { length: number } {
+  const arr = new ARRAY_CTOR[dtypeOfColumn(name)](length);
+  const empty = emptyValueOf(name);
+  if (empty !== 0) arr.fill(empty);
+  return arr;
+}
 
 /**
  * Bring an older world state up to SCHEMA_VERSION by copy (the input is never modified; CLAUDE.md
@@ -161,7 +224,12 @@ export const COLUMNS_ADDED_IN: Readonly<Record<number, readonly (typeof ENTITY_C
  * world implicitly had: dryTimer 0, because no organism could rest before schema 2; at schema 3 an
  * empty trait record and journal, because nothing of either was recorded before it; at schema 4 every
  * Phase 3 column at its empty value (−1 for link slots: a 0 would point at slot 0), no food objects and
- * no held sample, because none of these existed before it.
+ * no held sample, because none of these existed before it; at schema 5 (D-0102) every Phase 5 column
+ * at its empty value (no glow, no metabolic mode, no trap or hold, −1 for the trap and held-by slots,
+ * no handling attempt), no edge barriers, no devices, ambient climate (both arrays null), no gate
+ * tallies and nextDeviceId 1, because no Phase 5 rule or structure existed before it. A held sample's
+ * rows gain the same columns at the same empty values (each row is a full entity row; decodeSample
+ * needs every column). settings.cycleStartTick stays absent: no older world could run a light cycle.
  */
 export function migrateWorldState(state: WorldState): WorldState {
   if (!Number.isInteger(state.schemaVersion) || state.schemaVersion < 1) throw new Error(`unsupported world schema ${String(state.schemaVersion)}`);
@@ -171,18 +239,26 @@ export function migrateWorldState(state: WorldState): WorldState {
     const columns: Record<string, EncodedArray> = { ...s.entities.columns };
     for (const name of COLUMNS_ADDED_IN[v] ?? []) {
       if (columns[name]) continue;
-      const dtype = ENTITY_COLUMNS.find(([n]) => n === name)![1];
-      const Ctor = { f64: Float64Array, f32: Float32Array, i32: Int32Array, u32: Uint32Array, u16: Uint16Array, u8: Uint8Array }[dtype];
-      const arr = new Ctor(s.entities.highWater);
-      const empty = emptyValueOf(name);
-      if (empty !== 0) arr.fill(empty);
-      columns[name] = encodeArray(arr);
+      columns[name] = encodeArray(emptyColumn(name, s.entities.highWater));
     }
     s = { ...s, schemaVersion: v, entities: { ...s.entities, columns } };
     // Schema 3 (P2.8): history gains trait samples and the dish's journal, both empty for an older world.
     if (v === 3) s = { ...s, history: historyForSchema3(s.history, s.tick) };
     // Schema 4 (Phase 3 foundation): no finite food objects and no held sample.
     if (v === 4) s = { ...s, objects: [], sample: null };
+    // Schema 5 (Phase 5 foundation; D-0102): no barriers, devices or tallies, ambient climate, and the
+    // held sample's rows gain the Phase 5 columns.
+    if (v === 5) {
+      s = {
+        ...s,
+        edges: [],
+        devices: [],
+        climate: { warmth: null, moisture: null },
+        gateTally: [],
+        counters: { ...s.counters, nextDeviceId: 1 },
+        sample: s.sample ? sampleWithColumns(s.sample, COLUMNS_ADDED_IN[5]!) : (s.sample ?? null),
+      };
+    }
   }
   // SPEC §14.5: a migration tags provenance. Not in the state hash (stateHash never reads provenance).
   if (state.schemaVersion < SCHEMA_VERSION) {
@@ -190,6 +266,28 @@ export function migrateWorldState(state: WorldState): WorldState {
     s = { ...s, content: { ...s.content, provenance: { ...p, migratedFrom: [...(p.migratedFrom ?? []), state.schemaVersion] } } };
   }
   return s;
+}
+
+/** A copy of a saved sample whose rows carry `names` at their empty values (columns it already has are kept). */
+function sampleWithColumns(sample: SavedSample, names: readonly ColumnName[]): SavedSample {
+  const columns: Record<string, SavedTyped> = { ...sample.rows.columns };
+  const count = sample.rows.count;
+  for (const name of names) {
+    if (columns[name]) continue;
+    // Malformed counts are left to the import's sample check (savedSampleProblem) to refuse by name.
+    if (!Number.isInteger(count) || count < 0) continue;
+    columns[name] = encodeArray(emptyColumn(name, count));
+  }
+  return { ...sample, rows: { ...sample.rows, columns } };
+}
+
+/** A climate payload as a new CELL_COUNT Float64Array (throws on a malformed one). */
+function decodeClimate(enc: EncodedArray | null | undefined, name: string): Float64Array | null {
+  if (enc === null || enc === undefined) return null;
+  if (enc.length !== CELL_COUNT) throw new Error(`climate ${name} has wrong length`);
+  const arr = new Float64Array(CELL_COUNT);
+  decodeInto(enc, arr);
+  return arr;
 }
 
 export function deserializeWorld(input: WorldState): World {
@@ -235,6 +333,12 @@ export function deserializeWorld(input: WorldState): World {
   if (state.branches) Object.assign(world.branches, JSON.parse(JSON.stringify(state.branches)));
   for (const o of state.objects ?? []) world.objects.push(JSON.parse(JSON.stringify(o)) as FoodObject);
   world.sample = state.sample ? decodeSample(state.sample) : null;
+  // Schema 5 stores (deep copies; settings.cycleStartTick came with the settings).
+  for (const e of state.edges ?? []) world.edges.push(JSON.parse(JSON.stringify(e)) as EdgeBarrier);
+  for (const d of state.devices ?? []) world.devices.push(JSON.parse(JSON.stringify(d)) as Device);
+  world.climate.warmth = decodeClimate(state.climate?.warmth, 'warmth');
+  world.climate.moisture = decodeClimate(state.climate?.moisture, 'moisture');
+  for (const t of state.gateTally ?? []) world.gateTally.push(JSON.parse(JSON.stringify(t)) as GateTally);
   updateDerived(world);
   rebuildIndex(world);
   return world;
@@ -278,9 +382,33 @@ export function stateHash(world: World): string {
   h.string(canonicalJson(world.branches));
   // Schema 4 stores and counters (D-0035): hashed only when non-empty / moved from their initial value.
   if (world.objects.length > 0) h.string('objects').string(canonicalJson(world.objects));
-  if (world.sample !== null) h.string('sample').string(canonicalJson(encodeSample(world.sample)));
+  if (world.sample !== null) h.string('sample').string(canonicalJson(hashedSample(world.sample)));
   if (c.nextObjectId !== 1) h.string('nextObjectId').number(c.nextObjectId);
+  // Schema 5 stores and counter (D-0102, the D-0035 rule): hashed only when non-empty / non-null / moved
+  // from 1. gateTally is observation only and never hashed; settings.cycleStartTick is covered by the
+  // settings line above (absent, it hashes as before).
+  if (world.edges.length > 0) h.string('edges').string(canonicalJson(world.edges));
+  if (world.devices.length > 0) h.string('devices').string(canonicalJson(world.devices));
+  if (world.climate.warmth !== null) h.string('climate.warmth').typed(world.climate.warmth);
+  if (world.climate.moisture !== null) h.string('climate.moisture').typed(world.climate.moisture);
+  if (c.nextDeviceId !== 1) h.string('nextDeviceId').number(c.nextDeviceId);
   return h.hex();
+}
+
+/**
+ * The form of a held sample that stateHash hashes: its saved form without the schema 5 columns that hold
+ * their empty value in every held row (the D-0035 rule applied to the sample's rows), so a world holding
+ * a sample and no Phase 5 state hashes exactly as the v1.0 build hashed it (the rc1 corpus holds one).
+ * A column with any non-empty value in any row is hashed whole, by name.
+ */
+export function hashedSample(sample: World['sample'] & object): SavedSample {
+  const saved = encodeSample(sample);
+  const columns: Record<string, SavedTyped> = { ...saved.rows.columns };
+  for (const name of COLUMNS_ADDED_IN[5]!) {
+    const empty = emptyValueOf(name);
+    if (sample.rows.every((r) => Object.is(r.cols[name], empty))) delete columns[name];
+  }
+  return { ...saved, rows: { ...saved.rows, columns } };
 }
 
 /** True when every slot in [0, hw) holds `empty` (Object.is, so a −0 in a 0 column counts as state, as the raw bytes do). */

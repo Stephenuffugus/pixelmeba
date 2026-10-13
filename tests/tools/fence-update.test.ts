@@ -278,6 +278,41 @@ describe('fence-update writes nothing when it refuses, and keeps g2Digest outsid
     expect(readFileSync(rc1ExpectedPath, 'utf8')).toBe(rc1Before);
   });
 
+  // The success path of --rc1 (rc1-corpus verifier NIT, deferred to wave 8a's LEAD AFTER): after the Phase 5 manifest
+  // bump (D-0105: contentVersion 2 → 3, above the rc1 manifest's 2), a decision that states the bump and names the
+  // re-record authorizes it; main() measures every rc1 save through loadSaveFile and writes only --expected.
+  const RC1_DECISION = '# Decisions\n\n## D-0900 · 2026-10-13 · test · An rc1 re-record\nDecision: contentVersion 2 → 3. It re-records the rc1 saves (fence-update --rc1).\n';
+  const rc1Run = () => main(['--rc1', '--reason', 'D-0900', '--decisions', decisionsPath, '--fence', fencePath, '--expected', rc1ExpectedPath]);
+
+  it('a successful --rc1 re-record with unchanged values leaves expected.json byte-identical, with no changedBy', async () => {
+    writeFileSync(decisionsPath, RC1_DECISION);
+    const fenceBefore = readFileSync(fencePath, 'utf8');
+    const rc1Before = readFileSync(rc1ExpectedPath, 'utf8');
+    const logs: string[] = [];
+    vi.spyOn(console, 'log').mockImplementation((m: unknown) => void logs.push(String(m)));
+    expect(await rc1Run()).toBe(0);
+    expect(errors).toEqual([]);
+    expect(logs).toEqual([`unchanged ${rc1ExpectedPath}`]);
+    expect(readFileSync(rc1ExpectedPath, 'utf8')).toBe(rc1Before);
+    expect(readRc1Expected(rc1ExpectedPath).changedBy).toBeUndefined();
+    expect(readFileSync(fencePath, 'utf8')).toBe(fenceBefore);
+    expect(readFileSync(RC1_EXPECTED_PATH, 'utf8')).toBe(rc1Before);
+  }, 600_000);
+
+  it('a successful --rc1 re-record rewrites a changed value from the measured save and names that save in changedBy', async () => {
+    writeFileSync(decisionsPath, RC1_DECISION);
+    const real = readRc1Expected();
+    const [first] = Object.keys(real.saves);
+    const stale = { ...real, saves: { ...real.saves, [first!]: { ...real.saves[first!]!, hashAtLoad: '0000000000000000' } } };
+    writeFileSync(rc1ExpectedPath, rc1ExpectedText(stale.saves));
+    expect(await rc1Run()).toBe(0);
+    expect(errors).toEqual([]);
+    const after = readRc1Expected(rc1ExpectedPath);
+    expect(after.saves).toEqual(real.saves);
+    expect(after.changedBy).toEqual([{ decision: 'D-0900', saves: [first] }]);
+    expect(readFileSync(rc1ExpectedPath, 'utf8')).toBe(rc1ExpectedText(real.saves, [{ decision: 'D-0900', saves: [first!] }]));
+  }, 600_000);
+
   it('--recipe re-records currentDigest under its decision and never touches g2Digest', async () => {
     const real = readFence().entries.find((e) => e.id === 'CLEANING_CREW_V1')!;
     const edited: FenceFile = readFence(fencePath);

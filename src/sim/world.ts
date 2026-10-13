@@ -24,16 +24,23 @@ import type { FungalFlowObs } from './fungalTransport';
 import { createReactionCells, type ReactionCells } from './reactions';
 import { createIntakeSeen, type IntakeSeen } from './intake';
 import type { SampleSlot } from './sampleSlot';
+import type { EdgeBarrier } from './barriers';
+import type { Device } from './devices';
+import type { FieldId } from './fields';
 
 /**
  * World schema. 1 = Phase 1. 2 = P2.1 adds the dryTimer entity column (dormancy). 3 = P2.8 adds
  * history records (regional trait samples, the debris total, the dish's journal; see history.ts).
  * 4 = P3 foundation: link, anchor, film, E12 and P04 columns; food-object and sample stores (D-0035;
  * all hash-neutral while empty, so a world without Phase 3 state hashes as the g2 build hashed it).
+ * 5 = Phase 5 foundation (D-0102): glow, mixotrophy, trap, held and handling columns; the edge-barrier,
+ * device, climate and gate-tally stores, the nextDeviceId counter and settings.cycleStartTick (all
+ * hash-neutral while empty or absent, the D-0035 rule, so a world without Phase 5 state hashes as the
+ * v1.0 build hashed it). Every save is written at 5, so a v1.0 build refuses a v1.1 dish.
  * Older states are migrated by copy in migrateWorldState (src/sim/serialize.ts); new states are
  * always written at the current version.
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export type MutationPreset = 'standard' | 'accelerated' | 'fixed';
 export type FounderMode = 'identical' | 'varied' | 'diverse';
@@ -46,6 +53,12 @@ export interface WorldSettings {
   warmth: number;
   mutationPreset: MutationPreset;
   founderMode: FounderMode;
+  /**
+   * Schema 5 (D-0106): the tick the light cycle started, present only while lightMode is 'cycle'; the
+   * cycle phase is (tick − cycleStartTick) mod 2400 (SPEC §4.6). Absent in every older world, so their
+   * settings hash as before (canonicalJson skips undefined).
+   */
+  cycleStartTick?: number;
 }
 
 export interface WorldContent {
@@ -90,6 +103,35 @@ export interface Counters {
   nextEventId: number;
   /** Next finite food object id (schema 4; hashed only once it moved from 1). */
   nextObjectId: number;
+  /**
+   * Next edge-barrier or device id (schema 5; hashed only once it moved from 1). One id space for both,
+   * so a gate tally or a GateReading names one structure unambiguously.
+   */
+  nextDeviceId: number;
+}
+
+/**
+ * Local warmth and moisture per cell (SPEC §4.7–§4.8; schema 5). null = the ambient value
+ * (settings.warmth) or the substrate default (derived.moisture). Allocated lazily by the climate stage
+ * when a heater or cooler is switched on, drying starts, the wet brush is used or a wick is placed;
+ * never by observation.
+ */
+export interface Climate {
+  warmth: Float64Array | null;
+  moisture: Float64Array | null;
+}
+
+/**
+ * Observation only (schema 5): what crossed one edge barrier, cumulatively in either direction. Saved,
+ * never hashed and never read by the simulation (it feeds the gate inspector and GateReading).
+ */
+export interface GateTally {
+  /** The edge barrier's id. */
+  readonly id: number;
+  /** Cumulative amount of each field that crossed. */
+  fields: Partial<Record<FieldId, number>>;
+  /** Cumulative organism crossings. */
+  organisms: number;
 }
 
 export interface World {
@@ -151,6 +193,14 @@ export interface World {
   readonly objects: FoodObject[];
   /** The single held sample (SPEC §10.5; schema 4), or null (src/sim/sampleSlot.ts). */
   sample: SampleSlot | null;
+  /** Edge barriers S01–S04 (SPEC §2.4; schema 5), sorted by edgeKey, one per edge (src/sim/barriers.ts). */
+  edges: EdgeBarrier[];
+  /** Furnishings and devices S05–S12 (SPEC §2.5; schema 5), sorted by cell, one per cell (src/sim/devices.ts). */
+  devices: Device[];
+  /** Local warmth and moisture (schema 5); both null until the climate stage allocates them. */
+  readonly climate: Climate;
+  /** Per edge barrier crossing totals (schema 5; observation only: saved, never hashed), sorted by id. */
+  gateTally: GateTally[];
 }
 
 export function speciesIndex(world: World, id: string): number {
@@ -200,7 +250,7 @@ export function createEmptyWorld(opts: {
     lineage: createLineage(),
     ledger: createLedger(),
     commands: { pending: [], nextSeq: 1, log: [] },
-    counters: { nextEntityId: 1, nextBirthId: 1, nextEventId: 1, nextObjectId: 1 },
+    counters: { nextEntityId: 1, nextBirthId: 1, nextEventId: 1, nextObjectId: 1, nextDeviceId: 1 },
     events: createEventLog(),
     history: createHistory(species.length),
     capacityLimitedTicks: 0,
@@ -214,5 +264,9 @@ export function createEmptyWorld(opts: {
     intakeSeen: createIntakeSeen(),
     objects: [],
     sample: null,
+    edges: [],
+    devices: [],
+    climate: { warmth: null, moisture: null },
+    gateTally: [],
   };
 }

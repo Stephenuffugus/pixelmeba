@@ -129,3 +129,33 @@ this plan and the relevant slice of g5-briefs.md, not the whole spec.
   ordering uses the index.
 - **Performance.** A per-tick light recompute when the cycle or canopy is on, and warmth diffusion. Keep the fast path
   when no factor changes, and measure at the flips.
+
+## Carry-overs (task writers: put each into its wave's assignment)
+
+- **Every wave that writes a schema 5 column or store (D-0108):** the import (src/persistence/phase5State.ts) refuses
+  state the dish's rules could not have produced, so each writer must keep its invariants, or the game's own saves are
+  refused. Add a buildSaveFile → loadSaveFile round trip at every state transition the wave writes. The invariants:
+  - glowState 1 only while Active, never set on a non-Active organism, and cleared when it leaves Active;
+  - FLAG.restNewborn only while not Active, so waking clears it;
+  - trap pairs stay mutual through capture, release and death, each birthId cleared together with its slot;
+  - climate values stay in [0, 1];
+  - leaving cycle mode deletes settings.cycleStartTick;
+  - gateTally stays sorted, with ids below nextDeviceId.
+
+- **Wave 8b, art-large:** give P08 its `dormant` ×3 (native DORMANCY), or art-build refuses the P08 sprite (D-0109).
+- **Wave 9, climate-stage2:** suitability reads `settings.warmth` only. The ambient (null) branch of `world.climate`
+  must stay bit-identical (D-0108).
+- **Wave 11, e2-signals (D-0108):** the import refuses glowState 1 on an organism that is not Active (D-0106), so the
+  code that moves an organism out of Active (dormancy entry, resting newborns) must clear glowState in the same tick, or
+  the game's own saves are refused. Add a test that saves and reloads a glowing organism right after it starts Preparing.
+- **Wave 13, e3-traps (D-0108):**
+  - Count trapReserveC/N in computeTotals and sampleTotals (a +0 term keeps older sums bit-identical) and drop the
+    import's reserve refusal (src/persistence/phase5State.ts).
+  - With the trap's prey data, refuse a held organism that is not the trap's prey (P04, CT §3.3).
+  - Add both trap pairs (trapSlot/trapBirthId, heldBySlot/heldByBirthId) to src/sim/sample.ts REF_COLUMNS and
+    replace the "held sample holds a trap" refusal with the sample closure.
+- **Wave 13, org-ui (D-0109):** move glow_center, jacket_rim and mode_half (in this order) from art's
+  `PHASE5_FEATURE_LAYERS` into `FEATURE_LAYERS` and the renderer's `FEATURE_LAYER_IDS`; module-visuals.test.ts:139
+  guards the move. The grit glyph is procedural (src/render).
+- **Phase 7 (P7.2, E14 dispersal):** CT §5.3's "fungal disperser" is Medium; `classOf` has no rule for it yet (D-0108).
+- **Art polish:** V02's glyph reads as a spiked capsid more than UX §6.3's "lace glyph" (D-0109).

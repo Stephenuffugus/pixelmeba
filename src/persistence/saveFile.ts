@@ -28,6 +28,7 @@ import { savedSampleProblem } from '@sim/sampleSlot';
 import { virusIdOfCode } from '@sim/viruses';
 import { notebookIsEmpty, notebookWithoutNicknames, readNotebook, sealNotebook, type NotebookRecord } from './notebook';
 import { goalWorldRefsOf } from './notebookGoals';
+import { phase5StateProblem } from './phase5State';
 
 export const SAVE_FORMAT = 'pixelmeba-save';
 export const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
@@ -431,6 +432,9 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
   // Schema 4 (Phase 3 foundation): links, finite food objects and the held sample.
   const phase3Error = phase3StateProblem(s, cols, hw, speciesIds);
   if (phase3Error) fail('integrity', `${phase3Error} Nothing was loaded.`);
+  // Schema 5 (Phase 5 foundation; D-0102): stores, climate and organism columns the dish's rules could hold.
+  const phase5Error = phase5StateProblem(s, cols, hw, { species: c.species, genomes, modules: c.modules, systems: man.data.enabledSystems, enabledStructures: man.data.enabledStructures ?? [] });
+  if (phase5Error) fail('integrity', `${phase5Error} Nothing was loaded.`);
   // P3.4 (parasites and viruses): host/parasite pairs and infections must be ones the dish could hold.
   const pairError = hostParasiteProblem(cols, hw, c.species, man.data.enabledSystems);
   if (pairError) fail('integrity', `${pairError} Nothing was loaded.`);
@@ -547,7 +551,9 @@ function phase3StateProblem(s: WorldState, cols: Record<string, ArrayLike<number
   if (extra(/^aLinkB?[0-9]+$/, [...ADHESION_SLOT_COLUMNS, 'aLinkB0', 'aLinkB1'])) return `An organism has more than ${ADHESION_LINK_MAX} adhesion links.`;
   const links = linkProblem(cols, hw);
   if (links) return `The dish's links are inconsistent (${links}).`;
-  const next = (s.counters as { nextObjectId?: unknown }).nextObjectId ?? 1;
+  // Only an absent counter means 1: a null one would load and be copied into the world (D-0108).
+  const savedNext = (s.counters as { nextObjectId?: unknown }).nextObjectId;
+  const next = savedNext === undefined ? 1 : savedNext;
   if (!Number.isInteger(next) || (next as number) < 1) return 'The food object counter is invalid.';
   const structure = base64ToBytes(s.grid.structure.b64);
   const objects = foodObjectsProblem(s.objects ?? [], structure, next as number);

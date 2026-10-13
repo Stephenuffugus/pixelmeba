@@ -6,8 +6,13 @@ import { A01_SUNBEAD, B04_RECYCLER, B06_CRUMBSMITH, P01_AMOEBA } from './sprites
 import { F01_THREADLACE, F02_CORDWEAVER } from './sprites/fungi';
 import { B02_VELVET, B03_DUSK, B05_CROSSFEEDER, B07_OILWICK, B08_BROTHMAKER, X01_HITCHER, Y01_BUBBLE, Y02_CREAMBUD } from './sprites/phase3_small';
 import { V01_PINPHAGE } from './sprites/virus';
+import { F03_TRAPLACE, F04_SPOREVEIL } from './sprites/phase5_fungi';
+import { A02_GLASSWHEEL, A03_SHADELEAF, A04_TURNLEAF, A05_RAFTBALL, B09_LANTERN, B10_BRINECOIL, B11_SOURBUD, B12_SLEEPER, B13_RAMPART, V02_LACEPHAGE, X02_THREADRIDER } from './sprites/phase5_small';
 
-/** Phase 1 sprites first (their packing order is unchanged), then the Phase 3 sprites by species id. */
+/**
+ * Phase 1 sprites first (their packing order is unchanged), then the Phase 3 sprites by species id,
+ * then the Phase 5 sprites by species id (P5.7; only positions after the Phase 3 entries move).
+ */
 export const SPRITES: readonly SpriteDef[] = [
   A01_SUNBEAD,
   B01_SPRINTER,
@@ -29,4 +34,18 @@ export const SPRITES: readonly SpriteDef[] = [
   X01_HITCHER,
   Y01_BUBBLE,
   Y02_CREAMBUD,
+  // Phase 5 (UX §6.3, P5.7); drawn before the organism flip enables them (D-0104), as Phase 3 was (D-0046).
+  A02_GLASSWHEEL,
+  A03_SHADELEAF,
+  A04_TURNLEAF,
+  A05_RAFTBALL,
+  B09_LANTERN,
+  B10_BRINECOIL,
+  B11_SOURBUD,
+  B12_SLEEPER,
+  B13_RAMPART,
+  F03_TRAPLACE,
+  F04_SPOREVEIL,
+  V02_LACEPHAGE,
+  X02_THREADRIDER,
 ];

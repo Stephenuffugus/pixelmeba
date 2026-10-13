@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { loadSaveFile } from '../../src/persistence/saveFile';
-import { worldHasModule, worldHasSpecies, worldHasSystem } from '../../src/sim/gates';
+import { worldHasModule, worldHasSpecies, worldHasStructure, worldHasSystem } from '../../src/sim/gates';
 import { realizeRecipe } from '../../src/sim/recipes';
 import { deserializeWorld, serializeWorld } from '../../src/sim/serialize';
 import { readG2SaveText } from '../helpers/g2-saves';
@@ -49,5 +49,19 @@ describe('world gates read the world’s recorded manifest (P-25)', () => {
     const recorded = { content: { ...old.content, manifest } };
     expect(old.fields.film).toBeUndefined();
     expect([worldHasSystem(recorded, 'film'), worldHasSpecies(recorded, 'B02'), worldHasSpecies(recorded, 'B01'), worldHasModule(recorded, 'E01')]).toEqual([true, true, false, false]);
+  });
+});
+
+describe('worldHasStructure reads the recorded enabledStructures (Phase 5 foundation)', () => {
+  it('answers from the world’s manifest only, false when the list is absent', () => {
+    const w = realizeRecipe(registryWith(G2_LISTS), 'FIRST_DISH_V1', { worldId: 'gates-structures' });
+    const recorded = (enabledStructures: string[] | undefined) => ({ content: { ...w.content, manifest: { ...w.content.manifest, enabledStructures } } });
+    expect(['STONE', 'S01', 'S09'].map((id) => worldHasStructure(recorded(['S01', 'STONE']), id))).toEqual([true, true, false]);
+    expect(worldHasStructure(recorded(undefined), 'STONE')).toBe(false);
+    expect(worldHasStructure(recorded([]), 'WALL')).toBe(false);
+    // The shipped build lists no S-structure yet; a world realized under it records none.
+    const shipped = realizeRecipe(registryWith({}), 'FIRST_DISH_V1', { worldId: 'gates-shipped' });
+    expect(['STONE', 'WALL', 'BEAD'].every((id) => worldHasStructure(shipped, id))).toBe(true);
+    expect(['S01', 'S04', 'S08', 'S12'].some((id) => worldHasStructure(shipped, id))).toBe(false);
   });
 });

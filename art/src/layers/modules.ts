@@ -25,6 +25,23 @@
  *   adhesion_link   E12 carrier while linked (CUE2_LINKED) — small link pixels at its sides (the links
  *                   themselves are drawn between member positions from SnapshotMsg.links).
  *
+ * Phase 5 layers (SPEC §7.8, §7.10, §9 E02/E11 visuals; UX §6.2, §6.5; ARCH §10.1 "Lantern
+ * dim/glow; Turnleaf two modes; jacket 4 levels"; P5.7 art-small):
+ *
+ *   glow_center    native B09 and E02 carriers — frame 0 'dim' (glowState 0: a small pale center),
+ *                  frame 1 'glow' (glowState 1: a bright lime center and a dotted 2-px halo ring just
+ *                  outside an 8–12 px body, UX §6.5 "glow halo (local, 2 px)"). The lime #C6F04D is
+ *                  only in 'glow' (D-0046 "a colour belongs to the state it shows").
+ *   jacket_rim     E11 carrier — frames 0–3 = the band of its jacket coverage c = jacketMineral /
+ *                  (0.10·B) (quarters), each with more rim plates than the last, all on the West/back
+ *                  side: the East quarter stays bare, the soft-body gap of SPEC §9 E11 ("four rim
+ *                  levels with a soft-body gap"). Authored at 16 and scaled by the renderer to the
+ *                  32 px P01/P02/P07 bodies like every mark.
+ *   mode_half      native A04 — the recorded metabolicMode (SPEC §7.10): frame 0 'photo' brightens the
+ *                  leading (East) half of the split spindle in light green, frame 1 'sugar' the
+ *                  trailing (West) half in amber. The body itself is drawn at one mid value, so only
+ *                  this layer says which mode it is in.
+ *
  * Frames are authored 16×16 facing East, centered on the body, like the sprites. tools/art-build.ts
  * derives the other three headings with the same lossless orient() and packs every frame into the
  * organism atlas as `feature/<layer>/<heading>/<frame>` (ARCH §10.1); the renderer looks them up in
@@ -46,8 +63,20 @@ export type FeatureLayerId =
   | 'matrix_edge'
   | 'adhesion_link';
 
-export interface FeatureLayerDef {
-  readonly id: FeatureLayerId;
+/**
+ * The Phase 5 marks (P5.7). They are packed into the atlas now, before the organism flip (D-0104), but
+ * the renderer learns them only in wave 13 (org-ui): until then they are not in FeatureLayerId, so
+ * FEATURE_LAYERS stays exactly the renderer's vocabulary (src/render/features.ts FEATURE_LAYER_IDS,
+ * pinned by tests/sim/module-visuals.test.ts). Org-ui moves them into FeatureLayerId and
+ * FEATURE_LAYERS (appended in this order, so the atlas does not move) and empties this type.
+ */
+export type Phase5FeatureLayerId = 'glow_center' | 'jacket_rim' | 'mode_half';
+
+/** Every mark the atlas packs: the renderer's layers and the Phase 5 marks awaiting it. */
+export type AtlasFeatureLayerId = FeatureLayerId | Phase5FeatureLayerId;
+
+export interface FeatureLayerDef<Id extends AtlasFeatureLayerId = FeatureLayerId> {
+  readonly id: Id;
   /** Index 0 is transparent. */
   readonly palette: readonly string[];
   readonly frames: readonly Px[];
@@ -211,7 +240,84 @@ const ADHESION_LINK: FeatureLayerDef = {
   frames: [frame(grid({ 7: 'dl............ld', 8: 'dl............ld' }))],
 };
 
-/** Canonical order (atlas layout and manifest order). Phase 3 layers follow the Phase 2 three. */
+// ------------------------------------------------------------------ Phase 5 layers (art-small)
+
+const dist = (x: number, y: number) => Math.hypot(x + 0.5 - 8, y + 0.5 - 8);
+
+/** glow_center: 'dim' = a 2×2 pale center; 'glow' = a lime center (2×2 + cross) and a dotted 2-px halo ring. */
+function glowFrame(glow: boolean): Px {
+  const p = new Px(16, 16);
+  if (!glow) return p.fillRect(7, 7, 2, 2, 1);
+  p.fillRect(7, 7, 2, 2, 2);
+  for (const [x, y] of [[7, 6], [8, 6], [9, 7], [9, 8], [7, 9], [8, 9], [6, 7], [6, 8]] as const) p.set(x, y, 2);
+  // Halo: two pixels deep, just outside a 12 px body (radius 6), dotted so the body shows through.
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if (dist(x, y) >= 6.0 && dist(x, y) < 8.0 && (x + y) % 2 === 0) p.set(x, y, 3);
+  return p;
+}
+
+const GLOW_CENTER: FeatureLayerDef<Phase5FeatureLayerId> = {
+  id: 'glow_center',
+  palette: ['', P.glowDim, P.lanternLime, P.glowHalo],
+  frameNames: ['dim (not glowing)', 'glow (glowing: bright center and 2-px halo)'],
+  frames: [glowFrame(false), glowFrame(true)],
+};
+
+/** jacket_rim level k (0–3): rim plates on the ring 5.5 ≤ r < 7, within an angle of the West point that grows with k; the East quarter (the soft-body gap) is never covered. */
+function jacketFrame(level: number): Px {
+  const p = new Px(16, 16);
+  const reach = [40, 72, 102, 130][level]!; // degrees either side of West
+  for (let y = 0; y < 16; y++)
+    for (let x = 0; x < 16; x++) {
+      const d = dist(x, y);
+      if (d < 5.5 || d >= 7.0) continue;
+      const deg = (Math.atan2(y + 0.5 - 8, x + 0.5 - 8) * 180) / Math.PI; // 0 = East, ±180 = West
+      const fromWest = 180 - Math.abs(deg);
+      if (fromWest > reach) continue;
+      // Plates: alternate deep and light every 20°, so the rim reads as mineral plates, not a line.
+      p.set(x, y, Math.floor((deg + 180) / 20) % 2 === 0 ? 1 : 2);
+    }
+  return p;
+}
+
+const JACKET_RIM: FeatureLayerDef<Phase5FeatureLayerId> = {
+  id: 'jacket_rim',
+  palette: ['', P.jacketRimDeep, P.jacketRim],
+  frameNames: ['level 0 (coverage under a quarter)', 'level 1 (up to a half)', 'level 2 (up to three quarters)', 'level 3 (above three quarters)'],
+  frames: [jacketFrame(0), jacketFrame(1), jacketFrame(2), jacketFrame(3)],
+};
+
+/** A04's split spindle (art/src/sprites/phase5_small.ts turnleaf: x 1.8–14.2, half-height 3.4, profile 1 − |u|^1.4, seam at x = 8). */
+function turnleafBody(): Px {
+  const p = new Px(16, 16);
+  for (let y = 0; y < 16; y++)
+    for (let x = 0; x < 16; x++) {
+      const u = (x + 0.5 - 8) / 6.2;
+      if (Math.abs(u) <= 1 && Math.abs(y + 0.5 - 8) <= 3.4 * (1 - Math.abs(u) ** 1.4)) p.set(x, y, 1);
+    }
+  return p;
+}
+
+/** mode_half: the interior of one half of the spindle; its edge in the deeper tone, its core in the light one. */
+function modeFrame(leading: boolean, edge: number, core: number): Px {
+  const body = turnleafBody();
+  const p = new Px(16, 16);
+  for (let y = 0; y < 16; y++)
+    for (let x = 0; x < 16; x++) {
+      if (!body.get(x, y) || (leading ? x < 9 : x > 7)) continue;
+      const inner = body.get(x + 1, y) && body.get(x - 1, y) && body.get(x, y + 1) && body.get(x, y - 1);
+      p.set(x, y, inner ? core : edge);
+    }
+  return p;
+}
+
+const MODE_HALF: FeatureLayerDef<Phase5FeatureLayerId> = {
+  id: 'mode_half',
+  palette: ['', P.turnleafLight, P.turnleafPale, P.turnleafAmber, P.turnleafAmberLight],
+  frameNames: ['photo (leading half bright)', 'sugar (trailing half amber)'],
+  frames: [modeFrame(true, 1, 2), modeFrame(false, 3, 4)],
+};
+
+/** The renderer's layers in canonical order (atlas layout and manifest order). Phase 3 layers follow the Phase 2 three. */
 export const FEATURE_LAYERS: readonly FeatureLayerDef[] = [
   STARCH_NOTCH,
   RESERVE_POCKET,
@@ -224,3 +330,9 @@ export const FEATURE_LAYERS: readonly FeatureLayerDef[] = [
   MATRIX_EDGE,
   ADHESION_LINK,
 ];
+
+/** The Phase 5 marks, packed after the renderer's layers (see Phase5FeatureLayerId). */
+export const PHASE5_FEATURE_LAYERS: readonly FeatureLayerDef<Phase5FeatureLayerId>[] = [GLOW_CENTER, JACKET_RIM, MODE_HALF];
+
+/** Every mark tools/art-build.ts packs, in atlas order: the renderer's layers, then the Phase 5 marks. */
+export const ATLAS_FEATURE_LAYERS: readonly FeatureLayerDef<AtlasFeatureLayerId>[] = [...FEATURE_LAYERS, ...PHASE5_FEATURE_LAYERS];

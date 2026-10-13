@@ -117,12 +117,37 @@ export const P3_SPRITES: Readonly<Record<string, SpriteSpec>> = {
   P04: { size: 32, headings: 4 },
 };
 
+/**
+ * Phase 5 small sprites (P5.7 art-small; CT §1.1/§1.3 speeds, UX §6.2, each record's frameSize and
+ * headings): motile B09–B12, A04 and X02 loop "move"; non-motile B13, A02, A03 and A05 loop "idle"
+ * (A03 keeps the 4 headings its record gives it). Native state machines add their frame sets
+ * (ARCH §10.1 "dormancy prepare/rest/wake; trap open/holding/cooldown"): B12 and F04 (DORMANCY) need
+ * `dormant` 3, F03 (TRAP) needs `trap` 3.
+ */
+export const P5_SPRITES: Readonly<Record<string, SpriteSpec>> = {
+  B09: { size: 16, headings: 4, loop: 'move' },
+  B10: { size: 16, headings: 4, loop: 'move' },
+  B11: { size: 16, headings: 4, loop: 'move' },
+  B12: { size: 16, headings: 4, loop: 'move', extra: [{ anims: ['dormant'], frames: 3, rule: 'ARCH §10.1 "dormancy prepare/rest/wake"' }] },
+  B13: { size: 16, headings: 1, loop: 'idle' },
+  A02: { size: 16, headings: 1, loop: 'idle' },
+  A03: { size: 16, headings: 4, loop: 'idle' },
+  A04: { size: 16, headings: 4, loop: 'move' },
+  A05: { size: 16, headings: 1, loop: 'idle' },
+  X02: { size: 16, headings: 1, loop: 'move' },
+  F03: { size: 16, headings: 1, extra: [{ anims: ['trap'], frames: 3, rule: 'ARCH §10.1 "trap open/holding/cooldown"' }] },
+  F04: { size: 16, headings: 1, extra: [{ anims: ['dormant'], frames: 3, rule: 'ARCH §10.1 "dormancy prepare/rest/wake"' }] },
+  V02: { size: 16, headings: 1 },
+};
+
 /** The independent size/heading/loop spec for a species, and the document it comes from. */
 function spriteSpec(id: string): { spec: SpriteSpec; source: string } | null {
   const p14 = P14_SPRITES[id];
   if (p14) return { spec: p14, source: 'BUILD_DIRECTIVE P1.4' };
   const p3 = P3_SPRITES[id];
   if (p3) return { spec: p3, source: 'CT §1.3 / UX §6.2' };
+  const p5 = P5_SPRITES[id];
+  if (p5) return { spec: p5, source: 'CT §1.3 / UX §6.2' };
   return null;
 }
 
@@ -133,10 +158,15 @@ export function requiredFrames(frameSize: number, category?: string): readonly F
   return frameSize >= 32 ? LARGE_FRAMES : SMALL_FRAMES;
 }
 
-/** What the atlas check needs to know about one enabled module: its content id and visual layer. */
+/**
+ * What the atlas check needs to know about one enabled module: its content id and visual layer. A
+ * species' native mark (NATIVE_MARKS) uses the same shape with `kind: 'species'` and
+ * `moduleId` = "<species id> <ability>".
+ */
 export interface AtlasMarkRef {
   readonly moduleId: string;
   readonly layer: string;
+  readonly kind?: 'module' | 'species';
 }
 
 /**
@@ -163,6 +193,18 @@ export const FEATURE_FRAMES: Readonly<Record<string, { readonly frames: number; 
   protein_notches: { frames: 2, states: 'paired notches, pale release marks' },
   matrix_edge: { frames: 4, states: 'film bands 0–3' },
   adhesion_link: { frames: 1, states: 'link pixels while linked' },
+  // Phase 5 (ARCH §10.1 "Turnleaf two modes"; SPEC §7.10): A04's native metabolicMode mark.
+  mode_half: { frames: 2, states: 'photo, sugar' },
+};
+
+/**
+ * Native abilities drawn by a feature mark rather than by the body (ARCH §10.1 "Lantern dim/glow",
+ * "Turnleaf two modes"): an enabled species with the ability needs that mark in the atlas, checked
+ * like an enabled module's visualLayer. B09's SIGNAL_GLOW shares E02's glow_center.
+ */
+export const NATIVE_MARKS: Readonly<Record<string, string>> = {
+  SIGNAL_GLOW: 'glow_center',
+  MIXOTROPHY: 'mode_half',
 };
 export const FEATURE_SIZE = 16;
 export const FEATURE_HEADINGS = 4;
@@ -175,6 +217,18 @@ export function featureFrameKey(layer: string, frame: number, heading: number): 
 /** The feature marks the enabled modules need, from their content records (sorted by module id). */
 export function enabledMarks(registry: { readonly manifest: { readonly enabledModules: readonly string[] }; readonly modules: Readonly<Record<string, { readonly visualLayer: string }>> }): AtlasMarkRef[] {
   return [...registry.manifest.enabledModules].sort().map((id) => ({ moduleId: id, layer: registry.modules[id]!.visualLayer }));
+}
+
+/** The native marks the enabled species need (NATIVE_MARKS), by species id, then ability. */
+export function nativeMarks(registry: { readonly manifest: { readonly enabledSpecies: readonly string[] }; readonly species: Readonly<Record<string, { readonly nativeAbilities: readonly string[] }>> }): AtlasMarkRef[] {
+  const out: AtlasMarkRef[] = [];
+  for (const id of [...registry.manifest.enabledSpecies].sort()) {
+    for (const ability of [...registry.species[id]!.nativeAbilities].sort()) {
+      const layer = NATIVE_MARKS[ability];
+      if (layer) out.push({ moduleId: `${id} ${ability}`, layer, kind: 'species' });
+    }
+  }
+  return out;
 }
 
 /**
@@ -346,7 +400,7 @@ export function checkAtlas(
     const need = FEATURE_FRAMES[mark.layer];
     const entry = features?.[mark.layer];
     if (!isObj(entry)) {
-      err(base, `enabled module ${who} has no feature mark in the atlas (run npm run art:build)`);
+      err(base, `enabled ${mark.kind === 'species' ? 'species' : 'module'} ${who} has no feature mark in the atlas (run npm run art:build)`);
       continue;
     }
     if (entry.size !== FEATURE_SIZE) err(`${base}.size`, `${who}: mark frame size ${String(entry.size)}, expected ${FEATURE_SIZE}`);
@@ -440,7 +494,7 @@ async function main(): Promise<void> {
         const pngPath = join(dirname(atlasPath), image);
         const png = existsSync(pngPath) ? new Uint8Array(readFileSync(pngPath)) : null;
         const refs = registry.manifest.enabledSpecies.map((id) => atlasSpeciesRef(registry.species[id]!));
-        marks = enabledMarks(registry);
+        marks = [...enabledMarks(registry), ...nativeMarks(registry)];
         tilesNeeded = enabledTiles(registry);
         issues.push(...checkAtlas(atlas, refs, { file: atlasFile, png, marks, tiles: tilesNeeded }));
         atlasFrames = isObj(atlas) && Array.isArray(atlas.frames) ? atlas.frames.length : 0;
@@ -474,7 +528,7 @@ async function main(): Promise<void> {
     `content ok · contentHash ${hash} · species ${r.speciesIds.length} (enabled ${r.manifest.enabledSpecies.length}) · ` +
       `materials ${r.materialIds.length} · modules ${r.moduleIds.length} · habitats ${r.habitatIds.length} · structures ${r.structureIds.length} · ` +
       `recipes ${r.recipeIds.length} · experiments ${r.experimentIds.length} · variants ${r.variantIds.length} · ` +
-      `atlas ${atlasFile} complete for ${r.manifest.enabledSpecies.length} enabled species and ${marks.length} enabled module marks (${marks.map((m) => m.layer).join(', ')}) and ${tilesNeeded.length} world tiles (${tilesNeeded.map((t) => t.tile).join(', ')}; ${atlasFrames} frames)`,
+      `atlas ${atlasFile} complete for ${r.manifest.enabledSpecies.length} enabled species and ${marks.length} enabled module and native marks (${marks.map((m) => m.layer).join(', ')}) and ${tilesNeeded.length} world tiles (${tilesNeeded.map((t) => t.tile).join(', ')}; ${atlasFrames} frames)`,
   );
 }
 

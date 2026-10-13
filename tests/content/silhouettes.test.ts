@@ -30,6 +30,8 @@ const LUMA_STEP = 32;
  * a DECISIONS.md entry; see docs/reports/reviews/g3-wave-1/art-organisms-fix1.md).
  */
 const SAME_OUTLINE = new Set(['B03|B07', 'B01|B06']);
+/** Phase 5 small sprites (P5.7 art-small): every one is held to the alpha rule; none shares an outline. */
+const P5_SMALL = ['A02', 'A03', 'A04', 'A05', 'B09', 'B10', 'B11', 'B12', 'B13', 'F03', 'F04', 'V02', 'X02'];
 
 function representative(def: SpriteDef): Px {
   const a = def.form === 'fungus' ? def.animations.mask : def.form === 'virus' ? def.animations.glyph : (def.animations.move ?? def.animations.idle);
@@ -86,10 +88,12 @@ const key = (a: SpriteDef, b: SpriteDef) => [a.speciesId, b.speciesId].sort().jo
 const stats = (a: SpriteDef, b: SpriteDef) => compare(gray(a, representative(a)), gray(b, representative(b)));
 
 describe('silhouettes and grayscale patterns (UX §6.1, §6.3)', () => {
-  it('covers every Phase 1 and Phase 3 sprite, grouped by frame size', () => {
-    expect(SPRITES.map((d) => d.speciesId).sort()).toEqual(['A01', 'B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'F01', 'F02', 'P01', 'P02', 'P03', 'P04', 'V01', 'X01', 'Y01', 'Y02']);
-    // 15 small (16×16) → 105 pairs; 4 large (32×32) → 6 pairs.
-    expect(pairs).toHaveLength(105 + 6);
+  it('covers every Phase 1, Phase 3 and Phase 5 sprite, grouped by frame size', () => {
+    expect(SPRITES.map((d) => d.speciesId).sort()).toEqual(
+      ['A01', 'B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'F01', 'F02', 'P01', 'P02', 'P03', 'P04', 'V01', 'X01', 'Y01', 'Y02', ...P5_SMALL].sort(),
+    );
+    // 15 + 13 small (16×16) → 378 pairs; 4 large (32×32) → 6 pairs.
+    expect(pairs).toHaveLength((28 * 27) / 2 + 6);
     for (const k of SAME_OUTLINE) expect(pairs.some(([a, b]) => key(a, b) === k), k).toBe(true);
   });
 
@@ -137,12 +141,12 @@ function boxes(f: Px): { body: [number, number]; all: { x0: number; y0: number; 
 }
 
 describe('small body size (UX §6.2 "Small (bacteria, yeast, algae, parasites): 16×16 frames, 8–12 px visible body")', () => {
-  // Phase 3 small organisms (fungus tiles join edge to edge by design; V01 is a virus glyph, not a
+  // Phase 3 and Phase 5 small organisms (fungus tiles join edge to edge by design; V01/V02 are virus glyphs, not a
   // small-organism body). Phase 1 B04 (16×6, a bead chain) shipped before this check and is kept
   // byte-identical. Loop frames (move or idle) are the body as normally seen; reproduction may stretch.
   const small = SPRITES.filter((d) => d.size === 16 && !d.form && !['A01', 'B01', 'B04', 'B06'].includes(d.speciesId));
-  it('covers the Phase 3 small organisms', () => {
-    expect(small.map((d) => d.speciesId).sort()).toEqual(['B02', 'B03', 'B05', 'B07', 'B08', 'X01', 'Y01', 'Y02']);
+  it('covers the Phase 3 and Phase 5 small organisms', () => {
+    expect(small.map((d) => d.speciesId).sort()).toEqual(['A02', 'A03', 'A04', 'A05', 'B02', 'B03', 'B05', 'B07', 'B08', 'B09', 'B10', 'B11', 'B12', 'B13', 'X01', 'X02', 'Y01', 'Y02']);
   });
   it.each(small.map((d) => [d.speciesId, d] as const))('%s: every loop frame has an 8–12 px body and a clear 1 px margin', (id, d) => {
     const loop = d.animations.move ?? d.animations.idle;

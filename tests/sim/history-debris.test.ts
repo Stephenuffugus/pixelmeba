@@ -94,7 +94,7 @@ describe('debris in History (P2.8)', () => {
   });
 
   it('a schema 2 save loads through the import path (migrated by copy), continues identically, and has no debris for its older seconds', async () => {
-    expect(SCHEMA_VERSION).toBe(4);
+    expect(SCHEMA_VERSION).toBe(5);
     const w = realizeRecipe(reg, 'CLEANING_CREW_V1', { worldId: 'old-dish', seed: 103 });
     run(w, 300);
     const { text } = await buildSaveFile(w, {

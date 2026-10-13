@@ -1480,3 +1480,61 @@ Decision:
 - The writer's proposed decisions (the column list, one id space for edges and devices, which devices store `on`, edge-code arrays edgeR/edgeD, `edges`/`devices` arrays on habitats and recipes, `requiresSystem` on tool records, the atlas cap of 1024×2048) are accepted at wave 8a's integration as D-numbers. A builder may still report evidence against them.
 Reason: fewer waves and integration cycles (fast-track.md); one owner per file per stage.
 Owner review: no.
+
+## D-0108 · 2026-10-13 · Phase 5 wave 8a · World schema 5 as built, and the import's integration fixes
+Context: wave 8a task schema5 (run wf_af23c8d6-dba; docs/reports/reviews/g5-wave-8a/schema5-build.md, saves-verify-schema5.md, wave-verify.md). D-0102 called for one schema bump for all of Phase 5. This entry records its shape as built, the builder's proposed decisions (accepted, as D-0107 said) and the lead's fixes for the verifiers' MINORs and NITs.
+Decision:
+- **Columns.** SCHEMA_VERSION is 5. `COLUMNS_ADDED_IN[4]` is frozen as a 25-name literal. `COLUMNS_ADDED_IN[5]` holds 12 columns: glowState, glowDwell, metabolicMode, trapReserveC, trapReserveN, trapSlot (empty −1), trapBirthId, trapTimer, trapCooldown, heldBySlot (empty −1), heldByBirthId, handlingNeed. The task said "11" but listed these 12.
+  - No column is added for the jacket (jacketMineral), the shell (boundMineral), the handling target (preySlot/preyBirthId with handlingProgress) or native dormancy (the existing lifeState machine runs B12, F04 and P08).
+  - "Held" is heldBySlot ≥ 0 and "glowing" is glowState = 1, so no flag duplicates a column. The only new flag is FLAG.restNewborn (bit 14), because "began Resting at birth" cannot be derived from lifeState. Bit 12 stays retired.
+- **Stores.** `edges`, `devices` (both sorted), `climate { warmth, moisture }` (null means ambient), `gateTally` (saved, never hashed), the counter `nextDeviceId` (from 1) and `settings.cycleStartTick` (cycle mode only).
+  - Edge barriers and devices share one id space, so a gate reading names one structure.
+  - Edge codes are two Uint8 arrays per cell (`edgeCodeArrays` → `r` for the edge to x + 1, `d` for the edge to y + 1), not ARCH §5's "4 per cell". A cell's left and up edges are its neighbours' R and D edges, so each edge is stored once and the arrays cannot disagree.
+  - `on` is stored only on S09 and S10 (false when placed). The resin's Off is an empty `resinSelect`. Furnishings and devices sit only on open water, gel or sediment, never on stone, wall or bead. The basket stores no object reference (one object per cell).
+- **Transport class (`classOf`).** A species recorded Fixed but not attached is classed by its category: a consumer is Medium, a bacterium Small, anything else Fixed. Fungi are Fixed, except a resting F04 newborn, which is Small (D-0106). An E04-anchored organism keeps its record class. A parasite on a host takes its host's class. CT §5.3's "fungal disperser" (Medium) belongs to the dispersal module E14 (CT §7.1, Phase 7, P7.2) and is not modelled yet.
+- **Migration and hashing.**
+  - The 4 → 5 step adds the empty stores and adds the 12 columns at their empty values, also to a held sample's rows.
+  - stateHash hashes each new store, counter and setting only once it is non-empty or has moved.
+  - hashedSample leaves out a schema 5 column only while every held row holds its empty value, compared with Object.is so −0 counts as state (D-0035).
+  - All five rc1 saves load as 4 → 5 with every recorded value equal (migration-schema5, rc1-replay).
+- **Import** (src/persistence/phase5State.ts, after phase3StateProblem). The builder's refusals beyond the Build 6 list:
+  - a glow timer on an organism that cannot glow;
+  - a trap or held-by birthId without its slot;
+  - a held sample row holding a trap or a trapped organism, until e3-traps lands the sample closure.
+
+  The lead's integration fixes for the verifiers' MINORs and NITs (verified by wf_4596eb7b-bc0, docs/reports/reviews/g5-wave-8a/integrate-verify.md):
+  - glowing while not Active (D-0106);
+  - a trap holding itself;
+  - a non-zero trap reserve, because computeTotals and sampleTotals do not count it yet;
+  - a null `nextDeviceId`, and the same pattern from v1.0 for `nextObjectId` (only an absent counter means 1; a null one used to load and be copied into the world);
+  - a present but malformed store: null edges, devices or gateTally, or a climate that is not an object or carries other keys.
+
+  An absent schema 5 store still reads as empty, as deserializeWorld reads it. Refusal sentences name a structure "of kind S01", never "a S01".
+- **Protocol** stays 2 until wave 11 (D-0107).
+
+Carry-overs (also in docs/agent/g5-plan.md "Carry-overs"):
+- **e3-traps (wave 13):**
+  - Count trapReserveC/N in computeTotals and sampleTotals. A +0 term keeps every older sum bit-identical. Then drop the reserve refusal.
+  - With the trap's prey data, refuse a held organism that is not the trap's prey (P04, CT §3.3).
+  - Add both trap pairs (trapSlot/trapBirthId, heldBySlot/heldByBirthId) to src/sim/sample.ts REF_COLUMNS when the sample closure lands.
+- **climate-stage2 (wave 9):** suitability reads `settings.warmth` only. The ambient (null) branch must stay bit-identical.
+- **Accepted, not fixed:** a crafted schema 4 state that carries Phase 5 stores (edges, devices, climate, gateTally, nextDeviceId) loads with them dropped by the 4 → 5 step instead of refused. No real schema 4 save holds them. (Phase 5 entity columns and settings.cycleStartTick in such a state are kept and checked by the import.)
+
+Evidence: the fence held unchanged (g2-replay, rc1-replay, the four trajectory-fence files, conservation-closed-lid: 7 files, 58 tests, at wave verify and again at re-verify); the saves lens found no BLOCKER/MAJOR (16 files, 172 tests); integration evidence in the wave 8a commit.
+Reason: one source of truth per fact; nothing a v1.0 save holds is refused; each refusal names state that the dish's own rules could not have produced.
+Owner review: no.
+
+## D-0109 · 2026-10-13 · Phase 5 wave 8a · The 16 px Phase 5 organism art as built
+Context: wave 8a task art-small (P5.7, 16 px half; docs/reports/reviews/g5-wave-8a/art-small-build.md, art-small-fix1.md, wave-verify.md, wave-reverify1.md). Nothing is enabled; the sprites wait for the organism flip (D-0104).
+Decision:
+- **Animation names.** AnimName gains two state-indexed names, each with exactly 3 still frames: `dormant` (Preparing, Resting, Waking, indexed by lifeState − 1) and `trap` (Open, Holding, Cooldown). One name per recorded state machine replaces six per-state names. A sprite may not carry `dormant` or `trap` without the ability.
+- **Native marks.** SIGNAL_GLOW draws glow_center and MIXOTROPHY draws mode_half (`NATIVE_MARKS`). They are required like module visual layers: by content:validate for enabled species and by art-build for every sprite. art-large (wave 8b) must give P08 its `dormant` ×3 (native DORMANCY), or art-build refuses the P08 sprite.
+- **Mark geometry.**
+  - jacket_rim levels are coverage quarters. Plates grow from the back (West), and the leading ±50° stays bare (the soft-body gap).
+  - The glow halo is a dotted ring at 6 ≤ r < 8 px from the mark centre: a 2 px deep ring that starts at the edge of a 12 px body.
+  - Traplace Cooldown has its own dim tone, `traplaceSlack` #A88A5C, so the loop colour #6B4A12 means "a trap is set or holding".
+- **Renderer vocabulary (fix round 1 for the verifier's MAJOR).** Art's `FeatureLayerId` and `FEATURE_LAYERS` stay the renderer's 10 layers. The three Phase 5 marks (glow_center, jacket_rim, mode_half) are packed after them, through `PHASE5_FEATURE_LAYERS` and `ATLAS_FEATURE_LAYERS`. org-ui (wave 13) moves them, in that order, into `FEATURE_LAYERS` and the renderer's `FEATURE_LAYER_IDS`; module-visuals.test.ts:139 guards the move.
+- **Atlas.** After 8a the sheet is 1024×1024 with 1342 frames, and the 856 v1.0 frames are identical in pixels and metadata. The cap is 1024×2048 (`ATLAS_MAX_H`), an assumed safe WebGL texture height for low-end Android that no device test has measured yet (g5-plan "Risks"; check it on the owner's device). The grit glyph is procedural (src/render, org-ui), not an atlas sprite. 8a made no audio change; the Phase 3 'wake' patch and cue stay, and sound belongs to P5.7b (wave 12).
+- **Taste note** for the art polish pass: V02's glyph reads as a spiked, filled capsid more than UX §6.3's "lace glyph". The alpha difference from V01 holds.
+Evidence: art:build --check up to date (1342 frames, 112 feature-mark frames, 1024×1024); content:validate ok, contentHash b8ddc0dd… unchanged, 19 species enabled; art and renderer tests 11 files / 531 tests at re-verify.
+Owner review: no.

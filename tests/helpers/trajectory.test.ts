@@ -14,7 +14,9 @@ import { computeContentHash } from '../../src/sim/content/registry';
 import { ENTITY_COLUMNS } from '../../src/sim/entities';
 import { allocateFields, allocatedFieldIds, FIELD_DEFS, FIELD_IDS } from '../../src/sim/fields';
 import { realizeRecipe } from '../../src/sim/recipes';
-import { stateHash } from '../../src/sim/serialize';
+import { COLUMNS_ADDED_IN, serializeWorld, stateHash } from '../../src/sim/serialize';
+import type { ColumnName } from '../../src/sim/entities';
+import type { SampleRow } from '../../src/sim/sampleSlot';
 import { run } from '../../src/sim/tick';
 import { speciesIndex, type World } from '../../src/sim/world';
 import { loadRegistryFs } from '../../tools/lib/content-fs';
@@ -182,5 +184,77 @@ describe('trajectoryDigest (P-17, P-18)', () => {
       unset();
       expect(trajectoryDigest(w, 'full'), label).toBe(base);
     }
+  });
+});
+
+describe('schema 5 state in the digest (Phase 5 foundation; D-0102)', () => {
+  const SCHEMA5 = COLUMNS_ADDED_IN[5]!;
+
+  it("each schema 5 store, the counter, cycleStartTick and every schema 5 column: 'g2' throws naming it, 'full' differs, cleared gives back the digest", () => {
+    const w = garden(G2, 50);
+    const base = trajectoryDigest(w, 'g2');
+    expect(trajectoryDigest(w, 'full')).toBe(base); // all empty: both modes equal the same world's g2 digest
+    const i = firstAlive(w);
+    const cases: [string, () => void, () => void][] = [
+      ['world store edges', () => w.edges.push({ id: 1, kind: 'S01', cell: 8256, dir: 'R' }), () => void w.edges.splice(0)],
+      ['world store devices', () => w.devices.push({ id: 1, kind: 'S06', cell: 8256 }), () => void w.devices.splice(0)],
+      ['world store climate', () => (w.climate.warmth = new Float64Array(w.grid.substrate.length)), () => (w.climate.warmth = null)],
+      ['counter nextDeviceId = 2', () => (w.counters.nextDeviceId = 2), () => (w.counters.nextDeviceId = 1)],
+      ['settings key cycleStartTick = 0', () => Object.assign(w.settings, { cycleStartTick: 0 }), () => delete (w.settings as { cycleStartTick?: number }).cycleStartTick],
+      ...SCHEMA5.map((name): [string, () => void, () => void] => {
+        const arr = w.ents.cols[name] as unknown as Float64Array;
+        const empty = arr[i]!;
+        return [`entity column ${name}`, () => (arr[i] = empty === -1 ? 3 : 1), () => (arr[i] = empty)];
+      }),
+    ];
+    for (const [label, set, unset] of cases) {
+      set();
+      expect(postG2State(w).join(), label).toContain(label);
+      expect(() => trajectoryDigest(w, 'g2'), label).toThrow(PostG2StateError);
+      expect(trajectoryDigest(w, 'full'), label).not.toBe(base);
+      unset();
+      expect(postG2State(w), label).toEqual([]);
+      expect(trajectoryDigest(w, 'g2'), label).toBe(base);
+      expect(trajectoryDigest(w, 'full'), label).toBe(base);
+    }
+  });
+
+  it('gateTally is observation only: never post-g2 state, never in either digest', () => {
+    const w = garden(G2, 50);
+    const base = trajectoryDigest(w, 'g2');
+    w.gateTally.push({ id: 1, fields: { sugar: 3 }, organisms: 4 });
+    expect(postG2State(w)).toEqual([]);
+    expect(trajectoryDigest(w, 'g2')).toBe(base);
+    expect(trajectoryDigest(w, 'full')).toBe(base);
+  });
+
+  it("a held row digests a schema 5 column only while it holds a non-empty value; the slot columns never", () => {
+    const w = garden(G2, 50);
+    const slot = firstAlive(w);
+    const cols: Record<string, number> = {};
+    for (const [name] of ENTITY_COLUMNS) cols[name] = (w.ents.cols[name] as ArrayLike<number>)[slot]!;
+    const g = w.ents.cols.genome[slot]!;
+    const sampleWith = (edit: Partial<Record<ColumnName, number>>) => ({
+      txId: 'tx-digest',
+      seq: w.commands.nextSeq,
+      mode: 'life' as const,
+      origin: [64, 64] as const,
+      radius: 1,
+      rows: [{ slot, cols: { ...cols, ...edit } as SampleRow['cols'] }],
+      cells: [],
+      objects: [],
+      genomes: [{ index: g, genome: serializeWorld(w).genomes[g]! }],
+    });
+    w.ents.free(slot);
+    w.sample = sampleWith({});
+    const held = trajectoryDigest(w, 'full');
+    w.sample = sampleWith({ trapReserveC: 0.5 });
+    expect(trajectoryDigest(w, 'full')).not.toBe(held);
+    w.sample = sampleWith({ trapSlot: 7, heldBySlot: 9 }); // slots: identity is kept by the birthId columns
+    expect(trajectoryDigest(w, 'full')).toBe(held);
+    w.sample = sampleWith({ trapBirthId: 7 });
+    expect(trajectoryDigest(w, 'full')).not.toBe(held);
+    w.sample = sampleWith({});
+    expect(trajectoryDigest(w, 'full')).toBe(held);
   });
 });

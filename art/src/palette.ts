@@ -122,6 +122,91 @@ export const P = {
   phageLight: '#A9C8EE',
   phageDeep: '#264F82',
 
+  // Phase 5 organisms (UX §6.1 base + accent, by species; the deep/light/outline tones are local
+  // shades for volume, derived like the Phase 3 ones). Small (P5.7 art-small) first, then the six
+  // large consumers (art-large appends shades there if it needs them).
+  // B09 Lantern (lanternLime is the glow colour: it appears only in glow_center's 'glow' frame)
+  lanternBlueGreen: '#3FB3A6',
+  lanternLime: '#C6F04D',
+  lanternDeep: '#2B867B',
+  lanternLight: '#A7E3DA',
+  lanternCore: '#1F5F57',
+  // B10 Brinecoil
+  brinecoilRust: '#B5552F',
+  brinecoilCream: '#F1E3C8',
+  brinecoilDeep: '#86391C',
+  // B11 Sourbud
+  sourbudRed: '#C93B3B',
+  sourbudBud: '#5A1E1E',
+  sourbudDeep: '#9A2828',
+  sourbudLight: '#F0A3A3',
+  // B12 Sleeper
+  sleeperOlive: '#8B9A3C',
+  sleeperSeam: '#4E5620',
+  sleeperDeep: '#6B7A27',
+  sleeperLight: '#C9D38A',
+  // B13 Rampart
+  rampartBrick: '#A8412F',
+  rampartLight: '#E4B7AF',
+  rampartDeep: '#7C2C1E',
+  // F03 Traplace (traplaceLoop is the trap colour: it appears only in the 'trap' frames)
+  traplaceAmber: '#C98A2B',
+  traplaceLoop: '#6B4A12',
+  traplaceOutline: '#3E2A0C',
+  traplaceLight: '#ECC27A',
+  traplaceSlack: '#A88A5C',
+  // F04 Sporeveil
+  sporeveilSilver: '#B9BEC4',
+  sporeveilRing: '#23272B',
+  sporeveilOutline: '#5F666D',
+  sporeveilLight: '#E8EBEE',
+  // A02 Glasswheel
+  glasswheelGold: '#E0B84A',
+  glasswheelRim: '#F7F1D9',
+  glasswheelDeep: '#A8862C',
+  // A03 Shadeleaf
+  shadeleafGreen: '#2F6B3A',
+  shadeleafVein: '#9FE3B4',
+  shadeleafDeep: '#1F4B28',
+  // A04 Turnleaf (turnleafAmber shows Sugar mode: only in mode_half's 'sugar' frame)
+  turnleafGreen: '#6FAE4E',
+  turnleafAmber: '#D9A441',
+  turnleafDeep: '#4F8236',
+  turnleafLight: '#B9E09A',
+  turnleafAmberLight: '#F2D08A',
+  turnleafPale: '#E2F4D2',
+  // A05 Raftball
+  raftballEmerald: '#2E9E5B',
+  raftballHollow: '#D6E7E5',
+  raftballDeep: '#1F7342',
+  raftballLight: '#8FD9AE',
+  // X02 Threadrider
+  threadriderMauve: '#8C6E9E',
+  threadriderDeep: '#674E77',
+  threadriderLight: '#CDB9D9',
+  // V02 Lacephage
+  lacephageGlyph: '#6A4FB3',
+  lacephageLight: '#C2B5EA',
+  lacephageDeep: '#47347F',
+  // P05 Shellglider
+  shellgliderCream: '#EADFC8',
+  shellgliderScallop: '#9C8B6A',
+  // P06 Bellstalk
+  bellstalkBlue: '#A9C7E6',
+  bellstalkStalk: '#5E7EA3',
+  // P07 Dartfin
+  dartfinAqua: '#5CC8D8',
+  dartfinTail: '#1F6F7A',
+  // P08 Waterbear
+  waterbearTan: '#9C8A6E',
+  waterbearLegs: '#5E5040',
+  // P09 Wheelgrazer
+  wheelgrazerRose: '#D77FA0',
+  wheelgrazerWheel: '#F7DCE8',
+  // P10 Needlejaw
+  needlejawBlue: '#3B5FB4',
+  needlejawFork: '#B7C6EE',
+
   // Feature layers
   reserveAmber: '#E0A53A',
   reserveEmpty: '#F6E3B0',
@@ -145,6 +230,11 @@ export const P = {
   matrixEdgeLight: '#A9D3C7',
   adhesionLink: '#2C3F49',
   adhesionLinkLight: '#E8E1C9',
+  // Phase 5 feature layers (SPEC §9 E02/E11 visuals, §7.8, §7.10; art-small)
+  glowDim: '#D3DDB8',
+  glowHalo: '#E4F7A6',
+  jacketRim: '#C7D0D4',
+  jacketRimDeep: '#7D8A91',
 
   // World tiles (UX §6.2 film textures, §6.5 food object outlines; wave 2 art-features)
   filmTeal: '#7FB9AB',

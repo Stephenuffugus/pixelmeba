@@ -11,14 +11,15 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { SPRITES } from '../art/src/index';
-import { FEATURE_LAYERS, type FeatureLayerDef } from '../art/src/layers/modules';
-import { TILES, type TileDef } from '../art/src/tiles/index';
+import { SPRITES as ALL_SPRITES } from '../art/src/index';
+import { ATLAS_FEATURE_LAYERS as ALL_LAYERS, type AtlasFeatureLayerId, type FeatureLayerDef as AnyLayerDef } from '../art/src/layers/modules';
+import { TILES as ALL_WORLD_TILES, type TileDef } from '../art/src/tiles/index';
 import {
   frameRgba,
   FUNGUS_REQUIRED,
   HEADING_NAMES,
   LARGE_REQUIRED,
+  NATIVE_ABILITY_FRAMES,
   orient,
   paletteRgba,
   SMALL_REQUIRED,
@@ -29,15 +30,33 @@ import {
 } from '../art/src/sprite';
 import { blit, createImage, encodePng } from './lib/png';
 import { REPO_ROOT, loadRegistryFs } from './lib/content-fs';
-import { ALL_TILES, atlasSpeciesRef, checkAtlas, enabledMarks, enabledTiles, FEATURE_HEADINGS, FEATURE_SIZE, featureFrameKey, TILE_SIZE, tileFrameKey } from './content-validate';
+import { ALL_TILES, atlasSpeciesRef, checkAtlas, enabledMarks, enabledTiles, FEATURE_HEADINGS, FEATURE_SIZE, featureFrameKey, NATIVE_MARKS, TILE_SIZE, tileFrameKey } from './content-validate';
+
+/** A packed mark: the renderer's layers and the Phase 5 marks awaiting it (art/src/layers/modules.ts). */
+type FeatureLayerDef = AnyLayerDef<AtlasFeatureLayerId>;
 
 const PAD = 2;
 /**
  * Atlas width. 1024 since Phase 3 (14 more species: ~760 frames do not fit 512 wide without a
- * 2048-tall sheet); the height stays the next power of two of the packed shelves, so the sheet is
- * 1024×1024 at most for this content, inside every WebGL texture limit we target.
+ * 2048-tall sheet); the height is the next power of two of the packed shelves. Phase 5's 13 small
+ * sprites and three marks (art-small, wave 8a) still fit 1024×1024; its large consumers (art-large)
+ * are expected to grow the sheet to 1024×2048, which is the cap: ATLAS_MAX_H.
  */
 const ATLAS_W = 1024;
+/** The tallest sheet we ship: 2048 px, an assumed safe WebGL texture height for low-end Android, not yet measured on a device (ARCH §10.1). */
+export const ATLAS_MAX_H = 2048;
+
+/** The error for a packed sheet taller than the cap, or null when it fits. */
+export function atlasSizeError(width: number, height: number): string | null {
+  return height > ATLAS_MAX_H ? `atlas would be ${width}x${height}; the cap is ${ATLAS_W}x${ATLAS_MAX_H} (assumed safe WebGL texture height on low-end Android, ARCH §10.1)` : null;
+}
+
+/** What buildAtlas packs; tests pass edited copies to prove the checks fail. Defaults: the real art. */
+export interface AtlasSources {
+  readonly sprites?: readonly SpriteDef[];
+  readonly layers?: readonly FeatureLayerDef[];
+  readonly tiles?: readonly TileDef[];
+}
 
 export interface AtlasFrame {
   readonly key: string;
@@ -165,7 +184,33 @@ type PackItem =
   | { readonly kind: 'feature'; readonly size: number; readonly def: FeatureLayerDef; readonly heading: number; readonly index: number }
   | { readonly kind: 'tile'; readonly size: number; readonly def: TileDef; readonly index: number };
 
-export function buildAtlas(): { png: Buffer; manifest: AtlasManifest; errors: string[] } {
+/**
+ * Native abilities a sprite must draw (D-0032-style marks and ARCH §10.1 frame sets), checked for
+ * every sprite against its species record, enabled or not, so the organism flip needs no art change:
+ * a NATIVE_MARKS ability needs its feature layer, a NATIVE_ABILITY_FRAMES ability needs its frame set
+ * with exactly that many frames, and a sprite may not carry such a frame set without the ability (a
+ * pose for a state the organism can never be in).
+ */
+function validateNative(def: SpriteDef, abilities: readonly string[], layers: readonly FeatureLayerDef[]): string[] {
+  const errors: string[] = [];
+  for (const ability of abilities) {
+    const layer = NATIVE_MARKS[ability];
+    if (layer && !layers.some((l) => l.id === layer)) errors.push(`${def.speciesId}: native ${ability} needs feature mark "${layer}" in art/src/layers`);
+  }
+  for (const [ability, need] of Object.entries(NATIVE_ABILITY_FRAMES)) {
+    const a = def.animations[need.anim];
+    if (abilities.includes(ability)) {
+      if (!a) errors.push(`${def.assetId}: native ${ability} needs "${need.anim}" (${need.frames} frames: ${need.states})`);
+      else if (a.frames.length !== need.frames) errors.push(`${def.assetId}: "${need.anim}" has ${a.frames.length} frames; native ${ability} needs exactly ${need.frames} (${need.states})`);
+    } else if (a) errors.push(`${def.assetId}: "${need.anim}" frames without native ${ability} (no recorded state shows them)`);
+  }
+  return errors;
+}
+
+export function buildAtlas(sources: AtlasSources = {}): { png: Buffer; manifest: AtlasManifest; errors: string[] } {
+  const SPRITES = sources.sprites ?? ALL_SPRITES;
+  const FEATURE_LAYERS = sources.layers ?? ALL_LAYERS;
+  const TILES = sources.tiles ?? ALL_WORLD_TILES;
   const errors: string[] = [];
   for (const def of SPRITES) errors.push(...validate(def));
   for (const def of FEATURE_LAYERS) errors.push(...validateLayer(def));
@@ -187,6 +232,7 @@ export function buildAtlas(): { png: Buffer; manifest: AtlasManifest; errors: st
     if (def.headings !== sp.headings) errors.push(`${id}: sprite headings ${def.headings} ≠ content headings ${sp.headings}`);
     const form = sp.category === 'fungus' ? 'fungus' : sp.category === 'virus' ? 'virus' : 'organism';
     if ((def.form ?? 'organism') !== form) errors.push(`${id}: sprite form ${def.form ?? 'organism'} ≠ content category ${sp.category}`);
+    errors.push(...validateNative(def, sp.nativeAbilities, FEATURE_LAYERS));
   }
 
   // Every enabled module needs its feature mark (content visualLayer → art/src/layers).
@@ -228,6 +274,8 @@ export function buildAtlas(): { png: Buffer; manifest: AtlasManifest; errors: st
   }
   let height = 1;
   while (height < y + rowH) height *= 2;
+  const tooTall = atlasSizeError(ATLAS_W, height);
+  if (tooTall) errors.push(tooTall);
   const img = createImage(ATLAS_W, height);
   const frames: (AtlasFrame | AtlasFeatureFrame | AtlasTileFrame)[] = [];
   for (const { item, x: fx, y: fy } of placed) {

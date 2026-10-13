@@ -42,6 +42,7 @@ import { genomeKey } from '../../src/sim/genome';
 import { createGrid } from '../../src/sim/grid';
 import { canonicalJson, StateHasher } from '../../src/sim/hash';
 import { createEmptyWorld, type World } from '../../src/sim/world';
+import { COLUMNS_ADDED_IN } from '../../src/sim/serialize';
 import type { SampleSlot } from '../../src/sim/sampleSlot';
 
 export type DigestMode = 'g2' | 'full';
@@ -194,7 +195,11 @@ const G2_INDEX_COLUMNS: Readonly<Partial<Record<ColumnName, IndexKind>>> = Objec
   propModule1: 'module',
 });
 
-/** Post-g2 columns that hold a species, genome or module index (hashed as IDs in 'full' mode). */
+/**
+ * Post-g2 columns that hold a species, genome or module index (hashed as IDs in 'full' mode). Schema 5
+ * adds none: trapSlot and heldBySlot hold entity slots, not content indices, and are hashed as numbers
+ * like preySlot (the g5 brief's suggestion to register them here does not fit this table).
+ */
 export const POST_G2_COLUMN_KINDS: Readonly<Record<string, IndexKind>> = Object.freeze({});
 /** Post-g2 stores whose records hold slot/species/module references: map them to birthIds and IDs for 'full' mode. */
 export const POST_G2_STORE_CANON: Readonly<Record<string, (world: World, value: unknown) => unknown>> = Object.freeze({
@@ -203,13 +208,21 @@ export const POST_G2_STORE_CANON: Readonly<Record<string, (world: World, value: 
   // dropped (each has a birthId partner column that keeps the identity).
   sample: (world: World, value: unknown) => canonSample(world, value as SampleSlot),
 });
-/** Post-g2 world properties that are derived caches (rebuilt from state, never saved): never hashed. */
-export const POST_G2_DERIVED_KEYS: readonly string[] = Object.freeze(['reactionCells', 'fungalFlow', 'intakeSeen']);
-/** The value a post-g2 WorldSettings key has in a world that never set it (absent counts as default too). */
+/**
+ * Post-g2 world properties that are derived caches (rebuilt from state, never saved) or observation-only
+ * stores (saved but never hashed and never read by the simulation: schema 5's gateTally): never hashed.
+ */
+export const POST_G2_DERIVED_KEYS: readonly string[] = Object.freeze(['reactionCells', 'fungalFlow', 'intakeSeen', 'gateTally']);
+/**
+ * The value a post-g2 WorldSettings key has in a world that never set it (absent counts as default too).
+ * Schema 5's cycleStartTick needs no entry: it is absent unless the light cycles, and absent is default.
+ */
 export const POST_G2_SETTINGS_DEFAULTS: Readonly<Record<string, unknown>> = Object.freeze({});
 
 /** Sample columns holding a slot (identity kept by their birthId partner columns). */
-const SAMPLE_SLOT_COLUMNS: readonly string[] = ['preySlot', 'hostSlot', 'parasiteSlot', 'fLink0', 'fLink1', 'fLink2', 'fLink3', 'aLink0', 'aLink1'];
+const SAMPLE_SLOT_COLUMNS: readonly string[] = ['preySlot', 'hostSlot', 'parasiteSlot', 'fLink0', 'fLink1', 'fLink2', 'fLink3', 'aLink0', 'aLink1', 'trapSlot', 'heldBySlot'];
+/** Schema 5 columns: a held row digests one only while it holds a non-empty value (so a held sample digests as before). */
+const SAMPLE_SCHEMA5_COLUMNS: readonly string[] = COLUMNS_ADDED_IN[5]!;
 
 function canonSample(world: World, s: SampleSlot): unknown {
   const map = new Mapper(world);
@@ -220,6 +233,7 @@ function canonSample(world: World, s: SampleSlot): unknown {
       if (SAMPLE_SLOT_COLUMNS.includes(name)) continue;
       const kind = kinds[name];
       const v = r.cols[name];
+      if (SAMPLE_SCHEMA5_COLUMNS.includes(name) && Object.is(v, emptyColumnValue(name))) continue;
       cols[name] = kind ? map.index(kind, v) : v;
     }
     // P3.5 (D-0043): Cancel restores each row into its original slot, so the slot is future state.

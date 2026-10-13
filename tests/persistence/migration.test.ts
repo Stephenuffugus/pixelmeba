@@ -1,21 +1,24 @@
 /**
  * Save migration (SPEC §14.5, ARCH §11.3): worlds written at older schemas load through the real
  * import path (loadSaveFile), are migrated by copy and continue exactly like the same world saved by
- * the build that wrote them. Three paths reach world schema 4 (Phase 3 foundation; D-0035):
- *   - 3 → 4: a real save written by the g2 build (tests/fixtures/saves/); its stateHash at load is the
- *     g2 build's (expected.json hashAtLoad), because the schema 4 state is hash-neutral while empty;
- *   - 2 → 4: the real schema 2 save in tests/persistence/fixtures/ (its hashes at load and +300 ticks
+ * the build that wrote them. Three paths reach world schema 5 (Phase 5 foundation; D-0102) through
+ * schema 4 (Phase 3 foundation; D-0035):
+ *   - 3 → 5: a real save written by the g2 build (tests/fixtures/saves/); its stateHash at load is the
+ *     g2 build's (expected.json hashAtLoad), because the schema 4 and 5 state is hash-neutral while empty;
+ *   - 2 → 5: the real schema 2 save in tests/persistence/fixtures/ (its hashes at load and +300 ticks
  *     are asserted in tests/sim/history-debris.test.ts);
- *   - 1 → 4: a current save rewritten as schema 1 (no later columns, no schema 4 stores).
- * Each records provenance.migratedFrom, leaves its input untouched, fills every link-slot column with
- * −1 (emptyValueOf: a 0 would point at slot 0), passes linksValid, and re-saves and re-loads to the
- * same stateHash. Also: imports that the simulation could not run are refused up front.
+ *   - 1 → 5: a current save rewritten as schema 1 (no later columns, no schema 4 or 5 stores).
+ * Each records provenance.migratedFrom, leaves its input untouched, fills every link-slot column (and
+ * the schema 5 trap and held-by slots) with −1 (emptyValueOf: a 0 would point at slot 0), passes
+ * linksValid, and re-saves and re-loads to the same stateHash. The 4 → 5 path of the real v1.0 saves
+ * is tests/persistence/migration-schema5.test.ts. Also: imports that the simulation could not run are
+ * refused up front.
  */
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { buildSaveFile, loadSaveFile } from '../../src/persistence/saveFile';
-import { emptyValueOf, ENTITY_COLUMNS, FIRST_HASH_NEUTRAL_COLUMN } from '../../src/sim/entities';
+import { emptyValueOf, ENTITY_COLUMNS, FIRST_HASH_NEUTRAL_COLUMN, FIRST_SCHEMA5_COLUMN } from '../../src/sim/entities';
 import { base64ToBytes, canonicalJson, sha256Hex } from '../../src/sim/hash';
 import { FUNGAL_SLOT_COLUMNS, ADHESION_SLOT_COLUMNS, linksValid } from '../../src/sim/links';
 import { realizeRecipe } from '../../src/sim/recipes';
@@ -32,8 +35,8 @@ async function asSchema1(text: string): Promise<string> {
   const file = JSON.parse(text) as { schemaVersion: number; state: WorldState; checksum: string };
   const columns = { ...file.state.entities.columns };
   for (let v = 2; v <= SCHEMA_VERSION; v++) for (const name of COLUMNS_ADDED_IN[v] ?? []) delete columns[name];
-  const { objects: _o, sample: _s, ...rest } = file.state;
-  const { nextObjectId: _n, ...counters } = file.state.counters;
+  const { objects: _o, sample: _s, edges: _e, devices: _d, climate: _c, gateTally: _g, ...rest } = file.state;
+  const { nextObjectId: _n, nextDeviceId: _nd, ...counters } = file.state.counters;
   const state = { ...rest, schemaVersion: 1, counters, entities: { ...file.state.entities, columns } };
   const checksum = `sha256:${await sha256Hex(canonicalJson(state))}`;
   return JSON.stringify({ ...file, schemaVersion: 1, state, checksum });
@@ -46,7 +49,7 @@ async function resave(text: string, edit: (s: { entities: { columns: Record<stri
   return JSON.stringify(file);
 }
 
-/** The schema 4 columns of a migrated state hold exactly their empty values (decoded from the payload). */
+/** The schema 4 and 5 columns of a migrated state hold exactly their empty values (decoded from the payload), and the stores are empty. */
 function expectEmptyPhase3Columns(state: WorldState): void {
   const hw = state.entities.highWater;
   for (const [name, dtype] of ENTITY_COLUMNS.slice(FIRST_HASH_NEUTRAL_COLUMN)) {
@@ -62,6 +65,12 @@ function expectEmptyPhase3Columns(state: WorldState): void {
   }
   expect(state.objects).toEqual([]);
   expect(state.sample).toBeNull();
+  expect(state.edges).toEqual([]);
+  expect(state.devices).toEqual([]);
+  expect(state.gateTally).toEqual([]);
+  expect(state.climate).toEqual({ warmth: null, moisture: null });
+  expect(state.counters.nextDeviceId).toBe(1);
+  expect('cycleStartTick' in state.settings).toBe(false);
 }
 
 /** Every link-slot column of a loaded world holds −1, and its links are valid. */
@@ -86,14 +95,22 @@ async function expectResaveRoundTrip(world: World, migratedFrom: number[]): Prom
 }
 
 describe('save migration', () => {
-  it('world schema is 4 and schema 4 added exactly the Phase 3 columns', () => {
-    expect(SCHEMA_VERSION).toBe(4);
-    expect(COLUMNS_ADDED_IN[4]).toEqual(ENTITY_COLUMNS.slice(FIRST_HASH_NEUTRAL_COLUMN).map(([n]) => n));
-    expect(COLUMNS_ADDED_IN[4]![0]).toBe('filmSeconds');
-    expect(COLUMNS_ADDED_IN[4]).toContain('noUsableIntakeSeconds');
+  it('world schema is 5; COLUMNS_ADDED_IN[4] is the frozen literal; COLUMNS_ADDED_IN[5] is exactly the Phase 5 columns', () => {
+    expect(SCHEMA_VERSION).toBe(5);
+    // Schema 4 (D-0035), frozen (D-0102): appending a column never changes what schema 4 means.
+    const schema4 = ['filmSeconds', 'anchorState', 'anchorSeconds', 'anchorLockout', 'adhPartner', 'adhSeconds', 'adhLockout', 'waterCrossed', 'noUsableIntakeSeconds', 'fLink0', 'fLink1', 'fLink2', 'fLink3', 'fLinkB0', 'fLinkB1', 'fLinkB2', 'fLinkB3', 'fLinkKind0', 'fLinkKind1', 'fLinkKind2', 'fLinkKind3', 'aLink0', 'aLink1', 'aLinkB0', 'aLinkB1'];
+    expect(schema4).toHaveLength(25);
+    expect(COLUMNS_ADDED_IN[4]).toEqual(schema4);
+    expect(COLUMNS_ADDED_IN[4]).toEqual(ENTITY_COLUMNS.slice(FIRST_HASH_NEUTRAL_COLUMN, FIRST_SCHEMA5_COLUMN).map(([n]) => n));
+    // Schema 5 (D-0102): the Phase 5 columns, in order, to the end of the registry.
+    const schema5 = ['glowState', 'glowDwell', 'metabolicMode', 'trapReserveC', 'trapReserveN', 'trapSlot', 'trapBirthId', 'trapTimer', 'trapCooldown', 'heldBySlot', 'heldByBirthId', 'handlingNeed'];
+    expect(COLUMNS_ADDED_IN[5]).toEqual(schema5);
+    expect(ENTITY_COLUMNS.slice(FIRST_SCHEMA5_COLUMN).map(([n]) => n)).toEqual(schema5);
+    expect(FIRST_SCHEMA5_COLUMN).toBeGreaterThan(FIRST_HASH_NEUTRAL_COLUMN); // hash-neutral too
+    expect(schema5.filter((n) => emptyValueOf(n as never) === -1)).toEqual(['trapSlot', 'heldBySlot']);
   });
 
-  it('3 → 4: a save written by the g2 build migrates by copy and hashes exactly as the g2 build hashed it', async () => {
+  it('3 → 5: a save written by the g2 build migrates by copy and hashes exactly as the g2 build hashed it', async () => {
     const file = 'first-dish-t3000.pixelmeba.gz';
     const text = readG2SaveText(file);
     const raw = JSON.parse(text) as { schemaVersion: number; state: WorldState };
@@ -117,7 +134,7 @@ describe('save migration', () => {
     await expectResaveRoundTrip(world, [3]);
   });
 
-  it('2 → 4: the real schema 2 save migrates by copy through both steps', async () => {
+  it('2 → 5: the real schema 2 save migrates by copy through both steps', async () => {
     const text = gunzipSync(readFileSync('tests/persistence/fixtures/schema2-cleaning-crew-t1900.pixelmeba.gz')).toString('utf8');
     const raw = JSON.parse(text) as { schemaVersion: number; state: WorldState };
     expect(raw.state.schemaVersion).toBe(2);
@@ -136,7 +153,7 @@ describe('save migration', () => {
     await expectResaveRoundTrip(world, [2]);
   });
 
-  it('1 → 4: a schema 1 save loads through the import path and continues identically', async () => {
+  it('1 → 5: a schema 1 save loads through the import path and continues identically', async () => {
     const w = realizeRecipe(registry(), 'FIRST_DISH_V1');
     run(w, 300);
     const { text } = await buildSaveFile(w, { name: 'Old dish', savedAt: '2026-09-27T00:00:00Z', recipeId: 'FIRST_DISH_V1' });
@@ -144,8 +161,11 @@ describe('save migration', () => {
     const oldState = (JSON.parse(old) as { state: WorldState }).state;
     expect(oldState.entities.columns.dryTimer).toBeUndefined();
     expect(oldState.entities.columns.fLink0).toBeUndefined();
+    expect(oldState.entities.columns.glowState).toBeUndefined();
     expect('objects' in oldState).toBe(false);
     expect('sample' in oldState).toBe(false);
+    expect('edges' in oldState).toBe(false);
+    expect('nextDeviceId' in oldState.counters).toBe(false);
     const before = JSON.stringify(oldState);
     expectEmptyPhase3Columns(migrateWorldState(oldState));
     expect(JSON.stringify(oldState)).toBe(before);

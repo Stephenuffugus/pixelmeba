@@ -28,3 +28,8 @@ export function worldHasSpecies(world: Recorded, id: string): boolean {
 export function worldHasModule(world: Recorded, id: string): boolean {
   return world.content.manifest.enabledModules.includes(id);
 }
+
+/** Whether this world's recorded manifest enables structure `id` (STONE, WALL, BEAD; S01–S12 from Phase 5). */
+export function worldHasStructure(world: Recorded, id: string): boolean {
+  return (world.content.manifest.enabledStructures ?? []).includes(id);
+}

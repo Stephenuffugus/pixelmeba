@@ -513,8 +513,11 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
   return { registry, issues };
 }
 
-/** Modules that use a system (CT §7): E01 and E09 secrete enzymes, E10 builds film. */
-export const MODULE_SYSTEM_NEEDS: Readonly<Record<string, SystemFlag>> = { E01: 'enzymes', E09: 'enzymes', E10: 'film' };
+/**
+ * Modules that use a system (CT §7): E01 and E09 secrete enzymes, E10 builds film; Phase 5 (D-0043's
+ * carry-over): E02 emits and reads the glow signal, E11 binds silicate into its jacket.
+ */
+export const MODULE_SYSTEM_NEEDS: Readonly<Record<string, SystemFlag>> = { E01: 'enzymes', E09: 'enzymes', E10: 'film', E02: 'signals', E11: 'silicate' };
 
 /**
  * The systems a species uses, each with what uses it (for the validator's message). Never film for
@@ -531,6 +534,11 @@ export function speciesSystemNeeds(s: Species): [SystemFlag, string][] {
   else if (s.category === 'virus') out.push(['viruses', 'the virus category']);
   for (const a of ['E_STARCH_SECRETION', 'E_OIL_SECRETION', 'E_PROTEIN_SECRETION'] as const) if (has(a)) out.push(['enzymes', a]);
   if (s.foodPriority.includes('broth')) out.push(['enzymes', 'a broth diet']);
+  // Phase 5 (D-0043's carry-over). V02 needs no entry for its film gate: without the film system film is
+  // 0 everywhere and V02 simply never infects (its LYSIS already needs 'viruses').
+  if (has('SIGNAL_GLOW')) out.push(['signals', 'SIGNAL_GLOW']);
+  if (has('RIVALRY')) out.push(['rivalry', 'RIVALRY']);
+  if (has('SHELL')) out.push(['silicate', 'SHELL']);
   return out;
 }
 

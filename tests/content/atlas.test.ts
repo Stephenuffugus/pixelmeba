@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildAtlas } from '../../tools/art-build';
-import { ALL_TILES, atlasSpeciesRef, checkAtlas, enabledMarks, enabledTiles, FEATURE_FRAMES, featureFrameKey, P3_SPRITES, pngSize, requiredFrames, TILE_FRAMES, type AtlasSpeciesRef } from '../../tools/content-validate';
+import { ALL_TILES, atlasSpeciesRef, checkAtlas, enabledMarks, enabledTiles, FEATURE_FRAMES, featureFrameKey, NATIVE_MARKS, P3_SPRITES, pngSize, requiredFrames, TILE_FRAMES, type AtlasSpeciesRef } from '../../tools/content-validate';
 import { loadRegistryFs, REPO_ROOT } from '../../tools/lib/content-fs';
 
 interface Frame {
@@ -165,8 +165,8 @@ describe('atlas completeness (P1.4)', () => {
     });
 
     it('later-phase marks carry their ARCH §10.1 frame counts: a one-frame jacket, cache or glow mark fails when its module is enabled', () => {
-      // Every listed layer is a real content visualLayer (a typo would silently never apply).
-      const layers = new Set(Object.values(reg.modules).map((m) => m.visualLayer));
+      // Every listed layer is a real content visualLayer or a native mark (a typo would silently never apply).
+      const layers = new Set([...Object.values(reg.modules).map((m) => m.visualLayer), ...Object.values(NATIVE_MARKS)]);
       for (const layer of Object.keys(FEATURE_FRAMES)) expect(layers.has(layer), layer).toBe(true);
       // ARCH §10.1 "jacket 4 levels", "cache 4 fills", "Lantern dim/glow"; UX §6.2 "jacket rim (4)", "cache icon (4 fills)".
       expect([FEATURE_FRAMES.jacket_rim?.frames, FEATURE_FRAMES.cache_marker?.frames, FEATURE_FRAMES.glow_center?.frames]).toEqual([4, 4, 2]);
@@ -174,6 +174,8 @@ describe('atlas completeness (P1.4)', () => {
       const oneFrame = (layer: string): Atlas => {
         const a = atlas();
         const src = a.frames.find((f) => f.key === 'feature/starch_notch/e/0')!;
+        // Phase 5 packs glow_center and jacket_rim with their real frames: replace them with one frame.
+        a.frames = a.frames.filter((f) => !f.key.startsWith(`feature/${layer}/`));
         a.features[layer] = { size: 16, headings: 4, frames: 1, frameNames: ['only'] };
         for (const h of ['e', 's', 'w', 'n']) a.frames.push({ ...src, key: `feature/${layer}/${h}/0` });
         return a;
@@ -226,7 +228,8 @@ describe('atlas completeness (P1.4)', () => {
       expect(a.manifest.frames.slice(firstTile).every((f) => 'tile' in f)).toBe(true);
       const markFrames = Object.values(a.manifest.features).reduce((n, f) => n + f.frames * f.headings, 0);
       expect(firstTile - firstMark).toBe(markFrames);
-      expect(markFrames).toBe(80);
+      // 10 Phase 2–3 layers (80 frames) + Phase 5 glow_center 2, jacket_rim 4, mode_half 2, in four headings.
+      expect(markFrames).toBe(80 + (2 + 4 + 2) * 4);
       expect(a.manifest.frames.length - firstTile).toBe(Object.values(a.manifest.tiles).reduce((n, t) => n + t.frames, 0));
     });
   });

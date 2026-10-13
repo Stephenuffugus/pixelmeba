@@ -13,8 +13,17 @@ import type { Px } from './px';
  * (overlays drawn over the segment's mask tile at its center), F02's `pulse` (a transfer overlay),
  * and `idle` (one-frame thumbnail). Viruses (form 'virus', UX §6.2) use `glyph` (the inspection
  * glyph) and `idle` (one-frame thumbnail); their density overlay is a field render, not an atlas frame.
+ *
+ * Phase 5 (ARCH §10.1 required frame counts; P5.7) adds two state-indexed sets, each one name for one
+ * recorded state machine rather than one name per state:
+ *   - `dormant`: exactly 3 still poses, Preparing, Resting, Waking (frame index = lifeState − 1), for a
+ *     species with native DORMANCY (B12's seam forming / folded / unfolding, F04's lone ringed spore
+ *     speck). It is the native-rester analogue of the resting_seam layer's three frames: the renderer
+ *     holds a still frame in these states (src/render/features.ts bodyFrameIndex), never a loop.
+ *   - `trap`: exactly 3 overlays, Open, Holding, Cooldown (the recorded trap state), for a species with
+ *     native TRAP (F03). Drawn over the trapping segment's mask tile at its center, like tip and bud.
  */
-export type AnimName = 'move' | 'idle' | 'feed' | 'reproduction' | 'stress' | 'death' | 'mask' | 'decaying' | 'tip' | 'bud' | 'pulse' | 'glyph';
+export type AnimName = 'move' | 'idle' | 'feed' | 'reproduction' | 'stress' | 'death' | 'mask' | 'decaying' | 'tip' | 'bud' | 'pulse' | 'glyph' | 'dormant' | 'trap';
 /** What a sprite draws: one organism body, a fungal segment tile set, or a virus glyph. */
 export type SpriteForm = 'organism' | 'fungus' | 'virus';
 export const HEADING_NAMES = ['e', 's', 'w', 'n'] as const;
@@ -83,6 +92,16 @@ export const LARGE_REQUIRED: Readonly<Partial<Record<AnimName, number>>> = { mov
 export const FUNGUS_REQUIRED: Readonly<Partial<Record<AnimName, number>>> = { mask: 16, decaying: 16, tip: 1, bud: 1, idle: 1 };
 /** Viruses (UX §6.2): the inspection glyph and one thumbnail frame. */
 export const VIRUS_REQUIRED: Readonly<Partial<Record<AnimName, number>>> = { glyph: 1, idle: 1 };
+
+/**
+ * Frame sets a native ability requires (ARCH §10.1 "dormancy prepare/rest/wake; trap
+ * open/holding/cooldown"): exactly this many frames, checked by tools/art-build.ts for every sprite
+ * whose species record lists the ability, enabled or not.
+ */
+export const NATIVE_ABILITY_FRAMES: Readonly<Record<string, { readonly anim: AnimName; readonly frames: number; readonly states: string }>> = {
+  DORMANCY: { anim: 'dormant', frames: 3, states: 'Preparing, Resting, Waking' },
+  TRAP: { anim: 'trap', frames: 3, states: 'Open, Holding, Cooldown' },
+};
 
 /** Connection-mask bits for fungal tiles (the frame index of `mask` and `decaying`). */
 export const MASK_N = 1;

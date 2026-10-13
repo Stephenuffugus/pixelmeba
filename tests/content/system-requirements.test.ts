@@ -135,6 +135,36 @@ describe('enabled content needs the systems it uses', () => {
       null,
       null,
     ]);
-    expect(MODULE_SYSTEM_NEEDS).toEqual({ E01: 'enzymes', E09: 'enzymes', E10: 'film' });
+    expect(MODULE_SYSTEM_NEEDS).toEqual({ E01: 'enzymes', E09: 'enzymes', E10: 'film', E02: 'signals', E11: 'silicate' });
+    // Phase 5 (D-0043's carry-over): SIGNAL_GLOW → signals, RIVALRY → rivalry, SHELL → silicate; V02's film
+    // gate needs no entry (without film it never infects), its LYSIS needs viruses.
+    expect(needs('B09')).toEqual(['signals']);
+    expect(needs('B13')).toEqual(['rivalry']);
+    expect(needs('A02')).toEqual(['silicate']);
+    expect(needs('P05')).toEqual(['silicate']);
+    expect(needs('V02')).toEqual(['viruses']);
   });
+});
+
+describe('Phase 5 content needs its systems (D-0043 carry-over; validated at build phase 5)', () => {
+  /** Errors with `patch` applied at build phase 5, so the Phase 5 records may be enabled. */
+  const issues5 = (patch: ManifestPatch) => issuesWith({ buildPhase: 5, ...patch });
+  const cases: [string, 'species' | 'module', SystemFlag, string][] = [
+    ['B09', 'species', 'signals', 'SIGNAL_GLOW'],
+    ['B13', 'species', 'rivalry', 'RIVALRY'],
+    ['A02', 'species', 'silicate', 'SHELL'],
+    ['P05', 'species', 'silicate', 'SHELL'],
+    ['E02', 'module', 'signals', ''],
+    ['E11', 'module', 'silicate', ''],
+  ];
+  for (const [id, kind, sys, why] of cases) {
+    it(`${id} without "${sys}" is refused naming both sides; with it, no system error`, () => {
+      const list: ManifestPatch = kind === 'species' ? { enabledSpecies: sorted(G2_LISTS.enabledSpecies, id) } : { enabledModules: sorted(G2_LISTS.enabledModules, id) };
+      const errs = systemErrors(issues5(list));
+      const hit = errs.find((e) => e.message.includes(`"${id}"`) && e.message.includes(`"${sys}" system`) && e.message.includes(why));
+      expect(hit, errs.map((e) => e.message).join('\n')).toBeDefined();
+      expect(hit!.path).toMatch(kind === 'species' ? /^enabledSpecies\.\d+$/ : /^enabledModules\.\d+$/);
+      expect(systemErrors(issues5({ ...list, enabledSystems: systemsWith(sys) }))).toEqual([]);
+    });
+  }
 });

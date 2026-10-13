@@ -122,6 +122,21 @@ duplicate IDs error; every enabled entry needs `guideText` and (from Phase 1) re
 - **Events**: ring buffer of structs (typed arrays + a small string table for names).
 - **History**: ring buffers per series; compaction into one‑minute summaries.
 
+As built, Phase 5 wave 8a (world schema 5; D-0102, D-0108; `src/sim/world.ts`, `entities.ts`, `barriers.ts`,
+`devices.ts`):
+- **Edge barriers.** The codes are **two** `Uint8Array` per cell, not four: `edgeCodeArrays(edges)` gives `r` (the edge to
+  x + 1) and `d` (the edge to y + 1), and a cell's left and up edges are its neighbours' R and D. Each edge is stored once,
+  so the arrays cannot disagree. `edgeCodeBetween(a, b)` reads the code between two 4-adjacent cells.
+- **Stores.** Edges and devices are sorted record lists, `world.edges` and `world.devices`, with one id space
+  (`counters.nextDeviceId`). Local climate is `world.climate.{warmth, moisture}`: a `Float64Array(16384)`, or null for
+  ambient. `world.gateTally` is observation only.
+- **Entity columns.** Schema 5 appends 12 columns, each hash-neutral while empty: glowState, glowDwell, metabolicMode,
+  trapReserveC, trapReserveN, trapSlot (−1), trapBirthId, trapTimer, trapCooldown, heldBySlot (−1), heldByBirthId and
+  handlingNeed. `FLAG.restNewborn` is bit 14; bit 12 stays unused.
+- **Classes.** `barriers.ts` holds the CT §5.3 class table (`edgeFactor`, `edgePermits`) and `classOf`.
+- **Nothing reads them yet.** No stage reads these stores or columns before wave 9; Phase 5 rules are gated on the
+  world's recorded manifest (`src/sim/gates.ts`: `worldHasSystem`, `worldHasStructure`, …; D-0103).
+
 ## 6. Determinism primitives
 ```ts
 // 32-bit mixer (murmur3 fmix / splitmix32 style) over canonical encoding of args
@@ -481,6 +496,15 @@ tiles + tip/bud/decaying; film isolated/edge/center/eroding; dormancy prepare/re
 open/holding/cooldown; Lantern dim/glow; Turnleaf two modes; reserve 4 bands; jacket 4 levels;
 cache 4 fills; role marks ×5; partner bracket; link pixels.
 
+As built, Phase 5 wave 8a (P5.7 16 px half; D-0109): `AnimName` gains `dormant` (Preparing, Resting, Waking =
+lifeState − 1) and `trap` (Open, Holding, Cooldown), each exactly 3 still frames, required by native DORMANCY / TRAP
+and refused on a species without the ability. Native marks (`NATIVE_MARKS`: SIGNAL_GLOW → glow_center, MIXOTROPHY →
+mode_half) are required like module visual layers. The three Phase 5 marks (glow_center, jacket_rim, mode_half) are
+packed after the renderer's 10 layers through `PHASE5_FEATURE_LAYERS` / `ATLAS_FEATURE_LAYERS` until org-ui (wave 13)
+moves them into `FEATURE_LAYERS` and `FEATURE_LAYER_IDS`. The sheet is 1024 wide; its height is the next power of two
+of the packed shelves, capped at 2048 (`ATLAS_MAX_H`: an assumed safe WebGL texture height for low-end Android, not yet
+measured on a device): 1024×1024 with 1342 frames after 8a.
+
 ### 10.2 UI icons
 Inline SVG components (24 px glyph in 48 px target), single color via `currentColor`, with
 selected/disabled/focused states in CSS. Never pixel‑scaled bitmaps for UI.
@@ -807,6 +831,27 @@ As built, Phase 4 wave 6b (P4.8b bookmarks, gallery and storage; P4.8c custom ch
 `src/persistence/migrations/<from>-to-<to>.ts`; each ships with an old‑save fixture in
 `tests/persistence/fixtures/`. Migration outputs a new validated record and never alters the
 input. Unknown newer versions produce a typed error surfaced as copy.
+
+As built, schema 5 (Phase 5 wave 8a; D-0102, D-0108; `src/sim/serialize.ts`, `src/persistence/phase5State.ts`):
+- **Migration.** Every world is written as schema 5, so a v1.0 build refuses a v1.1 dish ("needs a newer version"). The
+  4 → 5 step works by copy:
+  - it adds `edges: []`, `devices: []`, `climate: { warmth: null, moisture: null }`, `gateTally: []` and
+    `counters.nextDeviceId: 1`;
+  - it adds the 12 schema 5 entity columns at their empty values, also to a held sample's rows;
+  - `COLUMNS_ADDED_IN[4]` is a frozen 25-name literal and `COLUMNS_ADDED_IN[5]` the 12 new names.
+- **Hashing.** stateHash hashes each new store, counter and `settings.cycleStartTick` only once it is non-empty or has
+  moved. A held sample's schema 5 column is hashed only when some row holds a non-empty value (Object.is).
+- **The rc1 corpus.** All five v1.0.0-rc1 saves load as 4 → 5 with every recorded value equal
+  (tests/persistence/migration-schema5.test.ts, tests/fixtures/rc1-replay.test.ts).
+- **Import.** `phase5StateProblem` runs inside `parseSaveFile` after the schema 4 checks, against the dish's own
+  recorded systems and structures. It refuses:
+  - stores or settings whose system the dish does not record;
+  - malformed stores; a present store must be well formed, while an absent one reads as empty;
+  - organism columns on organisms without the ability that writes them;
+  - glowing while not Active;
+  - inconsistent or self trap pairs;
+  - a trap reserve, until e3-traps counts it in the totals;
+  - a held sample row holding a trap pair.
 
 ## 12. Android (Capacitor)
 - `appId com.lucidwinds.pixelmeba`, `appName Pixelmeba`, `webDir dist`, `android.allowMixedContent

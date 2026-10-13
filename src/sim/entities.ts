@@ -130,6 +130,31 @@ export const ENTITY_COLUMNS = [
   ['aLink1', 'i32'],
   ['aLinkB0', 'u32'],
   ['aLinkB1', 'u32'],
+  // ---- Phase 5 foundation (world schema 5; D-0102). Hash-neutral like every column from `filmSeconds`
+  // on (D-0035), so a world holding no Phase 5 state hashes exactly as the v1.0 build hashed it. Nothing
+  // in the foundation writes them; the jacket (jacketMineral), the shell (boundMineral), the handling
+  // target (preySlot/preyBirthId with handlingProgress) and native dormancy (lifeState, stateTimer,
+  // lockoutTimer, dryTimer) reuse existing columns.
+  // Glow (SPEC §7.8, §9 E02): 0 dim, 1 glowing; seconds the switching condition has held continuously.
+  ['glowState', 'u8'],
+  ['glowDwell', 'f64'],
+  // A04 mixotrophy (SPEC §7.10): 0 no mode (every organism without MIXOTROPHY), 1 Photo, 2 Sugar.
+  ['metabolicMode', 'u8'],
+  // F03 trap (SPEC §7.17): the reserve drained from the held organism (carbon, nutrient; ledgered by the
+  // trap stage), the held P04 (slot −1 = none, birthId), seconds the current target has been held, and
+  // the cooldown seconds left.
+  ['trapReserveC', 'f64'],
+  ['trapReserveN', 'f64'],
+  ['trapSlot', 'i32'],
+  ['trapBirthId', 'u32'],
+  ['trapTimer', 'f64'],
+  ['trapCooldown', 'f64'],
+  // On the held organism: the trap holding it (slot −1 = none, birthId); mutual with trapSlot/trapBirthId.
+  ['heldBySlot', 'i32'],
+  ['heldByBirthId', 'u32'],
+  // P10 handling (SPEC §7.3): seconds of continuous contact the current attempt needs, sampled when the
+  // attempt starts; 0 = no attempt.
+  ['handlingNeed', 'f64'],
 ] as const satisfies ReadonlyArray<readonly [string, ColType]>;
 
 export type ColumnName = (typeof ENTITY_COLUMNS)[number][0];
@@ -170,6 +195,8 @@ const NEG_ONE_DEFAULT: ReadonlySet<ColumnName> = (() => {
     'fLink3',
     'aLink0',
     'aLink1',
+    'trapSlot',
+    'heldBySlot',
   ]);
 })();
 
@@ -187,6 +214,9 @@ export function emptyValueOf(name: ColumnName): number {
  * column and every later one are hashed only while some slot in [0, highWater) is not empty.
  */
 export const FIRST_HASH_NEUTRAL_COLUMN: number = ENTITY_COLUMNS.findIndex(([n]) => n === 'filmSeconds');
+
+/** Index in ENTITY_COLUMNS of the first column world schema 5 added (`glowState`; D-0102). Hash-neutral too. */
+export const FIRST_SCHEMA5_COLUMN: number = ENTITY_COLUMNS.findIndex(([n]) => n === 'glowState');
 
 function makeArray(t: ColType, n: number): ArrayFor<ColType> {
   switch (t) {
@@ -221,9 +251,16 @@ export const FLAG = {
   restDry: 1 << 10,
   /** This tick's intake reached 1 % of its intake ceiling (USABLE_INTAKE_FRACTION; set in stage 6). */
   usableIntake: 1 << 11,
-  // 1 << 12 is unused (E04 and E12 keep their state in columns, D-0055/D-0058; D-0056).
+  // 1 << 12 is unused (E04 and E12 keep their state in columns, D-0055/D-0058; D-0056). Never reuse it:
+  // a bit some build may have written into a saved flags column must keep one meaning.
   /** This tick's intake came from local detritus through E08 (debris feeder; set in stage 6, cleared with feeding). */
   detritusIntake: 1 << 13,
+  /**
+   * Phase 5 (world schema 5; D-0106): an F04 daughter that began Resting at birth (reason RESTING_NEWBORN).
+   * Unattached, unlinked and in the Small transport class while it rests; attachability is part of waking.
+   * "Held" (heldBySlot ≥ 0) and "glowing" (glowState 1) are columns, so no flag bit duplicates them.
+   */
+  restNewborn: 1 << 14,
 } as const;
 
 /** Life states (SPEC §6.1, §7.6). Saved in the lifeState column: append only. */
