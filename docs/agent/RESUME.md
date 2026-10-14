@@ -3,6 +3,20 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑14 01:22 UTC — WAVE 10 RUNNING (run `wf_73d02c11-690`, session 1383cb99, launched 01:17 from
+> docs/agent/g5-wave-10.run.workflow.js.txt; stage 1 barrier-transport 4271 + structure-commands 4272 on task). Backups
+> every 30 min → `wip/g5-wave-10` (pid tmp/lead/backup-10.pid). WAVE 11 TASK WRITER RUNNING (run `wf_eb1d828b-f0f`; writes
+> docs/agent/g5-wave-11.tasks.js.txt only: structure-render-worker 4271 + e2-signals 4272 both critical 'own' | structure-ui
+> 4273 + region-charts-gates 4274; verifyGroups [['e2-signals'], [the three screen tasks]]; script saved under
+> ~/.claude/projects/-workspaces-pixelmeba/1383cb99-e9f3-46ff-8724-5fe4b53c8734/workflows/scripts/). START HERE.**
+> - If the session died mid-10: if `git status` is clean, restore the tree from `wip/g5-wave-10`; read
+>   docs/reports/reviews/g5-wave-10/ and the run journal
+>   ~/.claude/projects/-workspaces-pixelmeba/1383cb99-e9f3-46ff-8724-5fe4b53c8734/subagents/workflows/wf_73d02c11-690/journal.jsonl;
+>   rerun only unfinished tasks (A.only + finish notes), or resumeFromRunId in the same session.
+> - If the writer died: its file may be partial; rerun the saved script (same prompt) after checking the journal.
+> - After 10: LEAD AFTER WAVE 10 in docs/agent/g5-wave-10.tasks.js.txt; save the writer's final message to
+>   docs/reports/reviews/g5-wave-11/tasks-writer.md, lead-review the wave 11 file, then its LEAD PRE-LAUNCH.
+
 > **Update 2026‑10‑13 23:25 UTC — SAFE REFRESH POINT (the owner refreshes the codespace after wave 9, before wave 10).
 > WAVE 9 COMMITTED `3d2a1d8` (check 235 files / 2679 tests incl. the fence and both corpora; art and contentHash
 > unchanged; D‑0115 classOf, D‑0116 as built; integration verifier's MAJOR + MINORs fixed). WAVE 10 IS READY BUT NOT
