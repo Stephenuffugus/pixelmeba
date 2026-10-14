@@ -129,7 +129,46 @@ export const OBSERVE_TEXT = {
     'Not measured here: the dish also adds or removes it where it lies (or it does not drift), so a change inside is not all crossing.',
   absent: 'not in this dish',
   close2: 'Close regions',
+
+  // Phase 5 wave 11 (region-charts-gates; UX §5.4 charts, §9 table alternatives; D-0119)
+  notMeasuredDecays: 'Not measured here: it also decays while it spreads.',
+  notMeasuredResin: 'Not measured here: a resin in this region removes it.',
+  notMeasuredGas: 'Not measured here: with the lid open, the air trades it.',
+  chartsTitle: (w: MapWindowSeconds) => `Each second of the last ${w} s`,
+  showTable: 'Show as table',
+  showCharts: 'Show as charts',
+  seriesCaption: (id: string, w: MapWindowSeconds) => `Region ${id}: each recorded second of the last ${w} s`,
+  colSecond: 'Dish time',
+  colLiving: 'Living',
+  colBiomass: 'Biomass (C)',
+  colNet: (pool: string) => `${pool} net into the region`,
+  chartLiving: 'Living organisms',
+  chartBiomass: 'Biomass (C)',
+  chartNet: (pool: string) => `${pool} net into the region each second`,
+  chartRange: (lo: string, hi: string) => `from ${lo} to ${hi}`,
+  chartFlat: (v: string) => `steady at ${v}`,
+  chartFrom: 'Dish time',
+  noSeries: 'No second recorded yet.',
+  crossingsTitle: (w: MapWindowSeconds) => `Entered or left in the last ${w} s`,
+  crossed: (name: string, entered: string, left: string) => `${name}: entered ${entered}, left ${left}`,
+  noCrossings: (w: MapWindowSeconds) => `No organism entered or left in the last ${w} s.`,
+  gatesTitle: 'Gates on this region’s edge',
+  gateHeading: (name: string, edges: string) => `${name} · ${edges}`,
+  // The sum over the current edges of one kind, each counted since it was placed (a removed edge's
+  // share leaves the sum; D-0119 fix 1, worded like the gate sheet's "Measured since this barrier was placed").
+  gateSince: (list: string) => `Measured since each of these edges was placed: ${list}`,
+  gateWindow: (w: MapWindowSeconds, list: string) => `In the last ${w} s: ${list}`,
+  gateWindowSince: (clock: string, list: string) => `Since ${clock}: ${list}`,
+  gateNoWindow: 'This window: no whole second recorded yet.',
+  gateNothing: 'nothing yet',
+  gatesWhy:
+    'A gate adds up what crossed it in either direction, so it can be more than the region’s net amount above.',
 } as const;
+
+/** "1 edge", "12 edges". */
+export const edgeCount = (n: number): string => plural(n, 'edge', 'edges');
+/** "0 organisms crossed", "1 organism crossed". */
+export const organismsCrossed = (n: number): string => `${plural(n, 'organism', 'organisms')} crossed`;
 
 export const MEAN_NAMES: Readonly<Record<string, string>> = {
   sugar: 'Sugar',
@@ -140,6 +179,28 @@ export const MEAN_NAMES: Readonly<Record<string, string>> = {
   broth: 'Broth',
   oxygen: 'Oxygen',
   co2: 'Carbon dioxide',
+  // Phase 5 wave 11: the boundary list's added pools and every pool a gate can tally.
+  salt: 'Salt',
+  silicate: 'Silicate',
+  sugarN: 'Nutrient in sugar',
+  brothN: 'Nutrient in broth',
+  metabolite: 'Metabolite',
+  nutrient: 'Mineral nutrient',
+  acid: 'Acid',
+  base: 'Base',
+  buffer: 'Buffer',
+  inhBact: 'Bacterial inhibitor',
+  inhFung: 'Fungal inhibitor',
+  inhPhoto: 'Photosynthetic inhibitor',
+  eStarch: 'Starch enzyme',
+  eOil: 'Oil enzyme',
+  eProtein: 'Protein enzyme',
+  breaker: 'Enzyme breaker',
+  sGlow: 'Lantern signal',
+  quencher: 'Signal quencher',
+  rival: 'Rivalry extract',
+  v01: 'Pinphage',
+  v02: 'Lacephage',
 };
 
 /** The measured value of one map edge, in words. */
@@ -183,6 +244,7 @@ export function allObserveStrings(): string[] {
   walk(ENZYME_TARGETS);
   walk(POOL_NAMES);
   walk(MEAN_NAMES);
+  for (const n of [0, 1, 3]) out.push(edgeCount(n), organismsCrossed(n));
   for (const k of Object.keys(KIND_TEXT) as MapEdgeKind[])
     for (const n of [1, 3]) out.push(edgeValue(k, { count: n, carbon: n * 0.5, seconds: n }, 60));
   return out;

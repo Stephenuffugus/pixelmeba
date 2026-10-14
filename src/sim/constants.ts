@@ -170,3 +170,41 @@ export const RESIN_RATE_PER_SECOND = 0.05;
 export const SHELL_MINERAL_PER_BIOMASS = 0.1;
 /** Share of the remaining shell grit that dissolves into free silicate per second (CT §12.2). */
 export const GRIT_DISSOLVE_PER_SECOND = 0.01;
+
+/**
+ * Signals and glow (Phase 5 wave 11, P5.3 E2-SIGNALS; SPEC §7.8, §9 E02; CT §12.6; src/sim/signals.ts). Native
+ * SIGNAL_GLOW (B09) reads these; an E02 carrier reads its world's recorded E02 parameters (the same numbers in
+ * content/modules/E02.json). Per-tick amounts are rate × DT.
+ */
+/** S_GLOW emitted per second into the emitter's cell (CT §12.6 "signal: 0.02/s"). */
+export const SIGNAL_EMIT_RATE = 0.02;
+/** Energy per second while emitting, ledgered as 'signal' (CT §12.6 "0.20 E/s"; D-0106). */
+export const SIGNAL_EMIT_COST = 0.2;
+/** Emission only while E (remaining this tick) is above this (CT §12.6 "E > 35"). */
+export const SIGNAL_MIN_ENERGY = 35;
+/** Emission stops while the local S_GLOW is at or above this; existing excess is kept (CT §12.6 "cap 1.0"). */
+export const SIGNAL_LOCAL_CAP = 1.0;
+/** Glow turns on after the sensed signal has been ≥ this for GLOW_DWELL_SECONDS (CT §12.6 "on ≥ 0.30 for 5 s"). */
+export const GLOW_ON_THRESHOLD = 0.3;
+/** Glow turns off after the sensed signal has been ≤ this for GLOW_DWELL_SECONDS (CT §12.6 "off ≤ 0.15 for 5 s"). */
+export const GLOW_OFF_THRESHOLD = 0.15;
+/** Continuous seconds either switching condition must hold (CT §12.6 "5 s"). */
+export const GLOW_DWELL_SECONDS = 5;
+/** Energy per second while glowing, ledgered as 'signal' (CT §12.6 "0.30 E/s"; D-0106). */
+export const GLOW_COST = 0.3;
+/** Glow turns off at once when E falls below this, and never turns on below it (CT §12.6 "or E < 15"; D-0119). */
+export const GLOW_OFF_ENERGY = 15;
+
+/** Rivalry (Phase 5 wave 11; SPEC §7.9, §4.3; CT §3.4, §12.6; src/sim/rivalry.ts). Per-tick amounts are rate × DT. */
+/** RIVAL secreted per second by a B13 into its cell (CT §12.6 "RIVAL: 0.02/s"). */
+export const RIVAL_EMIT_RATE = 0.02;
+/** Energy per second while secreting RIVAL, ledgered as 'secretion' (CT §12.6 "0.60 E/s"; D-0119). */
+export const RIVAL_EMIT_COST = 0.6;
+/** Secretion only while E (remaining this tick) is above this (CT §12.6 "E > 50"). */
+export const RIVAL_MIN_ENERGY = 50;
+/** Secretion stops while the local RIVAL is at or above this (CT §12.6 "local < 1.0"). */
+export const RIVAL_LOCAL_CAP = 1.0;
+/** A target within this many cells (Chebyshev, the 5 × 5 window) triggers secretion (CT §12.6 "within 2 cells"; D-0119). */
+export const RIVAL_RADIUS = 2;
+/** A RIVAL target's inhibitor exposure gains this × the local RIVAL (CT §3.4, §12.6 "+0.25 × RIVAL exposure"; SPEC §4.3). */
+export const RIVAL_EXPOSURE_FACTOR = 0.25;

@@ -8,6 +8,7 @@ import { PAINT_TARGETS, PLACEABLE_STRUCTURES, type PaintTarget, type PlaceableSt
 import { paintName, structureName } from '../panels/LabTrayNames';
 import { dishInfo, inspector } from '../state';
 import { cellDescriptionText } from './describe';
+import { cellStructureDescription } from '../strings/structures';
 
 export const CELL_DESCRIPTION_ID = 'dish-cell-description';
 
@@ -41,9 +42,12 @@ export function CellDescription() {
         ),
       })
     : '';
+  // P5.1/P5.2: the cell's edge barriers and its furnishing or device are named too (absent on a v1.0 dish).
+  const structures = c ? cellStructureDescription(c.edges, c.device) : '';
+  const full = structures ? `${text} ${structures}` : text;
   return (
     <p id={CELL_DESCRIPTION_ID} class="sr-only" data-testid="cell-description">
-      {text}
+      {full}
     </p>
   );
 }

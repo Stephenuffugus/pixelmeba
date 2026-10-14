@@ -25,6 +25,7 @@ import type { ProbeMask } from './probes';
 import type { BookmarkEventRef, GalleryEntryInput } from './protocol';
 import type { StorageInfo } from './storage';
 import { platformStorage, startFsHost } from '@platform/capacitor';
+import type { SnapshotEnvironment, SnapshotResin } from './protocol';
 import { PROTOCOL_VERSION, stamp, type DishInfo, type DishSource, type Envelope, type FamilyAnswer, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 
 export class WorkerRequestError extends Error {
@@ -123,6 +124,9 @@ export class SimClient {
   private readonly lastGen: Record<string, number> = {};
   /** P3.1: each dish's lid setting from its latest snapshot (the Habitat tray's lid toggle). */
   private readonly lastLid: Record<string, 'open' | 'closed'> = {};
+  /** Protocol 3: each dish's latest SnapshotMsg.environment and .resins (null when its latest snapshot had none). */
+  private readonly lastEnvironment: Record<string, SnapshotEnvironment | null> = {};
+  private readonly lastResins: Record<string, readonly SnapshotResin[] | null> = {};
   /** P3.5: each dish's held sample from its latest snapshot (null: none held). */
   private readonly lastSample: Record<string, SampleHeldSummary | null> = {};
   private readonly snapshotListeners: ((s: SnapshotMsg) => void)[] = [];
@@ -149,6 +153,19 @@ export class SimClient {
   /** P3.1: a dish's lid setting as its latest snapshot reported it, or null before one arrived. */
   lidOf(dishId: string): 'open' | 'closed' | null {
     return this.lastLid[dishId] ?? null;
+  }
+
+  /**
+   * Protocol 3: a dish's light mode and drying as its latest snapshot reported them, or null before one
+   * arrived or when the dish records no 'climate' system (its snapshots carry no environment).
+   */
+  environmentOf(dishId: string): SnapshotEnvironment | null {
+    return this.lastEnvironment[dishId] ?? null;
+  }
+
+  /** Protocol 3: a dish's S08 resins (id, cell, saturation 0–1) as its latest snapshot reported them, or null when it has none. */
+  resinsOf(dishId: string): readonly SnapshotResin[] | null {
+    return this.lastResins[dishId] ?? null;
   }
 
   /** P3.5: the sample a dish holds as its latest snapshot reported it (null: none, or no snapshot yet). */
@@ -393,6 +410,8 @@ export class SimClient {
       if (msg.gen <= last) return; // stale
       this.lastGen[msg.dishId] = msg.gen;
       if (msg.lid) this.lastLid[msg.dishId] = msg.lid;
+      this.lastEnvironment[msg.dishId] = msg.environment ?? null;
+      this.lastResins[msg.dishId] = msg.resins ?? null;
       if (msg.sample !== undefined) this.lastSample[msg.dishId] = msg.sample;
       for (const fn of this.snapshotListeners) fn(msg);
       return;

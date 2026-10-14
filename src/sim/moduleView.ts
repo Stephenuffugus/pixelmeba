@@ -11,7 +11,7 @@ import { anchorUpkeepPerSecond } from './anchor';
 import { adhesionLinked, adhesionUpkeepPerSecond } from './adhesion';
 import { photosynthesizedThisTick } from './intake';
 import { R } from './reasons';
-import { PRODUCER_BIT } from './secretion';
+import { EMITTER_BIT, PRODUCER_BIT } from './secretion';
 import { matrixBuiltNow } from './matrixBuilder';
 import type { World } from './world';
 
@@ -66,6 +66,8 @@ function moduleActiveNow(world: World, i: number, id: string): boolean {
   switch (id) {
     case 'E01':
       return (c.secreting[i]! & PRODUCER_BIT.starch) !== 0; // released starch enzyme this tick (secretion.ts)
+    case 'E02':
+      return (c.secreting[i]! & EMITTER_BIT.signal) !== 0 || c.glowState[i] === 1; // emitted signal this tick, or glowing (signals.ts)
     case 'E03':
       return c.lifeState[i] !== LIFE_ACTIVE;
     case 'E04':

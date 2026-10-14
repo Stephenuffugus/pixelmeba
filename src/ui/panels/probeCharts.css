@@ -1,0 +1,87 @@
+/* Phase 5 wave 11 region-charts-gates: the probe sheet's charts, series table, crossings and gates
+   (src/ui/panels/ProbeCharts.tsx). Text ≥ 16 px; controls ≥ 48 px; colour is never the only carrier
+   (every chart is labelled in words). */
+.probe-charts-block h4 {
+  margin: 0.5rem 0 0.25rem;
+  font-size: var(--fs-body);
+}
+.probe-charts-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.probe-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.5rem;
+  margin: 0.25rem 0 0.5rem;
+}
+.probe-spark {
+  margin: 0;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0.25rem 0.5rem;
+  background: var(--surface);
+}
+.probe-spark figcaption,
+.probe-spark-axis {
+  font-size: var(--fs-body);
+  overflow-wrap: anywhere;
+}
+.probe-spark svg {
+  display: block;
+  width: 100%;
+  height: 48px;
+  margin: 0.25rem 0;
+}
+.probe-spark polyline {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.probe-spark circle {
+  fill: var(--primary);
+}
+.probe-spark-zero {
+  stroke: var(--text);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+}
+.probe-spark-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.probe-series-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.probe-series-wrap:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+.probe-series th,
+.probe-series td {
+  white-space: nowrap;
+}
+.probe-gates ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.probe-gates li {
+  border-top: 1px solid var(--line);
+  padding: 0.25rem 0;
+}
+.probe-gates p {
+  margin: 0.125rem 0;
+  font-size: var(--fs-body);
+}
+.probe-gate-name {
+  font-weight: 600;
+}

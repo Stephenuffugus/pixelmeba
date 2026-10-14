@@ -39,6 +39,7 @@ import { FavoriteFollow } from './FavoriteFollow';
 import { notebook } from '../favorites';
 import { buildGalleryEntry, saveSpecimen } from '../gallery';
 import { GALLERY_UI } from '../strings/notebookTools';
+import { CellClimateLines, cellLightFactors, CellStructureLines } from '../inspector/CellStructureLines';
 
 /**
  * P4.8b Save to gallery: an entry from a COPY of the latest published snapshot and this inspector answer
@@ -803,7 +804,9 @@ export function InspectorSheet() {
                 </>
               ) : null}
               <dt>Light</dt>
-              <dd data-testid="cell-light">{lightText(p.cell)}</dd>
+              {/* P5.2: every light factor (cycle, roof, canopy) when the dish has any; else the habitat × shade line. */}
+              <dd data-testid="cell-light">{cellLightFactors(p.cell) ?? lightText(p.cell)}</dd>
+              <CellClimateLines cell={p.cell} />
               {p.cell.exposure ? (
                 <>
                   <dt>Inhibitor exposure</dt>
@@ -825,6 +828,8 @@ export function InspectorSheet() {
                   : p.cell.residents.map((r) => dishInfo.value?.speciesNames[dishInfo.value.speciesIds.indexOf(r.speciesId)] ?? r.speciesId).join(', ')}
               </dd>
             </dl>
+            {/* P5.1/P5.2: edge barriers on its sides ("Show gate") and its furnishing or device ("Settings"). */}
+            <CellStructureLines cell={p.cell} />
             {p.cell.reactions ? <ReactionLedger rows={p.cell.reactions} /> : null}
           </>
         ) : null}

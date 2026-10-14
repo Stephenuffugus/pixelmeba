@@ -3,7 +3,9 @@
  * species, biomass, food and gas means per cell, and what drifted across its edge in the window (only
  * for pools the dish's environment stage moves without adding or removing). An overlap warning names
  * every pair that shares a cell. Readings are the worker's measurement of the world, read only; regions
- * are session state and reset on reload.
+ * are session state and reset on reload. Phase 5 wave 11 (region-charts-gates): per region, charts of
+ * each recorded second with a table alternative, organisms that entered or left, the gates on its edge
+ * and, for pools that are not measured, why (ProbeCharts.tsx).
  */
 import { useEffect } from 'preact/hooks';
 import { IconClose } from '../icons';
@@ -21,6 +23,7 @@ import {
 } from '../observe';
 import { WindowChoice } from './RelationshipMap';
 import { ShapeIcon, startProbeSession } from './ProbeSession';
+import { ProbeRegionCharts } from './ProbeCharts';
 import { labTray } from '../views/LabView';
 
 const REFRESH_MS = 1000;
@@ -113,11 +116,12 @@ export function ProbeSheet() {
                     .map((b) => (
                       <tr key={b.field}>
                         <th scope="row">{MEAN_NAMES[b.field] ?? b.field}</th>
-                        <td>{boundaryText(b.status, b.into)}</td>
+                        <td>{boundaryText(b.status, b.into, b.why)}</td>
                       </tr>
                     ))}
                 </tbody>
               </table>
+              <ProbeRegionCharts reading={r} gates={shown?.gates ?? []} names={names} windowSeconds={w} />
               {r.recordedSinceSecond !== null ? (
                 <p class="sub">{OBSERVE_TEXT.recordedSince(clockText(r.recordedSinceSecond))}</p>
               ) : null}

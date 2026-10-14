@@ -42,6 +42,20 @@ import {
   ENZYME_EMIT_MIN_ENERGY,
   ENZYME_EMIT_RATE,
   ENZYME_LOCAL_CAP,
+  GLOW_COST,
+  GLOW_DWELL_SECONDS,
+  GLOW_OFF_ENERGY,
+  GLOW_OFF_THRESHOLD,
+  GLOW_ON_THRESHOLD,
+  RIVAL_EMIT_COST,
+  RIVAL_EMIT_RATE,
+  RIVAL_LOCAL_CAP,
+  RIVAL_MIN_ENERGY,
+  RIVAL_RADIUS,
+  SIGNAL_EMIT_COST,
+  SIGNAL_EMIT_RATE,
+  SIGNAL_LOCAL_CAP,
+  SIGNAL_MIN_ENERGY,
 } from './constants';
 
 export interface ModuleRT {
@@ -108,6 +122,47 @@ export interface DormancyRules {
   readonly wakeConditionSeconds: number;
 }
 
+/**
+ * Signal emission and glow (SPEC §7.8, §9 E02, CT §12.6; Phase 5 wave 11, src/sim/signals.ts): native
+ * SIGNAL_GLOW (B09, the CT constants) or gained through E02 (the world's recorded E02 numbers). Never both:
+ * E02's nativeEquivalents exclude B09.
+ */
+export interface GlowRules {
+  readonly source: 'native' | 'E02';
+  /** S_GLOW per second into its cell (0.02). */
+  readonly emitRate: number;
+  /** Energy per second while emitting (0.20), ledgered as 'signal'. */
+  readonly emitCost: number;
+  /** Emits only while E remaining is above this (35). */
+  readonly minEnergy: number;
+  /** No emission while local S_GLOW ≥ this (1.0); existing excess is kept. */
+  readonly localCap: number;
+  /** Glow on after sensed ≥ this for dwellSeconds (0.30). */
+  readonly onThreshold: number;
+  /** Glow off after sensed ≤ this for dwellSeconds (0.15). */
+  readonly offThreshold: number;
+  /** Continuous seconds either switching condition must hold (5). */
+  readonly dwellSeconds: number;
+  /** Energy per second while glowing (0.30), ledgered as 'signal'. */
+  readonly glowCost: number;
+  /** Off at once below this energy; never on below it (15). */
+  readonly glowOffEnergy: number;
+}
+
+/** RIVAL secretion (SPEC §7.9, CT §12.6; Phase 5 wave 11, src/sim/rivalry.ts): native RIVALRY (B13) only. */
+export interface RivalryRules {
+  /** RIVAL per second into its cell (0.02). */
+  readonly emitRate: number;
+  /** Energy per second while secreting (0.60), ledgered as 'secretion'. */
+  readonly emitCost: number;
+  /** Secretes only while E remaining is above this (50). */
+  readonly minEnergy: number;
+  /** No secretion while local RIVAL ≥ this (1.0). */
+  readonly localCap: number;
+  /** A stage-start Active target within this Chebyshev distance in cells triggers it (2). */
+  readonly radius: number;
+}
+
 export interface Profile {
   readonly b0: number;
   readonly q: number;
@@ -161,6 +216,10 @@ export interface Profile {
   readonly shade: ShadeRules | null;
   /** E08 debris feeder (debrisFeeder.ts): with no held meal it may eat local detritus. */
   readonly debrisFeeder: boolean;
+  /** Signal emission and glow rules (native SIGNAL_GLOW, module E02; signals.ts), or null. */
+  readonly glow: GlowRules | null;
+  /** RIVAL secretion rules (native RIVALRY; rivalry.ts), or null. */
+  readonly rivalry: RivalryRules | null;
 }
 
 /** E04 Surface anchor (SPEC §9 E04, CT §12.6), from the world's recorded module numbers. */
@@ -260,6 +319,29 @@ const NATIVE_FILM_BUILDER: BuilderRules = Object.freeze({
   energyPerC: 0,
 });
 
+/** Native SIGNAL_GLOW (B09; SPEC §7.8, CT §12.6). */
+const NATIVE_GLOW: GlowRules = Object.freeze({
+  source: 'native',
+  emitRate: SIGNAL_EMIT_RATE,
+  emitCost: SIGNAL_EMIT_COST,
+  minEnergy: SIGNAL_MIN_ENERGY,
+  localCap: SIGNAL_LOCAL_CAP,
+  onThreshold: GLOW_ON_THRESHOLD,
+  offThreshold: GLOW_OFF_THRESHOLD,
+  dwellSeconds: GLOW_DWELL_SECONDS,
+  glowCost: GLOW_COST,
+  glowOffEnergy: GLOW_OFF_ENERGY,
+});
+
+/** Native RIVALRY (B13; SPEC §7.9, CT §12.6). */
+const NATIVE_RIVALRY: RivalryRules = Object.freeze({
+  emitRate: RIVAL_EMIT_RATE,
+  emitCost: RIVAL_EMIT_COST,
+  minEnergy: RIVAL_MIN_ENERGY,
+  localCap: RIVAL_LOCAL_CAP,
+  radius: RIVAL_RADIUS,
+});
+
 function param(mod: ModuleRT, key: string): number {
   const v = mod.params[key];
   if (v === undefined || !Number.isFinite(v)) throw new Error(`module ${mod.id} has no parameter "${key}"`);
@@ -284,6 +366,22 @@ function builderFrom(mod: ModuleRT): BuilderRules {
     bodyFloor: param(mod, 'minBodyMultiple'),
     energyPerC: param(mod, 'energyPerCarbon'),
     filmCap: param(mod, 'filmCap'),
+  };
+}
+
+/** E02 Signal glow (SPEC §9 E02, §7.8): B09's emission and glow with the world's recorded E02 numbers. */
+function glowFrom(mod: ModuleRT): GlowRules {
+  return {
+    source: 'E02',
+    emitRate: param(mod, 'emitRate'),
+    emitCost: param(mod, 'emitCost'),
+    minEnergy: param(mod, 'minEnergy'),
+    localCap: param(mod, 'localCap'),
+    onThreshold: param(mod, 'onThreshold'),
+    offThreshold: param(mod, 'offThreshold'),
+    dwellSeconds: param(mod, 'dwellSeconds'),
+    glowCost: param(mod, 'glowCost'),
+    glowOffEnergy: param(mod, 'glowOffEnergy'),
   };
 }
 
@@ -402,6 +500,7 @@ export function deriveProfile(sp: SpeciesRT, genome: Genome, modules: readonly M
   let moduleBuilder: BuilderRules | null = null; // E10 (never on a native builder)
   let shade: ShadeRules | null = null;
   let debrisFeeder = false;
+  let moduleGlow: GlowRules | null = null; // E02 (never on a native SIGNAL_GLOW species)
 
   // Modules: surcharge is part of maintenance; upkeep and capacities are separate.
   let surchargeRaw = 0;
@@ -416,6 +515,7 @@ export function deriveProfile(sp: SpeciesRT, genome: Genome, modules: readonly M
     else if (mod.id === 'E10') moduleBuilder = builderFrom(mod);
     else if (mod.id === 'E06') shade = { lightHalf: param(mod, 'lightHalf'), ceilingFactor: param(mod, 'ceilingFactor') };
     else if (mod.id === 'E08') debrisFeeder = true;
+    else if (mod.id === 'E02') moduleGlow = glowFrom(mod);
     else if (mod.id === 'E05') {
       energyCap += param(mod, 'capacityBonus');
       upkeep += param(mod, 'upkeepPerSecond');
@@ -460,5 +560,7 @@ export function deriveProfile(sp: SpeciesRT, genome: Genome, modules: readonly M
     lightSeeker,
     shade,
     debrisFeeder,
+    glow: sp.abilities.includes('SIGNAL_GLOW') ? NATIVE_GLOW : moduleGlow,
+    rivalry: sp.abilities.includes('RIVALRY') ? NATIVE_RIVALRY : null,
   };
 }

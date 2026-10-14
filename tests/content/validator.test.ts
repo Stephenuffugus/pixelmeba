@@ -72,16 +72,17 @@ describe('content validation (P0.2)', () => {
     expect(errs.some((e) => e.file === 'content/species/B01copy.json' && e.message.includes('file name must match id'))).toBe(true);
   });
 
-  // Phase 3 preflight (g3-plan-recheck W2-02 (b)): the subjects are Phase 5 records (B09's SIGNAL_GLOW,
-  // B10), which no Phase 3 or 4 build enables or implements, so these cases keep testing the rule.
+  // Phase 3 preflight (g3-plan-recheck W2-02 (b)): the subjects are Phase 5 records, which no Phase 3 or 4 build
+  // enables, so these cases keep testing the rule. The ability subject moved from B09's SIGNAL_GLOW (implemented
+  // at the wave 11 integration, D-0120) to F03's TRAP (wave 13); it moves again when TRAP is implemented.
   it('refuses to enable a species whose native ability is not implemented', () => {
     const errs = errorsOf(
       mutate(raw, 'manifest', 'manifest.json', (d) => {
-        d.enabledSpecies = [...(d.enabledSpecies as string[]), 'B09'].sort();
+        d.enabledSpecies = [...(d.enabledSpecies as string[]), 'F03'].sort();
         d.buildPhase = 7;
       }),
     );
-    expect(errs.some((e) => e.file === 'content/species/B09.json' && e.message.includes('SIGNAL_GLOW'))).toBe(true);
+    expect(errs.some((e) => e.file === 'content/species/F03.json' && e.message.includes('TRAP'))).toBe(true);
   });
 
   it('refuses a shipped recipe that uses content outside the manifest', () => {

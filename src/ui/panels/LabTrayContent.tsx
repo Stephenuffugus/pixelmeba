@@ -50,8 +50,8 @@ const MATERIAL_RECORDS = byId(
  */
 const TOOL_RECORDS = byId(import.meta.glob<ToolDef>('../../../content/tools/*.json', { eager: true, import: 'default' }));
 
-/** Tool records the Lab tray describes: Sample, Transfer, Clean water and Erase structure. */
-export type TrayToolRecordId = 'SAMPLE' | 'TRANSFER' | 'CLEAN_WATER' | 'ERASE_STRUCTURE';
+/** Tool records the Lab tray describes: Sample, Transfer, Clean water, Erase structure and (P5.2) the wetting brush. */
+export type TrayToolRecordId = 'SAMPLE' | 'TRANSFER' | 'CLEAN_WATER' | 'ERASE_STRUCTURE' | 'WET_BRUSH';
 
 /** A bundled tool record (content/tools/<id>.json); throws when the record is missing, which the content tests rule out. */
 export function toolRecord(id: string): ToolDef {
@@ -130,12 +130,43 @@ export function structureRecord(info: DishInfo, s: PlaceableStructure): LabRecor
   return { id, name: rec.name, summary: rec.guide.summary, rules: rec.guide.rules, example: rec.guide.example };
 }
 
+/**
+ * P5.2 (D-0111): whether this dish records the 'climate' system (its own enabledSystems, DishInfo.systems):
+ * the wetting brush, the light-mode and drying controls and the warmth and moisture overlays are offered
+ * per dish on this, never on the build's tool filter, so a v1.0 dish never shows them.
+ */
+export function dishHasClimate(info: DishInfo): boolean {
+  return info.systems?.includes('climate') === true;
+}
+
 /** Habitat tray tools this dish offers, in tray order. */
 export function habitatTools(info: DishInfo): LabToolId[] {
   const out: LabToolId[] = [];
   for (const t of SUBSTRATE_NAMES) if (paintOf(info, t)) out.push(`paint:${t}`);
   if (shadeFactorOf(info) !== null) out.push('shade:paint', 'shade:erase');
+  if (dishHasClimate(info)) out.push('wet');
   return out;
+}
+
+/** The Build group's records in CT §4 order (P5.1/P5.2). */
+export const BUILD_IDS = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12'] as const;
+
+/**
+ * The Build group's tools this dish offers (P5.1/P5.2): each S01–S12 its recorded manifest enables
+ * (DishInfo.structureIds; D-0024), in CT §4 order, then Remove when there is any. A v1.0 dish offers none.
+ */
+export function buildTools(info: DishInfo): LabToolId[] {
+  const ids = dishStructureIds(info);
+  const out: LabToolId[] = BUILD_IDS.filter((id) => ids.includes(id) && STRUCTURE_RECORDS[id] !== undefined).map((id) => `build:${id}` as LabToolId);
+  if (out.length > 0) out.push('build:remove');
+  return out;
+}
+
+/** A Build item's content record (name, summary, rules, example), or null. */
+export function buildRecord(id: string): LabRecord | null {
+  const rec = STRUCTURE_RECORDS[id];
+  if (!rec) return null;
+  return { id, name: rec.name, summary: rec.guide.summary, rules: rec.guide.rules, example: rec.guide.example };
 }
 
 /** Tools tray structure tools this dish offers, in tray order (erase only when it has structures). */
@@ -154,7 +185,8 @@ export function toolAvailable(info: DishInfo, id: LabToolId): boolean {
   if (id.startsWith('material:')) return info.materials.some((m) => m.id === id.slice('material:'.length));
   // P3.6: a food object tool needs that object material in this dish's recorded content.
   if (id.startsWith('object:')) return info.materials.some((m) => m.id === id.slice('object:'.length) && m.kind === 'object');
-  if (id.startsWith('paint:') || id.startsWith('shade:')) return habitatTools(info).includes(id);
+  if (id.startsWith('paint:') || id.startsWith('shade:') || id === 'wet') return habitatTools(info).includes(id);
+  if (id.startsWith('build:')) return buildTools(info).includes(id);
   return structureTools(info).includes(id);
 }
 
@@ -181,10 +213,14 @@ export function lifeBrushFor(info: DishInfo, speciesId: string): LifeBrush | nul
   const habitats = i < 0 ? undefined : info.speciesHabitats?.[i];
   const attachment = i < 0 ? undefined : info.speciesAttachment?.[i];
   if (!habitats || attachment === undefined) return null;
+  // P5.1 (wave 11): a Medium or Large free class cannot enter an S05 porous shelter cell, so the preview
+  // refuses those cells exactly as the inoculate filter (canOccupy) does. Absent for a v1.0 dish.
+  const cls = i < 0 ? undefined : info.speciesFreeClass?.[i];
+  const shelter = cls === 'medium' || cls === 'large' ? { shelterBlocked: true } : {};
   // An attached species also needs one of its recorded surfaces in the cell (SPEC §2.2, D-0006).
   return attachment === null
-    ? { habitatMask: habitatMaskOf(habitats), attached: false }
-    : { habitatMask: habitatMaskOf(habitats), attached: true, surfaces: [...attachment] };
+    ? { habitatMask: habitatMaskOf(habitats), attached: false, ...shelter }
+    : { habitatMask: habitatMaskOf(habitats), attached: true, surfaces: [...attachment], ...shelter };
 }
 
 /** The diet symbol a species tile shows next to its diet line (UX §4.3). */

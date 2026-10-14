@@ -131,3 +131,51 @@ All pass relErr < 1e-5 for C, N and mineral; measured worst values where the tes
 The resin binds activity, which is not a conserved material, so it has no ledger line; the channel moves material
 between cells only. Nothing was optimised in wave 10; nothing here is a regression on any shipped dish. The systems
 flip measures again on the SPEC §16 workloads.
+
+## Wave 11: snapshot packing (protocol 3), region probes and the stage 8 signal pass (2026-10-14)
+
+All three were measured on the contended 2-core codespace (builders in parallel, or the lead's `npm run check`
+running), so every figure is an upper bound; nothing here is a regression on a shipped dish, whose stage 8 gains
+two manifest checks and three always-false `applies` closures per Active organism.
+
+### Snapshot packing (structure-render-worker's probe)
+
+One pack = packEntities + packDeposits + packGeometry + packResins + packEnvironment + one cell inspector, 300 packs
+after 30 warm-up packs (`tmp/structure-render-worker/perf.ts`, not committed). The host rebuilds the geometry only
+when `geometryVersion` moves, so a real snapshot costs less than this.
+
+| Dish | Mean (ms) | p95 (ms) |
+|---|---|---|
+| v1.0 FIRST_DISH_V1 t200 (56 organisms) | 2.58 | 7.76 |
+| the same, second run | 1.98 | 5.05 |
+| 400 organisms, 512 edges, 256 devices, 8 resins | 2.84 | 9.28 |
+
+An earlier, less contended run gave 1.44–1.69 ms for v1.0 and 1.38 ms for the Phase 5 dish (then 266 organisms).
+
+### Region probes with gates and organism crossings (region-charts-gates' probe)
+
+Six regions (one of them the whole dish), 500 Sprinters (527 alive at the end), 1,000 measured ticks after 200
+warm-up (`tmp/region-charts-gates/perf.test.ts`, not committed):
+
+- organism crossings, the stage 4 pass and the after-tick pass together: mean 0.245 ms, p95 0.572 ms per tick
+  (the after-tick pass alone 0.117 / 0.173);
+- the stage 1 + 2 boundary sums (P4.8 code, now 10 pools): mean 1.65 ms, p95 6.0 ms per tick, dominated by the
+  whole-dish region; the two new pools add about a quarter. Only while regions exist. If it matters: sum only the
+  active fields (`derived.fieldActive`), since an inactive field is exactly zero.
+
+### The stage 8 signal pass (lead)
+
+`tmp/lead/perf-w11.ts` (`npx tsx`, not committed), run while `npm run check` was running: 400 ticks after 100
+warm-up; stage 8 (stageStructures) timed from the end of stage 7 to the end of stage 8. With signals: 30 B09, 10
+B01 carrying E02 and 10 B13 on gel with 10 B01 targets beside them, sGlow 0.4 over the B09 patch, a registry
+recording 'signals' and 'rivalry'. Without: the same positions with B01, plain B01 and B02 under the shipped
+registry (60 alive in both).
+
+| Run | Stage 8 without signals, mean / p95 (ms) | With 30 B09, 10 E02, 10 B13, mean / p95 (ms) |
+|---|---|---|
+| 1 | 0.056 / 0.065 | 0.139 / 0.120 |
+| 2 | 0.044 / 0.050 | 0.064 / 0.062 |
+
+- The stage-start senses, the glow thresholds and both emissions cost about **+0.02 to +0.08 ms per tick** for 50
+  emitters (the senses scan every living slot once while the world records 'signals' or 'rivalry').
+

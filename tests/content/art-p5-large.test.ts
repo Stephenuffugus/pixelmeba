@@ -385,7 +385,8 @@ describe('the committed atlas (npm run art:build)', () => {
   });
 
   it('every frame packed before wave 8b is byte-identical to the wave 8a atlas (60a4731)', () => {
-    const NEW = /^(p05_shellglider|p06_bellstalk|p07_dartfin|p08_waterbear|p09_wheelgrazer|p10_needlejaw)\/|^feature\/(handling_arc|trap_loop)\//;
+    // Wave 11 (structure-render-worker) appended the 13 'device' tile frames last: they are not wave 8a frames either.
+    const NEW = /^(p05_shellglider|p06_bellstalk|p07_dartfin|p08_waterbear|p09_wheelgrazer|p10_needlejaw)\/|^feature\/(handling_arc|trap_loop)\/|^tile\/device\//;
     const old = manifest.frames.filter((f) => !NEW.test(f.key)).sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
     const h = createHash('sha256');
     for (const f of old) {
@@ -396,6 +397,6 @@ describe('the committed atlas (npm run art:build)', () => {
     expect(old).toHaveLength(1342);
     expect(h.digest('hex')).toBe('327490bd6265f39530fde0360fcc34af4ef8fd4a8215be05a1053328cf4fdfeb');
     // The new frames: 32 px P05/P06/P09 20 each and P07 80; 48 px P08 92 and P10 80; marks (4 + 2) × 4.
-    expect(manifest.frames.length - old.length).toBe(20 * 3 + 80 + 92 + 80 + 24);
+    expect(manifest.frames.length - old.length).toBe(20 * 3 + 80 + 92 + 80 + 24 + 13); // + wave 11's 13 device frames
   });
 });

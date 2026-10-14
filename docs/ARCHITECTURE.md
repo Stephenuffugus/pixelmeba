@@ -235,6 +235,33 @@ Nothing is enabled (D-0104):
   V02 joins `VIRUSES` (B02 only, only where film ≥ 0.10, `V02_FILM_MIN`); X02 runs the generic parasite rules on
   F02 and F04 and is released alive when its host leaves Active or dies.
 
+As built, Phase 5 wave 11 (P5.3 signals and rivalry; D-0119, D-0120; `src/sim/signals.ts`, `rivalry.ts`,
+`structures.ts`, `actions.ts`, `secretion.ts`, `suitability.ts`, `chemistry.ts`, `phenotype.ts`, `ledger.ts`,
+`events.ts`). Nothing is enabled (D-0104):
+- **Stage 8 order.** `stage8Senses` runs once before the slot loop and returns at once unless the world records
+  'signals' or 'rivalry': the stage-start sensed signal S_GLOW / (1 + quencher) of every living glower (a WeakMap
+  scratch stamped with the tick: never saved, never iterated, rebuilt identically after a reload) and a cell mask
+  of Active RIVAL targets. Per living slot: clear the secreting bits; `dormancyStep` (Active → Preparing clears
+  glow in the same branch); `glowThresholds`; `releaseInvalidLinks`; Active only, the action table: E_STARCH 0,
+  E_OIL 1, E_PROTEIN 2, BIOFILM 3, SIGNAL_GLOW 5, RIVALRY 6, then E01, E02, E09, E10.
+- **Glow.** Hysteresis on the stage-start value: on after ≥ 0.30 held 5 s (never below 15 E), off after ≤ 0.15
+  held 5 s or at once below 15 E; 0.30 E/s under 'signal' while glowing. Glow writes no field and no light, is off
+  in every non-Active state, and is never inherited (births start both daughters dim, one 'glowOff' why 'division'
+  under the parent's birthId); death emits none. 'glowOn' {sensed} and 'glowOff' {sensed, why: signal | energy |
+  rest | division} go to the event ring only; every why but 'division' (the live reading at stage 9) records the
+  stage-start value.
+- **Emission.** S_GLOW 0.02/s into its cell while E remaining > 35 and local S_GLOW < 1.0 (existing excess kept),
+  0.20 E/s under 'signal' (native SIGNAL_GLOW, or E02 with the world's recorded E02 numbers). RIVAL (B13) while an
+  Active target lies in the 5 × 5 Chebyshev window of the stage-start mask (edge barriers ignored: sensing, not
+  contact), charged under 'secretion'; no target records secretionCode NONE. Emitter bits in `secreting`: rival 8,
+  signal 16 (`recordEmission`).
+- **Exposure.** A RIVAL target (B01, B10, B11; `SpeciesRT.rivalTarget` by ancestor id) adds 0.25 × RIVAL to its
+  inhBact exposure, and film halves the sum once; the reason is RIVAL_EXPOSURE when the inhibitor factor binds and
+  the RIVAL term is the larger part. A non-target pays one boolean read; a world without the rival field adds no
+  float operation. `exposureBreakdown(...).rival` feeds the inspector.
+- **Energy.** A new ledger category 'signal' (S_GLOW emission and glowing); E02's 0.02 E/s is 'surcharge'. Older
+  saves load signal 0, and a v1.0 world now serializes `energy.signal: 0` (the energy ledger is not hashed).
+
 ## 6. Determinism primitives
 ```ts
 // 32-bit mixer (murmur3 fmix / splitmix32 style) over canonical encoding of args
@@ -248,7 +275,7 @@ sha256(bytes): Promise<string>  // Web Crypto; pure-JS fallback in Node tests
 per session, never saved, never read by the sim. ESLint forbids `Math.random` outside
 `src/render` and `src/audio`.
 
-## 7. Worker protocol (versioned; `protocolVersion: 2`)
+## 7. Worker protocol (versioned; `protocolVersion: 3` since Phase 5 wave 11)
 
 Main → Worker:
 ```
@@ -564,6 +591,36 @@ and the host passes any payload to `applyNow` (wave 11 bumps the protocol once):
 - **Challenges.** Structure commands and the wetting brush count as 'habitat', light mode and drying as 'lid';
   `setDevice`, `setLightMode` and `setDrying` use up no action.
 
+As built, Phase 5 wave 11 (protocol 3, the one Phase 5 bump; D-0102, D-0107, D-0119, D-0120; `src/worker/protocol.ts`,
+`snapshot.ts`, `host.ts`, `client.ts`, `probes.ts`):
+- `PROTOCOL_VERSION` 3; the client refuses a worker of another version ("protocol version mismatch: worker 2, app 3").
+- **Geometry.** `GeometryMsg.edges` is `{r, d, list} | null`: the per-cell R and D codes (barriers.ts
+  `edgeCodeArrays`, an S04 flowing −1 ORed with `EDGE_FLOW_BACK` 8) and `list` `{id, kind, cell, dir, open?, flow?}`;
+  `devices` is `{id, kind, cell, on?, resinSelect?}[]` (never `bound` or `nextOrganismTick`). Both are sent with
+  every geometry, which is resent when `geometryVersion` moves (Undo included).
+- **Snapshot.** `SnapshotMsg.resins` `{id, cell, saturation}[]` (only with an S08, in every snapshot, since `bound`
+  changes without a geometry bump) and `environment` `{lightMode, drying}` (only when the world records 'climate');
+  the client keeps them beside `lidOf` (`resinsOf`, `environmentOf`).
+- **DishInfo** gains `systems` (the recorded enabledSystems) and `speciesFreeClass` ('small' | 'medium' | 'large' |
+  'fixed' | 'viral', in speciesIds order). `OverlayId` gains 'warmth' and 'moisture' (read only, never allocate).
+- **Inspector.** `CellInspect` gains optional `climate {warmth, ambientWarmth, warmthLocal, moisture,
+  moistureLocal}`, `lightFactors {cycle?, roof?, canopy?}` (chemistry.ts `lightFactors`; in a climate world roof
+  and canopy are always present), `edges` (N, E, S, W: `{id, kind, side, neighbour, code, open?, flow?: 'out' |
+  'in', tally {fields, organisms} | null}`), `device {id, kind, on?, resinSelect?, bound?, saturation?}` and
+  `exposure.rival {amount, exposure, targets}`; `EntityInspect.suitFactors.warmth` reads the local warmth. Every
+  new key is absent on a v1.0 dish.
+- **New Dish.** `RecipeOverrides` gains `lid`, `lightMode` and `drying`. `build()` validates them (an unknown value,
+  or a cycle or drying without 'climate', is refused with a sentence and no dish is created) and
+  `recipeProvenance` records only the keys given, so a build without them is byte-identical to the previous one;
+  `NewDishPreview` gains `environment {lid, lightMode, drying}` and `climate`.
+- **Region probes** (types only, no message change): boundary entries for salt and silicate (measured); the
+  decaying pools (inhibitors, enzymes, breaker, sGlow, quencher, rival, v01, v02) only when the dish records
+  'barriers' or 'devices' (v01 / v02 only with V01 / V02), as 'notMeasured' with why 'decays', or 'resin' where an
+  S08 selecting the pool sits in the region; gases with the lid open carry why 'gas'; per-region
+  `crossings {species, entered, left}[]` (membership compared after stage 4 and after the tick, matched by slot
+  and birthId, transfers by birthId); `gates` (one `ProbeGate` per barrier edge touching a region: `sinceStart`
+  and the change of `world.gateTally` over the window). `WORLD_GATES` is the objectives' default GateReading.
+
 ## 8. Snapshots
 Published ≤ 10/s (adaptive under load). Contents: `renderList` as a packed `Float32Array`
 [entityIndex, speciesIdx, x, y, heading, scale/sizeFactor, stateFlags, cueBits] per living
@@ -584,6 +641,14 @@ eroding, from worker-side scratch). `links` is a `Float32Array` [x1, y1, x2, y2,
 link (each pair once); `objects` lists the food objects [{id, x, y, kind, fill}] with fill = remaining
 C / full inventory. VisualEvent types add `objectEmptied` (a fading stain).
 
+As built, protocol 3 (Phase 5 wave 11; D-0119, D-0120): ENT_STRIDE 15, slots 0–13 unchanged, `E_CUE3` = 14 with 13
+bits read from authoritative columns (`cue3Of`, every value < 2^24): glowing 1, E02 2, metabolic mode at shift 2 (0
+none, 1 Photo, 2 Sugar), held 16, handling 32, trap state at shift 6 (holding over cooldown over armed), jacket band
+at shift 8, jacketed 1024, E11 2048, shell 4096. `deposits` has 8 bands; band 7 is grit on the starch and detritus
+scale (0 without a grit field; packed, not drawn yet). A v1.0 dish packs slots 0–13 and bands 0–6 exactly as
+protocol 2 did (tests/fixtures/protocol2-golden/, written from the code before the bump), and packing only reads:
+stateHash and the full digest are unchanged under per-tick packing, and no climate array is allocated.
+
 ## 9. Rendering (PixiJS 8)
 - World unit = one cell. Base scale 4 px/cell at zoom 1 (512 px dish). Zoom presets: whole dish
   (fit), neighborhood (8 px/cell), close (16 px/cell). Sprite scale = `pxPerCell / 8` snapped to
@@ -602,6 +667,26 @@ C / full inventory. VisualEvent types add `objectEmptied` (a fading stain).
 - Selection: ring/bracket outside the body; candidate list for ambiguous taps (proximity, then
   id). Selection radius is separate from collision.
 - Effects: particles are cosmetic, budgeted, and dropped first under load.
+
+As built, Phase 5 wave 11 (D-0119, D-0120; `src/render/renderer.ts`, `structureLayer.ts`, `structurePreviewModel.ts`,
+`gateTracer.ts`, `layers.ts`; `src/ui/edgeSnap.ts`):
+- **Edges** are procedural glyphs on the shared cell edge (S01 membrane, S02 sieve, S03 shutter open or closed, S04
+  channel with its flow), colours in `DISH_COLORS` (≥ 3:1 on water, gel and sediment), drawn above the dish and
+  below film and deposits; at least about 1.5 screen px wide, redrawn when the zoom moves by more than 25 %, never
+  per tick.
+- **Devices and furnishings** use the 'device' atlas tile, 13 frames (s05, s06, s07, s08_0–3 by resin saturation
+  quartile, s09_off/on, s10_off/on, s11, s12), appended last (1691 frames, 1024 × 2048); the S11 roof is drawn as
+  an outline. **Overlays** 'warmth' and 'moisture' have their own ramps and legends (0 is painted: a reading).
+- **Previews** go through structurePreviewModel.ts, which calls the commands' own pure rules (structurePreview.ts,
+  grid.ts) over a model of the latest geometry and snapshot: `setBrushPreview` (Lab rules, 'life', 'device', 'move'
+  (deviceMoveOutcome: no cap; a basket carrying an object refused onto another), 'wet'), `setEdgePreview` (edgeKey
+  order, the running cap) and `setRemovePreview`. Edge strokes come from `edgeSnap.ts`: a drag's samples snap to
+  grid vertices joined edge by edge (one connected path, nothing across the line), a tap to the nearest edge
+  midpoint; a Remove drag takes every barrier edge whose midpoint its samples snap to.
+- **The gate preview tracer** (`setGatePreview`) draws 14 tokens (CT §5.3's seven classes from both sides) as a
+  pure function of (edge code, token, ms) through `cosmetic`, only while the dish is paused: blocked classes turn
+  back before the edge, the Fixed tokens never move, an S04 shows only its directed transfer; reduced motion shows
+  the end frame.
 
 ## 10. Art and audio pipelines
 
@@ -1087,6 +1172,12 @@ As built, Phase 5 wave 10 (docs/reports/perf-g5.md; indicative): 512 edge barrie
 resins cost stage 2 about +0.4 to +0.45 ms per tick at about 350 organisms, mostly the gate tallies' field pass over
 about 455 gate edges; the grit scan costs about 0.06 to 0.17 ms per tick in a world that records silicate (every
 cell, while the grit and silicate fields exist).
+
+As built, Phase 5 wave 11 (docs/reports/perf-g5.md; indicative, contended): one snapshot pack (entities, deposits,
+geometry, resins, environment and one cell inspector) costs about 2 to 3 ms mean for a v1.0 dish and for 400
+organisms with 512 edges, 256 devices and 8 resins (the geometry is rebuilt only when `geometryVersion` moves);
+region probes with six regions and about 530 organisms add about 0.25 ms per tick for organism crossings; the stage
+8 signal pass costs about +0.02 to +0.08 ms per tick for 50 emitters.
 
 ## 14. Web and arcade build
 - `npm run build` → `dist/` with relative asset URLs; works from any subpath and inside an

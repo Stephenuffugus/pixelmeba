@@ -286,11 +286,13 @@ describe('worker protocol (P1.3)', () => {
   });
 
   describe('protocol version', () => {
-    it('exports protocol version 2 (ARCH §7; D-0036: bumped once by wave 2 for the Phase 3 snapshot fields)', () => {
-      expect(PROTOCOL_VERSION).toBe(2);
-      expect(ENT_STRIDE).toBe(14);
+    it('exports protocol version 3 (ARCH §7; D-0036: bumped once by wave 2 for the Phase 3 snapshot fields; D-0102/D-0119: once more by Phase 5 wave 11)', () => {
+      // Protocol 3 (wave 11 structure-render-worker): ENT_STRIDE 15 (E_CUE3 = 14) and eight deposit bands (grit);
+      // the protocol 2 offsets are unchanged (tests/worker/protocol3.test.ts pins the whole layout).
+      expect(PROTOCOL_VERSION).toBe(3);
+      expect(ENT_STRIDE).toBe(15);
       expect([E_CUE2, E_LINKMASK]).toEqual([12, 13]);
-      expect(DEPOSIT_BANDS).toBe(7);
+      expect(DEPOSIT_BANDS).toBe(8);
     });
 
     it('every packet in both directions carries protocolVersion', async () => {

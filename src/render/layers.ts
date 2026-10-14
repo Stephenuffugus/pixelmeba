@@ -31,6 +31,18 @@ const C = {
   sugarHaze: [0xf3, 0xc9, 0x5c],
   // Catalysis dust: the Crumbsmith's deep ochre (palette crumbDeep), where enzyme is converting starch.
   catalysis: [0x9e, 0x72, 0x29],
+  // Phase 5 edge-barrier glyphs (wave 11, src/render/structureLayer.ts): neutral dark outlines, each ≥ 3:1
+  // against water, gel and sediment (UX §4.1 essential graphics; tests/render/structure-layers.test.ts).
+  // The kind is carried by shape (S01 dotted, S02 slotted, S03 bar or hinge stubs, S04 chevrons), the halo
+  // is a pale under-stroke drawn first so the glyph also reads over dark sediment and organisms.
+  edgeMembrane: [0x17, 0x2c, 0x35],
+  edgeSieve: [0x17, 0x2c, 0x35],
+  edgeShutter: [0x17, 0x2c, 0x35],
+  edgeChannel: [0x10, 0x2a, 0x44],
+  edgeHalo: [0xf5, 0xf4, 0xef],
+  // Refusal preview (red) and accepted preview (amber), as the Lab brush preview draws them.
+  previewOk: [0xf2, 0xb8, 0x4b],
+  previewRefused: [0xb3, 0x47, 0x3f],
 } as const;
 
 /** The dish and deposit colours above, read by the contrast audit (tools/contrast-audit.ts, P3.11). */
@@ -184,7 +196,7 @@ function paintDepositCell(img: ImageData, bands: Uint8Array, i: number, hasSugar
 }
 
 /** Colormaps per overlay kind; alpha is applied by the sprite (45 % default). */
-export type Colormap = 'food' | 'gas' | 'nutrient' | 'light' | 'ph' | 'activity' | 'deposit' | 'viral' | 'simple';
+export type Colormap = 'food' | 'gas' | 'nutrient' | 'light' | 'ph' | 'activity' | 'deposit' | 'viral' | 'simple' | 'warmth' | 'moisture';
 
 export const RAMPS: Record<Colormap, readonly RGB[]> = {
   food: [[255, 247, 220], [247, 200, 90], [214, 120, 30]],
@@ -201,6 +213,10 @@ export const RAMPS: Record<Colormap, readonly RGB[]> = {
   // grayscale and under every colour-vision deficiency, and its ends stay ≥ 3:1 apart even at the
   // default 45 % opacity over water (docs/reports/contrast.md); the legend says which end is high.
   simple: [[245, 244, 239], [122, 146, 158], [10, 20, 25]],
+  // Protocol 3 overlays (0–1 index, max 1): local warmth cool blue → neutral → warm orange (a diverging ramp
+  // whose ends also differ in lightness), and moisture dry tan → wet blue.
+  warmth: [[62, 110, 170], [236, 232, 220], [214, 96, 44]],
+  moisture: [[214, 190, 150], [170, 200, 205], [30, 90, 150]],
 };
 
 export function colormapFor(id: string, simplified = false): Colormap {
@@ -209,6 +225,8 @@ export function colormapFor(id: string, simplified = false): Colormap {
   if (id === 'oxygen' || id === 'co2') return 'gas';
   if (id === 'nutrient' || id.endsWith('N')) return 'nutrient';
   if (id === 'light') return 'light';
+  if (id === 'warmth') return 'warmth';
+  if (id === 'moisture') return 'moisture';
   if (id === 'ph') return 'ph';
   if (id.startsWith('e') || id === 'breaker' || id === 'sGlow' || id === 'rival' || id === 'quencher') return 'activity';
   if (id === 'starch' || id === 'detritus' || id === 'oil' || id === 'protein' || id === 'film' || id === 'grit') return 'deposit';
@@ -233,6 +251,8 @@ function ramp(map: Colormap, t: number): RGB {
 export function paintOverlay(img: ImageData, data: Float32Array, structure: Uint8Array | null, id: string, scaleMax: number, simplified = false): void {
   const map = colormapFor(id, simplified);
   const isPh = id === 'ph';
+  // Warmth and moisture are defined in every dish cell (0 is a real reading: cold, or dried out).
+  const opaque = isPh || id === 'warmth' || id === 'moisture';
   for (let i = 0; i < CELL_COUNT; i++) {
     const o = i * 4;
     if (structure && structure[i] !== 0 && structure[i] !== 3) {
@@ -245,7 +265,7 @@ export function paintOverlay(img: ImageData, data: Float32Array, structure: Uint
     img.data[o] = rgb[0];
     img.data[o + 1] = rgb[1];
     img.data[o + 2] = rgb[2];
-    img.data[o + 3] = isPh || v > 0 ? 255 : 0;
+    img.data[o + 3] = opaque || v > 0 ? 255 : 0;
   }
 }
 

@@ -39,6 +39,7 @@ import { canOccupy, preyAllowed } from './movement';
 import type { DormancyRules, Profile } from './phenotype';
 import { profileOf } from './profiles';
 import { R } from './reasons';
+import { clearGlow } from './signals';
 import { entityCell, forEachInCell } from './spatial';
 import type { SpeciesRT } from './species';
 import { responseBelowOnly, SHOULDER_MOISTURE } from './suitability';
@@ -247,6 +248,8 @@ export function dormancyStep(world: World, i: number, prof: Profile): void {
       c.E[i]! -= rules.prepareCost;
       EL.dormancy += rules.prepareCost;
       c.lifeState[i] = LIFE_PREPARING;
+      // Phase 5 (D-0106, D-0108): glow is off in every non-Active state, from this very tick (signals.ts).
+      if (prof.glow !== null) clearGlow(world, i, 'rest');
       c.stateTimer[i] = 0;
       c.dryTimer[i] = 0;
       c.flags[i] = dryTrigger ? c.flags[i]! | FLAG.restDry : c.flags[i]! & ~FLAG.restDry;

@@ -33,6 +33,8 @@ import type { Ledger } from './ledger';
 import type { Profile } from './phenotype';
 import { producerApplies, producerRun } from './secretion';
 import { biofilmApplies, biofilmRun } from './film';
+import { signalApplies, signalRun } from './signals';
+import { rivalryApplies, rivalryRun } from './rivalry';
 import { matrixApplies, matrixRun } from './matrixBuilder';
 import { advanceIntakeClock } from './intakeClock';
 import { anchorStep } from './anchor';
@@ -101,13 +103,22 @@ export function buildActionTable(actions: readonly Stage8Action[]): readonly Sta
  * to a producer whose rules are native, the module producers only to one whose rules came from that
  * module (a module never duplicates a native ability, SPEC §9), so a native B06 and an E01 carrier
  * each run exactly one starch action. Where the other modules act is listed in structures.ts.
+ *
+ * Phase 5 wave 11 (D-0119): native SIGNAL_GLOW (5, S_GLOW emission) and RIVALRY (6, RIVAL secretion), and
+ * module E02 (2, the same emission with the world's recorded E02 numbers) join the table. Only an organism
+ * whose profile has glow or rivalry rules runs them, and no v1.0 profile has either, so a v1.0 world's stage 8
+ * is unchanged. The glow thresholds are not a table entry: they run from stageStructures right after the
+ * dormancy step, before the link release (SPEC §3.2 stage 8 order; signals.ts).
  */
 const SHIPPED: readonly Stage8Action[] = [
   nativeAction('E_STARCH_SECRETION', producerApplies('starch', 'native'), producerRun('starch')),
   nativeAction('E_OIL_SECRETION', producerApplies('oil', 'native'), producerRun('oil')),
   nativeAction('E_PROTEIN_SECRETION', producerApplies('protein', 'native'), producerRun('protein')),
   nativeAction('BIOFILM', biofilmApplies, biofilmRun),
+  nativeAction('SIGNAL_GLOW', signalApplies('native'), signalRun),
+  nativeAction('RIVALRY', rivalryApplies, rivalryRun),
   moduleAction('E01', producerApplies('starch', 'E01'), producerRun('starch')),
+  moduleAction('E02', signalApplies('E02'), signalRun),
   moduleAction('E09', producerApplies('protein', 'E09'), producerRun('protein')),
   moduleAction('E10', matrixApplies, matrixRun),
 ];

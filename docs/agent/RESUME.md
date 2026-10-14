@@ -3,6 +3,22 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑14 13:45 UTC — RESUMED after the codespace stopped ≈ 13:04 (owner: "get back to work … I want all the
+> expansions built … and live"). NOTHING WAS LOST: the tree == `wip/g5-wave-11` = `dae3ec1` (tree 1819ae6, pushed). Wave 11
+> run wf_79e1123b-8bf had FINISHED (builds, verifiers, fix1, reverify1 ok); the lead integration (D‑0120, ARCH/UX/perf notes,
+> docs/agent/g5-systems-flip-plan.md) is in the tree. Running (session 913596e0): the full check tmp/lead/check-w11.sh →
+> tmp/lead/check-w11.log (EXIT / ART_EXIT / CONTENT_EXIT lines; started 13:26, ≈ 72 min); backup loop pid tmp/lead/backup-11.pid;
+> Phase 6 read-only mappers wf_4d2c3a93-612 (three briefs → docs/agent/g6-briefs.md, then the lead's g6-plan.md). START HERE.**
+> - Next: check green → wave 11 journeys (LEAD AFTER WAVE 11 step 3: structures, region-charts, lab-tools, new-dish, inspector,
+>   observe, observe-tools, place-and-undo on desktop + phone-portrait; E2E_PORT=4300 E2E_OUTDIR=tmp/lead/e2e-dist) → commit
+>   wave 11 (message in LEAD AFTER step 5) + WORKLOG notes (scratchpad worklog_w11.py logic: dated notes on P5.1/P5.2/P5.3/P5.7) →
+>   push → launch THE SYSTEMS FLIP from docs/agent/g5-systems-flip.workflow.js.txt (copy to the scratchpad as .js; args
+>   {base: '<wave 11 sha>'}) → lead: D‑0121, WORKLOG ticks, commit → wave 12 fill + D‑0122 + launch (g5-systems-flip-plan.md
+>   "Then the wave 12 pre-launch").
+> - Owner asks pending: (1) an 8-core codespace would cut the 72-min check to ~10–15 min (vitest runs ONE worker on 2 cores) and
+>   allow 4–6 agents; (2) the arcade deploy (tools/deploy-arcade.mjs) needs a credential that can push Stephenuffugus/lucid-winds
+>   (the codespace token gets 403) — `env -u GITHUB_TOKEN gh auth login` once; lucidwinds.com still serves the 2026‑09‑29 build.
+
 > **Update 2026‑10‑14 08:02 UTC — WAVE 10 COMMITTED `bdf7f7c` (check 255 files / 2928 tests incl. the fence and both
 > corpora; art and contentHash unchanged; lab-tools + sample-transfer journeys 12 passed on desktop + phone-portrait; D‑0118
 > as built, D‑0119 wave 11's rulings). WAVE 11 RUNNING (run `wf_79e1123b-8bf`, session 1383cb99, launched 08:01 from

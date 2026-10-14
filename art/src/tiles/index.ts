@@ -12,13 +12,16 @@
  *           than three quarters): the outline shrinks with what is left.
  *   wafer   M11 leaf wafer, the same four fill steps.
  *   stain   the fading stain an emptied object leaves (cosmetic; blocks nothing).
+ *   device  Phase 5 furnishings and devices S05–S12 (13 frames; art/src/tiles/structures.ts lists them).
  *
  * Silhouette and value carry each tile in grayscale; texture is deterministic (no randomness).
  */
 import { P } from '../palette';
 import { Px } from '../px';
+import { DEVICE } from './structures';
 
-export type TileId = 'film' | 'pellet' | 'wafer' | 'stain';
+/** 'device' (Phase 5, wave 11): furnishing and device frames, art/src/tiles/structures.ts. */
+export type TileId = 'film' | 'pellet' | 'wafer' | 'stain' | 'device';
 
 export interface TileDef {
   readonly id: TileId;
@@ -162,5 +165,5 @@ const STAIN: TileDef = {
   ],
 };
 
-/** Canonical order (atlas layout and manifest order). */
-export const TILES: readonly TileDef[] = [FILM, PELLET, WAFER, STAIN];
+/** Canonical order (atlas layout and manifest order). DEVICE is appended last (wave 11) so no earlier frame moves. */
+export const TILES: readonly TileDef[] = [FILM, PELLET, WAFER, STAIN, DEVICE];

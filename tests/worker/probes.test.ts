@@ -157,7 +157,7 @@ describe('region probes (P4.8)', () => {
     const r = ps.read(w, 60);
     const w60 = r.masks[0]!;
     for (const b of w60.boundary) {
-      if (['sugar', 'oxygen', 'co2', 'broth'].includes(b.field) && w.fields[b.field as 'sugar']) {
+      if (['sugar', 'oxygen', 'co2', 'broth', 'salt', 'silicate'].includes(b.field) && w.fields[b.field as 'sugar']) {
         expect(b.status, b.field).toBe('measured');
         expect(Math.abs(b.into), b.field).toBeLessThan(1e-9);
       } else if (w.fields[b.field as 'sugar']) expect(b.status, b.field).toBe('notMeasured');

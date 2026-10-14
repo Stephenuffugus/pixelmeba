@@ -45,6 +45,19 @@ export function paintName(info: DishInfo | null, target: PaintTarget): string {
   return PAINTS.find((m) => m.target === target)?.name ?? FALLBACK_PAINT;
 }
 
+/**
+ * Phase 5 (wave 11): the content name of any Structure record by id ("Fine membrane" for S01), or the
+ * generic word when this build has no such record (never the id itself).
+ */
+export function structureNameById(id: string): string {
+  return STRUCTURES.find((r) => r.id === id)?.name ?? FALLBACK_STRUCTURE;
+}
+
+/** Phase 5: the bundled Structure record by id (name, kind and guide text), or null. */
+export function structureRecordById(id: string): StructureDef | null {
+  return STRUCTURES.find((r) => r.id === id) ?? null;
+}
+
 /** Every placeable structure's content name, in tray order. */
 export function structureNames(): string[] {
   return PLACEABLE_STRUCTURES.map(structureName);

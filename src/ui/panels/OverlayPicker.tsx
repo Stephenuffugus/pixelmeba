@@ -16,10 +16,20 @@ export const OPACITY_MIN = 0.2;
 export const OPACITY_MAX = 0.9;
 export const OPACITY_STEP = 0.05;
 
-/** Overlays this dish can show: fields it allocates, plus light and food access (always derived; P3.6). */
+/** P5.2: overlays derived from the climate system, offered only in a dish that records it (D-0111). */
+const CLIMATE_OVERLAYS: readonly string[] = ['warmth', 'moisture'];
+
+/**
+ * Overlays this dish can show: fields it allocates, plus light and food access (always derived; P3.6), and
+ * warmth and moisture when the dish's own manifest records 'climate' (DishInfo.systems).
+ */
 export function availableOverlays(): typeof OVERLAYS {
-  const fields = dishInfo.value?.fieldIds;
-  return OVERLAYS.filter((o) => o.id === 'light' || o.id === 'foodAccess' || !fields || fields.includes(o.id));
+  const info = dishInfo.value;
+  const fields = info?.fieldIds;
+  const climate = info?.systems?.includes('climate') === true;
+  return OVERLAYS.filter((o) =>
+    CLIMATE_OVERLAYS.includes(o.id) ? climate : o.id === 'light' || o.id === 'foodAccess' || !fields || fields.includes(o.id),
+  );
 }
 
 /** Viral unit fields (Phase 3 Pinphage): a dish holding one offers the Infection markers toggle. */

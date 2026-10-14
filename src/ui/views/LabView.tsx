@@ -7,7 +7,7 @@
  * Mid-gesture safety: a view switch bumps the view epoch and cancels the uncommitted stroke (its
  * preview disappears and its release commits nothing), so Explore ⇄ Lab never changes the dish.
  */
-import { batch, signal } from '@preact/signals';
+import { batch, effect, signal } from '@preact/signals';
 import { placementCue } from '@audio/cues';
 import type { CommandPayload, CommandResult } from '@sim/commands';
 import {
@@ -19,6 +19,10 @@ import {
   type SubstrateName,
 } from '@sim/grid';
 import type { OverlayId } from '@worker/protocol';
+import { EDGE_KINDS, type EdgeKind } from '@sim/barriers';
+import { DEVICE_KINDS, type DeviceKind } from '@sim/devices';
+import { snapStroke, strokeRemoveIds, type RemoveGeometry } from '../edgeSnap';
+import { DEVICE_COPY, edgePreviewText, removePreviewText, structureOutcome, type StructureContext } from '../strings/structures';
 import type { GestureHandlers } from '../gestures';
 import { IconLab } from '../icons';
 import { editLabel, lifeBrushFor, shadeFactorOf } from '../panels/LabTrayContent';
@@ -42,6 +46,8 @@ import {
   dishInfo,
   getClient,
   getRenderer,
+  latestDishSnapshots,
+  meta,
   overlay,
   reportDishCommand,
   select,
@@ -80,7 +86,46 @@ export type LabToolId =
    * P3.5 Tools-tray sessions (panels/SampleSession.tsx): Sample, Transfer and Clean water. They take the
    * next tap or stroke through `labSession` and are never stored as the persistent `labTool`.
    */
-  | LabSessionId;
+  | LabSessionId
+  /**
+   * P5.1/P5.2 (wave 11): the Tools tray's Build group — an edge barrier (S01–S04, tapped or dragged along
+   * edges), a furnishing or device (S05–S12, one per tap) and Remove; the Habitat tray's wetting brush.
+   */
+  | BuildToolId
+  | 'wet';
+
+/** The Build group's tool ids (P5.1/P5.2): one per S01–S12 record, plus Remove. */
+export type BuildToolId = `build:${EdgeKind}` | `build:${DeviceKind}` | 'build:remove';
+
+/** The structure a Build tool places, or null (Remove, other tools). */
+export function buildKind(id: LabToolId): EdgeKind | DeviceKind | null {
+  if (!id.startsWith('build:')) return null;
+  const k = id.slice('build:'.length);
+  return (EDGE_KINDS as readonly string[]).includes(k) || (DEVICE_KINDS as readonly string[]).includes(k) ? (k as EdgeKind | DeviceKind) : null;
+}
+
+/** The edge barrier an edge tool places (S01–S04), or null. */
+export function edgeKindOf(id: LabToolId): EdgeKind | null {
+  const k = buildKind(id);
+  return k !== null && (EDGE_KINDS as readonly string[]).includes(k) ? (k as EdgeKind) : null;
+}
+
+/** The furnishing or device a device tool places (S05–S12), or null. */
+export function deviceKindOf(id: LabToolId): DeviceKind | null {
+  const k = buildKind(id);
+  return k !== null && (DEVICE_KINDS as readonly string[]).includes(k) ? (k as DeviceKind) : null;
+}
+
+/** A new shutter gate's state (D-0119: Open by default; it changes nothing until the player closes it). */
+export const buildShutterOpen = signal<boolean>(true);
+/** A new one-way channel's direction (D-0119: 1, toward the right/lower cell, by default). */
+export const buildFlow = signal<1 | -1>(1);
+
+/**
+ * A device waiting for its new cell (SPEC §10.4 "moving a device is a paused atomic relocation"): set by the
+ * device sheet's Move while the dish is paused; the next tap on the dish sends one moveDevice command.
+ */
+export const movingDevice = signal<{ readonly id: number; readonly kind: DeviceKind; readonly from: number } | null>(null);
 
 export const dishView = signal<DishView>('explore');
 /** The open tray (null = closed). Inspect has no tray. */
@@ -100,6 +145,8 @@ export interface BrushInfo {
   readonly cells: number;
   /** Covered cells that would be refused (crossed in the preview). */
   readonly refused: number;
+  /** P5.1/P5.2: the whole line for an edge stroke or a removal (edges and reasons), instead of the cell count. */
+  readonly text?: string;
 }
 /** Live footprint summary while a brush is previewed (UX §4.2 "footprint and total dose"). */
 export const brushInfo = signal<BrushInfo | null>(null);
@@ -140,6 +187,7 @@ export function setDishView(v: DishView): void {
   // stroke keeps its old epoch, so a release that still arrives is recognised and dropped.
   cancelGesture?.();
   clearPreview();
+  movingDevice.value = null; // P5.1: a device move waiting for its cell is dropped (nothing sent)
   endSession();
   endProbeSession(); // P4.8: drawing regions is a Lab session
   batch(() => {
@@ -176,6 +224,7 @@ let shownDishId: string | null = null;
 export function labShowsDish(dishId: string): void {
   if (shownDishId !== null && shownDishId !== dishId) {
     pending = null;
+    movingDevice.value = null;
     clearPreview();
     labTray.value = null;
   }
@@ -227,7 +276,36 @@ function placingSpecimen(): boolean {
 /** Whether one-finger drag paints (true for every brush tool in Lab) instead of panning. */
 export function labPaints(): boolean {
   // P4.8: while drawing regions one-finger drag draws a region (two fingers still pan).
-  return isLab() && !placingSpecimen() && (probeDrawing.value || brushRule(activeTool()) !== null);
+  return isLab() && !placingSpecimen() && (probeDrawing.value || brushRule(activeTool()) !== null || strokeTool(activeTool()));
+}
+
+/** P5.1/P5.2: tools whose drag paints but that are not Lab brush rules (edges, Remove, the wetting brush). */
+function strokeTool(id: LabToolId): boolean {
+  return edgeKindOf(id) !== null || id === 'build:remove' || id === 'wet';
+}
+
+/** The open dish's latest structures (GeometryMsg edges and devices), for Remove and the outcome words. */
+export function currentStructures(): RemoveGeometry {
+  const g = latestDishSnapshots()?.geometry;
+  return { edges: g?.edges?.list ?? [], devices: g?.devices ?? [] };
+}
+
+/** The kinds of the structures with these ids in the latest geometry (for the outcome words). */
+function kindsOf(ids: readonly number[]): string[] {
+  const g = latestDishSnapshots()?.geometry;
+  const out: string[] = [];
+  for (const id of ids) {
+    const k = g?.edges?.list.find((e) => e.id === id)?.kind ?? g?.devices?.find((d) => d.id === id)?.kind;
+    if (k) out.push(k);
+  }
+  return out;
+}
+
+/** The grid cell under a world point, or null outside the grid. */
+function cellAt(wx: number, wy: number): number | null {
+  const cx = Math.floor(wx);
+  const cy = Math.floor(wy);
+  return cx >= 0 && cy >= 0 && cx < GRID_W && cy < GRID_H ? cy * GRID_W + cx : null;
 }
 
 /** The dose per cell the selected material tool uses (from the world's recorded material). */
@@ -269,11 +347,30 @@ export function payloadFor(
   if (id.startsWith('object:')) return { kind: 'placeObject', materialId: id.slice('object:'.length), x: pts[0]![0], y: pts[0]![1] };
   // P3.5: one clean-water stroke at the chosen fraction.
   if (id === 'cleanWater') return { kind: 'cleanWater', points: pts, radius, fraction: cleanFraction.value };
+  // P5.1/P5.2 (wave 11): one stroke or tap = one structure or climate command.
+  if (id === 'wet') return { kind: 'wetBrush', points: pts, radius };
+  const edgeKind = edgeKindOf(id);
+  if (edgeKind !== null) {
+    const edges = snapStroke(pts);
+    if (edges.length === 0) return null;
+    if (edgeKind === 'S03') return { kind: 'placeEdges', structure: edgeKind, edges, open: buildShutterOpen.value };
+    if (edgeKind === 'S04') return { kind: 'placeEdges', structure: edgeKind, edges, flow: buildFlow.value };
+    return { kind: 'placeEdges', structure: edgeKind, edges };
+  }
+  const deviceKind = deviceKindOf(id);
+  if (deviceKind !== null) {
+    const cell = cellAt(pts[0]![0], pts[0]![1]);
+    return cell === null ? null : { kind: 'placeDevice', structure: deviceKind, cell };
+  }
+  if (id === 'build:remove') {
+    const ids = strokeRemoveIds(pts, currentStructures());
+    return ids.length === 0 ? null : { kind: 'removeStructures', ids };
+  }
   return null;
 }
 
 /** Send one Lab command (undoable, like every gesture) and report the simulation's own counts. */
-export async function sendLabCommand(payload: CommandPayload): Promise<CommandResult | null> {
+export async function sendLabCommand(payload: CommandPayload, context?: StructureContext): Promise<CommandResult | null> {
   if (payload.kind === 'deposit' || payload.kind === 'inoculate') {
     // The ordinary path reports these with the same words and placement ring as Explore.
     await sendCommand(payload);
@@ -281,6 +378,9 @@ export async function sendLabCommand(payload: CommandPayload): Promise<CommandRe
   }
   const info = dishInfo.value;
   if (!info) return null;
+  // The kinds the command names, read from the geometry before it changes (content names for the words).
+  const ctx: StructureContext =
+    context ?? (payload.kind === 'removeStructures' ? { kinds: kindsOf(payload.ids) } : {});
   const res = await getClient().command(info.dishId, `lab-${++commandCounter}`, payload, true);
   reportDishCommand(info.dishId, payload, res); // the onDishCommand listeners (narration's "Add food" for a food object), as sendCommand does
   if (res && dishInfo.value?.dishId === info.dishId) placementCue(res.accepted); // P3.10: drop / placement_error (+ haptics)
@@ -292,6 +392,14 @@ export async function sendLabCommand(payload: CommandPayload): Promise<CommandRe
       4000,
     );
     return res;
+  }
+  if (res && dishInfo.value?.dishId === info.dishId) {
+    // P5.1/P5.2: structure and climate commands, worded from the result with content names.
+    const words = structureOutcome(payload, res, ctx);
+    if (words !== null) {
+      showToast(words, 7000);
+      return res;
+    }
   }
   if (res && dishInfo.value?.dishId === info.dishId && payload.kind === 'placeObject') {
     const name = info.materials.find((m) => m.id === payload.materialId)?.name ?? payload.materialId;
@@ -333,18 +441,120 @@ function showPreview(cells: readonly number[], rule: LabBrushRule | LifeBrush): 
 }
 
 export function clearPreview(): void {
-  getRenderer()?.setBrushPreview(null);
+  const r = getRenderer();
+  r?.setBrushPreview(null);
+  r?.setEdgePreview(null);
+  r?.setRemovePreview(null);
   brushInfo.value = null;
 }
 
+/**
+ * P5.1/P5.2: the preview of a Build or wetting stroke (or tap) with tool `id` over these points: edges with
+ * their refusals, a device's cell, what Remove would take, or the wetting footprint. Returns false for any
+ * other tool. Cosmetic only; the command's result stays authoritative.
+ */
+function showStructurePreview(id: LabToolId, points: ReadonlyArray<readonly [number, number]>): boolean {
+  const r = getRenderer();
+  const edgeKind = edgeKindOf(id);
+  if (edgeKind !== null) {
+    const edges = snapStroke(points);
+    const res = r?.setEdgePreview(edges.length > 0 ? { edges, structure: edgeKind } : null);
+    brushInfo.value = res ? { cells: res.ok, refused: res.refused, text: edgePreviewText(res.ok, res.reasons) } : { cells: edges.length, refused: 0, text: edgePreviewText(edges.length, {}) };
+    return true;
+  }
+  const deviceKind = deviceKindOf(id);
+  if (deviceKind !== null) {
+    const cell = points.length > 0 ? cellAt(points[0]![0], points[0]![1]) : null;
+    if (cell === null) {
+      clearPreview();
+      return true;
+    }
+    const res = r?.setBrushPreview({ cells: [cell], rule: 'device', structure: deviceKind });
+    brushInfo.value = res ? { cells: res.ok, refused: res.refused } : { cells: 1, refused: 0 };
+    return true;
+  }
+  if (id === 'build:remove') {
+    const ids = strokeRemoveIds(points, currentStructures());
+    const res = r?.setRemovePreview(ids.length > 0 ? { ids } : null);
+    brushInfo.value = { cells: ids.length, refused: 0, text: removePreviewText(res?.edges ?? 0, res?.devices ?? 0) };
+    return true;
+  }
+  if (id === 'wet') {
+    const cells = strokeFootprint(points, labRadius.value);
+    const res = r?.setBrushPreview({ cells, rule: 'wet' });
+    brushInfo.value = res ? { cells: res.ok, refused: res.refused } : { cells: cells.length, refused: 0 };
+    return true;
+  }
+  return false;
+}
+
+/** The new-cell preview of a device being moved (deviceMoveOutcome over the latest geometry: the renderer's 'move' rule). */
+function showMovePreview(w: readonly [number, number] | null): void {
+  const m = movingDevice.value;
+  const cell = w ? cellAt(w[0], w[1]) : null;
+  if (!m || cell === null || cell === m.from) {
+    getRenderer()?.setBrushPreview(null);
+    brushInfo.value = null;
+    return;
+  }
+  const res = getRenderer()?.setBrushPreview({ cells: [cell], rule: 'move', structure: m.kind, from: m.from });
+  brushInfo.value = res ? { cells: res.ok, refused: res.refused } : { cells: 1, refused: 0 };
+}
+
+/** End a device move without moving it (Cancel, Escape, Run, another dish or view). */
+export function cancelDeviceMove(): void {
+  if (movingDevice.value === null) return;
+  movingDevice.value = null;
+  clearPreview();
+}
+
+/**
+ * The tap that ends a device move: one moveDevice command (atomic; Undo restores it). Returns true when
+ * a move was waiting (the tap is used up either way). The dish must still be paused (D-0119).
+ */
+export function deviceMoveTap(wx: number, wy: number): boolean {
+  const m = movingDevice.value;
+  if (!m) return false;
+  movingDevice.value = null;
+  clearPreview();
+  const cell = cellAt(wx, wy);
+  if (cell === null) {
+    showToast('Not moved: that is outside the dish.', 3000);
+    return true;
+  }
+  if ((meta.value?.speed ?? 0) !== 0) {
+    showToast(DEVICE_COPY.movePaused, 3000);
+    return true;
+  }
+  void sendLabCommand({ kind: 'moveDevice', id: m.id, cell }, { kinds: [m.kind], cell }).then((res) => {
+    // The settings sheet follows the device to its new cell (or stays on the old one when refused).
+    if (dishInfo.value === null) return;
+    select({ kind: 'cell', cell: res && res.accepted > 0 ? cell : m.from });
+    sheet.value = 'device';
+  });
+  return true;
+}
+
+// Move is offered only while paused (D-0119): pressing Run drops a move still waiting for its cell.
+effect(() => {
+  const speed = meta.value?.speed ?? 0;
+  if (speed > 0 && movingDevice.peek() !== null) cancelDeviceMove();
+});
+
+
 /** Mouse hover (before pressing): the footprint of a tap here. Touch has no hover. */
 export function labHover(w: readonly [number, number] | null): void {
+  if (movingDevice.value) {
+    showMovePreview(w);
+    return;
+  }
   if (!isLab() || pending) return;
   if (!w || placingSpecimen() || probeDrawing.value) {
     clearPreview();
     return;
   }
   const id = activeTool();
+  if (showStructurePreview(id, [w])) return;
   // P3.5: the sample circle, or the held sample's footprint where a transfer here would put it.
   if (id === 'sample') {
     // A tapped preview stays marked until it is taken or cancelled.
@@ -384,6 +594,7 @@ export function labStrokeStart(w: readonly [number, number]): void {
     return;
   }
   pending = { epoch: viewEpoch, tool: activeTool() };
+  if (showStructurePreview(activeTool(), [w])) return;
   const p = previewCells([w]);
   if (p) showPreview(p.cells, p.rule);
 }
@@ -391,6 +602,7 @@ export function labStrokeStart(w: readonly [number, number]): void {
 export function labStrokeMove(points: ReadonlyArray<readonly [number, number]>): void {
   if (probeDrawing.value) probeStrokeMove(points, viewEpoch);
   if (!pending || pending.epoch !== viewEpoch) return;
+  if (showStructurePreview(pending.tool, points)) return;
   const p = previewCells(points);
   if (p) showPreview(p.cells, p.rule);
 }
@@ -476,6 +688,8 @@ export function labGestures(h: GestureHandlers): GestureHandlers {
     ...h,
     paints: () => labPaints() || h.paints(),
     onTap: (sx, sy, wx, wy) => {
+      // P5.1: a device waiting for its new cell takes the tap in either view (the move is one command).
+      if (deviceMoveTap(wx, wy)) return;
       if (labTap(wx, wy)) return;
       // Lab's Inspect: the inspector opens where the tray was (a tray would cover it on phones).
       if (isLab()) labTray.value = null;
@@ -500,6 +714,11 @@ export function labGestures(h: GestureHandlers): GestureHandlers {
  */
 export function handleViewKey(e: KeyboardEvent): boolean {
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  // P5.1: Escape ends a device move (nothing is sent) in either view.
+  if (e.key === 'Escape' && movingDevice.value) {
+    cancelDeviceMove();
+    return true;
+  }
   const k = e.key.toLowerCase();
   if (isLab()) {
     if (k === 'i') {

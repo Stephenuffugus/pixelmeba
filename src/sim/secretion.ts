@@ -39,6 +39,27 @@ export const PRODUCER_FIELDS: Readonly<Record<ProducerSlot, { readonly substrate
  */
 export const PRODUCER_BIT: Readonly<Record<ProducerSlot, number>> = Object.freeze({ starch: 1, oil: 2, protein: 4 });
 
+/**
+ * Phase 5 (wave 11; D-0119) emitters beside the producers: RIVAL secretion (rivalry.ts) ORs 8 and S_GLOW
+ * emission (signals.ts) ORs 16 into `secreting` when they released this tick, with FLAG.secreting, so the
+ * snapshot's secreting cue shows real emission only. Bits 1/2/4 keep their meaning.
+ */
+export const EMITTER_BIT: Readonly<{ rival: number; signal: number }> = Object.freeze({ rival: 8, signal: 16 });
+
+/** Record an emitter's outcome as producerRun does: SECRETING if any emitter succeeded this tick, else the last refusal. */
+export function recordEmission(ctx: ActionContext, outcome: number, bit: number): number {
+  const c = ctx.world.ents.cols;
+  const i = ctx.i;
+  if (outcome === R.SECRETING) {
+    c.secretionCode[i] = outcome;
+    c.secreting[i] = c.secreting[i]! | bit;
+    c.flags[i] = c.flags[i]! | FLAG.secreting;
+  } else if (c.secreting[i] === 0) {
+    c.secretionCode[i] = outcome;
+  }
+  return outcome;
+}
+
 /** Whether a deposited substrate lies in `cell` or one of its four neighbors. */
 export function substrateNear(sub: Float64Array, cell: number): boolean {
   if (sub[cell]! > 0) return true;

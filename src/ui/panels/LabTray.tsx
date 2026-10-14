@@ -10,6 +10,8 @@ import type { JSX } from 'preact';
 import { drawFrame, loadAtlas } from '../atlas';
 import { IconClose, IconCopy, IconUndo } from '../icons';
 import { dishInfo, duplicateCurrent, getClient, meta, openCompare, sheet, showToast, undo } from '../state';
+import { BUILD_COPY, ENVIRONMENT_COPY } from '../strings/structures';
+import type { SnapshotEnvironment } from '@worker/protocol';
 import type { PlaceableStructure, SubstrateName } from '@sim/grid';
 import {
   BRUSH_COPY,
@@ -35,6 +37,9 @@ import {
 } from '../strings/lab';
 import {
   brushRule,
+  buildFlow,
+  buildShutterOpen,
+  edgeKindOf,
   labCount,
   labDoseIndex,
   labRadius,
@@ -47,8 +52,22 @@ import {
 } from '../views/LabView';
 import { IconCompare } from './CompareIcon';
 import {
+  IconBasket,
   IconBead,
+  IconChannel,
   IconCharts,
+  IconCooler,
+  IconHeater,
+  IconMembrane,
+  IconMesh,
+  IconRemoveStructure,
+  IconResin,
+  IconRoof,
+  IconShelter,
+  IconShutter,
+  IconSmallGate,
+  IconWet,
+  IconWick,
   IconErase,
   IconGel,
   IconLineage,
@@ -81,7 +100,10 @@ import { openBookmarkSheet } from '../bookmarks';
 import { BOOKMARK_UI } from '../strings/notebookTools';
 import { endProbeSession, ShapeIcon, startProbeSession } from './ProbeSession';
 import {
+  buildRecord,
+  buildTools,
   dietLine,
+  dishHasClimate,
   dishStructureIds,
   habitatTools,
   isPhage,
@@ -104,7 +126,35 @@ const HABITAT_ICONS: Record<HabitatToolId, () => JSX.Element> = {
   'paint:sediment': IconSediment,
   'shade:paint': IconShade,
   'shade:erase': IconSun,
+  wet: IconWet,
 };
+/** P5.1/P5.2: the Build group's icons (CT §4 objects), by record id. */
+const BUILD_ICONS: Record<string, () => JSX.Element> = {
+  S01: IconMembrane,
+  S02: IconSmallGate,
+  S03: IconShutter,
+  S04: IconChannel,
+  S05: IconShelter,
+  S06: IconMesh,
+  S07: IconBasket,
+  S08: IconResin,
+  S09: IconHeater,
+  S10: IconCooler,
+  S11: IconRoof,
+  S12: IconWick,
+  remove: IconRemoveStructure,
+};
+
+/** The Build group's items this dish offers (its recorded S01–S12, then Remove), with content names. */
+export function buildItems(): TrayItem[] {
+  const info = dishInfo.value;
+  if (!info) return [];
+  return buildTools(info).map((id) => {
+    const key = id.slice('build:'.length);
+    const Icon = BUILD_ICONS[key] ?? IconRemoveStructure;
+    return { id, name: key === 'remove' ? BUILD_COPY.remove : (buildRecord(key)?.name ?? BUILD_COPY.remove), icon: <Icon /> };
+  });
+}
 const STRUCTURE_ICONS: Record<StructureToolId, () => JSX.Element> = {
   'place:stone': IconStone,
   'place:wall': IconWall,
@@ -226,8 +276,8 @@ export function categoryOf(id: LabToolId): LabCategory {
   if (id.startsWith('object:')) return 'food';
   if (id.startsWith('material:'))
     return CHEMISTRY_MATERIALS.includes(id.slice('material:'.length)) ? 'chemistry' : 'food';
-  if (id.startsWith('paint:') || id.startsWith('shade:')) return 'habitat';
-  if (id.startsWith('place:') || id === 'erase') return 'tools';
+  if (id.startsWith('paint:') || id.startsWith('shade:') || id === 'wet') return 'habitat';
+  if (id.startsWith('place:') || id === 'erase' || id.startsWith('build:')) return 'tools';
   return 'inspect';
 }
 
@@ -327,6 +377,38 @@ export function itemCopy(id: LabToolId): ItemCopy | null {
       watch: rec.example,
     };
   }
+  // P5.1/P5.2 (wave 11): Build items, named and described by their content records (rules = changes,
+  // example = watch for); where they go and what they leave alone is the Build group's chrome.
+  if (id === 'build:remove') {
+    if (!buildTools(info).includes(id)) return null;
+    return {
+      name: BUILD_COPY.remove,
+      purpose: BUILD_COPY.removePurpose,
+      habitats: BUILD_COPY.removeHabitats,
+      dose: BUILD_COPY.removeDose,
+      changes: BUILD_COPY.removeChanges,
+      unchanged: BUILD_COPY.removeUnchanged,
+      watch: BUILD_COPY.removeWatch,
+    };
+  }
+  if (id.startsWith('build:')) {
+    const key = id.slice('build:'.length);
+    const rec = buildRecord(key);
+    if (!rec || !buildTools(info).includes(id)) return null;
+    const edge = edgeKindOf(id) !== null;
+    const machine = key === 'S08' || key === 'S09' || key === 'S10';
+    return {
+      name: rec.name,
+      purpose: rec.summary,
+      habitats: edge ? (key === 'S04' ? BUILD_COPY.channelHabitats : BUILD_COPY.edgeHabitats) : BUILD_COPY.deviceHabitats,
+      dose: edge ? BUILD_COPY.edgeDose : BUILD_COPY.deviceDose,
+      changes: rec.rules || rec.summary,
+      unchanged: edge ? BUILD_COPY.edgeUnchanged : machine ? BUILD_COPY.machineUnchanged : BUILD_COPY.deviceUnchanged,
+      watch: rec.example,
+    };
+  }
+  // P5.2: the wetting brush (content/tools/WET_BRUSH.json), only in a dish that records climate (D-0111).
+  if (id === 'wet') return dishHasClimate(info) ? toolItemCopy('WET_BRUSH') : null;
   // P3.8 (D-0039): tool texts are content records, shared with the Field Guide.
   if (id === 'erase') return structureTools(info).includes('erase') ? toolItemCopy('ERASE_STRUCTURE') : null;
   // P3.5: player tools offered on every world (D-0037).
@@ -385,10 +467,29 @@ function Segmented<T extends number>({
   );
 }
 
+/** Two labelled choices (P5.1: a shutter's Open / Closed, a channel's direction). */
+function BoolChoice({ label, value, onPick, yes, no, testid }: { label: string; value: boolean; onPick: (v: boolean) => void; yes: string; no: string; testid: string }) {
+  return (
+    <div class="lab-option">
+      <span class="lab-option-label" id={`${testid}-label`}>
+        {label}
+      </span>
+      <div class="segmented" role="group" aria-labelledby={`${testid}-label`}>
+        <button class="btn" aria-pressed={value} onClick={() => onPick(true)} data-testid={`${testid}-yes`}>
+          {yes}
+        </button>
+        <button class="btn" aria-pressed={!value} onClick={() => onPick(false)} data-testid={`${testid}-no`}>
+          {no}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ItemDetails({ id }: { id: LabToolId }) {
   const copy = itemCopy(id);
   if (!copy) return null;
-  const brush = brushRule(id) !== null || id.startsWith('life:') || id === 'sample';
+  const brush = brushRule(id) !== null || id.startsWith('life:') || id === 'sample' || id === 'wet';
   const t = LAB_TEXT.details;
   const info = dishInfo.value;
   // The species' diet line (UX §4.3; W2-13), from the dish's own records.
@@ -497,7 +598,32 @@ function ToolOptions({ id }: { id: LabToolId }) {
         format={(v) => CLEAN_WATER_LABELS[String(v)] ?? String(v)}
       />,
     );
-  if (brushRule(id) !== null || id.startsWith('life:') || id === 'sample')
+  // P5.1/P5.2: a new shutter's state (D-0119: Open by default) and a new channel's direction.
+  if (edgeKindOf(id) === 'S03')
+    opts.push(
+      <BoolChoice
+        key="shutter"
+        label={BUILD_COPY.shutterLabel}
+        value={buildShutterOpen.value}
+        onPick={(v) => (buildShutterOpen.value = v)}
+        yes={BUILD_COPY.shutterOpen}
+        no={BUILD_COPY.shutterClosed}
+        testid="build-shutter"
+      />,
+    );
+  if (edgeKindOf(id) === 'S04')
+    opts.push(
+      <BoolChoice
+        key="flow"
+        label={BUILD_COPY.flowLabel}
+        value={buildFlow.value === 1}
+        onPick={(v) => (buildFlow.value = v ? 1 : -1)}
+        yes={BUILD_COPY.flowForward}
+        no={BUILD_COPY.flowBack}
+        testid="build-flow"
+      />,
+    );
+  if (brushRule(id) !== null || id.startsWith('life:') || id === 'sample' || id === 'wet')
     opts.push(
       <Segmented
         key="radius"
@@ -612,6 +738,89 @@ function LidToggle() {
   );
 }
 
+let envCommands = 0;
+
+/**
+ * P5.2 (D-0111, D-0119): the light mode and drying, beside the lid (the LidToggle pattern), only in a dish
+ * that records 'climate'. Each is one recorded, undoable command (setLightMode, setDrying) with a toast that
+ * quotes the rule; the shown state is the dish's latest snapshot's (client.environmentOf).
+ */
+function EnvironmentToggles() {
+  const info = dishInfo.value;
+  const dishId = info?.dishId ?? null;
+  const [env, setEnv] = useState<SnapshotEnvironment | null>(() => (dishId ? getClient().environmentOf(dishId) : null));
+  useEffect(() => {
+    if (!dishId) return;
+    const c = getClient();
+    setEnv(c.environmentOf(dishId));
+    return c.onSnapshot((s) => {
+      if (s.dishId === dishId && s.environment) setEnv(s.environment);
+    });
+  }, [dishId]);
+  if (!dishId || !info || !dishHasClimate(info)) return null;
+  const send = (payload: { kind: 'setLightMode'; mode: 'fixed' | 'cycle' } | { kind: 'setDrying'; drying: boolean }, failed: string) => {
+    void getClient()
+      .command(dishId, `lab-env-${++envCommands}`, payload, true)
+      .then((res) => {
+        if (dishInfo.value?.dishId !== dishId) return;
+        if (!res || res.accepted === 0) {
+          showToast(failed, 4000);
+          return;
+        }
+        showToast(payload.kind === 'setLightMode' ? ENVIRONMENT_COPY.lightOutcome(payload.mode) : ENVIRONMENT_COPY.dryingOutcome(payload.drying), 5000);
+      })
+      .catch(() => showToast(failed, 4000));
+  };
+  const light = env?.lightMode ?? null;
+  const drying = env?.drying ?? null;
+  return (
+    <>
+      <div class="lab-option" data-testid="lab-light">
+        <span class="lab-option-label" id="lab-light-label">
+          {ENVIRONMENT_COPY.lightLabel}
+        </span>
+        <div class="segmented" role="group" aria-labelledby="lab-light-label" aria-describedby="lab-light-rule">
+          {(['fixed', 'cycle'] as const).map((v) => (
+            <button
+              key={v}
+              class="btn"
+              aria-pressed={light === v}
+              onClick={() => (v === light ? undefined : send({ kind: 'setLightMode', mode: v }, ENVIRONMENT_COPY.lightFailed))}
+              data-testid={`lab-light-${v}`}
+            >
+              {v === 'fixed' ? ENVIRONMENT_COPY.fixed : ENVIRONMENT_COPY.cycle}
+            </button>
+          ))}
+        </div>
+        <p class="lab-sub" id="lab-light-rule">
+          {ENVIRONMENT_COPY.lightRule}
+        </p>
+      </div>
+      <div class="lab-option" data-testid="lab-drying">
+        <span class="lab-option-label" id="lab-drying-label">
+          {ENVIRONMENT_COPY.dryingLabel}
+        </span>
+        <div class="segmented" role="group" aria-labelledby="lab-drying-label" aria-describedby="lab-drying-rule">
+          {([false, true] as const).map((v) => (
+            <button
+              key={String(v)}
+              class="btn"
+              aria-pressed={drying === v}
+              onClick={() => (v === drying ? undefined : send({ kind: 'setDrying', drying: v }, ENVIRONMENT_COPY.dryingFailed))}
+              data-testid={`lab-drying-${v ? 'on' : 'off'}`}
+            >
+              {v ? ENVIRONMENT_COPY.on : ENVIRONMENT_COPY.off}
+            </button>
+          ))}
+        </div>
+        <p class="lab-sub" id="lab-drying-rule">
+          {ENVIRONMENT_COPY.dryingRule}
+        </p>
+      </div>
+    </>
+  );
+}
+
 function ObserveActions() {
   return (
     <div class="lab-actions" role="group" aria-label={OBSERVE_TEXT.observeGroup}>
@@ -694,6 +903,37 @@ function IconRelMap() {
   );
 }
 
+/**
+ * P5.1/P5.2 (wave 11): the Tools tray's Build group — the S01–S12 records this dish's manifest enables, in
+ * CT §4 order, then Remove. A dish without any (every v1.0 dish) shows no Build group at all.
+ */
+function BuildGroup({ selected }: { selected: LabToolId }) {
+  const items = buildItems();
+  if (items.length === 0) return null;
+  return (
+    <section class="lab-build" aria-labelledby="lab-build-title" data-testid="lab-build">
+      <h3 id="lab-build-title" class="lab-group-title">
+        {BUILD_COPY.group}
+      </h3>
+      <p class="lab-sub">{BUILD_COPY.groupHint}</p>
+      <div class="lab-items" role="group" aria-labelledby="lab-build-title">
+        {items.map((it) => (
+          <button
+            key={it.id}
+            class="btn lab-item"
+            aria-pressed={selected === it.id}
+            onClick={() => selectLabTool(it.id)}
+            data-testid={`lab-item-${it.id}`}
+          >
+            {it.icon}
+            <span>{it.name}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function LabTray({ category }: { category: LabCategory }) {
   const cat = LAB_CATEGORIES.find((c) => c.id === category)!;
   const items = trayItems(category);
@@ -743,6 +983,7 @@ export function LabTray({ category }: { category: LabCategory }) {
                 ))}
               </div>
             ) : null}
+            {category === 'tools' ? <BuildGroup selected={selected} /> : null}
             {inThisTray ? (
               <>
                 <ToolOptions id={selected} />
@@ -764,6 +1005,7 @@ export function LabTray({ category }: { category: LabCategory }) {
             ) : null}
             {category === 'tools' ? <ToolsActions /> : null}
             {category === 'habitat' ? <LidToggle /> : null}
+            {category === 'habitat' ? <EnvironmentToggles /> : null}
           </>
         )}
       </div>

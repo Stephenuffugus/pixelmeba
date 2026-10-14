@@ -36,6 +36,9 @@ import {
   type PresetId,
 } from '../strings/modes';
 import { plural } from '../strings/experiments';
+import { effectiveEnvironment, environmentGroupVisible, environmentOverrides, environmentSummary, type DishEnvironment, type EnvironmentChoice } from '../environment';
+import { ENVIRONMENT_COPY } from '../strings/structures';
+import { LID_COPY } from '../strings/lab';
 
 const RECIPE_ID = 'FIRST_DISH_V1';
 const MAX_SEED = 4294967295;
@@ -59,8 +62,19 @@ interface CuratedDish {
  * order, read from the same content records the worker validates (as the Lab tray reads its tools).
  * The worker builds the dish from its own validated copy; these values only choose what to ask for.
  */
+/** This build's content manifest (the same record the worker validates). */
+const BUILD_MANIFEST: Manifest | undefined = Object.values(
+  import.meta.glob<Manifest>('../../../content/manifest.json', { eager: true, import: 'default' }),
+)[0];
+
+/**
+ * P5.1 (UX §2.3 "Environment … Phase 5"): the Environment group is offered only when this build's manifest
+ * enables 'climate' (src/ui/environment.ts); until the systems flip (D-0104) it is absent.
+ */
+const ENVIRONMENT_OFFERED = environmentGroupVisible(BUILD_MANIFEST);
+
 const CURATED: readonly CuratedDish[] = (() => {
-  const manifest = Object.values(import.meta.glob<Manifest>('../../../content/manifest.json', { eager: true, import: 'default' }))[0];
+  const manifest = BUILD_MANIFEST;
   const glob = import.meta.glob<RecipeDef>('../../../content/recipes/L*.json', { eager: true, import: 'default' });
   return Object.keys(glob)
     .sort()
@@ -168,7 +182,7 @@ function CuratedLines({ dish, p }: { readonly dish: CuratedDish; readonly p: New
 }
 
 /** Exactly what the preview world holds, in words (founders, patches, seeded abilities, initial ledger). */
-function Summary({ p, habitatStart, curated }: { readonly p: NewDishPreview; readonly habitatStart: boolean; readonly curated: CuratedDish | null }) {
+function Summary({ p, habitatStart, curated, env }: { readonly p: NewDishPreview; readonly habitatStart: boolean; readonly curated: CuratedDish | null; readonly env: DishEnvironment | null }) {
   const founders = p.founders.map((f) => countOf(f.count, f.name));
   const seeded = p.founders.filter((f) => f.withModule > 0);
   const eligible = p.founders.reduce((a, f) => a + f.eligible, 0);
@@ -216,6 +230,7 @@ function Summary({ p, habitatStart, curated }: { readonly p: NewDishPreview; rea
           .
         </p>
       ) : null}
+      {env ? <p data-testid="new-dish-environment-summary">{environmentSummary(env)}</p> : null}
       <p data-testid="new-dish-ledger">{startLedgerText(p.ledger)}</p>
       <p>
         Seed {p.seed}. Nothing else appears on its own. It opens paused in the Lab, with the Life tray open.
@@ -243,6 +258,95 @@ function revealLifeTray(frames = 60): void {
   if (r.top < 0 || r.bottom > window.innerHeight) first.scrollIntoView({ block: 'nearest' });
 }
 
+/** One environment setting as two labelled buttons (the LidToggle pattern; UX §4.1 targets). */
+function EnvChoice<T extends string | boolean>({
+  label,
+  testId,
+  value,
+  options,
+  onPick,
+  rule,
+}: {
+  label: string;
+  testId: string;
+  value: T | null;
+  options: readonly { readonly v: T; readonly label: string }[];
+  onPick: (v: T) => void;
+  rule: string;
+}) {
+  return (
+    <div class="lab-option" data-testid={testId}>
+      <span class="lab-option-label" id={`${testId}-label`}>
+        {label}
+      </span>
+      <div class="segmented" role="group" aria-labelledby={`${testId}-label`} aria-describedby={`${testId}-rule`}>
+        {options.map((o) => (
+          <button key={String(o.v)} type="button" class="btn" aria-pressed={value === o.v} onClick={() => onPick(o.v)} data-testid={`${testId}-${String(o.v)}`}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <p class="sub" id={`${testId}-rule`}>
+        {rule}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * P5.1 New Dish Environment (UX §2.3; CT §8.1; D-0106): the lid, the light mode and drying the dish starts
+ * with, after Evolution. Defaults are the preview world's own; only changed keys become overrides.
+ */
+function EnvironmentGroup({
+  defaults,
+  choice,
+  onChange,
+}: {
+  defaults: DishEnvironment | null;
+  choice: EnvironmentChoice;
+  onChange: (c: EnvironmentChoice) => void;
+}) {
+  const env = defaults ? effectiveEnvironment(defaults, choice) : null;
+  return (
+    <section class="card" aria-labelledby="nd-environment" data-testid="new-dish-environment">
+      <h2 id="nd-environment">Environment</h2>
+      <EnvChoice<'open' | 'closed'>
+        label={LID_COPY.label}
+        testId="new-dish-lid"
+        value={env?.lid ?? null}
+        options={[
+          { v: 'open', label: LID_COPY.open },
+          { v: 'closed', label: LID_COPY.closed },
+        ]}
+        onPick={(v) => onChange({ ...choice, lid: v })}
+        rule={LID_COPY.rule.replace(/ Each change is recorded and can be undone\.$/, "")}
+      />
+      <EnvChoice<'fixed' | 'cycle'>
+        label={ENVIRONMENT_COPY.lightLabel}
+        testId="new-dish-light"
+        value={env?.lightMode ?? null}
+        options={[
+          { v: 'fixed', label: ENVIRONMENT_COPY.fixed },
+          { v: 'cycle', label: ENVIRONMENT_COPY.cycle },
+        ]}
+        onPick={(v) => onChange({ ...choice, lightMode: v })}
+        rule={ENVIRONMENT_COPY.lightRule.replace(/ Each change is recorded and can be undone\.$/, "")}
+      />
+      <EnvChoice<boolean>
+        label={ENVIRONMENT_COPY.dryingLabel}
+        testId="new-dish-drying"
+        value={env?.drying ?? null}
+        options={[
+          { v: false, label: ENVIRONMENT_COPY.off },
+          { v: true, label: ENVIRONMENT_COPY.on },
+        ]}
+        onPick={(v) => onChange({ ...choice, drying: v })}
+        rule={ENVIRONMENT_COPY.dryingRule.replace(/ Each change is recorded and can be undone\.$/, "")}
+      />
+    </section>
+  );
+}
+
 export function NewDish() {
   const [start, setStart] = useState<StartId>('garden');
   const [name, setName] = useState('My dish');
@@ -255,6 +359,8 @@ export function NewDish() {
     null,
   );
   const [problem, setProblem] = useState<string | null>(null);
+  /** P5.1: the Environment group's picks (only keys the player touched). */
+  const [envChoice, setEnvChoice] = useState<EnvironmentChoice>({});
   const request = useRef(0);
 
   const curated = curatedOf(start);
@@ -307,6 +413,10 @@ export function NewDish() {
     preview.p.recipeId === recipeId
       ? preview.p
       : null;
+  // P5.1: the group's defaults are the preview world's own environment (recipe, else habitat; CT §8.1),
+  // asked for without the group's picks so a pick never becomes its own default.
+  const envDefaults: DishEnvironment | null = ENVIRONMENT_OFFERED ? (current?.environment ?? null) : null;
+  const env = envDefaults ? effectiveEnvironment(envDefaults, envChoice) : null;
   // The registry is this build's manifest whatever the choices, so an older answer still describes it.
   const registry = (current ?? preview?.p)?.registry ?? null;
 
@@ -346,6 +456,8 @@ export function NewDish() {
           founderMode: founders,
           empty,
           ...(START_HABITAT[start] !== undefined ? { habitatId: START_HABITAT[start] } : {}),
+          // Only the keys changed from the defaults: an untouched group records nothing.
+          ...(envDefaults ? { environment: environmentOverrides(envDefaults, envChoice) } : {}),
         },
         started,
       );
@@ -501,6 +613,9 @@ export function NewDish() {
             )}
           </div>
         </section>
+        {ENVIRONMENT_OFFERED ? (
+          <EnvironmentGroup defaults={envDefaults} choice={envChoice} onChange={setEnvChoice} />
+        ) : null}
         <section class="card" aria-labelledby="nd-content">
           <h2 id="nd-content">Content</h2>
           <button
@@ -536,7 +651,7 @@ export function NewDish() {
             {worldModesLine(preset, founders, registry)}
           </p>
           {current ? (
-            <Summary p={current} habitatStart={START_HABITAT[start] !== undefined} curated={curated} />
+            <Summary p={current} habitatStart={START_HABITAT[start] !== undefined} curated={curated} env={env} />
           ) : (
             <p>Working out exactly what this dish starts with…</p>
           )}

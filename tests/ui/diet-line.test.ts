@@ -122,6 +122,15 @@ describe('Diet lines from the dish’s own records (W2-13)', () => {
     expect(dietLine(base, 'Z99')).toBeNull();
   });
 
+  it('a Medium or Large free class gets shelterBlocked (an S05 porous shelter refuses it); other classes, or no class sent, do not', () => {
+    const { speciesFreeClass: _sent, ...base } = infoOf(waveRegistry());
+    expect(lifeBrushFor(base, 'B01')!.shelterBlocked).toBeUndefined();
+    for (const cls of ['small', 'medium', 'large', 'fixed', 'viral'] as const) {
+      const info: DishInfo = { ...base, speciesFreeClass: base.speciesIds.map(() => cls) };
+      expect(lifeBrushFor(info, 'B01')!.shelterBlocked, cls).toBe(cls === 'medium' || cls === 'large' ? true : undefined);
+    }
+  });
+
   it('V01 is a phage: its Life brush is the dose rule (open cells and porous beads), and its copy reads units per cell', () => {
     const info = infoOf(waveRegistry());
     expect(isPhage(info, 'V01')).toBe(true);

@@ -117,7 +117,54 @@ export interface ObjectiveProgress {
  */
 export interface GateReading {
   transferred(world: World, gate: string, field: FieldId): number | null;
+  /** Organism crossings through the dish's gates of that kind so far, or null when it has none (Phase 5 wave 11). */
+  organisms?(world: World, gate: string): number | null;
 }
+
+/** The tally record of structure `id` in world.gateTally (sorted by id), or null. Read only. */
+function gateTallyRecord(world: World, id: number): World['gateTally'][number] | null {
+  const list = world.gateTally;
+  let lo = 0;
+  let hi = list.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (list[mid]!.id < id) lo = mid + 1;
+    else hi = mid;
+  }
+  const t = list[lo];
+  return t !== undefined && t.id === id ? t : null;
+}
+
+/**
+ * The dish's own gates (Phase 5 wave 11; D-0108, D-0117, D-0119): a gate is an edge structure kind
+ * ('S01' … 'S04', as the objective record names it). With no edge barrier of that kind in world.edges
+ * the dish has no such gate (null). Otherwise the reading is the sum, over the current edges of that kind
+ * in store order, of world.gateTally's cumulative amount (|flux| in either direction, field units; 0 for
+ * an edge or a field without an amount). Removing a gate removes its share. Observation only: it reads
+ * the saved, never-hashed tally and writes nothing.
+ */
+export const WORLD_GATES: GateReading = {
+  transferred(world: World, gate: string, field: FieldId): number | null {
+    let found = false;
+    let sum = 0;
+    for (const e of world.edges) {
+      if (e.kind !== gate) continue;
+      found = true;
+      sum += gateTallyRecord(world, e.id)?.fields[field] ?? 0;
+    }
+    return found ? sum : null;
+  },
+  organisms(world: World, gate: string): number | null {
+    let found = false;
+    let sum = 0;
+    for (const e of world.edges) {
+      if (e.kind !== gate) continue;
+      found = true;
+      sum += gateTallyRecord(world, e.id)?.organisms ?? 0;
+    }
+    return found ? sum : null;
+  },
+};
 
 export interface ObjectiveProblem {
   /** Path inside the objective record, e.g. 'predicate.params.species'. */
@@ -337,7 +384,7 @@ export function objectiveRefsProblem(refs: ObjectiveWorldRefs, pred: ObjectivePr
  * and a gate goal needs a gate the reader finds. Never a build constant, so an old save is offered only
  * what it recorded.
  */
-export function objectiveSupportProblem(world: World, pred: ObjectivePredicate, gates: GateReading | null = null): string | null {
+export function objectiveSupportProblem(world: World, pred: ObjectivePredicate, gates: GateReading | null = WORLD_GATES): string | null {
   const t = typedPredicate(pred);
   if (isProblem(t)) return t.message;
   if (t.type === 'transferAcrossGate') {
@@ -401,7 +448,7 @@ export class ObjectiveWatch {
     pred: ObjectivePredicate,
     world: World,
     resume: ObjectiveProgress | null = null,
-    private readonly gates: GateReading | null = null,
+    private readonly gates: GateReading | null = WORLD_GATES,
   ) {
     const t = typedPredicate(pred);
     if (isProblem(t)) throw new ObjectiveError(t.message);

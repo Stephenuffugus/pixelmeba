@@ -1785,3 +1785,74 @@ Decision:
 - **Ticking.** BUILD_DIRECTIVE P5.1 and P5.2 have Build lists but no "Done when" line (contradiction 3); they are ticked at the systems flip when every item of their Build lists is met and the D-0104 checks pass.
 Reason: each ruling keeps v1.0 worlds, snapshots of v1.0 dishes and older saves equivalent, keeps a displayed number traceable to the value the simulation used, or follows the closest canonical text (SPEC §3.2, CT §12.6). The import ruling closes a path by which a crafted file could run unshipped rules in a release build, without touching any dish a shipped build could have made.
 Owner review: no.
+
+## D-0120 · 2026-10-14 · Phase 5 wave 11 · Protocol 3, structures on screen, signals and rivalry, region charts and gates as built
+Context: wave 11, run wf_79e1123b-8bf (10 agents). Stage 1 was structure-render-worker and e2-signals (`critical: 'own'`), stage 2 structure-ui and region-charts-gates. Two rules verifiers and two saves verifiers checked the wave. One fix round went to region-charts-gates: a v1.0 dish's region reading listed nine decaying pools, including the unreleased Lacephage, and the gate-total sentence was wrong. The re-verify was clean except for the items left to the lead. Sources: docs/reports/reviews/g5-wave-11/ (four build reports, region-charts-gates-fix1, wave-verify-1/2, wave-reverify1, saves-verify-*). D-0119 holds the task writer's rulings; this entry records what the builders and the lead added.
+Decision:
+- **Protocol 3 and the render side (structure-render-worker).** The layout is in ARCH §7–§9 "As built, Phase 5 wave 11". The builder's rulings:
+  - GeometryMsg.edges and .devices are optional in the type, but the worker always sends both, and an absent key reads as none. They stay optional because tools/render-bench.ts builds a protocol 2 shaped message.
+  - DishInfo.speciesFreeClass is sent for every dish and includes 'viral' (V01, V02), since freeClassOfSpecies returns the record's transportClass. A phage brush is a material brush and never reads shelterBlocked.
+  - The CUE3 trap precedence is holding, then cooldown, then armed. Waves 12–13 may refine it within the 2-bit range without a bump.
+  - The paint preview takes an optional substrate. Without it, an S04 side previews as refused (conservative).
+  - The device preview counts placed devices over the cells given. placeDevice places one device per command, so for a single cell this is the command's rule.
+  - The warmth and moisture overlays paint 0 opaque, because 0 is a reading (cold, or dried out).
+  - Edge glyphs stay at least about 1.5 screen px wide and are redrawn when the zoom moves by more than 25 %, never per tick.
+  - **The device tile has 13 frames, not the 14 that D-0119 states:** s05, s06, s07, s08_0–3, s09_off/on, s10_off/on, s11 and s12. These are the frames the assignment listed. They are appended last: the atlas went from 1678 to 1691 frames at 1024 × 2048, and every earlier frame is byte-identical.
+  - The v1.0 equivalence golden (tests/fixtures/protocol2-golden/) was written from the code before the bump. A saves verifier regenerated it from a git archive of the pre-wave HEAD and got byte-identical files.
+- **Signals and rivalry (e2-signals).** These are in addition to D-0119:
+  - Emitter bits are rival 8 and signal 16 in `secreting`, and the shared outcome rule `recordEmission` lives in secretion.ts.
+  - A B13 with no stage-start target in range records secretionCode NONE, because SECRETION_NO_SUBSTRATE's copy names starch.
+  - Death emits no glowOff; the death event covers it. `EntityStore.free` clears every column, so a freed slot holds no glow state, and the import refuses one that does. The builder's report said "a dead slot keeps its last glowState until reuse", which is wrong.
+  - What a glowOff records:
+    - for 'signal', 'energy' and 'rest', the stage-start value ('rest' after the lead's fix below);
+    - for 'division', the live reading of its cell in stage 9.
+  - Tests that save and load E02 dishes mock IMPLEMENTED_MODULES with E02 appended (vi.mock with importOriginal) until E02 is listed. This is test-only.
+  - A v1.0 world now serializes `ledger.energy.signal: 0`, one extra key. Older saves load it as 0. The energy ledger is not hashed, so no stateHash, digest or fence value moves.
+- **Build tools and sheets (structure-ui).**
+  - **Gate inspector totals.** The sentence says "Measured since this barrier was placed: …". "Nothing has crossed yet." covers both a null and an all-zero record.
+  - **Live sheets.** The device and gate sheets keep their cell's inspector live through state.ts `inspectedSelection`, with no protocol change.
+  - **The Remove tool's rule (D-0119, made total).**
+    - A tap takes the cell's device when it is within 0.3 cell of the centre, when the nearest edge holds no barrier, or when the centre is nearer than that edge's midpoint. Otherwise it takes the edge.
+    - A drag takes every barrier edge its samples snap to by midpoint, and every device cell it passes.
+  - **New Dish Environment.** The defaults come from a preview requested without the group's picks, so `environmentOverrides` sends only the keys that changed.
+  - **Device move.** After a move the device sheet re-opens on the new cell, or stays on the old one when the move was refused. Run and Escape cancel a waiting move.
+  - **Toasts.** Structure outcome toasts last 7 s.
+- **Region charts and gates (region-charts-gates and its fix round).**
+  - **Decaying pools are never boundary totals.**
+    - They read 'notMeasured' with why 'decays', or 'resin' when an S08 selecting them sits in the region (resin wins).
+    - Gases with the lid open carry why 'gas'.
+    - After the fix round, a reading lists decaying pools only when the dish records 'barriers' or 'devices', and v01 or v02 only when it records V01 or V02 (`listedDecayingFields`). A v1.0 dish therefore reads exactly as before, plus salt (measured) and silicate (absent).
+  - **Crossings** are compared twice per tick, after stage 4 and after the tick, so an organism that crossed and then divided or died in the same tick is still counted. Region entries plus leaves equal the S02's tallied crossings.
+  - **Transfers.** Sample transfers are matched by birthId. A held organism keeps the membership it had before it was taken, and a Discard is a removal, not a leave.
+  - **The region sheet** sums gates per kind: "Measured since each of these edges was placed: …" (fix round). Per-edge totals are in the gate inspector.
+  - **The gate window** is the change of world.gateTally between whole-second copies (session state, 601 s).
+  - **GateReading** is cumulative |flux| in either direction over the current edges of the kind. A removed gate's share leaves the sum. A resumed goal counts from the load; exact resume is P5.6's.
+  - **Screen readers** get the table by default.
+- **Lead integration.**
+  - **Edge snapping (the remaining MAJOR).** D-0119's assignment snapped each drag sample to the nearest edge midpoint. That drew a comb: a drag 0.05–0.2 cell off a grid line picked up a perpendicular edge at most vertices (9 to 21 stray edges on a 20-cell line). Those edges change transport and use up the 512 cap. The new rule:
+    - `snapStroke` snaps a drag's samples (at most 0.25 cell apart) to grid vertices and joins consecutive vertices with the edges between them.
+    - A diagonal step through a cell centre turns at the corner nearer the stroke; a tie turns horizontally first.
+    - A drag therefore gives one connected path and nothing across its line. Leaving the grid breaks the path.
+    - A tap, meaning a stroke that never leaves its first vertex, stays the nearest edge of its first point: the midpoint rule, with ties to the lower edgeKey.
+    - The Remove drag keeps the midpoint rule, so a drag across a membrane still takes the edges it crosses.
+    - wave 10's unused `structurePreview.ts nearestEdge`, which had another tie rule, is removed, so src/ui/edgeSnap.ts is the only snapping.
+    - Tests: the verifier's repro at five offsets, a horizontal line, the corner rule both ways, and the tap. Each fails under the old rule or a flipped corner.
+  - **The Move preview has its own rule** (structure-ui's NEEDS). Renderer `setBrushPreview({ rule: 'move', structure, from })` calls structurePreviewModel.ts `deviceMovePreview`, which calls `deviceMoveOutcome`. The device cap therefore never applies to a move, and a basket carrying an object is previewed as refused onto another object, as moveDevice decides. Tested against the command at the cap and for each refusal.
+  - **Fixed never moves.** The gate tracer's Fixed tokens now stay where they start on every code; they used to cross an open shutter or an edge with no barrier. The gate table's Fixed row reads "Stays put" where the edge would let it through, and "Blocked" elsewhere. Attached colonies, active fungi, deposits, film and food objects never travel, and CT §5.3 lists only barrier columns.
+  - **The 'rest' glowOff reading** is now the stage-start value when stage 8's snapshot was taken this tick (signals.ts `restSensed`). Mid-loop, the live field already holds lower slots' emission, so the saves verifier's probe recorded 0.312 or 0.31 depending on slot order. The value is not hashed; it is a record the feed and P5.6 will read. Test: both slot orders record 0.31.
+  - **Tests for the verifiers' MINORs**, each proven by a mutant:
+    - glow thresholds held at exactly 0.30 and 0.15 (both inclusive);
+    - the E02 module card's "active now", from a new `moduleActiveNow` case (it emitted signal this tick, or it is glowing);
+    - shelterBlocked from speciesFreeClass.
+  - **Implemented lists.** `IMPLEMENTED_NATIVE_ABILITIES` gains RIVALRY and SIGNAL_GLOW. E02 stays out of IMPLEMENTED_MODULES until the organism flip, because tests/sim/modules.test.ts pins that list to the shipped modules. The validator test's unimplemented-ability subject moved from B09's SIGNAL_GLOW to F03's TRAP (wave 13).
+  - **Carried, with owners.**
+    - To wave 13's org-ui, before the organism flip:
+      - the secretionCode copy for signal and RIVAL emitters. reasons.ts words SECRETING, SATURATED and ENERGY_LOW for enzymes, and experiments.ts counts an E02 B06's signal emission as starch secretion;
+      - RIVAL_EXPOSURE's "A rival colony is hurting it.", which an M08 deposit can trigger with no B13 in the dish;
+      - one name per field across screens. rival is "rivalry chemical" and "Rivalry extract", and sGlow is "glow signal" and "Lantern signal". The region reading also names them from content that a dish recording the system may not hold;
+      - snapshot.ts dropping exposure.rival when the breakdown has no lines.
+    - To P5.6: OBJECTIVE_EVENTS lacks glowOn and glowOff.
+    - To wave 12's structures-art-audio: the edge-glyph rows in tools/contrast-audit.ts.
+    - To the systems flip: the device tile in content-validate's TILE_FRAMES and enabled tiles, and the import gap (D-0119).
+Reason: the snapping, the Move preview, the Fixed rows and the 'rest' reading make what the player sees, and what the feed records, equal what the commands and the simulation do. The other rulings keep every v1.0 world, snapshot and save equivalent while nothing is enabled.
+Owner review: no.

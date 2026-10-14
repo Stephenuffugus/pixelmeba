@@ -7,7 +7,9 @@ import type { Intervention, MeasureRow } from '@worker/comparison';
 import type { DishInfo } from '@worker/protocol';
 import { reasonName } from '@sim/reasons';
 import { reasonText } from '../strings/reasons';
-import { paintName, structureName } from './LabTrayNames';
+import { inSentence, paintName, structureName, structureNameById } from './LabTrayNames';
+import { RESIN_TARGET_WORDS } from '../strings/structures';
+import { GRID_W } from '@sim/constants';
 import { evolutionLabel } from '../strings/whatif';
 import { CLEAN_WATER_LABELS, SAMPLE_MODE_LABELS } from '../strings/tools';
 
@@ -70,16 +72,26 @@ export function describeChange(info: DishInfo, payload: CommandPayload, result: 
     case 'cleanWater':
       return `Clean water (${CLEAN_WATER_LABELS[String(payload.fraction)] ?? payload.fraction}) on ${accepted} cell${accepted === 1 ? '' : 's'}`;
     // Phase 5 structures and climate (structureEdits.ts), in plain words without internal codes.
-    case 'placeEdges':
-      return `Edge barriers placed on ${accepted} edge${accepted === 1 ? '' : 's'}`;
+    // P5.1/P5.2 (wave 11): structures named from content ("Fine membrane") where the payload names one.
+    case 'placeEdges': {
+      const state = payload.structure === 'S03' ? (payload.open === false ? ' (closed)' : ' (open)') : '';
+      return `${structureNameById(payload.structure)}${state} placed on ${accepted} edge${accepted === 1 ? '' : 's'}`;
+    }
     case 'placeDevice':
-      return accepted > 0 ? 'A furnishing or device placed' : 'No furnishing or device placed';
+      return accepted > 0
+        ? `${structureNameById(payload.structure)} placed at (${payload.cell % GRID_W}, ${Math.floor(payload.cell / GRID_W)})`
+        : `${structureNameById(payload.structure)} not placed`;
     case 'removeStructures':
       return `${accepted} structure${accepted === 1 ? '' : 's'} removed`;
     case 'moveDevice':
-      return accepted > 0 ? 'A device moved' : 'No device moved';
+      return accepted > 0 ? `A device moved to (${payload.cell % GRID_W}, ${Math.floor(payload.cell / GRID_W)})` : 'No device moved';
     case 'setDevice':
-      return accepted > 0 ? 'A device setting changed' : 'No device setting changed';
+      if (accepted === 0) return 'No device setting changed';
+      if (payload.on !== undefined) return payload.on ? 'A heater or cooler turned On' : 'A heater or cooler turned Off';
+      if (payload.open !== undefined) return `${structureNameById('S03')} ${payload.open ? 'opened' : 'closed'}`;
+      return (payload.resinSelect ?? []).length === 0
+        ? `${structureNameById('S08')} set to Off`
+        : `${structureNameById('S08')} set to remove ${(payload.resinSelect ?? []).map((t) => RESIN_TARGET_WORDS[t] ?? inSentence(t)).join(' and ')}`;
     case 'wetBrush':
       return `Wetting brush on ${accepted} cell${accepted === 1 ? '' : 's'}`;
     case 'setLightMode':

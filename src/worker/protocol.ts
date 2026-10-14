@@ -27,8 +27,14 @@ import type { ProbeMask, ProbeReadings } from './probes';
 /**
  * 2 since Phase 3 wave 2 (D-0036): ENT_STRIDE 12 → 14 (E_CUE2, E_LINKMASK), seven deposit bands (film),
  * SnapshotMsg.links and .objects, VisualEvent 'objectEmptied'.
+ * 3 since Phase 5 wave 11 (D-0102, D-0107, D-0119; the one Phase 5 bump): ENT_STRIDE 14 → 15 (E_CUE3), eight
+ * deposit bands (grit, DEPOSIT_GRIT_BAND), GeometryMsg.edges and .devices, SnapshotMsg.resins and
+ * .environment, the optional CellInspect climate, lightFactors, edges and device lines, DishInfo.systems
+ * and .speciesFreeClass, RecipeOverrides lid / lightMode / drying, NewDishPreview environment and climate,
+ * and the 'warmth' and 'moisture' overlays. A v1.0 dish packs exactly as under protocol 2 (E_CUE3 0, the
+ * grit band 0, no new keys; tests/worker/protocol3-v1-equivalence.test.ts).
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** Every packet in both directions carries the protocol version (ARCH §7). */
 export interface Envelope {
@@ -41,8 +47,12 @@ export function stamp<T extends object>(msg: T): T & Envelope {
 
 export type Speed = 0 | 1 | 2 | 4;
 
-/** Overlays the renderer can request (one at a time). 'light' and 'ph' are derived fields. */
-export type OverlayId = FieldId | 'light' | 'ph' | 'foodAccess';
+/**
+ * Overlays the renderer can request (one at a time). 'light' and 'ph' are derived fields. Protocol 3:
+ * 'warmth' (the local warmth array, else the ambient settings.warmth everywhere) and 'moisture'
+ * (derived.moisture), both a 0–1 index with max 1; packing reads them and never allocates a climate array.
+ */
+export type OverlayId = FieldId | 'light' | 'ph' | 'foodAccess' | 'warmth' | 'moisture';
 
 export type Selection =
   | { readonly kind: 'entity'; readonly birthId: number }
@@ -59,6 +69,15 @@ export interface RecipeOverrides {
    * (@sim/recipes withHabitatOverride). Absent = the recipe's own habitat.
    */
   readonly habitatId?: string;
+  /**
+   * Protocol 3 (P5.1 New Dish Environment; D-0111, D-0119): the lid, the light mode and drying the dish
+   * starts with instead of the recipe's (applyRecipeOverrides). build() refuses an unknown value, and a
+   * cycle or drying when this build's registry has no 'climate', before anything is built; recipeProvenance
+   * records exactly the keys given. Absent = the recipe's own setting.
+   */
+  readonly lid?: 'open' | 'closed';
+  readonly lightMode?: 'fixed' | 'cycle';
+  readonly drying?: boolean;
 }
 
 export type DishSource =
@@ -399,8 +418,8 @@ export interface SlotModes {
   readonly partial?: boolean;
 }
 
-/** Per-entity record stride in SnapshotMsg.ents (Float32). 14 since protocol 2 (E_CUE2, E_LINKMASK). */
-export const ENT_STRIDE = 14;
+/** Per-entity record stride in SnapshotMsg.ents (Float32). 14 since protocol 2 (E_CUE2, E_LINKMASK); 15 since protocol 3 (E_CUE3). */
+export const ENT_STRIDE = 15;
 export const E_SLOT = 0;
 export const E_SPECIES = 1;
 export const E_X = 2;
@@ -415,6 +434,7 @@ export const E_SIZE = 10; // body size factor (1 until Phase 7)
 export const E_CUE = 11; // cue bits (see CUE_*)
 export const E_CUE2 = 12; // Phase 3 cue bits (see CUE2_*); 0 when none
 export const E_LINKMASK = 13; // fungal link directions and transfer (see LINKMASK_*); 0 when none
+export const E_CUE3 = 14; // Phase 5 cue bits (see CUE3_*, protocol 3); 0 when none
 
 export const CUE_FEEDING = 1;
 export const CUE_STRESSED = 2;
@@ -458,6 +478,35 @@ export const CUE2_DETRITUS_INTAKE = 4096;
 export const CUE2_RELEASING_PROTEIN = 8192;
 
 /**
+ * Phase 5 cue bits in E_CUE3 (protocol 3; D-0119). Each is set only from authoritative entity columns at
+ * pack time (src/worker/snapshot.ts cue3Of), 0 when nothing applies; every value is below 2^24, so exact in
+ * Float32. Most stay 0 until the waves that write their columns (12–13): those waves may refine a rule
+ * without a protocol bump as long as these names and value ranges hold.
+ * - GLOWING: glowState 1 (SPEC §7.8). MOD_E02 / MOD_E11: the module is in the genome (like CUE_MOD_E0x).
+ * - MODE (2 bits at CUE3_MODE_SHIFT): metabolicMode 0 none, 1 Photo, 2 Sugar (A04, SPEC §7.10).
+ * - HELD: heldBySlot ≥ 0 with a valid reference (an F03 trap holds it). HANDLING: handlingNeed > 0 with a
+ *   valid prey reference (P10, SPEC §7.3).
+ * - TRAP (2 bits at CUE3_TRAP_SHIFT): 0 none or idle, 1 armed (trapReserveC > 0, no target), 2 holding
+ *   (trapSlot ≥ 0, valid), 3 cooldown (trapCooldown > 0); holding wins over cooldown, cooldown over armed.
+ * - JACKET (2 bits at CUE3_JACKET_SHIFT): the jacket_rim frame, min(3, max(0, ⌈4c⌉ − 1)) with
+ *   c = min(1, jacketMineral / (0.10 × B)). JACKETED: jacketMineral > 0.
+ * - SHELL: the species has SHELL and boundMineral > 0.
+ */
+export const CUE3_GLOWING = 1;
+export const CUE3_MOD_E02 = 2;
+export const CUE3_MODE_SHIFT = 2;
+export const CUE3_MODE_MASK = 3 << CUE3_MODE_SHIFT;
+export const CUE3_HELD = 16;
+export const CUE3_HANDLING = 32;
+export const CUE3_TRAP_SHIFT = 6;
+export const CUE3_TRAP_MASK = 3 << CUE3_TRAP_SHIFT;
+export const CUE3_JACKET_SHIFT = 8;
+export const CUE3_JACKET_MASK = 3 << CUE3_JACKET_SHIFT;
+export const CUE3_JACKETED = 1024;
+export const CUE3_MOD_E11 = 2048;
+export const CUE3_SHELL = 4096;
+
+/**
  * E_LINKMASK (protocol 2): the low four bits are the directions of the segment's live fungal links
  * (y grows south; the art's mask bits, D-0046): N 1, E 2, S 4, W 8. Bit 4 is a transport transfer this
  * second (0 until wave 3's F02 transport).
@@ -483,6 +532,11 @@ export const LINK_KIND_ADHESION = 3;
 export const DEPOSIT_FILM_BAND = 6;
 export const FILM_LEVEL_MASK = 127;
 export const FILM_ERODING = 128;
+/**
+ * Protocol 3: band 7 is grit (E2-SHELLS), on the same soft log scale as starch and detritus; 0 where the
+ * world has no grit field. Packed, not drawn yet (the procedural grit glyph is wave 13's, D-0109).
+ */
+export const DEPOSIT_GRIT_BAND = 7;
 
 /** One finite food object as the renderer draws it (SnapshotMsg.objects). */
 export interface SnapshotObject {
@@ -498,11 +552,56 @@ export interface SnapshotObject {
 /** Per-entity id stride in SnapshotMsg.ids (Uint32): birthId, entityId. */
 export const ID_STRIDE = 2;
 
+/** GeometryMsg.edges (protocol 3). */
+export interface GeometryEdges {
+  readonly r: Uint8Array;
+  readonly d: Uint8Array;
+  readonly list: readonly GeometryEdge[];
+}
+
 export interface GeometryMsg {
   readonly version: number;
   readonly substrate: Uint8Array;
   readonly structure: Uint8Array;
   readonly shade: Float32Array;
+  /**
+   * Protocol 3: the dish's edge barriers, null when world.edges is empty. `r[cell]` / `d[cell]` are the
+   * barriers.ts edge code (edgeCodeArrays) of the cell's right / down edge, ORed with EDGE_FLOW_BACK when
+   * that edge is an S04 whose flow is −1 (it carries from the right/lower cell to `cell`). `list` is
+   * world.edges in its order (never nextOrganismTick: simulation timing, not geometry). The worker
+   * (snapshot.ts packGeometry) always sends both keys; they are optional in the type only so a tool that
+   * builds a protocol 2 shaped geometry (tools/render-bench.ts) still type-checks, and absent reads as none.
+   */
+  readonly edges?: GeometryEdges | null;
+  /** Protocol 3: furnishings and devices in world.devices order ([] when none), never a resin's `bound` (SnapshotMsg.resins). */
+  readonly devices?: readonly GeometryDevice[];
+}
+
+/** Bit ORed onto a GeometryMsg edge code: an S04 channel flowing from the right/lower cell to edge.cell (flow −1). */
+export const EDGE_FLOW_BACK = 8;
+
+/** One edge barrier as the renderer and inspector see it (GeometryMsg.edges.list). */
+export interface GeometryEdge {
+  readonly id: number;
+  readonly kind: 'S01' | 'S02' | 'S03' | 'S04';
+  /** The lower cell (the left cell for 'R', the upper cell for 'D'). */
+  readonly cell: number;
+  readonly dir: 'R' | 'D';
+  /** S03 only. */
+  readonly open?: boolean;
+  /** S04 only: +1 from `cell` to its neighbour, −1 back. */
+  readonly flow?: 1 | -1;
+}
+
+/** One furnishing or device as the renderer sees it (GeometryMsg.devices). */
+export interface GeometryDevice {
+  readonly id: number;
+  readonly kind: 'S05' | 'S06' | 'S07' | 'S08' | 'S09' | 'S10' | 'S11' | 'S12';
+  readonly cell: number;
+  /** S09/S10 only. */
+  readonly on?: boolean;
+  /** S08 only: its selection (sorted RESIN_TARGETS subset; [] = Off). */
+  readonly resinSelect?: readonly string[];
 }
 
 export interface VisualEvent {
@@ -592,6 +691,14 @@ export interface DishInfo {
   readonly registry?: RegistryInfo;
   /** P4.7: the dish's Try my dish turn (its notebook's record), when it is a turn dish. */
   readonly turn?: TurnRecord;
+  /** Protocol 3: the world's recorded enabledSystems (as structureIds is its enabledStructures), so the UI gates per dish (D-0111). */
+  readonly systems?: readonly string[];
+  /**
+   * Protocol 3: each species' free transport class (barriers.ts freeClassOfSpecies), in speciesIds order.
+   * The Life brush sets LifeBrush.shelterBlocked from it ('medium' or 'large'), so its preview refuses an
+   * S05 shelter cell exactly as canOccupy does.
+   */
+  readonly speciesFreeClass?: readonly ('small' | 'medium' | 'large' | 'fixed' | 'viral')[];
 }
 
 export interface SnapshotMsg {
@@ -631,6 +738,27 @@ export interface SnapshotMsg {
   readonly favorites?: FavoriteMarks;
   /** P4.13: the worker's own timings, only while diagnostics are on (src/worker/perfCounters.ts). */
   readonly perf?: PerfSample;
+  /**
+   * Protocol 3: every S08 resin's saturation (min(1, Σ bound / RESIN_CAPACITY), 0 with nothing bound), in
+   * world.devices order; present only when the dish holds an S08. Per snapshot because `bound` changes in
+   * stage 2 without a geometry bump.
+   */
+  readonly resins?: readonly SnapshotResin[];
+  /** Protocol 3: the light mode and drying in effect; present only when the world records 'climate'. */
+  readonly environment?: SnapshotEnvironment;
+}
+
+/** One adsorption resin's fill (SnapshotMsg.resins; CT §4 "darkens as saturated"). */
+export interface SnapshotResin {
+  readonly id: number;
+  readonly cell: number;
+  readonly saturation: number;
+}
+
+/** The dish's climate settings now in effect (SnapshotMsg.environment). */
+export interface SnapshotEnvironment {
+  readonly lightMode: 'fixed' | 'cycle';
+  readonly drying: boolean;
 }
 
 /** P4.13 (ARCH §13): worker timings over the last 300 ticks and snapshots, in ms (wall clock, worker side). */
@@ -1033,6 +1161,11 @@ export interface CellInspect {
       readonly growthFactor: number;
       readonly damagePerSecond: number;
     }[];
+    /**
+     * Protocol 3 (e2-signals, chemistry.ts exposureBreakdown): the rival toxin here, present only when the
+     * world has the rival field and the amount is > 0; `targets` are the species ids it acts on.
+     */
+    readonly rival?: { readonly amount: number; readonly exposure: number; readonly targets: readonly string[] };
   };
   /**
    * P3.6 reaction ledger (SPEC §12.1, §5.3): one row per enzyme with activity or conversion in this
@@ -1049,6 +1182,67 @@ export interface CellInspect {
     readonly pools: { readonly sugar?: number; readonly starch?: number; readonly protein?: number };
     readonly n: number;
   };
+  /**
+   * Protocol 3 (SPEC §4.4, §4.7, §4.8, §12.1), present only when the world records 'climate': local warmth
+   * (the array's value, else the ambient setting), the ambient setting, moisture (derived.moisture) and
+   * whether each comes from an allocated local array.
+   */
+  readonly climate?: CellClimate;
+  /**
+   * Protocol 3 (SPEC §4.4 "The inspector shows every factor"): what chemistry.ts lightFactors returns beyond
+   * baseline and shade (lightBase and shade above) — the cycle phase, the roof and the canopy factor — present
+   * only when it returns any of them (a world recording 'climate', an S11 or a CANOPY species). The light it
+   * describes is the last completed stage 2's (D-0113).
+   */
+  readonly lightFactors?: CellLightFactors;
+  /** Protocol 3: every edge barrier on the cell's four sides, in N, E, S, W order; absent when none. */
+  readonly edges?: readonly CellEdgeLine[];
+  /** Protocol 3: the furnishing or device on the cell; absent when none. */
+  readonly device?: CellDeviceLine;
+}
+
+export interface CellClimate {
+  readonly warmth: number;
+  readonly ambientWarmth: number;
+  readonly warmthLocal: boolean;
+  readonly moisture: number;
+  readonly moistureLocal: boolean;
+}
+
+export interface CellLightFactors {
+  readonly cycle?: { readonly phase: 'day' | 'dusk' | 'night' | 'dawn'; readonly factor: number; readonly secondsIntoPhase: number };
+  readonly roof?: number;
+  readonly canopy?: number;
+}
+
+/** One edge barrier beside an inspected cell (CellInspect.edges). */
+export interface CellEdgeLine {
+  readonly id: number;
+  readonly kind: 'S01' | 'S02' | 'S03' | 'S04';
+  /** Which side of this cell it lies on. */
+  readonly side: 'N' | 'E' | 'S' | 'W';
+  /** The cell across the edge. */
+  readonly neighbour: number;
+  /** The barriers.ts edge code (EDGE_S01 … EDGE_CHANNEL; no EDGE_FLOW_BACK bit). */
+  readonly code: number;
+  /** S03 only. */
+  readonly open?: boolean;
+  /** S04 only: 'out' carries from this cell to the neighbour, 'in' from the neighbour to this cell. */
+  readonly flow?: 'out' | 'in';
+  /** The gate's cumulative tally (world.gateTally, observation only), or null before its first amount. */
+  readonly tally: { readonly fields: Readonly<Record<string, number>>; readonly organisms: number } | null;
+}
+
+/** The furnishing or device on an inspected cell (CellInspect.device). */
+export interface CellDeviceLine {
+  readonly id: number;
+  readonly kind: 'S05' | 'S06' | 'S07' | 'S08' | 'S09' | 'S10' | 'S11' | 'S12';
+  /** S09/S10 only. */
+  readonly on?: boolean;
+  /** S08 only: its selection, what it holds per target, and min(1, Σ bound / RESIN_CAPACITY). */
+  readonly resinSelect?: readonly string[];
+  readonly bound?: Readonly<Record<string, number>>;
+  readonly saturation?: number;
 }
 
 /** One enzyme's line in the cell inspector's reaction ledger (P3.6). Carbon amounts are game units. */
@@ -1484,6 +1678,13 @@ export interface NewDishPreview {
   readonly registry: RegistryInfo;
   /** P4.3: the start's thumbnail (src/worker/thumbnail.ts): the Play shelf's live-state picture. */
   readonly thumb?: string;
+  /**
+   * Protocol 3 (P5.1 New Dish Environment): the realized preview world's lid, light mode and drying (the
+   * overrides, else the recipe's, else the habitat's), for the Environment group's defaults.
+   */
+  readonly environment: { readonly lid: 'open' | 'closed'; readonly lightMode: 'fixed' | 'cycle'; readonly drying: boolean };
+  /** Protocol 3: whether the realized preview world records the 'climate' system (light cycle, drying). */
+  readonly climate: boolean;
 }
 
 /** P4.7: a goal offered for a Try my dish turn, with its predicate's duration (null: none). */

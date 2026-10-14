@@ -40,6 +40,8 @@ import {
 import { AddLifeSheet } from '../panels/AddLifeSheet';
 import { FeedSheet } from '../panels/FeedSheet';
 import { InspectorSheet } from '../panels/Inspector';
+import { DeviceSheet } from '../panels/DeviceSheet';
+import { GateSheet } from '../panels/GateSheet';
 import { MoreSheet, SaveSheet } from '../panels/MoreSheet';
 import { HistorySheet } from '../panels/HistorySheet';
 import { FamilyMarkers } from '../panels/FamilyMarkers';
@@ -352,6 +354,9 @@ export function DishScreen() {
         {sheet.value === 'addLife' ? <AddLifeSheet /> : null}
         {sheet.value === 'feed' ? <FeedSheet /> : null}
         {sheet.value === 'inspect' ? <InspectorSheet /> : null}
+        {/* P5.1/P5.2: the device settings and gate sheets (opened from the cell inspector). */}
+        {sheet.value === 'device' ? <DeviceSheet /> : null}
+        {sheet.value === 'gate' ? <GateSheet /> : null}
         {sheet.value === 'more' ? <MoreSheet /> : null}
         {sheet.value === 'save' ? <SaveSheet /> : null}
         {sheet.value === 'history' ? <HistorySheet /> : null}

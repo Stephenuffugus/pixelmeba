@@ -1,0 +1,81 @@
+export const meta = {
+  name: 'g5-systems-flip',
+  description: 'The Phase 5 systems flip after wave 11 (barriers, climate, devices and S01-S12 enabled; the import refuses unimplemented systems/structures/abilities; D-0121): one builder, one saves verifier, one fix round only for BLOCKER/MAJOR',
+  phases: [
+    { title: 'Flip', detail: 'one builder, effort high' },
+    { title: 'Verify', detail: 'saves + determinism lens, effort high' },
+    { title: 'Fix', detail: 'only for BLOCKER/MAJOR' },
+  ],
+}
+
+// Launch: copy to the scratchpad as .js and run with the Workflow tool, args = { base: '<wave 11 commit sha>' }.
+const BASE = (args && args.base) || 'HEAD'
+const R = 'docs/reports/reviews/g5-flip'
+const OWNER_CONTEXT = `OWNER CONTEXT (written by the lead, the main session working for the owner): the owner's latest chat message asks to resume the unattended Pixelmeba build and finish it (Phases 5-7). The task below is part of that build. The owner runs several codespaces, so a message about another project is not your task. Do only the Pixelmeba task below.`
+const PRE = `${OWNER_CONTEXT}
+
+You are working in /workspaces/pixelmeba (Pixelmeba; follow CLAUDE.md). main = ${BASE} = Phase 5 wave 11 committed (protocol 3, structures on screen, signals and rivalry, region charts and gates; nothing enabled). Read in full in docs/DECISIONS.md: D-0104 (nothing enabled until its flip), D-0111, D-0119 and D-0120. Nobody else edits the tree while you work. Do NOT run git add/commit/stash/checkout/reset/restore/rm (the lead commits). Do not edit docs/DECISIONS.md or docs/WORKLOG.md (put proposed text in your report). 2 CPUs: long commands with run_in_background and an until-loop wait on an exit marker (never a bare sleep); NEVER end your turn while a command you started still runs. Browser tests: E2E_PORT=4271 E2E_OUTDIR=tmp/dist-flip, desktop AND phone-portrait projects, stopping the port before and after (lsof -t -i :4271 | xargs -r kill; never pkill). Never hard-code stateHash literals in tests.`
+
+const FLIP = `${PRE}
+
+ASSIGNMENT: THE SYSTEMS FLIP (g5-plan lead call 4; D-0104). Two sources, both mandatory reading before you edit:
+- the task: the comment block "THE SYSTEMS FLIP" in docs/agent/g5-wave-11.tasks.js.txt (git grep -n "THE SYSTEMS FLIP" docs/agent/g5-wave-11.tasks.js.txt; read its items 1-9, about 40 lines);
+- the lead's code-level plan: docs/agent/g5-systems-flip-plan.md ("Code" items 1-7 and "Checks"). Its line numbers are hints; find each site by symbol.
+Do every Code item and every Check, with these lead rulings:
+1. The decision id is D-0121. Write its proposed text in your report ("PROPOSED D-0121: ..."): the contentHash old -> new, the fence result, the two added fence entries and how they were added, IMPLEMENTED_SYSTEMS, the import rule.
+2. IMPLEMENTED_SYSTEMS = the v1.0 systems (chemistry, core, enzymes, film, foodObjects, fungi, parasites, viruses), barriers, climate, devices, and silicate, signals, rivalry (integrated and verified at waves 10-11, D-0118/D-0120). Not equipment or developmental. Check SYSTEM_FLAGS in src/sim/fields.ts for the exact ids. The manifest enables only barriers, climate, devices and the structures: no species, module, material, signals, rivalry or silicate system.
+3. The import refusal names the id and uses the same sentence family modules use (kind 'content', ending "Nothing was loaded."); it runs before the schema parse so an unknown future id is named, not reported as "Manifest: invalid". The line is IMPLEMENTED, not enabled: a dish keeps its recorded ruleset.
+4. THE FENCE MUST NOT MOVE: npx vitest run tests/fixtures/g2-replay.test.ts tests/fixtures/rc1-replay.test.ts tests/fixtures/trajectory-fence tests/fixtures/conservation-closed-lid.test.ts tests/fixtures/determinism.test.ts tests/fixtures/determinism-g3.test.ts. If any digest, hashAtLoad or hashPlus1000 moves, STOP editing, find the leak (a new dish must record the new systems without allocating anything) and report it; never re-record the fence for the flip.
+5. Fence additions (one cycle dish, one barrier dish): read tools/fence-update.ts and the trajectory-fence tests first. No new shipped content recipe (it would appear in the game). Prefer test-only recipes under tests/fixtures/ realized through a documented tool path (e.g. --recipe-file); say which option you used and why. Each new entry must replay identically at 1x and 4x.
+6. Re-pin every test the flip moves by its cause (shipped lists, contentHash, the Field Guide count), never weakening an assertion; dedupe registryWith as the plan says. Remove the test.skip of tests/e2e/structures-environment.spec.ts.
+7. Checks you run yourself, in this order: targeted tests while you work; npm run content:validate -- --write then npm run content:validate; npm run art:build -- --check; the fence (ruling 4); then the full check as "npm run typecheck && npm run lint && npx vitest run --maxWorkers=2" (equivalent to npm run check, which runs vitest with ONE worker on this 2-core machine and takes about 72 min; nothing else heavy runs while you do this; it must end green; if a file fails only under 2 workers, re-run it alone, and report both results and the elapsed time); then the journeys on desktop AND phone-portrait: structures-environment, structures, region-charts, new-dish, lab-tools, field-guide, a11y-screens (build once into tmp/dist-flip; one playwright invocation per project is fine).
+8. The D-0104 checks as automated tests where possible (unit or e2e; a spec may import an rc1 corpus save): an rc1 save loads and shows no Build group, no wetting brush and no light/drying controls; a new dish shows them; the Field Guide lists S01-S12. Perf: tick p95 with 512 edges and 256 devices (a scratch script under tmp/flip/, e.g. adapted from tmp/barrier-transport-perf/perf.ts if it exists) appended to docs/reports/perf-g5.md under "Systems flip (D-0121)".
+9. ARCH: add a short "As built, Phase 5 systems flip" note where the import rules are described (git grep -n "IMPLEMENTED_MODULES\\|needs a newer version" docs/ARCHITECTURE.md).
+10. For WORKLOG P5.1 and P5.2: list every item of their Build lists in docs/BUILD_DIRECTIVE.md (git grep -n "P5.1\\|P5.2" docs/BUILD_DIRECTIVE.md) as MET (evidence: file/test) or NOT MET (what is missing). The lead ticks.
+Final message (also written to ${R}/flip-build.md; create the folder): each Code item and Check DONE (command + summary line) or NOT DONE (why); the fence result (every digest unchanged, with the command line and pass count); the two new fence entries; every test file changed and why; the P5.1/P5.2 Build-list table; PROPOSED D-0121; the npm run check summary line (files/tests passed) and the journeys summary per project; anything surprising.`
+
+const VERDICT = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, problems: { type: 'array', items: { type: 'string' } } },
+  required: ['ok', 'problems'],
+}
+
+phase('Flip')
+const built = await agent(FLIP, { label: 'flip', phase: 'Flip', effort: 'high' })
+
+phase('Verify')
+const SAFE = `Do NOT edit any repository file except your report, and do NOT run git add/commit/stash/checkout/reset/restore. Scratch goes in tmp/verify-flip/. 2 CPUs: targeted vitest files only, run_in_background + an until-loop wait; never end your turn while a command runs. Browser tests only to prove a UI problem: E2E_PORT=4272 E2E_OUTDIR=tmp/dist-verify-flip, desktop or phone-portrait, stopping that port before and after.`
+const verdict = await agent(`${OWNER_CONTEXT}
+
+You are the adversarial saves/determinism verifier for the Pixelmeba Phase 5 systems flip (/workspaces/pixelmeba; follow CLAUDE.md). ${SAFE}
+The flip (uncommitted in the tree on top of ${BASE}; git diff and git status for new files) enabled the barriers, climate and devices systems and the S01-S12 structures in content/manifest.json, added IMPLEMENTED_SYSTEMS / IMPLEMENTED_STRUCTURES, made the import refuse a dish naming a system, structure or native ability this build does not implement, added two fence entries, and re-pinned tests. Its plan: docs/agent/g5-systems-flip-plan.md and "THE SYSTEMS FLIP" in docs/agent/g5-wave-11.tasks.js.txt. Builder report:
+---
+${built ? String(built) : 'NO REPORT (the builder failed)'}
+---
+LENS: saves and determinism. Prove or refute, with probes under tmp/verify-flip/ (never editing tracked files):
+1. The import gap is closed on the real path (the host import / loadSaveFile path the app uses, not only a helper): crafted dishes naming (a) 'equipment', (b) an unknown future system id, (c) a made-up structure id, (d) a species recording an unimplemented native ability (P10's HANDLING or F03's TRAP) are each refused with a sentence naming the id and ending "Nothing was loaded.", and the current world is untouched (stateHash and tick of the active world before = after).
+2. No over-refusal: both corpora (g2, rc1) load and replay unchanged; a wave 10 and a wave 11 fixture dish (tests/e2e/structureFixture.ts, regionFixture.ts) load; a dish recording B09 (SIGNAL_GLOW) or B13 (RIVALRY) with 'signals'/'rivalry' systems loads (those are implemented); every Phase 5 round-trip test passes.
+3. Old worlds keep their ruleset: an rc1 save loads with its recorded manifest (no 'climate', 'barriers', 'devices') and its stateHash after 3,000 further ticks equals the same world run without the save/load; nothing in it gains a structure, tool or climate array.
+4. New dishes record the new systems without allocating anything: a new FIRST_DISH_V1 Standard world under the post-flip manifest has the same trajectoryDigest (or stateHash at tick 1,200) as the same recipe realized under the pre-flip lists (registryWith with the pre-flip enabledSystems/enabledStructures; see tests/helpers/registry.ts); climate arrays stay null without a heater, drying or the wet brush.
+5. The two new fence entries replay identically at 1x and 4x and across buildSaveFile -> loadSaveFile at a tick where an edge, a device or the cycle is live; every pre-existing fence value is unchanged (diff tests/fixtures/fence.json against ${BASE}).
+6. No pinned test was weakened: read every changed test hunk (git diff tests/) and flag any assertion loosened rather than re-pinned.
+Prefix each problem with its grade exactly like "MAJOR [flip] <file:line> — <what> — <repro>" (or [lead] for a problem outside the flip). Add "VERIFIED OK — <item> — <evidence>" entries. ok=false if any BLOCKER or MAJOR. Write the same list to ${R}/flip-verify.md.`, { label: 'verify:flip', phase: 'Verify', schema: VERDICT, effort: 'high' })
+
+const problems = verdict && Array.isArray(verdict.problems) ? verdict.problems : []
+const blocking = problems.filter((p) => /^\s*(BLOCKER|MAJOR)/.test(p))
+let fix = null
+if (blocking.length) {
+  phase('Fix')
+  fix = await agent(`${PRE}
+
+You are the fixer for the Pixelmeba Phase 5 systems flip (the work is uncommitted in the tree; do not start over). The flip's assignment was:
+---
+${FLIP}
+---
+The saves/determinism verifier found (full list ${R}/flip-verify.md):
+---
+${problems.join('\n')}
+---
+Fix every BLOCKER and MAJOR (and cheap MINORs inside the flip's files). For each behavioural problem add or tighten a test that fails on the old behaviour and passes now (prove it with a hand-applied mutant, then restore). If a problem is wrong, say why with quotes from the canonical docs. Re-run the touched tests and the fence (ruling 4). Do not run the full npm run check (the lead runs it). Final message (also written to ${R}/flip-fix1.md): per problem FIXED (how, which test) / NOT A PROBLEM (why) / NOT FIXED (why); files changed; commands + results.`, { label: 'fix:flip', phase: 'Fix', effort: 'high' })
+}
+return { built, verdict, fix }

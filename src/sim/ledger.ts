@@ -50,6 +50,11 @@ export interface Ledger {
     dormancy: number;
     /** Stage 8 shared building (film, E10 construction; P3.7). Older saves load it as 0. */
     construction: number;
+    /**
+     * Phase 5 (wave 11; D-0106, D-0119): S_GLOW emission (native SIGNAL_GLOW or E02) and glowing, both
+     * charged in stage 8 (src/sim/signals.ts). RIVAL secretion is ordinary 'secretion'. Older saves load it as 0.
+     */
+    signal: number;
   };
   /** Most recent external inputs/exports (bounded) for the ledger panel. */
   entries: LedgerEntry[];
@@ -66,7 +71,7 @@ export function createLedger(): Ledger {
     exchangeC: 0,
     exchangeO2: 0,
     roundoff: { c: 0, n: 0, m: 0 },
-    energy: { earned: 0, maintenance: 0, movement: 0, division: 0, secretion: 0, dissipated: 0, other: 0, surcharge: 0, upkeep: 0, dormancy: 0, construction: 0 },
+    energy: { earned: 0, maintenance: 0, movement: 0, division: 0, secretion: 0, dissipated: 0, other: 0, surcharge: 0, upkeep: 0, dormancy: 0, construction: 0, signal: 0 },
     entries: [],
   };
 }
