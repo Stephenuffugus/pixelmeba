@@ -3,6 +3,26 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑14 19:31 UTC — SYSTEMS FLIP COMMITTED `c549595` (pushed; D‑0121; P5.1 and P5.2 ticked): barriers, climate,
+> devices and S01–S12 enabled, contentHash 67075b0e… → 84c41636…, fence unchanged plus two fence dishes; the import and the
+> validator refuse rules the build does not implement (IMPLEMENTED_SYSTEMS, IMPLEMENTED_RULES ceilings). Wave 11 journeys
+> recorded (isolated worktree at 9d22ec0: 36 passed, 2 skipped by design). WAVE 12 RUNNING (run `wf_8d1fe37e-485`, session 913596e0,
+> from docs/agent/g5-wave-12.run.workflow.js.txt; e2-light-algae 4271 + e3-predation 4272 critical 'own', structures-art-audio
+> 4273; D‑0122; launched 19:31 at `7098ae3`). WAVE 14 TASK WRITER RUNNING (run `wf_f7ade737-dbd`, from
+> docs/agent/g5-wave-14-tasks.workflow.js.txt; writes docs/agent/g5-wave-14.tasks.js.txt + docs/reports/reviews/g5-wave-14/
+> tasks-writer.md only). Backups → `wip/g5-wave-12` (pid tmp/lead/backup-12.pid). START HERE.**
+> - If the writer died: its file may be partial; rerun the saved script after checking its journal.
+> - If the session died mid-12: if `git status` is clean, restore from `wip/g5-wave-12`; read docs/reports/reviews/g5-wave-12/
+>   and the journal ~/.claude/projects/-workspaces-pixelmeba/913596e0-c750-44b2-b415-32a935e5b304/subagents/workflows/wf_8d1fe37e-485/
+>   journal.jsonl; rerun only unfinished tasks (A.only + finish notes), or resumeFromRunId in the same session.
+> - After 12: LEAD AFTER WAVE 12 in docs/agent/g5-wave-12.tasks.js.txt (append DETRITUS_FALLBACK, HANDLING, LOW_LIGHT_CURVE,
+>   MIXOTROPHY, RADIUS_CAPTURE; move validator.test.ts's unimplemented subject to F03's TRAP); then wave 13 (task file c6cb752,
+>   D‑0123 drafted in docs/reports/reviews/g5-wave-13/d0123-draft.md; fill its wave 12 / flip placeholders) and THE ORGANISM FLIP (moduleRegistryVersion 3 in
+>   the manifest AND IMPLEMENTED_RULES together — the validator refuses one without the other).
+> - Owner asks still pending: an 8-core codespace (the check takes ~68 min here; ~10–15 there) and `env -u GITHUB_TOKEN gh auth
+>   login -h github.com -p https -w` once so tools/deploy-arcade.mjs can push Stephenuffugus/lucid-winds (the arcade still serves
+>   the 2026‑09‑29 build).
+
 > **Update 2026‑10‑14 14:55 UTC — WAVE 11 COMMITTED `9d22ec0` (pushed): check 275 files after three stale pins were re-pinned
 > (shared-budget's synthetic E02 → E99 and the module tier E01/E02/E09/E10; view-switch's shelterBlocked from
 > freeClassOfSpecies), tsc/eslint 0, art 1691 frames, contentHash unchanged; wave 11 journeys tmp/lead/e2e-w11.sh RUNNING
