@@ -103,6 +103,7 @@ const EXPLORE: Record<ReasonName, string> = {
   HISTORY_COMPACTED: 'Older details were summarized.',
   EVIDENCE_EXPIRED: 'Older details were summarized.',
   MIXED_CAUSES: 'A few things are slowing it down.',
+  RESTING_NEWBORN: 'Resting since it formed.',
 };
 
 function lab(name: ReasonName, ctx: ReasonContext): string {
@@ -111,6 +112,9 @@ function lab(name: ReasonName, ctx: ReasonContext): string {
       return `Food access: ${pct(ctx.value)} of its intake budget found${ctx.food ? ` (${ctx.food})` : ''}.`;
     case 'NUTRIENT_LIMITED':
       return `Growth limited by mineral nutrients: ${pct(ctx.value)} of requested growth supplied.`;
+    case 'SILICATE_LIMITED':
+      // UX §5.2 Lab wording: the share of the requested shell growth that silicate supplied.
+      return `Shell growth limited by silicate: ${pct(ctx.value)}.`;
     case 'OXYGEN_LIMITED':
       return `Aerobic intake limited by oxygen: ${pct(ctx.value)} supplied.`;
     case 'LIGHT_LIMITED':
@@ -137,6 +141,9 @@ function lab(name: ReasonName, ctx: ReasonContext): string {
       return `Resting because food stayed scarce; wakes after 10 s of food and energy ≥ 5 (${secs(ctx.value)} s so far).`;
     case 'RESTING_DRY':
       return `Resting because it was too dry; wakes after 10 s of moisture and energy ≥ 5 (${secs(ctx.value)} s so far).`;
+    case 'RESTING_NEWBORN':
+      // D-0106: an F04 daughter begins Resting at birth; waking also needs a surface it can hold.
+      return `Resting since it formed; wakes after 10 s of food, moisture and a surface to hold, with energy ≥ 5 (${secs(ctx.value)} s so far).`;
     case 'PREPARING':
       return `Getting ready to rest: ${secondsLeft(ctx.value)} s left.`;
     case 'WAKING':

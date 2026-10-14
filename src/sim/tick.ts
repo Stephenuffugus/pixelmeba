@@ -14,6 +14,7 @@ import { stageContacts } from './contacts';
 import { stageStructures } from './structures';
 import type { World } from './world';
 import { evictProfiles, PROFILE_EVICT_TICKS } from './profiles';
+import { gateOrganismsAfter, gateOrganismsBefore } from './gateTally';
 
 export interface StepHooks {
   /** Called after every stage (tests use it to observe ordering). */
@@ -28,7 +29,9 @@ export function step(world: World, hooks: StepHooks = {}): void {
   after?.(2, world);
   stageConversion(world);
   after?.(3, world);
+  gateOrganismsBefore(world); // Phase 5 gate tallies (observation only; inert without edges or 'barriers')
   stageSenseAndMove(world);
+  gateOrganismsAfter(world);
   after?.(4, world);
   stageContacts(world);
   after?.(5, world);

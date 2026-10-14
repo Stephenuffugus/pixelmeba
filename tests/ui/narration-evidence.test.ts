@@ -175,6 +175,7 @@ describe('narration evidence, one rule per phrase', () => {
   it('Resting: a RESTING_* reason leads', () => {
     expectSpoken(base, v({ inspected: inspected(entity({ limitCode: R.RESTING_FOOD_SCARCE })) }), 'resting');
     expectSpoken(base, v({ inspected: inspected(entity({ limitCode: R.RESTING_DRY })) }), 'resting');
+    expectSpoken(base, v({ inspected: inspected(entity({ limitCode: R.RESTING_NEWBORN })) }), 'resting'); // an F04 resting newborn (D-0106)
     expectSilent(base, v({ inspected: inspected(entity({ limitCode: R.PREPARING })) }), 'resting');
     // Out of energy leads over everything (src/ui/strings/shortcuts.ts leadConstraint).
     expectSilent(base, v({ inspected: inspected(entity({ limitCode: R.RESTING_DRY, E: 0 })) }), 'resting');

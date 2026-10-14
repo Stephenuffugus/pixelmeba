@@ -183,6 +183,58 @@ As built, Phase 5 wave 9 (P5.1 climate, P5.2 organisms and edges; D-0113, D-0115
 - **Gates.** Each rule returns at once when the world holds no edges or no devices. Only a world whose recorded
   manifest enables 'barriers' or 'devices' can hold them, so a v1.0 world never reaches the new code.
 
+As built, Phase 5 wave 10 (P5.2 transport, P5.3 shells, P5.5 resters; D-0117, D-0118; `src/sim/transport.ts`,
+`channel.ts`, `resin.ts`, `gateTally.ts`, `intake.ts`, `conversion.ts`, `dormancy.ts`, `births.ts`, `viruses.ts`).
+Nothing is enabled (D-0104):
+- **Barrier coefficient pairs.** `transportCache` keeps the v1.0 loop and `kR[i] = Math.min(ki, kj)` byte for byte,
+  then, only when `world.edges` is non-empty, multiplies each barrier edge's coefficient by its CT §5.3 factor
+  (`applyBarrierFactors`; an open S03 is skipped). Dissolved and activity fields share kR/kD (their factors are
+  equal for every code); the viral pair kRv/kDv is the same array unless an S01 exists. Film halves after the
+  barrier factor (min × factor, then × 0.5): kRf/kDf and, with a separate viral pair, kRvf/kDvf. The kernel picks
+  its pair through `VIRAL_FIELD`; `diffuseField` is unchanged. The cache key is `grid.geometryVersion` plus the
+  edge store's identity and length.
+- **Stage 2 order.** climateStep → film coefficients → diffusion (barrier pairs; each field's tally just before
+  its step) → `channelStep` → gasExchange → decays → filmStage → `resinStep` → neutralize → updateDerived.
+- **The S04 channel.** Per S04 and tick, 2 %/s × dt of every eligible pool (`CHANNEL_FIELDS`: each diffusing
+  field of barrier class dissolved or viral; never activity fields, deposits, film or objects) moves from source
+  to destination, all from one snapshot taken before any channel moves, summed and capped per pool (the cap is
+  unreachable: a cell has at most four edges), companions in the same fraction. No multi-hop: what one channel
+  moved this tick no other moves. One organism per S04 once the tick reaches `nextOrganismTick`: candidates are
+  listed per source cell from positions before any move; it must be `classOf` Small and free (not attached, not
+  a host or an attached parasite, not linked, not anchored, not held), in any life state (a resting organism
+  rides passively); the lowest birthId goes first; the destination must pass `canOccupy` (a resting newborn
+  needs only her habitat). It moves by an exact integer offset (its in-cell position kept bit for bit), and
+  `nextOrganismTick` = tick + 10 is written only after a move. The channel edge stays closed to ordinary
+  diffusion and movement (D-0106).
+- **Resin.** Each S08 with a non-empty `resinSelect` removes up to 0.05/s × dt of the selected activities in its
+  own cell, proportionally (the last selected target takes the exact remainder), until its `bound` sum reaches
+  5; saturated, it does nothing. `bound` is created lazily and hashed with the device store; it has no ledger
+  line (activity is not a conserved material), and removing the resin exports it in the command result.
+- **Gate tallies** (observation only: saved, never hashed, never read by the simulation). Field amounts are
+  |flux| per field in field units on S01, S02 and S03 edges (open or closed), from pre-step values with the
+  kernel's own expression and pair (`tallyFieldFlux`). Organism crossings: `tick.ts` brackets stage 4 with
+  `gateOrganismsBefore`/`gateOrganismsAfter`; every organism alive with the same birthId whose cell changed has
+  its straight segment walked (the DDA of `traceFraction`, the Y step first at an exact corner), one crossing per
+  barrier edge crossed; an attached parasite counts as its own crossing. Channel moves (pools and organisms) are
+  tallied on the S04's own record.
+- **Gates.** Barrier factors need edges; tallies and the channel need edges and 'barriers'; the resin needs
+  devices and 'devices'. A v1.0 world pays a length check.
+- **Shells and grit.** In stage 6 a shell builder (native SHELL: A02, P05) has L = min(fracN, fracO, fracSi),
+  fracSi being its cell's supplied silicate fraction (1 where the need is 0), and binds exactly 0.10 × the
+  biomass gained into `boundMineral`, the same amount leaving the cell (dust through `subtractPool` into
+  `roundoff.m`). Every other organism keeps L = min(fracN, fracO). SILICATE_LIMITED is checked after N and O2 and
+  before light. Death and capture send bound mineral to grit; in stage 3, after the food release and before
+  catalysis, `dissolveGrit` turns grit into silicate in every cell while both fields exist (no threshold; grit +
+  silicate is conserved to roundoff). The shell table is rebuilt every stage from the species' abilities.
+- **Resters.** B12 and P08 rest by native DORMANCY. An F04 division (RESTING_DAUGHTER) commits the new daughter
+  Resting (`startRestingNewborn`, right after `commitDivision`'s birth reconciliation): FLAG.restNewborn,
+  unattached, unlinked and Small, placed under the parent's Fixed class on an attachable cell, birth event detail
+  `resting: 1`, reason RESTING_NEWBORN. She wakes only where she can attach (`WakeConditions.attachable`), and
+  waking clears the flag; while she rests her suitability's habitat factor ignores the attachment surface
+  (`crossing.ts` `entitySuitabilityAt`), so a channel can carry her across open water without killing her.
+  V02 joins `VIRUSES` (B02 only, only where film ≥ 0.10, `V02_FILM_MIN`); X02 runs the generic parasite rules on
+  F02 and F04 and is released alive when its host leaves Active or dies.
+
 ## 6. Determinism primitives
 ```ts
 // 32-bit mixer (murmur3 fmix / splitmix32 style) over canonical encoding of args
@@ -478,6 +530,39 @@ SnapshotMsg.perf?: PerfSample                            // only while diagnosti
   in this session (a map opened before the first tick arms at the first tick); until then the watcher sums
   no pool. `RelationshipMapData.poolsRecordedSinceSecond` is the second the pools' own record starts (null
   when it covers the window), and the map says "Recorded since m:ss." for the pools only.
+
+As built, Phase 5 wave 10 (the structure, device and climate commands; D-0117, D-0118; `src/sim/structureEdits.ts`,
+`structurePreview.ts`, `structures.ts`, `sample.ts`). `PROTOCOL_VERSION` stays 2: the `CommandPayload` union widens
+and the host passes any payload to `applyNow` (wave 11 bumps the protocol once):
+- **Eight kinds**, flat like the habitat edits: `placeEdges {structure S01–S04, edges [cell, 'R'|'D'][], open?
+  (S03, required there), flow? (S04, required there)}`, `placeDevice {structure S05–S12, cell}`,
+  `removeStructures {ids}`, `moveDevice {id, cell}`, `setDevice {id, on? | open? | resinSelect?}` (exactly one),
+  `wetBrush {points, radius}`, `setLightMode {mode}`, `setDrying {drying}`. A malformed payload is refused whole
+  (`invalidStructureCommand`); a structure the dish lacks with "`<ID>` is not in this dish"; the store and
+  climate commands in a dish without them with "structures are not in this dish" / "climate is not in this dish".
+- **Results.** `CommandResult` gains optional `ids` (ascending), `refused` (per `StructureRefusal`), `exported`
+  (a removed resin's bound activity) and `severed`; `HabitatSkips` gains `device` and `barrier`. Each key appears
+  only when used, so older command logs stay byte-identical. The same value on a setter gives accepted 0
+  'unchanged', which is no undo point.
+- **geometryVersion.** Every accepted store command replaces the store array and bumps `grid.geometryVersion`
+  exactly once. Stage writes (`nextOrganismTick`, `bound`, `gateTally`) never bump, and no cache keys on them.
+- **Placement rules** (`structurePreview.ts`, pure, the same functions the wave 11 preview calls; `src/render`
+  may import it). Edges are refused on the rim, beside a stone or wall (a bead is allowed beside S01–S03), on an
+  occupied edge, for an S04 not joining two open water cells, and at the 512 cap; devices on the rim, off
+  ST_NONE, on an occupied cell, and at the shared 256 cap. A moved basket carries its food object.
+- **Severing.** A barrier placed across a fungal or adhesion link, or a shutter closed across one, cuts it
+  (`severCrossedLinks`: ascending slot, fungal links before adhesion links, one `linkBroken` event with cause
+  'barrier'; a cut adhesion link starts E12's relink lockout). A released sample block whose link would straddle
+  a refusing edge is severed the same way.
+- **Lab edits against structures.** `applyHabitatEdit` skips, never removes: a device cell for stone, wall or
+  bead placement, and an S04 side for those and for gel or sediment paint (`labCellConflict`; skip reasons
+  `device` and `barrier`), only on cells the old rule accepted, so v1.0 counts are unchanged. The Life brush
+  preview takes optional `extras {mesh, shelter}`; a shelter refuses a Medium or Large free class ('structure').
+  Sample Transfer checks the destination with `canOccupy`.
+- **Climate commands.** `wetBrush` sets in-dish non-water cells to 0.9 (`wetCells`); an all-water stroke wets
+  nothing and allocates nothing ('nothing wetted'). `setLightMode` and `setDrying` wrap wave 9's functions.
+- **Challenges.** Structure commands and the wetting brush count as 'habitat', light mode and drying as 'lid';
+  `setDevice`, `setLightMode` and `setDrying` use up no action.
 
 ## 8. Snapshots
 Published ≤ 10/s (adaptive under load). Contents: `renderList` as a packed `Float32Array`
@@ -907,6 +992,14 @@ As built, schema 5 (Phase 5 wave 8a; D-0102, D-0108; `src/sim/serialize.ts`, `sr
   - a trap reserve, until e3-traps counts it in the totals;
   - a held sample row holding a trap pair.
 
+As built, Phase 5 wave 10 (D-0118; `src/persistence/saveFile.ts`, `phase5State.ts`): the import also refuses an S04
+whose `nextOrganismTick` lies more than CHANNEL_ORGANISM_TICKS past the saved tick; shell mineral on an organism
+whose species lacks native SHELL; jacket mineral in a dish without the silicate system; and a dish whose own rules
+break the validator's rules (a species or module missing a system it needs, RESTING_DAUGHTER without DORMANCY).
+Every one is a state the simulation cannot produce and each would crash the worker or switch a rule off. The check
+of a dish's systems, structures and native abilities against what the build implements comes at the systems flip
+(D-0119).
+
 ## 12. Android (Capacitor)
 - `appId com.lucidwinds.pixelmeba`, `appName Pixelmeba`, `webDir dist`, `android.allowMixedContent
   false`, no cleartext, no network permission beyond what Capacitor needs (none for this app).
@@ -989,6 +1082,11 @@ arrays add warmth relax, diffusion and clamp and the drying pass. The cycle, two
 cost stage 2 about +0.1 to +0.25 ms per tick; 512 edge barriers plus 256 devices cost stage 4 about +0.3 to
 +0.55 ms per tick at about 530 organisms (expected to grow with the number of movers). The systems flip measures
 both at 6,000 agents.
+
+As built, Phase 5 wave 10 (docs/reports/perf-g5.md; indicative): 512 edge barriers (eight of them channels) and eight
+resins cost stage 2 about +0.4 to +0.45 ms per tick at about 350 organisms, mostly the gate tallies' field pass over
+about 455 gate edges; the grit scan costs about 0.06 to 0.17 ms per tick in a world that records silicate (every
+cell, while the grit and silicate fields exist).
 
 ## 14. Web and arcade build
 - `npm run build` → `dist/` with relative asset URLs; works from any subpath and inside an

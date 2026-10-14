@@ -66,3 +66,68 @@ fourth row) and 256 devices (S05 shelters and S06 meshes alternating). Each proc
   (structures).
 
 Nothing was optimised in wave 9; nothing here is a regression on any shipped dish.
+
+## Wave 10: barrier transport, the channel, resin and gate tallies; shells and grit (2026-10-14)
+
+### Edge barriers, channels and resins (stage 2)
+
+Measured by the lead (06:33 UTC) after wave 10's integration edits, with nothing else running (1-minute load 0.75
+before, 1.70 after). The probe is barrier-transport's scratch script (`tmp/barrier-transport-perf/perf.ts`;
+`npx tsx <file>`, not committed): 2,000 ticks of `step()` with an `afterStage` hook for the stage 2 split, on
+`barrierDish` (a registry recording 'barriers', 'climate' and 'devices') with 400 B01 founders (about 350 alive at
+the end), uniform sugar 0.2 and inhBact 0.05 on every seventh cell. (a) no edges and no devices; (b) 512 edges (an
+S01 line at x 40, an S02 line at x 60, alternating open and closed shutters at x 80, eight S04 channels at x 100
+with alternating flow, and S02 D edges on rows 20, 100, 50 and 76 up to the cap) plus eight S08 resins selecting
+inhBact. Each process runs a, b, a, b; the probe ran twice.
+
+| Run | Organisms at end | Tick mean / p95 (ms) | Stage 2 mean (ms) | Stage 2 share | Gate tallies |
+|---|---|---|---|---|---|
+| (a) none, run 1 | 350 | 2.747 / 5.082 | 0.975 | 35.5 % | 0 |
+| (b) 512 edges + 8 resins, run 1 | 346 | 3.366 / 5.248 | 1.370 | 40.7 % | 455 |
+| (a) again | 350 | 2.484 / 4.149 | 0.899 | 36.2 % | 0 |
+| (b) again | 346 | 3.275 / 5.322 | 1.313 | 40.1 % | 455 |
+| (a) none, run 2 | 350 | 2.660 / 4.491 | 0.956 | 35.9 % | 0 |
+| (b) 512 edges + 8 resins, run 2 | 346 | 3.435 / 5.759 | 1.387 | 40.4 % | 455 |
+| (a) again | 350 | 2.470 / 4.044 | 0.894 | 36.2 % | 0 |
+| (b) again | 346 | 3.333 / 5.224 | 1.374 | 41.2 % | 455 |
+
+- Stage 2 costs about **+0.4 to +0.45 ms per tick** with the maximum edge store, eight channels and eight resins.
+  Most of it is the field tallies: about 455 gate edges × each active diffusing field, each with a lookup into
+  `gateTally`. If it ever matters, caching each gate edge's tally record index on the gate edge list would cut it.
+- The whole tick costs about +0.6 to +0.85 ms; the rest is wave 9's stage 4 edge checks and the organism-crossing
+  scan around stage 4.
+- The builder's run under contention measured stage 2 at 1.42–1.48 ms (none) and 2.00–2.21 ms (structures).
+- With no edges and no devices no extra work runs (the gates are a length check), and the fence passes unchanged.
+
+### The grit scan (stage 3) and shells (stage 6)
+
+The builder's probe (`tmp/e2-shells-perf/perf.ts`, under contention, not repeated by the lead): 2,000 ticks with
+100 A02, 50 P05 and 150 B01 and grit 0.5 in every cell, against a shipped twin with 100 A01, 50 P01 and 150 B01
+(both end at about 1,700 to 1,800 alive).
+
+| Run | Dish | Tick mean / p95 (ms) | Stage 3 (ms) | Stage 6 (ms) |
+|---|---|---|---|---|
+| 1 | shipped | 4.356 / 9.98 | 0.016 | 0.676 |
+| 1 | silicate | 3.790 / 7.64 | 0.072 | 0.539 |
+| 2 (heavier load) | shipped | 8.342 / 20.3 | 0.025 | 1.514 |
+| 2 (heavier load) | silicate | 8.343 / 18.1 | 0.196 | 1.420 |
+
+- The grit scan adds about **0.06 to 0.17 ms per tick** in a world that records silicate (it scans every cell
+  while the grit and silicate fields exist; D-0117). Stage 6's shell work is lost in the noise.
+
+### Closed-lid residuals of the new conservation tests
+
+All pass relErr < 1e-5 for C, N and mineral; measured worst values where the test prints them:
+
+| Test | Run | Worst relative error | Worst absolute |
+|---|---|---|---|
+| conservation-mineral (shells, grit, silicate) | 10,000 ticks, 486 shell builders lost | C 1.9e-14, N 6.3e-14, M 8.0e-15 | C 1.5e-10, N 7.2e-11, M 9.5e-13 |
+| phage-v02 (V01 and V02 lysis) | 10,000 ticks, 31 B01 and 12 B02 lyses | C 1.110e-14, N 6.463e-14 | — |
+| resters-determinism (B12, F04 daughters, P08) | 10,000 ticks | C 6.052e-15, N 6.695e-14 | C 3.638e-11, N 7.617e-11 |
+| barrier-transport-determinism (barriers, channels, resin) | 10,000 ticks | < 1e-5 (asserted) | < 1e-8 (asserted) |
+| channel (three channels) | 2,000 ticks | < 1e-5 at every 500-tick check | — |
+| structure-determinism (all 12 kinds by command, a heater on, a resin selected) | 20 × 500 ticks | < 1e-5 in every chunk | — |
+
+The resin binds activity, which is not a conserved material, so it has no ledger line; the channel moves material
+between cells only. Nothing was optimised in wave 10; nothing here is a regression on any shipped dish. The systems
+flip measures again on the SPEC §16 workloads.

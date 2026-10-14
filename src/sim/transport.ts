@@ -25,9 +25,16 @@ import { LIFE_ACTIVE } from './entities';
 import { FILM_DECAY_PER_SECOND } from './film';
 import { diffusionCoefficient, inMask, maskCells, SUB_SEDIMENT, SUB_WATER, transportOpen } from './grid';
 import { climateStep, deriveClimateLight, deriveClimateMoisture, lightNeutral } from './climate';
+import { EDGE_SHUTTER_OPEN, edgeCodeOf, edgeFactor, type EdgeBarrier } from './barriers';
+import { channelStep } from './channel';
+import { gateEdgesOf, gateTallyOn, tallyFieldFlux, type GateEdge } from './gateTally';
+import { resinStep } from './resin';
 import type { World } from './world';
 
 export const FIELD_INDEX: Readonly<Record<FieldId, number>> = Object.fromEntries(FIELD_IDS.map((id, i) => [id, i])) as Record<FieldId, number>;
+
+/** 1 where a field diffuses with the viral coefficient pair (FIELD_DEFS barrier 'viral'), by FIELD_IDS index. */
+const VIRAL_FIELD = Uint8Array.from(FIELD_IDS.map((id) => (FIELD_DEFS[id].barrier === 'viral' ? 1 : 0)));
 
 /** Per-world transport cache (derived; rebuilt when geometry changes). */
 export interface TransportCache {
@@ -80,6 +87,26 @@ export interface TransportCache {
   warmthD: Float64Array | null;
   warmthVersion: number;
   readonly warmthShutters: number[];
+  /**
+   * Barrier transport (Phase 5 wave 10; SPEC §4.1, §4.9; CT §5.3; D-0117). All derived, never saved or
+   * hashed, rebuilt with kR/kD (key: geometryVersion, plus the world.edges array's identity and length,
+   * since realizeRecipe assigns a new store without a bump; every command writer bumps geometryVersion).
+   * - kR/kD carry the dissolved/activity factor on barrier edges (the two classes' factors are equal for
+   *   every CT §5.3 code; tests/sim/barrier-transport.test.ts pins it);
+   * - kRv/kDv: the viral pair. The SAME arrays as kR/kD unless an S01 exists (the only code whose viral
+   *   factor differs), then kRvOwn/kDvOwn = min(ki, kj) × the viral factor on barrier edges;
+   * - kRvf/kDvf: the viral pair's film-adjusted copy, used only while the viral pair is separate;
+   * - gateEdges: the S01–S03 edges whose diffusion flux is tallied (gateTally.ts).
+   */
+  edgesRef: readonly EdgeBarrier[] | null;
+  edgesLen: number;
+  kRv: Float64Array;
+  kDv: Float64Array;
+  kRvOwn: Float64Array | null;
+  kDvOwn: Float64Array | null;
+  kRvf: Float64Array | null;
+  kDvf: Float64Array | null;
+  readonly gateEdges: GateEdge[];
 }
 
 const scratch = new Float64Array(CELL_COUNT);
@@ -101,10 +128,12 @@ function createCache(): TransportCache {
       rowX1[y] = x1;
     }
   }
+  const kR = new Float64Array(CELL_COUNT);
+  const kD = new Float64Array(CELL_COUNT);
   return {
     version: -1,
-    kR: new Float64Array(CELL_COUNT),
-    kD: new Float64Array(CELL_COUNT),
+    kR,
+    kD,
     kRf: new Float64Array(CELL_COUNT),
     kDf: new Float64Array(CELL_COUNT),
     gasRate: new Float64Array(CELL_COUNT),
@@ -126,6 +155,15 @@ function createCache(): TransportCache {
     warmthD: null,
     warmthVersion: -1,
     warmthShutters: [],
+    edgesRef: null,
+    edgesLen: 0,
+    kRv: kR,
+    kDv: kD,
+    kRvOwn: null,
+    kDvOwn: null,
+    kRvf: null,
+    kDvf: null,
+    gateEdges: [],
   };
 }
 
@@ -145,7 +183,8 @@ export function transportCacheObject(world: World): TransportCache {
 
 export function transportCache(world: World): TransportCache {
   const tc = transportCacheObject(world);
-  if (tc.version === world.grid.geometryVersion) return tc;
+  const edges = world.edges;
+  if (tc.version === world.grid.geometryVersion && tc.edgesRef === edges && tc.edgesLen === edges.length) return tc;
   const g = world.grid;
   tc.kR.fill(0);
   tc.kD.fill(0);
@@ -164,8 +203,54 @@ export function transportCache(world: World): TransportCache {
       }
     }
   }
+  tc.kRv = tc.kR;
+  tc.kDv = tc.kD;
+  tc.gateEdges.length = 0;
+  if (edges.length > 0) applyBarrierFactors(tc, edges);
   tc.version = world.grid.geometryVersion;
+  tc.edgesRef = edges;
+  tc.edgesLen = edges.length;
   return tc;
+}
+
+/**
+ * Edge barriers in the coefficients (SPEC §4.1 "Edge barriers multiply flux by their class factor";
+ * CT §5.3; Phase 5 wave 10). Runs only when the world holds an edge barrier, after the v1.0 loop above,
+ * and touches only barrier edges: kR[i] = min(ki, kj) × factor, so every other coefficient keeps its
+ * v1.0 bits. An open shutter is no barrier (factor 1: left untouched); the S04 channel and a closed
+ * shutter give 0 (D-0106: only the channel's directed transfer crosses it).
+ */
+function applyBarrierFactors(tc: TransportCache, edges: readonly EdgeBarrier[]): void {
+  let anyS01 = false;
+  for (let k = 0; k < edges.length; k++) {
+    if (edges[k]!.kind === 'S01') {
+      anyS01 = true;
+      break;
+    }
+  }
+  if (anyS01) {
+    const r = tc.kRvOwn ?? new Float64Array(CELL_COUNT);
+    const d = tc.kDvOwn ?? new Float64Array(CELL_COUNT);
+    r.set(tc.kR);
+    d.set(tc.kD);
+    tc.kRvOwn = r;
+    tc.kDvOwn = d;
+    tc.kRv = r;
+    tc.kDv = d;
+  }
+  for (let k = 0; k < edges.length; k++) {
+    const e = edges[k]!;
+    const code = edgeCodeOf(e);
+    if (code === EDGE_SHUTTER_OPEN) continue;
+    const down = e.dir === 'D';
+    const arr = down ? tc.kD : tc.kR;
+    arr[e.cell] = arr[e.cell]! * edgeFactor(code, 'dissolved');
+    if (anyS01) {
+      const v = down ? tc.kDv : tc.kRv;
+      v[e.cell] = v[e.cell]! * edgeFactor(code, 'viral');
+    }
+  }
+  gateEdgesOf(edges, tc.gateEdges);
 }
 
 /** Mark a field as possibly non-zero. Every writer into a diffusing field must call this. */
@@ -215,9 +300,17 @@ export function diffuseField(field: Float64Array, tc: TransportCache, kR: Float6
   return true;
 }
 
-function filmCoefficients(world: World, tc: TransportCache): { kR: Float64Array; kD: Float64Array } {
+interface CoefficientPairs {
+  readonly kR: Float64Array;
+  readonly kD: Float64Array;
+  /** The viral pair (=== kR/kD unless the world holds an S01). */
+  readonly kRv: Float64Array;
+  readonly kDv: Float64Array;
+}
+
+function filmCoefficients(world: World, tc: TransportCache): CoefficientPairs {
   const film = world.fields.film;
-  if (!film || !isFieldActive(world, 'film')) return { kR: tc.kR, kD: tc.kD };
+  if (!film || !isFieldActive(world, 'film')) return { kR: tc.kR, kD: tc.kD, kRv: tc.kRv, kDv: tc.kDv };
   let anyFilm = false;
   let anyNonZero = false;
   for (let y = 0; y < GRID_H; y++) {
@@ -240,7 +333,31 @@ function filmCoefficients(world: World, tc: TransportCache): { kR: Float64Array;
   // commands.ts). The coefficients are the same either way and filmStage still runs while filmN is
   // active: hash-neutral.
   if (!anyNonZero) world.derived.fieldActive[FIELD_INDEX.film] = 0;
-  return anyFilm ? { kR: tc.kRf, kD: tc.kDf } : { kR: tc.kR, kD: tc.kD };
+  if (!anyFilm) return { kR: tc.kR, kD: tc.kD, kRv: tc.kRv, kDv: tc.kDv };
+  if (tc.kRv === tc.kR) return { kR: tc.kRf, kD: tc.kDf, kRv: tc.kRf, kDv: tc.kDf };
+  return { kR: tc.kRf, kD: tc.kDf, ...viralFilmCoefficients(film, tc) };
+}
+
+/**
+ * The separate viral pair's film-adjusted copy (Phase 5 wave 10: only while the world holds an S01), by
+ * the same rule as kRf/kDf above: film halves the barrier-adjusted coefficient (min × factor, then × 0.5).
+ */
+function viralFilmCoefficients(film: Float64Array, tc: TransportCache): { kRv: Float64Array; kDv: Float64Array } {
+  const kRvf = tc.kRvf ?? new Float64Array(CELL_COUNT);
+  const kDvf = tc.kDvf ?? new Float64Array(CELL_COUNT);
+  tc.kRvf = kRvf;
+  tc.kDvf = kDvf;
+  for (let y = 0; y < GRID_H; y++) {
+    const base = y * GRID_W;
+    for (let i = base + tc.rowX0[y]!, end = base + tc.rowX1[y]!; i <= end; i++) {
+      const here = film[i]! > 0;
+      const r = tc.kRv[i]!;
+      kRvf[i] = r !== 0 && (here || film[i + 1]! > 0) ? r * 0.5 : r;
+      const d = tc.kDv[i]!;
+      kDvf[i] = d !== 0 && (here || film[i + GRID_W]! > 0) ? d * 0.5 : d;
+    }
+  }
+  return { kRv: kRvf, kDv: kDvf };
 }
 
 /** Multiply an activity field by (1 − fraction); values below 1e-9 are zeroed (not material). */
@@ -405,23 +522,32 @@ export function updateDerived(world: World, lightTick?: number): void {
 
 /**
  * Stage 2 (SPEC §3.2): climate (cycle phase is read by updateDerived; local warmth, then moisture;
- * climate.ts, inert without 'climate'), transport of every diffusing field, gas exchange, decays, film,
- * neutralization, then derived pH, light (with canopy) and moisture for this tick.
+ * climate.ts, inert without 'climate'), transport of every diffusing field (barrier-aware, with the gate
+ * tallies' pre-step flux), the S04 channel's directed transfers, gas exchange, decays, film, S08 resin
+ * adsorption, neutralization, then derived pH, light (with canopy) and moisture for this tick.
  */
 export function stageEnvironment(world: World): void {
   const tc = transportCache(world);
   climateStep(world, tc);
-  const { kR, kD } = filmCoefficients(world, tc);
+  const { kR, kD, kRv, kDv } = filmCoefficients(world, tc);
   const active = world.derived.fieldActive;
+  // Gate tallies (observation only; gateTally.ts): only where the world records 'barriers' and holds edges.
+  const tally = gateTallyOn(world);
   for (let fi = 0; fi < FIELD_IDS.length; fi++) {
     const id = FIELD_IDS[fi]!;
     const arr = world.fields[id];
     if (!arr || active[fi] === 0) continue;
     const cls = FIELD_DEFS[id].diffusion;
     if (cls === 'none') continue;
-    if (!diffuseField(arr, tc, kR, kD, cls !== 'normal')) active[fi] = 0;
+    const viral = VIRAL_FIELD[fi] === 1;
+    const r = viral ? kRv : kR;
+    const d = viral ? kDv : kD;
+    const half = cls !== 'normal';
+    if (tally) tallyFieldFlux(world, tc.gateEdges, id, arr, r, d, half);
+    if (!diffuseField(arr, tc, r, d, half)) active[fi] = 0;
   }
-  // Wave 10 (barrier-transport): the S04 channel's directed transfers go here, after diffusion.
+  // The S04 channel's directed transfers (channel.ts; inert without edges or 'barriers').
+  channelStep(world);
   gasExchange(world, tc);
   // Decays (SPEC §4.3, §5.3, §7.5). Per-second rates × dt; inhibitors decay per tick.
   decayActivity(world, 'inhBact', 0.002);
@@ -436,8 +562,9 @@ export function stageEnvironment(world: World): void {
   decayActivity(world, 'rival', 0.02 * DT);
   decayViral(world, 'v01');
   decayViral(world, 'v02');
-  // Wave 10 (barrier-transport): the S08 resin step goes here, after decays.
   filmStage(world);
+  // S08 adsorption resin (resin.ts; inert without devices or 'devices').
+  resinStep(world);
   neutralize(world);
   updateDerived(world, world.tick);
 }

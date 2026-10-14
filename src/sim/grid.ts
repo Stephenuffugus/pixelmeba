@@ -353,6 +353,20 @@ export interface LifeBrush {
    * accepts every cell a material brush accepts (open cells and porous beads) whatever the habitat.
    */
   readonly viral?: boolean;
+  /**
+   * Phase 5 (D-0117): true when an S05 porous shelter refuses this species (barriers.ts freeClassOfSpecies
+   * is 'medium' or 'large'; the caller computes it). Read only together with lifeCellOutcome's
+   * `extras.shelter`; absent means false.
+   */
+  readonly shelterBlocked?: boolean;
+}
+
+/** Phase 5 cell facts the Life brush preview needs beyond the grid codes (all optional; absent = none). */
+export interface LifeCellExtras {
+  /** The cell holds an S06 attachment mesh (attachment.ts SURF_MESH). */
+  readonly mesh?: boolean;
+  /** The cell holds an S05 porous shelter. */
+  readonly shelter?: boolean;
 }
 
 /**
@@ -362,11 +376,14 @@ export interface LifeBrush {
  * the two cell by cell. `stoneEdge` says whether the cell is a stone edge (isStoneEdge: an open cell
  * four-adjacent to stone). A cell without one of an attached species' surfaces is 'habitat'.
  */
-export function lifeCellOutcome(structure: number, substrate: number, life: LifeBrush, stoneEdge: boolean): BrushCellOutcome {
+export function lifeCellOutcome(structure: number, substrate: number, life: LifeBrush, stoneEdge: boolean, extras?: LifeCellExtras): BrushCellOutcome {
   // Phage doses: the material brush's rule (src/sim/viruses.ts phageCellAccepts states the same rule).
   if (life.viral === true) return brushCellOutcome('material', structure, false);
   if (structure === ST_OUTSIDE) return 'rim';
   if (structure !== ST_NONE && !(structure === ST_BEAD && life.attached)) return 'structure';
+  // Phase 5 (D-0117): an S05 shelter refusing a Medium or Large species is the structure in the way
+  // (movement.ts canOccupy's shelter rule; devices sit only on open cells).
+  if (extras?.shelter === true && life.shelterBlocked === true) return 'structure';
   const bit = substrate === SUB_WATER ? 1 : substrate === SUB_GEL ? 2 : substrate === SUB_SEDIMENT ? 4 : 0;
   if ((life.habitatMask & bit) === 0) return 'habitat';
   const surfaces = life.surfaces;
@@ -376,7 +393,8 @@ export function lifeCellOutcome(structure: number, substrate: number, life: Life
       ? surfaces.includes('bead')
       : (substrate === SUB_GEL && surfaces.includes('gel')) ||
         (substrate === SUB_SEDIMENT && surfaces.includes('sediment')) ||
-        (structure === ST_NONE && stoneEdge && surfaces.includes('stoneEdge'));
+        (structure === ST_NONE && stoneEdge && surfaces.includes('stoneEdge')) ||
+        (structure === ST_NONE && extras?.mesh === true && surfaces.includes('mesh'));
   return on ? 'ok' : 'habitat';
 }
 

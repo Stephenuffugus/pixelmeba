@@ -6,7 +6,7 @@
  */
 import { fungalIntroductionRefused } from './fungi';
 import { dosePhage, isFieldVirus } from './viruses';
-import { CELL_SOFT_CAPACITY, GRID_H, GRID_W, INITIAL_ENERGY, INITIAL_HEALTH, INITIAL_NUTRIENT_RATIO } from './constants';
+import { CELL_SOFT_CAPACITY, GRID_H, GRID_W, INITIAL_ENERGY, INITIAL_HEALTH, INITIAL_NUTRIENT_RATIO, SHELL_MINERAL_PER_BIOMASS } from './constants';
 import { emit, milestone } from './events';
 import { FLAG } from './entities';
 import { FIELD_DEFS, isFieldId, type FieldId } from './fields';
@@ -26,6 +26,8 @@ import { placeFoodObject } from './objects';
 import { sampleDiscard, sampleTake, sampleTransfer, type SamplePayload } from './sample';
 import { cleanWater, type CleanWaterPayload } from './tools';
 import { applyHabitatEdit, LAB_MAX_POINTS, LAB_MAX_STROKE_SAMPLES, type HabitatEditPayload, type HabitatMoved, type HabitatSkips } from './structures';
+import { applyStructureCommand, type StructureCommandPayload, type StructureRefusal } from './structureEdits';
+import type { ResinTarget } from './devices';
 import type { World, WorldSettings } from './world';
 import { speciesIndex } from './world';
 
@@ -43,7 +45,12 @@ export type CommandPayload =
   /** Sample Take, Transfer and Discard (P3.5; semantics in sample.ts; Begin and Cancel are host-level, D-0037). */
   | SamplePayload
   /** Clean water replacement (P3.5; semantics in tools.ts): one stroke, a fraction of 0.25, 0.5 or 1. */
-  | CleanWaterPayload;
+  | CleanWaterPayload
+  /**
+   * Phase 5 structure and climate commands (P5.1, P5.2; semantics in structureEdits.ts): placeEdges,
+   * placeDevice, removeStructures, moveDevice, setDevice, wetBrush, setLightMode, setDrying.
+   */
+  | StructureCommandPayload;
 
 export interface CommandResult {
   readonly accepted: number;
@@ -55,6 +62,16 @@ export interface CommandResult {
   readonly moved?: HabitatMoved;
   /** Evolution-setting change (P2.2): the setting it replaced, so the log alone says what changed and when. */
   readonly presetFrom?: WorldSettings['mutationPreset'];
+  // Phase 5 structure commands (structureEdits.ts). Each key is present only when used, so every older
+  // command log stays byte-identical.
+  /** Structure ids placed (placeEdges, placeDevice) or removed (removeStructures), ascending. */
+  readonly ids?: number[];
+  /** Per-reason refusal counts of a structure command. */
+  readonly refused?: Partial<Record<StructureRefusal, number>>;
+  /** A removed resin's bound activity per target: the logged export (activity is not a conserved material). */
+  readonly exported?: Partial<Record<ResinTarget, number>>;
+  /** Links cut because a barrier now crosses them (a placed barrier, a closed shutter, a released sample). */
+  readonly severed?: number;
 }
 
 export interface Command {
@@ -153,6 +170,16 @@ function applyCommand(world: World, cmd: Command): void {
       result = bad ? { accepted: 0, rejected: 0, note: bad } : cleanWater(world, p, strokeCells(p.points, p.radius));
       break;
     }
+    case 'placeEdges':
+    case 'placeDevice':
+    case 'removeStructures':
+    case 'moveDevice':
+    case 'setDevice':
+    case 'wetBrush':
+    case 'setLightMode':
+    case 'setDrying':
+      result = applyStructureCommand(world, p);
+      break;
   }
   cmd.result = result;
   world.commands.log.push(cmd);
@@ -370,7 +397,7 @@ export function introduceOrganism(
   c.decisionTimer[slot] = initialDecisionTimer(world, birthId);
   let mineral = 0;
   if (sp.abilities.includes('SHELL')) {
-    mineral = 0.1 * b0;
+    mineral = SHELL_MINERAL_PER_BIOMASS * b0;
     c.boundMineral[slot] = mineral;
   }
   recordInput(world, `introduce:${source}`, b0, INITIAL_NUTRIENT_RATIO * b0, mineral);

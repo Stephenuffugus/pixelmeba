@@ -105,7 +105,7 @@ export function inspectedViewOf(sel: Selection | null, sheetOpen: boolean, p: In
   let need: InspectedView['need'] = null;
   if ((lead === R.FOOD_ACCESS_LOW && !makesOwnFood(e)) || lead === R.FOOD_NONE_COMPATIBLE) need = 'food';
   else if (lead === R.DIV_BLOCK_PLACEMENT || lead === R.DIV_BLOCK_CROWDING) need = 'room';
-  else if (lead === R.RESTING_FOOD_SCARCE || lead === R.RESTING_DRY) need = 'resting';
+  else if (lead === R.RESTING_FOOD_SCARCE || lead === R.RESTING_DRY || lead === R.RESTING_NEWBORN) need = 'resting';
   return { birthId: e.birthId, eatingSugar, need };
 }
 

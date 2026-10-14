@@ -89,6 +89,23 @@ export function removeObject(world: World, id: number): FoodObject | null {
   return world.objects.splice(k, 1)[0]!;
 }
 
+/**
+ * Move the object with `id` to `cell` (Phase 5: an S07 basket moved by moveDevice carries its object;
+ * structureEdits.ts). The record is replaced at its place in the store, so id order holds; its contents
+ * are unchanged, so no material moves between pools and no ledger line is written. Refuses (false, and
+ * nothing changes) for an unknown id, a cell outside the dish or not open (a stone, wall or bead), or a
+ * cell that already holds another object.
+ */
+export function relocateObject(world: World, id: number, cell: number): boolean {
+  const k = world.objects.findIndex((o) => o.id === id);
+  if (k < 0 || !inDish(cell) || world.grid.structure[cell] !== ST_NONE) return false;
+  const here = objectAt(world, cell);
+  if (here !== null && here.id !== id) return false;
+  const o = world.objects[k]!;
+  world.objects[k] = { id: o.id, cell, kind: o.kind, pools: o.pools, n: o.n };
+  return true;
+}
+
 export function objectAt(world: World, cell: number): FoodObject | null {
   return world.objects.find((o) => o.cell === cell) ?? null;
 }

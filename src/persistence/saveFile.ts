@@ -18,6 +18,7 @@ import { deserializeWorld, migrateWorldState, serializeWorld, type EncodedArray,
 import { SCHEMA_VERSION, type World } from '@sim/world';
 import { variantRecordOf } from '@sim/variants';
 import { IMPLEMENTED_MODULES } from '@sim/content/implemented';
+import { MODULE_SYSTEM_NEEDS, nativeAbilityPairingProblem, speciesSystemNeeds } from '@sim/content/registry';
 import { isMutationPreset } from '@sim/mutation';
 import { historyProblem, journalProblem } from '@sim/history';
 import { generatedBranchName } from '@sim/branches';
@@ -328,6 +329,22 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
     if (!IMPLEMENTED_MODULES.includes(m.id)) {
       fail('content', `This dish uses the extra ability "${cleanName(m.name)}" (${m.id}), which this version of Pixelmeba cannot simulate. Nothing was loaded.`);
     }
+  }
+  // Wave 10 lead fixes: the dish's own rules must be consistent the way the content validator requires of
+  // every manifest a build ships (registry.ts: a species or module needs the systems it uses; RESTING_DAUGHTER
+  // needs DORMANCY). No build writes a manifest that fails these, and the simulation throws on the first
+  // tick that meets such a species (e.g. a shell builder without the silicate system, stageIntake).
+  const systems = man.data.enabledSystems;
+  for (const sp of c.species) {
+    for (const [sys, why] of speciesSystemNeeds(sp)) {
+      if (!systems.includes(sys)) fail('content', `This dish's rules are inconsistent: ${cleanName(sp.id)} uses ${why}, which needs the ${sys} system, and the dish's rules do not include it. Nothing was loaded.`);
+    }
+    const pairing = nativeAbilityPairingProblem(sp);
+    if (pairing !== null) fail('content', `This dish's rules are inconsistent: ${cleanName(sp.id)} ${pairing}. Nothing was loaded.`);
+  }
+  for (const m of c.modules) {
+    const sys = MODULE_SYSTEM_NEEDS[m.id];
+    if (sys !== undefined && !systems.includes(sys)) fail('content', `This dish's rules are inconsistent: the extra ability "${cleanName(m.name)}" (${m.id}) needs the ${sys} system, and the dish's rules do not include it. Nothing was loaded.`);
   }
 
   // Grid and fields.

@@ -258,6 +258,8 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
     if (s.speed === 0 && s.lociActive[0]) err(file, 'lociActive.0', 'motility locus cannot be active without native speed');
     if (s.sensingRadius === 0 && s.lociActive[2]) err(file, 'lociActive.2', 'sensing locus cannot be active without a sensing radius');
     if (s.minDivisionAge >= s.maxAge) err(file, 'minDivisionAge', 'must be below maxAge');
+    const pairing = nativeAbilityPairingProblem(s);
+    if (pairing !== null) err(file, 'nativeAbilities', pairing);
   }
   for (const id of modules.ids) {
     const m = modules.map[id]!;
@@ -579,6 +581,18 @@ export function speciesSystemNeeds(s: Species): [SystemFlag, string][] {
   if (has('RIVALRY')) out.push(['rivalry', 'RIVALRY']);
   if (has('SHELL')) out.push(['silicate', 'SHELL']);
   return out;
+}
+
+/**
+ * A native ability that works only through another one the species must also list, or null (wave 10
+ * lead ruling): RESTING_DAUGHTER places the newborn Resting under the species' own DORMANCY rules
+ * (births.ts startRestingNewborn throws without them). The validator and the save import both use it.
+ */
+export function nativeAbilityPairingProblem(s: Pick<Species, 'nativeAbilities'>): string | null {
+  if (s.nativeAbilities.includes('RESTING_DAUGHTER') && !s.nativeAbilities.includes('DORMANCY')) {
+    return 'lists RESTING_DAUGHTER without DORMANCY: a resting daughter rests by the dormancy rules, so a species with RESTING_DAUGHTER must also list DORMANCY';
+  }
+  return null;
 }
 
 /**

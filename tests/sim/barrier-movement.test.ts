@@ -233,7 +233,8 @@ describe('S03 shutter gate (CT §4, §5.3)', () => {
 describe('S04 one-way channel edge (D-0106)', () => {
   it('is closed to ordinary movement in both directions', () => {
     const w = barrierDish();
-    pushEdges(w, verticalLine('S04', 63, 0, 127, { flow: 1 }));
+    // The channel's directed transfer (wave 10, SPEC §4.9) is held off so only ordinary movement is under test.
+    pushEdges(w, verticalLine('S04', 63, 0, 127, { flow: 1, nextOrganismTick: 1_000_000_000 }));
     const left = same(w, place(w, 'B01', 62.5, Y + 0.5, { E: 60 }));
     const right = same(w, place(w, 'B01', 64.5, Y + 6.5, { E: 60 }));
     const c = w.ents.cols;

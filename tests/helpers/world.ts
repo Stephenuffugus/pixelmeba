@@ -217,3 +217,24 @@ export function barrierRegistry(): ContentRegistry {
 export function barrierDish(overrides: Partial<RecipeDef> = {}): World {
   return clearWater(overrides, barrierRegistry());
 }
+
+// ---- Phase 5 wave 10 (e3-resters): the resters' and V02/X02 test registry, and painted ground.
+
+/**
+ * The content registry of the wave 10 resters tests: the shipped manifest plus B12, F04, P08, X02 and
+ * V02, the 'barriers', 'climate' and 'devices' systems and S01–S12. allowUnimplemented: DORMANCY and
+ * RESTING_DAUGHTER are implemented by e3-resters (wave 10) but listed as implemented only by the lead at
+ * integration (D-0117); the structures at the Phase 5 systems flip (D-0104).
+ */
+export function resterRegistry(): ContentRegistry {
+  const shipped = registry().manifest;
+  const species = [...shipped.enabledSpecies, 'B12', 'F04', 'P08', 'V02', 'X02'].sort();
+  const systems = [...shipped.enabledSystems, 'barriers', 'climate', 'devices'].sort() as SystemFlag[];
+  return registryWith({ enabledSpecies: species, enabledSystems: systems, enabledStructures: ['BEAD', ...PHASE5_STRUCTURE_IDS, 'STONE', 'WALL'] }, { allowUnimplemented: true });
+}
+
+/** Paint substrate `sub` (grid.ts SUB_*) on the in-dish cells of the rectangle x0…x1 × y0…y1 (test setup); bumps geometryVersion. */
+export function paintRect(world: World, sub: number, x0: number, y0: number, x1: number, y1: number): void {
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (inMask(x, y)) world.grid.substrate[cellIndex(x, y)] = sub;
+  world.grid.geometryVersion++;
+}

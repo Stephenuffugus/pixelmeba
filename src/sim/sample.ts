@@ -49,7 +49,8 @@ import { R } from './reasons';
 import { SAMPLE_MODES, sampleTotals, type SampleGenome, type SampleMode, type SampleRow, type SampleSlot } from './sampleSlot';
 import type { SavedGenome } from './serialize';
 import { entityCell, rebuildIndex } from './spatial';
-import { habitatCompatible } from './suitability';
+import { canOccupy } from './movement';
+import { severCrossedLinks } from './structureEdits';
 import { markField, updateDerived } from './transport';
 import { ENTITY_COLUMNS, MOVE_NONE, type ColumnName } from './entities';
 import type { World } from './world';
@@ -442,7 +443,9 @@ export function transferProblem(world: World, dx: number, dy: number): string | 
     destCell[r.slot] = d;
     const sp = world.species[r.cols.species]!;
     const riding = r.cols.hostSlot >= 0 && heldBirth[r.cols.hostSlot] === r.cols.hostBirthId;
-    if (!riding && !habitatCompatible(world, sp, d)) return `${sp.def.name} cannot live where it would land`;
+    // Phase 5 (D-0116, D-0117): canOccupy adds the S05 shelter rule (and the S06 mesh surface through
+    // habitatCompatible's attachment mask); without devices it is habitatCompatible exactly.
+    if (!riding && !canOccupy(world, sp, d)) return `${sp.def.name} cannot live where it would land`;
     incoming[d] = (incoming[d] ?? 0) + r.cols.B / sp.def.b0;
   }
   for (const key of Object.keys(incoming).map(Number).sort((a, b) => a - b)) {
@@ -505,7 +508,16 @@ export function sampleTransfer(world: World, p: SampleTransferPayload): CommandR
     }
   }
   world.sample = null;
-  return { accepted: s.rows.length + s.cells.length + s.objects.length, rejected: 0 };
+  // Phase 5 (D-0116, D-0117): a released link that an edge barrier at the destination refuses is cut with
+  // a logged reason, as when a barrier is placed across a link (structureEdits.ts severCrossedLinks). A
+  // parasite rides at its host's position, so a host pair never straddles an edge. Without edges: 0.
+  let severed = 0;
+  if (world.edges.length > 0) {
+    const released = new Uint8Array(world.ents.highWater);
+    for (const r of rows) released[map[r.slot]!] = 1;
+    severed = severCrossedLinks(world, released);
+  }
+  return { accepted: s.rows.length + s.cells.length + s.objects.length, rejected: 0, ...(severed > 0 ? { severed } : {}) };
 }
 
 // ---- Held summary (host snapshots; read only) -----------------------------------------------------
