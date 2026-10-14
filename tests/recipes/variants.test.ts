@@ -349,10 +349,11 @@ describe('invalid variants are refused by content validation, with the file and 
   });
 
   it('missing capability (only for variants this build ships)', () => {
-    const errs = errorsOf(mutateRaw(RAW, 'variants', 'R-G1.json', (d) => (d.requiredCapabilities = ['core', 'enzymes', 'devices'])));
-    expect(errs).toEqual([{ severity: 'error', file: G1, path: 'requiredCapabilities.2', message: '"devices" is not enabled in this build' }]);
+    // 'equipment' (Phase 6): since the systems flip (D-0121) 'devices' is enabled in this build.
+    const errs = errorsOf(mutateRaw(RAW, 'variants', 'R-G1.json', (d) => (d.requiredCapabilities = ['core', 'enzymes', 'equipment'])));
+    expect(errs).toEqual([{ severity: 'error', file: G1, path: 'requiredCapabilities.2', message: '"equipment" is not enabled in this build' }]);
     const later = mutateRaw(RAW, 'variants', 'R-G1.json', (d) => {
-      d.requiredCapabilities = ['devices'];
+      d.requiredCapabilities = ['equipment'];
       d.phase = 6;
     });
     expect(errorsOf(later)).toEqual([]);

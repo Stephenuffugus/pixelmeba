@@ -8,9 +8,18 @@
  *
  * B09 (SIGNAL_GLOW), A04 (MIXOTROPHY), P10 (HANDLING), F03 (TRAP) and F04 (RESTING_DAUGHTER) are enabled
  * with allowUnimplemented: their abilities are implemented by later Phase 5 waves (e2/e3 organisms); no
- * test here steps a world.
+ * test here steps a world. Since the systems flip (D-0121) the import also refuses a dish recording a native
+ * ability this build does not implement, so this file mocks IMPLEMENTED_NATIVE_ABILITIES with MIXOTROPHY,
+ * HANDLING and TRAP appended until waves 12/13 implement them (test-only, as glow-saves does for E02).
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../src/sim/content/implemented', async (importOriginal) => {
+  const orig = await importOriginal<{ readonly IMPLEMENTED_NATIVE_ABILITIES: readonly string[] }>();
+  // Until waves 12/13 implement them (A04 MIXOTROPHY, P10 HANDLING, F03 TRAP).
+  return { ...orig, IMPLEMENTED_NATIVE_ABILITIES: [...new Set([...orig.IMPLEMENTED_NATIVE_ABILITIES, 'HANDLING', 'MIXOTROPHY', 'TRAP'])].sort() };
+});
+
 import { buildSaveFile, loadSaveFile, parseSaveFile } from '../../src/persistence/saveFile';
 import { applyNow } from '../../src/sim/commands';
 import { speciesSystemNeeds } from '../../src/sim/content/registry';
@@ -54,7 +63,7 @@ interface Dish {
 function dish(withStores = true): Dish {
   const w = clearWater({}, REG);
   const m = w.content.manifest;
-  (w as { content: WorldContent }).content = { ...w.content, manifest: { ...m, enabledStructures: [...(m.enabledStructures ?? []), ...S_IDS].sort() } };
+  (w as { content: WorldContent }).content = { ...w.content, manifest: { ...m, enabledStructures: [...new Set([...(m.enabledStructures ?? []), ...S_IDS])].sort() } };
   const at = (k: number) => [30.5 + 4 * k, 64.5] as const;
   const ids = ['b01', 'b09', 'a04', 'p10', 'f03', 'p04', 'f04', 'spare'] as const;
   const species = ['B01', 'B09', 'A04', 'P10', 'F03', 'P04', 'F04', 'B01'];

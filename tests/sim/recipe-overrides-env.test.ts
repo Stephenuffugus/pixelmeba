@@ -33,7 +33,7 @@ import {
 import { DishHost } from '../../src/worker/host';
 import type { FromWorker, ToWorker } from '../../src/worker/protocol';
 import { registryWith } from '../helpers/registry';
-import { registry } from '../helpers/world';
+import { preFlipRegistry, registry } from '../helpers/world';
 
 const REG = registry();
 const CLIMATE = (): ContentRegistry => registryWith({ enabledSystems: [...REG.manifest.enabledSystems, 'climate'].sort() as SystemFlag[] });
@@ -135,14 +135,16 @@ describe('P5.1 realizeRecipe: the light cycle starts at tick 0 and needs climate
   });
 
   it('refuses a light cycle or drying when the manifest lacks climate', () => {
-    expect(() => realizeRecipe(REG, 'FIRST_DISH_V1', { transform: (r) => applyRecipeOverrides(r, { lightMode: 'cycle' }) })).toThrow(
+    // A manifest without climate: the pre-flip one (since the systems flip, D-0121, the shipped one has it).
+    const V1 = preFlipRegistry();
+    expect(() => realizeRecipe(V1, 'FIRST_DISH_V1', { transform: (r) => applyRecipeOverrides(r, { lightMode: 'cycle' }) })).toThrow(
       new RecipeError('recipe FIRST_DISH_V1: Its light cycle needs the "climate" system (not in these rules).'),
     );
-    expect(() => realizeRecipe(REG, 'FIRST_DISH_V1', { transform: (r) => applyRecipeOverrides(r, { drying: true }) })).toThrow(
+    expect(() => realizeRecipe(V1, 'FIRST_DISH_V1', { transform: (r) => applyRecipeOverrides(r, { drying: true }) })).toThrow(
       new RecipeError('recipe FIRST_DISH_V1: Its drying needs the "climate" system (not in these rules).'),
     );
     // A closed lid or fixed light needs nothing new.
-    expect(() => realizeRecipe(REG, 'FIRST_DISH_V1', { transform: (r) => applyRecipeOverrides(r, { lid: 'closed', lightMode: 'fixed', drying: false }) })).not.toThrow();
+    expect(() => realizeRecipe(V1, 'FIRST_DISH_V1', { transform: (r) => applyRecipeOverrides(r, { lid: 'closed', lightMode: 'fixed', drying: false }) })).not.toThrow();
   });
 });
 
@@ -182,10 +184,13 @@ describe('P5.1 the Starting recipe file carries the environment choices', () => 
     expect(recipeFileProblem(withO({ lightMode: 'night' }), REG)).toEqual(damaged('overrides.lightMode'));
     expect(recipeFileProblem(withO({ drying: 'yes' }), REG)).toEqual(damaged('overrides.drying'));
     expect(recipeFileProblem(withO({ warmth: 0.9 }), REG)).toEqual(damaged('overrides'));
-    // The shipped build has no climate system.
-    expect(recipeFileProblem(withO({ lightMode: 'cycle' }), REG)).toEqual(damaged('overrides.lightMode'));
-    expect(recipeFileProblem(withO({ drying: true }), REG)).toEqual(damaged('overrides.drying'));
-    expect(recipeFileProblem(withO({ lightMode: 'fixed', drying: false }), REG)).toBeNull();
+    // A build without the climate system (the pre-flip manifest) refuses them.
+    const V1 = preFlipRegistry();
+    expect(recipeFileProblem(withO({ lightMode: 'cycle' }), V1)).toEqual(damaged('overrides.lightMode'));
+    expect(recipeFileProblem(withO({ drying: true }), V1)).toEqual(damaged('overrides.drying'));
+    expect(recipeFileProblem(withO({ lightMode: 'fixed', drying: false }), V1)).toBeNull();
+    // Since the systems flip (D-0121) the shipped build has climate and accepts them.
+    expect(recipeFileProblem(withO({ lightMode: 'cycle', drying: true }), REG)).toBeNull();
     // Under a climate build the same choices pass the validator.
     const reg = CLIMATE();
     const wc = await realizeRecipeSource(reg, source({ seed: 104729, lightMode: 'cycle', drying: true }), 'env-g');

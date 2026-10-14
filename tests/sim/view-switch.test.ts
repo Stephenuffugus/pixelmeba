@@ -286,11 +286,13 @@ describe('Explore ⇄ Lab changes no state (P2.7)', () => {
 async function withoutLabContent(text: string): Promise<string> {
   const file = JSON.parse(text) as { state: { content: Record<string, unknown> }; checksum: string };
   const content = file.state.content as {
-    manifest: Record<string, unknown> & { enabledMaterials: string[] };
+    manifest: Record<string, unknown> & { enabledMaterials: string[]; enabledSystems: string[] };
     materials: { kind: string }[];
   };
   const manifest = { ...content.manifest };
   delete manifest.enabledStructures;
+  // A dish older than P2.7 records none of the systems the systems flip enabled (D-0121) either.
+  manifest.enabledSystems = manifest.enabledSystems.filter((id) => !['barriers', 'climate', 'devices'].includes(id));
   manifest.enabledMaterials = manifest.enabledMaterials.filter((id) => !['GEL', 'SEDIMENT', 'SHADE', 'WATER'].includes(id));
   manifest.contentHash = 'a1'.repeat(32);
   const state = { ...file.state, content: { ...content, manifest, materials: content.materials.filter((m) => m.kind !== 'paint') } };
@@ -356,6 +358,8 @@ describe('Lab trays offer what the dish records (content is data; D-0024)', () =
       ['paint:sediment', 'Sediment'],
       ['shade:paint', 'Shade paint'],
       ['shade:erase', 'Remove shade'],
+      // Since the systems flip (D-0121) a new dish records climate: the wetting brush.
+      ['wet', 'Wetting brush'],
     ]);
     expect(tray.trayItems('tools').map((i) => [i.id, i.name])).toEqual([
       ['place:stone', reg.structures.STONE!.name],
@@ -409,8 +413,10 @@ describe('Lab trays offer what the dish records (content is data; D-0024)', () =
     const content = await import('../../src/ui/panels/LabTrayContent');
     const info = ui.dishInfo.value!;
     const TOOLS = ['place:stone', 'place:wall', 'place:bead', 'erase'];
-    // The worker sends the world manifest's enabledStructures.
-    expect(info.structureIds).toEqual(['BEAD', 'STONE', 'WALL']);
+    // The worker sends the world manifest's enabledStructures (S01–S12 too since the systems flip, D-0121;
+    // they are the Build group's, not these cell-structure tools).
+    const RECORDED = ['BEAD', 'S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12', 'STONE', 'WALL'];
+    expect(info.structureIds).toEqual(RECORDED);
     expect(content.structureTools(info)).toEqual(TOOLS);
     expect(content.structureTools({ ...info, structureIds: ['STONE'] })).toEqual(['place:stone', 'erase']);
     expect(content.structureTools({ ...info, structureIds: [] })).toEqual([]);
@@ -419,14 +425,14 @@ describe('Lab trays offer what the dish records (content is data; D-0024)', () =
     delete (bare as { structureIds?: unknown }).structureIds;
     expect(content.structureTools(bare)).toEqual([]);
     // A dish recorded under other content (another contentHash) whose manifest lists BEAD, STONE and
-    // WALL gets exactly those tools, and its simulation accepts them.
+    // WALL (and S01–S12) gets exactly those tools, and its simulation accepts them.
     const { text } = await ui.getClient().exportDish(info.dishId, false);
     await ui.importFile(new File([await withContentHash(text, 'b2'.repeat(32))], 'other-content.pixelmeba'));
     await flush();
     const other = ui.dishInfo.value!;
     expect(other.dishId).not.toBe(info.dishId);
     expect(other.contentHash).toBe('b2'.repeat(32));
-    expect(other.structureIds).toEqual(['BEAD', 'STONE', 'WALL']);
+    expect(other.structureIds).toEqual(RECORDED);
     expect(tray.trayItems('tools').map((i) => i.id)).toEqual([...TOOLS, 'sample', 'cleanWater']);
     lab.setDishView('lab');
     const res = await lab.sendLabCommand({ kind: 'placeStructure', structure: 'wall', points: STROKE, radius: 3 });

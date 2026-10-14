@@ -33,6 +33,15 @@ const goal = (id: string, predicate: Record<string, unknown>, more: Record<strin
   ...more,
 });
 
+/**
+ * The manifest before the systems flip (D-0121): the v1.0 systems and the cell structures only, so no gate
+ * structure is enabled (and a buildPhase 4 manifest enables nothing of phase 5).
+ */
+const PRE_FLIP = {
+  enabledSystems: registry().manifest.enabledSystems.filter((s) => s !== 'barriers' && s !== 'climate' && s !== 'devices'),
+  enabledStructures: ['BEAD', 'STONE', 'WALL'],
+};
+
 function errorsFor(id: string, packs: RawPacks): string[] {
   const res = validateContent(packs);
   return res.issues.filter((i) => i.severity === 'error' && i.file.includes(id)).map((i) => `${i.path}: ${i.message}`);
@@ -76,10 +85,14 @@ describe('content/objectives', () => {
       [goal('T_ENDED', { type: 'keepSpeciesAlive', params: { species: 'B01' }, durationSeconds: 60 }), /endedText: .*needs endedText/],
       [goal('T_OFFER', { type: 'observeEvent', params: { event: 'birth' } }, { offerOn: ['NO_SUCH_RECIPE'] }), /offerOn\.0: unknown recipe/],
     ];
+    // Under the pre-flip manifest no gate structure is enabled (since the systems flip, D-0121, the shipped one enables S01–S04).
     for (const [data, re] of cases) {
-      const errs = errorsFor(String(data.id), packsWith([data]));
+      const errs = errorsFor(String(data.id), packsWith([data], PRE_FLIP));
       expect(errs.join('\n'), String(data.id)).toMatch(re);
     }
+    // With the shipped manifest S02 is an enabled gate, so the same goal validates; STONE is still no gate.
+    expect(errorsFor('T_GATE', packsWith([cases[0]![0]]))).toEqual([]);
+    expect(errorsFor('T_GATE_STONE', packsWith([cases[1]![0]])).join('\n')).toMatch(/no enabled gate structure provides "STONE"/);
     // A schema-level problem (no completedText) is named too.
     const { completedText: _c, ...noText } = goal('T_TEXT', { type: 'observeEvent', params: { event: 'birth' } });
     expect(errorsFor('T_TEXT', packsWith([noText])).join('\n')).toMatch(/completedText/);
@@ -87,14 +100,14 @@ describe('content/objectives', () => {
 
   it('a phase 5 objective is skipped under buildPhase 4: no error, not in the catalog', () => {
     const later = goal('T_LATER', { type: 'transferAcrossGate', params: { gate: 'S02', field: 'sugar', threshold: 1 } }, { phase: 5 });
-    const res = validateContent(packsWith([later], { buildPhase: 4 })); // the build it means (the shipped one is 5 since D-0105)
+    const res = validateContent(packsWith([later], { buildPhase: 4, ...PRE_FLIP })); // the build it means (the shipped one is 5 since D-0105; a buildPhase 4 manifest enables no phase 5 structure)
     expect(res.issues.filter((i) => i.severity === 'error')).toEqual([]);
     expect(res.registry).not.toBeNull();
     expect(res.registry!.objectives.T_LATER).toBeDefined();
     expect(objectiveCatalog(res.registry!).map((o) => o.id)).not.toContain('T_LATER');
     // Its shape is still checked: a later objective that is malformed is an error.
     const broken = goal('T_LATER_BAD', { type: 'custom', params: {} }, { phase: 5 });
-    expect(errorsFor('T_LATER_BAD', packsWith([broken], { buildPhase: 4 })).join('\n')).toMatch(/custom/);
+    expect(errorsFor('T_LATER_BAD', packsWith([broken], { buildPhase: 4, ...PRE_FLIP })).join('\n')).toMatch(/custom/);
   });
 
   it('registryWith(G2_LISTS) (buildPhase 2) still validates and ships no goal', () => {

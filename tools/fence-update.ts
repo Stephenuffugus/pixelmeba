@@ -7,6 +7,12 @@
  *       Adds a fence entry for a recipe created after g2 and records its currentDigest
  *       (trajectoryDigest 'full' under the shipped manifest; default tick 1200). Its g2Digest stays
  *       null. Refuses an existing entry or an unknown recipe. Builders may run it for recipes they create.
+ *   npx tsx tools/fence-update.ts --add-file <tests/fixtures/fence-recipes/ID.json> [--ticks N]
+ *       Adds a fence entry (kind 'recipeFile', D-0121) for a TEST-ONLY recipe file: a RecipeDef under
+ *       tests/fixtures/fence-recipes/, never in content/ (it would appear in the game). The entry id is the
+ *       recipe's id, which must not be a content recipe's; it records the currentDigest as --add does
+ *       (g2Digest null). It fences dishes no shipped recipe makes (the light cycle, structures placed by
+ *       command at tick 0). --recipe <id> / --all re-record it like any other entry.
  *   npx tsx tools/fence-update.ts --recipe <entryId> --reason D-00xx
  *   npx tsx tools/fence-update.ts --all --reason D-00xx
  *       Re-records currentDigest (one entry, or every entry) under the shipped manifest. Never touches
@@ -37,7 +43,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ManifestSchema } from '../src/sim/content/schema';
 import { CONTENT_DIR, loadRegistryFs, REPO_ROOT } from './lib/content-fs';
-import { describeEntry, fenceDigest, FENCE_PATH, readFence, writeFence, type FenceEntry, type FenceFile } from '../tests/helpers/fence';
+import { describeEntry, fenceDigest, FENCE_PATH, readFence, readFenceRecipe, writeFence, type FenceEntry, type FenceFile } from '../tests/helpers/fence';
 import { EXPECTED_PATH, expectedText, G2_MANIFEST_PATH, G2_SAVE_FILES, measureSave, readG2SaveText, SAVES_DIR, type ExpectedChange, type G2Expected } from '../tests/helpers/g2-saves';
 import {
   measureRc1Save,
@@ -62,6 +68,7 @@ export class Refusal extends Error {}
 
 export type Mode =
   | { kind: 'add'; recipe: string; ticks: number }
+  | { kind: 'addFile'; file: string; ticks: number }
   | { kind: 'recipe'; id: string; reason: string }
   | { kind: 'all'; reason: string }
   | { kind: 'g2'; reason: string }
@@ -82,12 +89,15 @@ function value(argv: readonly string[], name: string): string | undefined {
   return v;
 }
 
+/** Where test-only fence recipe files live (repository-relative). */
+export const FENCE_RECIPES_DIR = 'tests/fixtures/fence-recipes/';
+
 const USAGE =
-  'usage: npx tsx tools/fence-update.ts --add <recipeId> [--ticks N] | --recipe <entryId> --reason D-00xx | --all --reason D-00xx | --g2 --reason D-00xx | --rc1 --reason D-00xx';
+  'usage: npx tsx tools/fence-update.ts --add <recipeId> [--ticks N] | --add-file <tests/fixtures/fence-recipes/ID.json> [--ticks N] | --recipe <entryId> --reason D-00xx | --all --reason D-00xx | --g2 --reason D-00xx | --rc1 --reason D-00xx';
 
 /** Parse the command line; throws Refusal for anything malformed (never guesses). */
 export function parseArgs(argv: readonly string[]): { mode: Mode; paths: Paths } {
-  const modes = ['--add', '--recipe', '--all', '--g2', '--rc1'].filter((m) => argv.includes(m));
+  const modes = ['--add', '--add-file', '--recipe', '--all', '--g2', '--rc1'].filter((m) => argv.includes(m));
   if (modes.length !== 1) throw new Refusal(`${modes.length === 0 ? 'no mode given' : `one mode at a time (${modes.join(', ')})`}. ${USAGE}`);
   const reason = value(argv, '--reason');
   const rc1 = modes[0] === '--rc1';
@@ -98,15 +108,19 @@ export function parseArgs(argv: readonly string[]): { mode: Mode; paths: Paths }
     decisions: resolve(value(argv, '--decisions') ?? join(REPO_ROOT, 'docs', 'DECISIONS.md')),
   };
   const mode = modes[0]!;
-  if (mode === '--add') {
-    if (reason !== undefined) throw new Refusal('--add records a new recipe and takes no --reason');
-    const recipe = value(argv, '--add')!;
+  if (mode === '--add' || mode === '--add-file') {
+    if (reason !== undefined) throw new Refusal(`${mode} records a new entry and takes no --reason`);
+    const target = value(argv, mode)!;
     const t = value(argv, '--ticks');
     const ticks = t === undefined ? DEFAULT_FENCE_TICKS : Number(t);
     if (!Number.isInteger(ticks) || ticks < 1) throw new Refusal(`--ticks must be a positive integer, not "${t}"`);
-    return { mode: { kind: 'add', recipe, ticks }, paths };
+    if (mode === '--add') return { mode: { kind: 'add', recipe: target, ticks }, paths };
+    const file = target.replace(/\\/g, '/');
+    if (!file.startsWith(FENCE_RECIPES_DIR) || !file.endsWith('.json') || file.includes('..'))
+      throw new Refusal(`--add-file takes a test-only recipe file under ${FENCE_RECIPES_DIR} (repository-relative), not "${target}"`);
+    return { mode: { kind: 'addFile', file, ticks }, paths };
   }
-  if (argv.includes('--ticks')) throw new Refusal('--ticks only goes with --add (an entry keeps its tick)');
+  if (argv.includes('--ticks')) throw new Refusal('--ticks only goes with --add or --add-file (an entry keeps its tick)');
   if (reason === undefined) throw new Refusal(`${mode} refuses to run without --reason D-00xx: a fence digest changes only under a recorded decision (docs/DECISIONS.md)`);
   if (!/^D-\d{4}$/.test(reason)) throw new Refusal(`--reason must be a decision id like D-0040, not "${reason}"`);
   if (mode === '--recipe') return { mode: { kind: 'recipe', id: value(argv, '--recipe')!, reason }, paths };
@@ -236,7 +250,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
   const { mode, paths } = parsed;
   try {
-    if (mode.kind !== 'add') {
+    if (mode.kind !== 'add' && mode.kind !== 'addFile') {
       const text = decisionText(paths.decisions, mode.reason);
       const manifestAt = (path: string) => versionStamps(ManifestSchema.parse(JSON.parse(readFileSync(path, 'utf8'))));
       if (mode.kind === 'g2') {
@@ -269,6 +283,24 @@ export async function main(argv: readonly string[]): Promise<number> {
       if (!reg.recipes[mode.recipe]) throw new Refusal(`unknown recipe "${mode.recipe}" (not in content/recipes)`);
       if (fence.entries.some((e) => e.id === mode.recipe)) throw new Refusal(`the fence already has an entry "${mode.recipe}"; re-record it with --recipe ${mode.recipe} --reason D-00xx`);
       const entry: FenceEntry = { id: mode.recipe, kind: 'recipe', recipe: mode.recipe, ticks: mode.ticks, g2Digest: null, currentDigest: null, changedBy: [] };
+      entry.currentDigest = await fenceDigest(reg, entry, 'full');
+      fence.entries.push(entry);
+      writeFence(fence, paths.fence);
+      console.log(`added ${describeEntry(entry)}: currentDigest ${entry.currentDigest}`);
+      return 0;
+    }
+    if (mode.kind === 'addFile') {
+      const reg = loadRegistryFs();
+      if (!existsSync(join(REPO_ROOT, mode.file))) throw new Refusal(`no recipe file ${mode.file}`);
+      let id: string;
+      try {
+        id = readFenceRecipe(mode.file).id;
+      } catch (e) {
+        throw new Refusal(`${mode.file} is not a valid recipe: ${(e as Error).message.split('\n')[0]}`);
+      }
+      if (reg.recipes[id]) throw new Refusal(`${mode.file}: id ${id} is a content recipe's; a test-only fence recipe needs its own id`);
+      if (fence.entries.some((e) => e.id === id)) throw new Refusal(`the fence already has an entry "${id}"; re-record it with --recipe ${id} --reason D-00xx`);
+      const entry: FenceEntry = { id, kind: 'recipeFile', file: mode.file, ticks: mode.ticks, g2Digest: null, currentDigest: null, changedBy: [] };
       entry.currentDigest = await fenceDigest(reg, entry, 'full');
       fence.entries.push(entry);
       writeFence(fence, paths.fence);

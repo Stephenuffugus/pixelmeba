@@ -137,6 +137,14 @@ function excludedBy(slotId: string | null): string | null {
 }
 
 /** A dish name as a file name ("Little Living Garden" → "little-living-garden"). */
+/**
+ * D-0121 (lead): a slot save that is readable but refused by rule (a newer version, or a system, structure or
+ * ability this build cannot simulate) is named when no copy of the slot opens, not reported as damaged.
+ */
+function ruleRefusal(e: unknown): SaveFileError | null {
+  return e instanceof SaveFileError && (e.kind === 'version' || e.kind === 'content') ? e : null;
+}
+
 function fileBase(name: string): string {
   return name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'dish';
 }
@@ -521,11 +529,15 @@ export class DishHost {
         case 'loadSlot': {
           if (!this.store) throw new Error('Saving is unavailable on this device.');
           // 1. Read and check the save first: one that cannot be opened keeps nothing and changes nothing.
+          const refused: { first: SaveFileError | null } = { first: null };
           const res = await this.store.load(msg.slotId, async (text) => {
-            await loadSaveFile(text);
+            await loadSaveFile(text).catch((e: unknown) => {
+              refused.first ??= ruleRefusal(e);
+              throw e;
+            });
             return true;
           });
-          if (!res) throw new SaveFileError('That save could not be read, and no earlier copy was usable.', 'integrity');
+          if (!res) throw refused.first ?? new SaveFileError('That save could not be read, and no earlier copy was usable.', 'integrity');
           const { file, world, notebook, notebookDropped } = await loadSaveFile(res.text);
           // P2.8: an automatic checkpoint opens as a new branch from a stored state (SPEC §10.7): like
           // Duplicate, it gets its own dish identity and a name that says the moment it starts from, so
@@ -583,13 +595,17 @@ export class DishHost {
           if (!this.store) throw new Error('Saving is unavailable on this device.');
           let name = 'dish';
           let read: { readonly notebook: NotebookRecord; readonly dropped: boolean } | null = null;
+          const refused: { first: SaveFileError | null } = { first: null };
           const res = await this.store.load(msg.slotId, async (text) => {
-            const got = await loadSaveFile(text);
+            const got = await loadSaveFile(text).catch((e: unknown) => {
+              refused.first ??= ruleRefusal(e);
+              throw e;
+            });
             name = got.file.meta.name;
             read = { notebook: got.notebook, dropped: got.notebookDropped !== null };
             return true;
           });
-          if (!res) throw new SaveFileError('That save could not be read, and no earlier copy was usable.', 'integrity');
+          if (!res) throw refused.first ?? new SaveFileError('That save could not be read, and no earlier copy was usable.', 'integrity');
           // P4.1: nicknames leave only by the player's choice. Only the file's notebook is replaced (sealed
           // again, without nicknames; left out when it could not be read); the state and its checksum stay as stored.
           this.post({ type: 'exported', requestId: msg.requestId, text: await exportedSaveText(res.text, read, msg.includeNicknames === true), filename: `${fileBase(name)}.pixelmeba` });

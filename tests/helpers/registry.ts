@@ -106,6 +106,15 @@ export function contentHashOf(raw: RawPacks): string {
   return createHash('sha256').update(contentHashInput(raw), 'utf8').digest('hex');
 }
 
+/**
+ * A list without repeated ids, first occurrence kept (order kept, so a sorted list stays sorted). Since
+ * the systems flip (D-0121) the shipped manifest already holds barriers, climate, devices and S01–S12,
+ * so a patch built as `[...shipped.enabledSystems, 'barriers', …]` repeats them.
+ */
+export function withoutRepeats<T>(list: readonly T[]): T[] {
+  return list.filter((x, i, a) => a.indexOf(x) === i);
+}
+
 /** A deep copy of the content packs on disk with the manifest fields in `patch` replaced and the content hash rewritten. */
 export function patchedRawPacks(patch: ManifestPatch): RawPacks {
   const keys = Object.keys(patch);
@@ -117,7 +126,7 @@ export function patchedRawPacks(patch: ManifestPatch): RawPacks {
   const data = raw.manifest.data as Record<string, unknown>;
   for (const k of PATCHABLE_MANIFEST_KEYS) {
     const v = patch[k];
-    if (v !== undefined) data[k] = JSON.parse(JSON.stringify(v)) as unknown;
+    if (v !== undefined) data[k] = JSON.parse(JSON.stringify(Array.isArray(v) ? withoutRepeats(v as readonly string[]) : v)) as unknown;
   }
   data.contentHash = contentHashOf(raw);
   return raw;
@@ -129,7 +138,8 @@ export function patchedRawPacks(patch: ManifestPatch): RawPacks {
  */
 export function registryWith(patch: ManifestPatch, opts: RegistryWithOptions = {}): ContentRegistry {
   const omit = [...(opts.omit ?? [])].sort();
-  const key = canonicalJson({ patch, allowUnimplemented: opts.allowUnimplemented === true, omit });
+  const deduped = Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, Array.isArray(v) ? withoutRepeats(v as readonly string[]) : v])) as ManifestPatch;
+  const key = canonicalJson({ patch: deduped, allowUnimplemented: opts.allowUnimplemented === true, omit });
   const hit = built[key];
   if (hit) return hit;
   const raw = patchedRawPacks(patch);

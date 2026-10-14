@@ -1,8 +1,8 @@
 /**
  * P5.1 New Dish Environment group (UX §2.3 "Environment (lid, light mode, drying) — Phase 5"; D-0119). The
- * group is gated on THIS BUILD's manifest enabling 'climate', which happens at the systems flip (D-0104):
- * until then the first test proves New Dish has no Environment group, and the second (the group itself) is
- * skipped; the lead runs it unskipped at the flip.
+ * group is gated on THIS BUILD's manifest enabling 'climate', which the systems flip did (D-0104, D-0121):
+ * the first test checks the group follows the build manifest (shown now), the second (no longer skipped)
+ * the group itself.
  */
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
@@ -23,21 +23,16 @@ async function openNewDish(page: Page): Promise<void> {
   await expect(page.getByTestId('new-dish-summary')).toBeVisible();
 }
 
-test('New Dish matches the build manifest: no Environment group without climate', async ({ page }) => {
+test('New Dish matches the build manifest: the Environment group since the systems flip (climate enabled)', async ({ page }) => {
   test.setTimeout(SLOW);
+  expect(buildManifestHasClimate).toBe(true); // D-0121
   await openNewDish(page);
-  if (buildManifestHasClimate) {
-    await expect(page.getByTestId('new-dish-environment')).toBeVisible();
-  } else {
-    await expect(page.getByTestId('new-dish-environment')).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: 'Environment' })).toHaveCount(0);
-    await expect(page.getByTestId('new-dish-environment-summary')).toHaveCount(0);
-  }
+  await expect(page.getByTestId('new-dish-environment')).toBeVisible();
+  await expect(page.getByTestId('new-dish-environment-summary')).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
 
 test('the Environment group: defaults, changes recorded in the dish, the summary in words', async ({ page }) => {
-  test.skip(!buildManifestHasClimate, 'runs at the systems flip (D-0104)');
   test.setTimeout(SLOW);
   await openNewDish(page);
   const group = page.getByTestId('new-dish-environment');

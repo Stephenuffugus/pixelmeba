@@ -234,6 +234,24 @@
       "g2Digest": null,
       "currentDigest": "60f4989ca92b567f",
       "changedBy": []
+    },
+    {
+      "id": "FENCE_CYCLE_HEATER",
+      "kind": "recipeFile",
+      "file": "tests/fixtures/fence-recipes/FENCE_CYCLE_HEATER.json",
+      "ticks": 1500,
+      "g2Digest": null,
+      "currentDigest": "11e6eeb6695ec849",
+      "changedBy": []
+    },
+    {
+      "id": "FENCE_BARRIER_LINE",
+      "kind": "recipeFile",
+      "file": "tests/fixtures/fence-recipes/FENCE_BARRIER_LINE.json",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "56e40d203f44e18f",
+      "changedBy": []
     }
   ]
 }

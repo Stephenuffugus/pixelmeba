@@ -8,6 +8,8 @@
  * devices []; the snapshot has no resins or environment key; CellInspect for the 24 recorded cells and
  * EntityInspect for the 5 lowest birthIds deep-equal the golden; the 'light' and 'sugar' overlays are equal;
  * stateHash is equal; and packing 300 snapshots between ticks leaves stateHash and trajectoryDigest unchanged.
+ * A v1.0 dish is built under preFlipRegistry() (the manifest before the systems flip, D-0121, with the same
+ * contentHash): since the flip a new dish under the shipped registry records the Phase 5 systems.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -23,7 +25,7 @@ import { DEPOSIT_GRIT_BAND, E_CUE3, ENT_STRIDE, ID_STRIDE } from '../../src/work
 import { buildInspector, DEPOSIT_BANDS, packDeposits, packEntities, packEnvironment, packGeometry, packOverlay, packResins } from '../../src/worker/snapshot';
 import { DishHost } from '../../src/worker/host';
 import type { FromWorker, SnapshotMsg } from '../../src/worker/protocol';
-import { loadRegistryFs } from '../../tools/lib/content-fs';
+import { preFlipRegistry } from '../helpers/world';
 import { readRc1SaveText, resumeRc1 } from '../helpers/rc1-saves';
 import { trajectoryDigest } from '../helpers/trajectory';
 
@@ -57,7 +59,7 @@ const asJson = (v: unknown): unknown => JSON.parse(JSON.stringify(v));
 
 async function dish(name: string): Promise<World> {
   if (name === 'first-dish-104729-t300') {
-    const w = realizeRecipe(loadRegistryFs(), 'FIRST_DISH_V1', { seed: 104729, worldId: 'golden' });
+    const w = realizeRecipe(preFlipRegistry(), 'FIRST_DISH_V1', { seed: 104729, worldId: 'golden' });
     run(w, 300);
     return w;
   }
@@ -131,7 +133,7 @@ describe('protocol 3 packs a v1.0 dish exactly as protocol 2 did (golden written
 
   it('the host snapshot of a v1.0 dish has no resins or environment key, and its geometry has edges null and devices []', () => {
     const out: FromWorker[] = [];
-    const host = new DishHost(loadRegistryFs(), (m) => out.push(m), { now: () => 0 });
+    const host = new DishHost(preFlipRegistry(), (m) => out.push(m), { now: () => 0 });
     host.handle({ type: 'create', requestId: 1, dishId: 'd', source: { kind: 'recipe', recipeId: 'FIRST_DISH_V1' } });
     const snap = out.filter((m): m is SnapshotMsg => m.type === 'snapshot').at(-1)!;
     expect('resins' in snap).toBe(false);
@@ -139,12 +141,12 @@ describe('protocol 3 packs a v1.0 dish exactly as protocol 2 did (golden written
     expect(snap.geometry!.edges).toBeNull();
     expect(snap.geometry!.devices).toEqual([]);
     const info = out.find((m): m is Extract<FromWorker, { type: 'ready' }> => m.type === 'ready');
-    expect(info?.info.systems).toEqual([...loadRegistryFs().manifest.enabledSystems]);
+    expect(info?.info.systems).toEqual([...preFlipRegistry().manifest.enabledSystems]);
   });
 
   it('packing 300 snapshots between ticks leaves stateHash and trajectoryDigest unchanged (packing only reads)', () => {
-    const a = realizeRecipe(loadRegistryFs(), 'FIRST_DISH_V1', { seed: 104729, worldId: 'pack' });
-    const b = realizeRecipe(loadRegistryFs(), 'FIRST_DISH_V1', { seed: 104729, worldId: 'pack' });
+    const a = realizeRecipe(preFlipRegistry(), 'FIRST_DISH_V1', { seed: 104729, worldId: 'pack' });
+    const b = realizeRecipe(preFlipRegistry(), 'FIRST_DISH_V1', { seed: 104729, worldId: 'pack' });
     for (let t = 0; t < 300; t++) {
       step(a);
       step(b);

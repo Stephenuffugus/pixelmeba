@@ -18,7 +18,7 @@ import type { World } from '../../src/sim/world';
 import { buildSaveFile, loadSaveFile } from '../../src/persistence/saveFile';
 import { DishHost } from '../../src/worker/host';
 import type { DishInfo, FromWorker, NewDishPreview, RecipeOverrides } from '../../src/worker/protocol';
-import { barrierRegistry, registry } from '../helpers/world';
+import { barrierRegistry, preFlipRegistry, registry } from '../helpers/world';
 
 const RECIPE = 'FIRST_DISH_V1';
 
@@ -79,7 +79,7 @@ describe('New Dish environment overrides (protocol 3)', () => {
     }
   });
 
-  it('an unknown value, and a cycle or drying under the shipped registry, are refused readably and create no dish', () => {
+  it('an unknown value, and a cycle or drying under a registry without climate (pre-flip), are refused readably and create no dish', () => {
     const climate = hostOn(barrierRegistry());
     for (const [o, msg] of [
       [{ lid: 'ajar' }, 'Unknown lid setting "ajar".'],
@@ -91,15 +91,18 @@ describe('New Dish environment overrides (protocol 3)', () => {
       expect(r.world).toBeNull();
       expect(r.info).toBeNull();
     }
-    const shipped = hostOn(registry());
+    // Since the systems flip (D-0121) the shipped registry has climate; the pre-flip manifest has not.
+    const shipped = hostOn(preFlipRegistry());
     const cyc = shipped.create({ lightMode: 'cycle' });
     expect(cyc.error).toBe("Day and night light needs the climate system, which this dish's content does not include.");
     expect(cyc.world).toBeNull();
     const dry = shipped.create({ drying: true });
     expect(dry.error).toBe("Drying needs the climate system, which this dish's content does not include.");
     expect(dry.world).toBeNull();
-    // The values that need no climate are accepted under the shipped registry.
+    // The values that need no climate are accepted there.
     expect(shipped.create({ lightMode: 'fixed', drying: false, lid: 'closed' }).error).toBeNull();
+    // The shipped registry (since the flip) accepts a cycle and drying.
+    expect(hostOn(registry()).create({ lightMode: 'cycle', drying: true }).error).toBeNull();
   });
 
   it('a world built with overrides {} or without overrides is byte-identical to the protocol 2 (HEAD) build', () => {
@@ -138,9 +141,11 @@ describe('New Dish environment overrides (protocol 3)', () => {
   });
 
   it('newDishPreview reports the start environment and whether the world records climate', () => {
-    const shipped = hostOn(registry()).preview({});
-    expect(shipped.environment).toEqual({ lid: expect.stringMatching(/^(open|closed)$/), lightMode: 'fixed', drying: false });
-    expect(shipped.climate).toBe(false);
+    const v1 = hostOn(preFlipRegistry()).preview({});
+    expect(v1.environment).toEqual({ lid: expect.stringMatching(/^(open|closed)$/), lightMode: 'fixed', drying: false });
+    expect(v1.climate).toBe(false);
+    // Since the systems flip (D-0121) a new dish under the shipped registry records climate.
+    expect(hostOn(registry()).preview({}).climate).toBe(true);
     const climate = hostOn(barrierRegistry());
     const p = climate.preview({ lid: 'closed', lightMode: 'cycle', drying: true });
     expect(p.environment).toEqual({ lid: 'closed', lightMode: 'cycle', drying: true });

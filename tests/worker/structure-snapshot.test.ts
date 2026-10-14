@@ -18,7 +18,7 @@ import type { World } from '../../src/sim/world';
 import { DishHost } from '../../src/worker/host';
 import { EDGE_FLOW_BACK, type CellInspect, type DishInfo, type EntityInspect, type FromWorker, type SnapshotMsg } from '../../src/worker/protocol';
 import { buildInspector } from '../../src/worker/snapshot';
-import { barrierDish, barrierRegistry, clearWater, place, pushDevices, pushEdges, registry, verticalLine } from '../helpers/world';
+import { barrierDish, barrierRegistry, clearWater, place, preFlipRegistry, pushDevices, pushEdges, registry, verticalLine } from '../helpers/world';
 
 const C = cellIndex;
 const S04_FWD = C(60, 60);
@@ -153,10 +153,13 @@ describe('protocol 3 structures through the worker', () => {
     const cyc = buildInspector(world, { kind: 'cell', cell: C(20, 64) }).cell!;
     expect(cyc.lightFactors!.cycle!.phase).toBe('day');
     expect(cyc.lightFactors!.cycle!.factor).toBe(1);
-    // A shipped dish records no climate, S11 or canopy species: no lightFactors key.
+    // A v1.0 (pre-flip) dish records no climate, S11 or canopy species: no lightFactors key.
+    const v1 = buildInspector(clearWater({}, preFlipRegistry()), { kind: 'cell', cell: C(64, 64) }).cell!;
+    expect('lightFactors' in v1).toBe(false);
+    expect('climate' in v1).toBe(false);
+    // Since the systems flip (D-0121) a new dish under the shipped registry records climate: its factors are listed.
     const shipped = buildInspector(clearWater({}, registry()), { kind: 'cell', cell: C(64, 64) }).cell!;
-    expect('lightFactors' in shipped).toBe(false);
-    expect('climate' in shipped).toBe(false);
+    expect(shipped.lightFactors).toMatchObject({ roof: 1, canopy: 1 });
   });
 
   it('CellInspect: edge lines with sides, codes, flow out/in and the gate tally (null before any)', () => {

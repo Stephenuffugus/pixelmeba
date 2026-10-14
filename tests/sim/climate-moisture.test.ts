@@ -25,7 +25,7 @@ import { run } from '../../src/sim/tick';
 import { updateDerived } from '../../src/sim/transport';
 import type { World, WorldContent } from '../../src/sim/world';
 import { registryWith } from '../helpers/registry';
-import { clearWater, place, registry } from '../helpers/world';
+import { clearWater, place, preFlipRegistry, registry } from '../helpers/world';
 
 const S_IDS = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12'];
 const SYSTEMS = [...registry().manifest.enabledSystems, 'barriers', 'climate', 'devices'].sort() as SystemFlag[];
@@ -247,7 +247,7 @@ describe('wetCells, repaint and readers', () => {
     expect(w.derived.moisture[GEL]).toBe(0.9); // no drying: it stays
     await expectRoundTrip(w);
     // Without 'climate' the brush does nothing.
-    const plain = clearWater({ habitatId: 'GEL_COLONY' });
+    const plain = clearWater({ habitatId: 'GEL_COLONY' }, preFlipRegistry());
     expect(wetCells(plain, [GEL])).toBe(false);
     expect(ensureMoisture(plain)).toBeNull();
     expect(plain.climate.moisture).toBeNull();

@@ -36,7 +36,7 @@ import { step } from '../../src/sim/tick';
 import { stageEnvironment, updateDerived } from '../../src/sim/transport';
 import type { World } from '../../src/sim/world';
 import { G2_LISTS, registryWith, withEnabled } from '../helpers/registry';
-import { clearWater, fillField, place, rebaseLedger, registry } from '../helpers/world';
+import { clearWater, fillField, place, preFlipRegistry, rebaseLedger, registry } from '../helpers/world';
 
 function sum(w: World, id: FieldId): number {
   const a = w.fields[id]!;
@@ -280,8 +280,8 @@ describe('gas exchange and the lid (SPEC §4.2)', () => {
 });
 
 describe('light (SPEC §4.4)', () => {
-  it('shade changes only light, × 0.1; the inspector factors are baseline × shade', () => {
-    const w = clearWater();
+  it('shade changes only light, × 0.1; the inspector factors are baseline × shade (a v1.0 dish: no climate factors)', () => {
+    const w = clearWater({}, preFlipRegistry());
     const fields = FIELD_IDS.filter((id) => w.fields[id]).map((id) => w.fields[id]!.slice());
     const before = w.derived.light[C]!;
     expect(lightFactors(w, C)).toEqual({ baseline: 0.8, shade: 1, effective: before });

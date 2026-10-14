@@ -30,7 +30,7 @@ import { serializeWorld, stateHash } from '../../src/sim/serialize';
 import { applyStructureCommand, type StructureCommandPayload } from '../../src/sim/structureEdits';
 import { step } from '../../src/sim/tick';
 import type { World } from '../../src/sim/world';
-import { aliveOf, barrierRegistry, clearWater, place, placeObject, pushDevices } from '../helpers/world';
+import { aliveOf, barrierRegistry, clearWater, place, placeObject, preFlipRegistry, pushDevices } from '../helpers/world';
 
 const REG = barrierRegistry();
 const dish = (): World => clearWater({}, REG);
@@ -334,8 +334,8 @@ describe('setDevice', () => {
 });
 
 describe('v1.0 dishes and the end-to-end cache bump', () => {
-  it('a dish under the shipped registry refuses every new kind "not in this dish" and stays byte-identical', () => {
-    const w = clearWater();
+  it('a v1.0 (pre-flip) dish refuses every new kind "not in this dish" and stays byte-identical', () => {
+    const w = clearWater({}, preFlipRegistry());
     const all: StructureCommandPayload[] = [
       { kind: 'placeEdges', structure: 'S01', edges: [[c(60, 60), 'R']] },
       { kind: 'placeEdges', structure: 'S03', edges: [[c(60, 60), 'R']], open: false },
@@ -361,7 +361,7 @@ describe('v1.0 dishes and the end-to-end cache bump', () => {
     expect(stateHash(w)).toBe(hash);
     // Through stage 1 as well: each is logged and takes a sequence number (hashed, as for any refused
     // command), and nothing else changes: the same hash as a twin given as many refused v1.0 commands.
-    const twin = clearWater();
+    const twin = clearWater({}, preFlipRegistry());
     for (const p of all) {
       expect(cmd(w, p).accepted).toBe(0);
       expect(cmd(twin, { kind: 'placeObject', materialId: 'NOT_A_MATERIAL', x: 60.5, y: 60.5 }).accepted).toBe(0);

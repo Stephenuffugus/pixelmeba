@@ -1,8 +1,8 @@
 /**
  * Phase 5 wave 8b (structure-content): habitat and recipe `edges` and `devices` placed by realizeRecipe
- * (P5.2 for P5.4's H04–H11; CT §4, §14; SPEC §2.4; D-0104, D-0106). Nothing is enabled in the shipped
- * manifest: every structure world here is built under a registryWith(...) that enables the systems and
- * S01–S12 with allowUnimplemented (the lead lists them as implemented at the systems flip).
+ * (P5.2 for P5.4's H04–H11; CT §4, §14; SPEC §2.4; D-0104, D-0106). Since the systems flip (D-0121) the
+ * shipped manifest enables the systems and S01–S12 and lists them as implemented; WITH_ALL equals it, and
+ * PRE_FLIP (the v1.0 systems and the cell structures) is the manifest that records none of them.
  */
 import { describe, expect, it } from 'vitest';
 import { validateContent, type ContentRegistry } from '../../src/sim/content/registry';
@@ -18,8 +18,10 @@ import { trajectoryDigest } from '../helpers/trajectory';
 import { registry } from '../helpers/world';
 
 const IDS = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12'];
-const ALL_ON = [...registry().manifest.enabledSystems, 'barriers', 'climate', 'devices'].sort() as SystemFlag[];
+const ALL_ON = [...new Set([...registry().manifest.enabledSystems, 'barriers', 'climate', 'devices'])].sort() as SystemFlag[];
 const WITH_ALL: ManifestPatch = { enabledSystems: ALL_ON, enabledStructures: ['BEAD', ...IDS, 'STONE', 'WALL'] };
+/** The manifest before the systems flip: the v1.0 systems and the cell structures only. */
+const PRE_FLIP: ManifestPatch = { enabledSystems: ALL_ON.filter((s) => s !== 'barriers' && s !== 'climate' && s !== 'devices'), enabledStructures: ['BEAD', 'STONE', 'WALL'] };
 const reg = (): ContentRegistry => registryWith(WITH_ALL, { allowUnimplemented: true });
 
 const EDGES: EdgePlacement[] = [
@@ -160,8 +162,10 @@ describe('P5.2 realizeRecipe places habitat and recipe structures', () => {
     expect(refusal(noClimate, first(r, { devices: [{ structure: 'S12', at: [70, 70] }] }))).toBe('recipe FIRST_DISH_V1: It places structure S12, which needs the "climate" system (not in these rules).');
     const noShelter = registryWith({ ...WITH_ALL, enabledStructures: WITH_ALL.enabledStructures!.filter((s) => s !== 'S05') }, { allowUnimplemented: true });
     expect(refusal(noShelter, first(noShelter, { devices: [DEVICES[1]!] }))).toBe('recipe FIRST_DISH_V1: It places structure S05, which these rules do not include.');
-    // The shipped build records none of them.
-    expect(refusal(registry(), first(registry(), { edges: [EDGES[0]!] }))).toBe('recipe FIRST_DISH_V1: It places structure S01, which these rules do not include.');
+    // A pre-flip build records none of them; the shipped build records them all since the systems flip (D-0121).
+    const preFlip = registryWith(PRE_FLIP);
+    expect(refusal(preFlip, first(preFlip, { edges: [EDGES[0]!] }))).toBe('recipe FIRST_DISH_V1: It places structure S01, which these rules do not include.');
+    expect(refusal(registry(), first(registry(), { edges: [EDGES[0]!] }))).toBe('');
   });
 });
 
@@ -205,20 +209,20 @@ describe('P5.2 content-time validation of habitat and recipe structures', () => 
 
   it('a shipped recipe needs the structures and systems it places, and climate for a cycle or drying', () => {
     const ok = recipeFile({ id: 'TEST_STRUCTURES', edges: [EDGES[0]!] });
-    expect(errorsWith({}, [ok])).toEqual(['content/recipes/TEST_STRUCTURES.json → edges: It places structure S01, which these rules do not include.']);
+    expect(errorsWith(PRE_FLIP, [ok])).toEqual(['content/recipes/TEST_STRUCTURES.json → edges: It places structure S01, which these rules do not include.']);
     const cycle = recipeFile({ id: 'TEST_CYCLE', lightMode: 'cycle' });
-    expect(errorsWith({}, [cycle])).toEqual(['content/recipes/TEST_CYCLE.json → lightMode: Its light cycle needs the "climate" system (not in these rules).']);
+    expect(errorsWith(PRE_FLIP, [cycle])).toEqual(['content/recipes/TEST_CYCLE.json → lightMode: Its light cycle needs the "climate" system (not in these rules).']);
     const drying = recipeFile({ id: 'TEST_DRYING', drying: true });
-    expect(errorsWith({}, [drying])).toEqual(['content/recipes/TEST_DRYING.json → drying: Its drying needs the "climate" system (not in these rules).']);
+    expect(errorsWith(PRE_FLIP, [drying])).toEqual(['content/recipes/TEST_DRYING.json → drying: Its drying needs the "climate" system (not in these rules).']);
     expect(errorsWith({ enabledSystems: ALL_ON }, [cycle, drying])).toEqual([]);
     // Above the build phase it is not shipped: skipped.
-    expect(errorsWith({}, [{ ...cycle, data: { ...(cycle.data as object), phase: 6 } }])).toEqual([]);
+    expect(errorsWith(PRE_FLIP, [{ ...cycle, data: { ...(cycle.data as object), phase: 6 } }])).toEqual([]);
   });
 
   it('a shipped habitat is checked the same way (its file, its own grid)', () => {
     const wg = patchedRawPacks({}).habitats.find((h) => h.file.endsWith('WATER_GARDEN.json'))!;
     const cycling = { file: wg.file, data: { ...(wg.data as object), lightMode: 'cycle' } };
-    expect(errorsWith({}, [], [cycling])).toContain('content/habitats/WATER_GARDEN.json → lightMode: Its light cycle needs the "climate" system (not in these rules).');
+    expect(errorsWith(PRE_FLIP, [], [cycling])).toContain('content/habitats/WATER_GARDEN.json → lightMode: Its light cycle needs the "climate" system (not in these rules).');
     const roofOnStone = { file: wg.file, data: { ...(wg.data as object), devices: [{ structure: 'S11', at: [83, 82] }] } };
     const errs = errorsWith(WITH_ALL, [], [roofOnStone]);
     // Once on the habitat (geometry and shipped checks agree); a recipe that repaints its grid (ops) is checked too.

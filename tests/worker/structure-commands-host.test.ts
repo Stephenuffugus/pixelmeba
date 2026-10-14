@@ -9,11 +9,12 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryBackend, SaveStore } from '../../src/persistence/store';
 import { applyNow, type CommandPayload } from '../../src/sim/commands';
+import type { ContentRegistry } from '../../src/sim/content/registry';
 import { cellIndex } from '../../src/sim/grid';
 import { challengeUsed, countsAgainstBudget, toolGroupOf } from '../../src/worker/challenge';
 import { DishHost } from '../../src/worker/host';
 import type { FromWorker, ToWorker } from '../../src/worker/protocol';
-import { barrierRegistry, clearWater, registry } from '../helpers/world';
+import { barrierRegistry, clearWater, preFlipRegistry, registry } from '../helpers/world';
 
 const ISO = '2026-10-14T00:00:00.000Z';
 const NOWHERE: CommandPayload = { kind: 'deposit', materialId: 'SUGAR', points: [[0, 0]], radius: 0, dose: 0.5 };
@@ -30,7 +31,10 @@ const NEW_KINDS: CommandPayload[] = [
 
 class Driver {
   readonly out: FromWorker[] = [];
-  readonly host = new DishHost(registry(), (m) => this.out.push(m), { now: () => 0, iso: () => ISO }, new SaveStore(new MemoryBackend()));
+  readonly host: DishHost;
+  constructor(reg: ContentRegistry = registry()) {
+    this.host = new DishHost(reg, (m) => this.out.push(m), { now: () => 0, iso: () => ISO }, new SaveStore(new MemoryBackend()));
+  }
   private req = 0;
   send<T extends FromWorker['type']>(msg: ToWorker, type: T): Extract<FromWorker, { type: T }> {
     this.host.handle(msg);
@@ -54,8 +58,8 @@ class Driver {
 }
 
 describe('structure commands through the host', () => {
-  it('a shipped dish refuses every new kind "not in this dish", with no undo point and nothing changed', () => {
-    const h = new Driver();
+  it('a v1.0 (pre-flip) dish refuses every new kind "not in this dish", with no undo point and nothing changed', () => {
+    const h = new Driver(preFlipRegistry());
     h.create('d1');
     h.create('twin');
     const ack = h.command('d1', NEW_KINDS[0]!);

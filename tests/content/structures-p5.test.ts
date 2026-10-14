@@ -1,8 +1,10 @@
 /**
  * Phase 5 wave 8b (structure-content): the twelve structure records S01–S12 and the wetting brush as
- * validated content (CT §4, §5.3, §12.2, §14; SPEC §2.4, §4.8; D-0104, D-0106). Nothing is enabled in
- * the shipped manifest; enabling is tested through patched manifests (tests/helpers/registry.ts), with
- * allowUnimplemented because the systems flip (D-0104) lists them as implemented.
+ * validated content (CT §4, §5.3, §12.2, §14; SPEC §2.4, §4.8; D-0104, D-0106). Since the systems flip
+ * (D-0121) the shipped manifest enables all twelve with 'barriers', 'climate' and 'devices', and they are
+ * listed as implemented; a manifest without those systems (V1_SYSTEMS, the v1.0 systems) is built through
+ * patched manifests (tests/helpers/registry.ts). The validator's "not implemented" refusal is
+ * tests/content/structures-implemented-check.test.ts (it mocks the list).
  */
 import { describe, expect, it } from 'vitest';
 import { validateContent, type RawPacks } from '../../src/sim/content/registry';
@@ -49,8 +51,12 @@ const NUMBERS: Record<string, string[]> = {
   S12: ['0.8', '0.01', '256'],
 };
 
-const ALL_ON: SystemFlag[] = [...registry().manifest.enabledSystems, 'barriers', 'climate', 'devices'].sort() as SystemFlag[];
+const ALL_ON: SystemFlag[] = [...new Set([...registry().manifest.enabledSystems, 'barriers', 'climate', 'devices'])].sort() as SystemFlag[];
 const WITH_ALL: ManifestPatch = { enabledSystems: ALL_ON, enabledStructures: ['BEAD', ...IDS, 'STONE', 'WALL'] };
+/** The shipped systems without the three the systems flip added (a v1.0 dish's systems). */
+const V1_SYSTEMS: SystemFlag[] = registry().manifest.enabledSystems.filter((s) => s !== 'barriers' && s !== 'climate' && s !== 'devices');
+/** A manifest as before the systems flip: the v1.0 systems and the cell structures only. */
+const PRE_FLIP: ManifestPatch = { enabledSystems: V1_SYSTEMS, enabledStructures: ['BEAD', 'STONE', 'WALL'] };
 
 const errorsOf = (raw: RawPacks, allowUnimplemented = false) =>
   validateContent(raw, { allowUnimplemented })
@@ -79,7 +85,7 @@ describe('P5.2 structure records S01–S12 (CT §4)', () => {
     for (const k of DEVICE_KINDS) expect(DevicePlacementSchema.safeParse({ structure: k, at: [64, 64] }).success, k).toBe(true);
     expect(DevicePlacementSchema.safeParse({ structure: 'S08', at: [64, 64], resinSelect: [...RESIN_TARGETS] }).success).toBe(true);
     expect(DevicePlacementSchema.safeParse({ structure: 'S08', at: [64, 64], resinSelect: ['oxygen'] }).success).toBe(false);
-    expect(IMPLEMENTED_STRUCTURES).toEqual([]); // the lead adds S01–S12 at the systems flip (D-0104)
+    expect(IMPLEMENTED_STRUCTURES).toEqual(IDS); // since the systems flip (D-0121)
   });
 
   it('each rules text states its numbers and limits; the roof, the wick and the wetting brush say drying never concentrates', () => {
@@ -108,29 +114,30 @@ describe('P5.2 structure records S01–S12 (CT §4)', () => {
     expect(text).not.toMatch(/superior|advanced|perfect|adapted|immune/i);
   });
 
-  it('the shipped manifest enables none of them and validates', () => {
-    expect(reg.manifest.enabledStructures).toEqual(['BEAD', 'STONE', 'WALL']);
-    for (const s of ['barriers', 'climate', 'devices'] as const) expect(reg.manifest.enabledSystems).not.toContain(s);
+  it('since the systems flip (D-0121) the shipped manifest enables all twelve with barriers, climate and devices (and no other Phase 5 system), and validates', () => {
+    expect(reg.manifest.enabledStructures).toEqual(['BEAD', ...IDS, 'STONE', 'WALL']);
+    for (const s of ['barriers', 'climate', 'devices'] as const) expect(reg.manifest.enabledSystems).toContain(s);
+    for (const s of ['signals', 'rivalry', 'silicate', 'equipment', 'developmental'] as const) expect(reg.manifest.enabledSystems).not.toContain(s);
+    expect(reg.manifest.enabledSystems).toEqual(ALL_ON);
     expect(errorsOf(patchedRawPacks({}))).toEqual([]);
+    // The pre-flip manifest (v1.0 systems, cell structures only) still validates.
+    expect(errorsOf(patchedRawPacks(PRE_FLIP))).toEqual([]);
   });
 
-  it('enabling one needs its systems and (until the flip) allowUnimplemented; the error names both sides', () => {
-    const shipped = registry().manifest.enabledSystems;
-    expect(errorsOf(patchedRawPacks({ enabledStructures: ['BEAD', 'S01', 'STONE', 'WALL'] }), true)).toEqual([
+  it('enabling one needs its systems (no allowUnimplemented since the flip); the error names both sides', () => {
+    expect(errorsOf(patchedRawPacks({ enabledSystems: V1_SYSTEMS, enabledStructures: ['BEAD', 'S01', 'STONE', 'WALL'] }))).toEqual([
       'content/manifest.json → enabledStructures.1: enabled structure "S01" (Fine membrane) needs the "barriers" system (not in enabledSystems)',
     ]);
-    const withDevices = [...shipped, 'devices'].sort() as SystemFlag[];
-    expect(errorsOf(patchedRawPacks({ enabledSystems: withDevices, enabledStructures: ['BEAD', 'S09', 'STONE', 'WALL'] }), true)).toEqual([
+    const withDevices = [...V1_SYSTEMS, 'devices'].sort() as SystemFlag[];
+    expect(errorsOf(patchedRawPacks({ enabledSystems: withDevices, enabledStructures: ['BEAD', 'S09', 'STONE', 'WALL'] }))).toEqual([
       'content/manifest.json → enabledStructures.1: enabled structure "S09" (Heater) needs the "climate" system (not in enabledSystems)',
     ]);
     for (const id of IDS) {
       const list = ['BEAD', id, 'STONE', 'WALL'];
-      expect(errorsOf(patchedRawPacks({ enabledSystems: ALL_ON, enabledStructures: list })), id).toEqual([
-        `content/manifest.json → enabledStructures.1: "${id}" is not implemented by the simulation yet`,
-      ]);
+      expect(errorsOf(patchedRawPacks({ enabledSystems: ALL_ON, enabledStructures: list })), id).toEqual([]);
     }
-    expect(errorsOf(patchedRawPacks(WITH_ALL), true)).toEqual([]);
-    expect(() => registryWith(WITH_ALL, { allowUnimplemented: true })).not.toThrow();
+    expect(errorsOf(patchedRawPacks(WITH_ALL))).toEqual([]);
+    expect(() => registryWith(WITH_ALL)).not.toThrow();
     // Each structure's systems (PROPOSED DECISION): edges 'barriers'; furnishings and devices 'devices'; S09, S10, S12 also 'climate'.
     expect(STRUCTURE_SYSTEM_NEEDS).toEqual({
       S01: ['barriers'], S02: ['barriers'], S03: ['barriers'], S04: ['barriers'],
@@ -156,22 +163,25 @@ describe('the wetting brush appears only where the dish has climate (PROPOSED DE
   it('enabledToolIds drops WET_BRUSH without the climate system and keeps it with it', () => {
     const reg = registry();
     const m = reg.manifest;
-    expect(enabledToolIds(reg.tools, reg.toolIds, m.buildPhase, m.enabledSystems)).not.toContain('WET_BRUSH');
-    expect(enabledToolIds(reg.tools, reg.toolIds, m.buildPhase, [...m.enabledSystems, 'climate'])).toContain('WET_BRUSH');
-    expect(enabledToolIds(reg.tools, reg.toolIds, 4, [...m.enabledSystems, 'climate'])).not.toContain('WET_BRUSH');
+    // Since the systems flip (D-0121) the shipped manifest has climate, so the build lists the brush.
+    expect(enabledToolIds(reg.tools, reg.toolIds, m.buildPhase, m.enabledSystems)).toContain('WET_BRUSH');
+    expect(enabledToolIds(reg.tools, reg.toolIds, m.buildPhase, V1_SYSTEMS)).not.toContain('WET_BRUSH');
+    expect(enabledToolIds(reg.tools, reg.toolIds, m.buildPhase, [...V1_SYSTEMS, 'climate'])).toContain('WET_BRUSH');
+    expect(enabledToolIds(reg.tools, reg.toolIds, 4, m.enabledSystems)).not.toContain('WET_BRUSH');
     // Every other tool is unaffected by the systems.
-    expect(enabledToolIds(reg.tools, reg.toolIds, m.buildPhase, m.enabledSystems)).toEqual(reg.toolIds.filter((id) => id !== 'WET_BRUSH'));
+    expect(enabledToolIds(reg.tools, reg.toolIds, m.buildPhase, V1_SYSTEMS)).toEqual(reg.toolIds.filter((id) => id !== 'WET_BRUSH'));
   });
 
-  it('the Field Guide model lists it only with climate', async () => {
+  it('the Field Guide model lists it only with climate (the shipped build, since the systems flip)', async () => {
     const { guideModel } = await import('../../src/ui/views/FieldGuideData');
     const shipped = guideModel(registry());
-    expect(shipped.equipment.map((e) => e.id)).not.toContain('WET_BRUSH');
-    const climate = registryWith({ enabledSystems: [...registry().manifest.enabledSystems, 'climate'].sort() as SystemFlag[] });
-    const withClimate = guideModel(climate);
-    const entry = withClimate.equipment.find((e) => e.id === 'WET_BRUSH');
+    const entry = shipped.equipment.find((e) => e.id === 'WET_BRUSH');
     expect(entry).toMatchObject({ kind: 'tool', name: 'Wetting brush' });
-    expect(withClimate.equipment.map((e) => e.id).filter((id) => id !== 'WET_BRUSH')).toEqual(shipped.equipment.map((e) => e.id));
+    const preFlip = guideModel(registryWith(PRE_FLIP));
+    expect(preFlip.equipment.map((e) => e.id)).not.toContain('WET_BRUSH');
+    // The shipped guide also lists S01–S12 (enabled structures); apart from those and the brush, the same entries.
+    expect(shipped.equipment.map((e) => e.id).filter((id) => id !== 'WET_BRUSH' && !IDS.includes(id))).toEqual(preFlip.equipment.map((e) => e.id));
+    for (const id of IDS) expect(shipped.equipment.map((e) => e.id), id).toContain(id);
   });
 
   it('an enabled tool with blank text is refused only once the dish has climate', () => {
@@ -179,7 +189,7 @@ describe('the wetting brush appears only where the dish has climate (PROPOSED DE
     const t = raw.tools!.find((x) => x.file.endsWith('WET_BRUSH.json'))!;
     (t.data as { watchFor: string }).watchFor = ' ';
     expect(errorsOf(raw)).toContain('content/tools/WET_BRUSH.json → watchFor: enabled tool needs Field Guide text here');
-    const raw2 = patchedRawPacks({});
+    const raw2 = patchedRawPacks(PRE_FLIP);
     const t2 = raw2.tools!.find((x) => x.file.endsWith('WET_BRUSH.json'))!;
     (t2.data as { watchFor: string }).watchFor = ' ';
     expect(errorsOf(raw2)).toEqual([]);
