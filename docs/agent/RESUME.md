@@ -3,6 +3,21 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑14 08:02 UTC — WAVE 10 COMMITTED `bdf7f7c` (check 255 files / 2928 tests incl. the fence and both
+> corpora; art and contentHash unchanged; lab-tools + sample-transfer journeys 12 passed on desktop + phone-portrait; D‑0118
+> as built, D‑0119 wave 11's rulings). WAVE 11 RUNNING (run `wf_79e1123b-8bf`, session 1383cb99, launched 08:01 from
+> docs/agent/g5-wave-11.run.workflow.js.txt at `934c01f`; stage 1 structure-render-worker 4271 + e2-signals 4272, both
+> critical 'own'; stage 2 structure-ui 4273 + region-charts-gates 4274). Backups every 30 min → `wip/g5-wave-11` (pid
+> tmp/lead/backup-11.pid = the loop itself). START HERE.**
+> - If the session died mid-11: if `git status` is clean, restore the tree from `wip/g5-wave-11`; read
+>   docs/reports/reviews/g5-wave-11/ and the run journal
+>   ~/.claude/projects/-workspaces-pixelmeba/1383cb99-e9f3-46ff-8724-5fe4b53c8734/subagents/workflows/wf_79e1123b-8bf/journal.jsonl;
+>   rerun only unfinished tasks (A.only + finish notes), or resumeFromRunId in the same session.
+> - After 11: LEAD AFTER WAVE 11 in docs/agent/g5-wave-11.tasks.js.txt (append RIVALRY and SIGNAL_GLOW, E02 only if no
+>   test pins IMPLEMENTED_MODULES, move validator.test.ts's unimplemented subject to P06's RADIUS_CAPTURE), then THE
+>   SYSTEMS FLIP there (item 2a: the import refuses systems, structures and native abilities the build lacks), then the
+>   wave 12 task writer (e2-light-algae, e3-predation, structures-art-audio; g5-plan wave 12 row).
+
 > **Update 2026‑10‑14 01:22 UTC — WAVE 10 RUNNING (run `wf_73d02c11-690`, session 1383cb99, launched 01:17 from
 > docs/agent/g5-wave-10.run.workflow.js.txt; stage 1 barrier-transport 4271 + structure-commands 4272 on task). Backups
 > every 30 min → `wip/g5-wave-10` (pid tmp/lead/backup-10.pid). WAVE 11 TASK WRITER RUNNING (run `wf_eb1d828b-f0f`; writes
