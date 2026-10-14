@@ -25,7 +25,8 @@
  * Small organisms and A05 is Medium; it includes this tick's stage 1 inoculations, SPEC §3.2). Outside
  * stage 2 it reads the current biomass, so after a reload the displayed canopy may differ until the next
  * stage 2. The state hash cannot: no simulation reader of derived.light runs before stage 2 (intake is
- * stage 6, E07 light seeking stage 4, dormancy stage 7; stage 1 reads no light).
+ * stage 6, E07 light seeking and A04's mode update stage 4 (mixotrophy.ts updateMode), dormancy stage 7,
+ * a newborn A04's mode stage 9 (births.ts commitDivision); stage 1 reads no light).
  *
  * Nothing here draws randomness, iterates a Map/Set/object key order, or moves material: heat and
  * moisture are indices, so no ledger line changes and no field is read or written (drying never

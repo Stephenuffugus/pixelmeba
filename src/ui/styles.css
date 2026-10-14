@@ -1431,6 +1431,30 @@ html[data-text-scale='2'] .lab-cat span {
   border-radius: 2px 10px;
   background: linear-gradient(135deg, transparent 0 46%, #f4efdc 46% 54%, transparent 54%), linear-gradient(135deg, #c9bd93 0 50%, #d99ba6 50%);
 }
+/* P5.7 (wave 12 structures-art-audio): the Phase 5 materials, each a colour plus a pattern (never a flat fill).
+   They show in the Lab tray once the organism flip enables them. */
+/* M02 silicate: pale glassy facets with a glint. */
+.sw-m02 {
+  border-radius: 3px;
+  background: linear-gradient(135deg, transparent 0 44%, #ffffff 44% 52%, transparent 52%), conic-gradient(from 45deg, #dbeef2 0 25%, #9fc6d0 0 50%, #eef8fa 0 75%, #b5d5dc 0);
+}
+/* M06 Lantern signal: a lime centre on B09's blue-green, with a ring. */
+.sw-m06 {
+  background: radial-gradient(circle at 50% 50%, #c6f04d 0 26%, #2b867b 28% 36%, transparent 38%), repeating-radial-gradient(circle at 50% 50%, #3fb3a6 0 3px, #a7e3da 3px 5px);
+}
+/* M07 signal quencher: the Lantern swatch with a dark bar across it. */
+.sw-m07 {
+  background: linear-gradient(135deg, transparent 0 40%, #1f2a30 40% 60%, transparent 60%), radial-gradient(circle at 50% 50%, #c6f04d 0 26%, #2b867b 28% 36%, transparent 38%), repeating-radial-gradient(circle at 50% 50%, #3fb3a6 0 3px, #a7e3da 3px 5px);
+}
+/* M08 rivalry extract: B13's brick hatching. */
+.sw-m08 {
+  border-radius: 4px;
+  background: repeating-linear-gradient(0deg, #e4b7af 0 1px, transparent 1px 6px), repeating-linear-gradient(90deg, #a8412f 0 5px, #e4b7af 5px 6px);
+}
+/* M12 shell grit: gold specks on cream. */
+.sw-m12 {
+  background: radial-gradient(circle at 30% 35%, #a8862c 0 12%, transparent 14%), radial-gradient(circle at 68% 30%, #e0b84a 0 12%, transparent 14%), radial-gradient(circle at 55% 70%, #a8862c 0 12%, transparent 14%), #f7f1d9;
+}
 .lab-options {
   display: flex;
   flex-wrap: wrap;
@@ -3929,6 +3953,16 @@ html[data-text-scale='2'] .tab-context {
 }
 .gate-table thead th {
   background: var(--surface-2);
+}
+/* Wave 12: the gate-class pip beside each row's words (gateBadges.ts shapes; text colour, aria-hidden). */
+.gate-pip {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: var(--text);
+  flex: none;
 }
 .device-targets {
   border: 1px solid var(--line);

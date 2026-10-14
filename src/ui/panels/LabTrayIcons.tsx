@@ -94,18 +94,19 @@ export const IconSnapshot = () =>
   ]);
 
 // ---- P5.1/P5.2 (wave 11): the Build group and the wetting brush (UX §6.4: 24 px, currentColor; each
-// reads as its CT §4 object, and every button also carries its content name).
+// reads as its CT §4 object, and every button also carries its content name). Wave 12 (structures-art-audio)
+// polished the membrane (a line of dots), the small gate (a slotted bar) and the cooler (fins on a base) so
+// each of the twelve is a distinct stroke drawing (tests/ui/structure-icons.test.ts).
 
-/** S01 fine membrane: a dotted line on one edge between two cell outlines. */
+/** S01 fine membrane: a line of dots on the edge between two cell outlines. */
 export const IconMembrane = () =>
   svg([
-    <rect x="3" y="6" width="8" height="12" rx="1" />,
-    <rect x="13" y="6" width="8" height="12" rx="1" />,
-    <path d="M12 4v16" stroke-dasharray="1.5 2.5" />,
+    <path d="M9 6H4v12h5M15 6h5v12h-5" />,
+    <path d="M12 4v.01M12 8v.01M12 12v.01M12 16v.01M12 20v.01" stroke-width="2.5" />,
   ]);
-/** S02 small gate: an edge with slots. */
+/** S02 small gate: a bar on the edge with three slots through it. */
 export const IconSmallGate = () =>
-  svg([<path d="M12 3v4M12 10v4M12 17v4" />, <path d="M8 8.5h8M8 15.5h8" />]);
+  svg([<rect x="9" y="3" width="6" height="18" rx="1.5" />, <path d="M12 6.5v2.5M12 11v2.5M12 15.5v2.5" />]);
 /** S03 shutter gate: a hinged tab across an edge. */
 export const IconShutter = () =>
   svg([<path d="M12 3v18" />, <path d="M12 7l6 3v6l-6 2" />, <circle cx="12" cy="7" r="1.2" fill="currentColor" />]);
@@ -132,9 +133,9 @@ export const IconResin = () =>
 /** S09 heater: a coil. */
 export const IconHeater = () =>
   svg([<path d="M5 20V9M19 20V9" />, <path d="M5 9c2-3 4 3 7 0s5 3 7 0" />, <path d="M5 14c2-3 4 3 7 0s5 3 7 0" />]);
-/** S10 cooler: fins. */
+/** S10 cooler: cooling fins standing on a base. */
 export const IconCooler = () =>
-  svg([<rect x="4" y="4" width="16" height="16" rx="2" />, <path d="M8 4v16M12 4v16M16 4v16" />]);
+  svg([<path d="M3 20h18" />, <path d="M6 20V9M10 20V5M14 20V5M18 20V9" />, <path d="M4 16h16" />]);
 /** S11 shade roof: a roof outline over a cell. */
 export const IconRoof = () => svg([<path d="M3 11 12 4l9 7" />, <rect x="6" y="11" width="12" height="9" stroke-dasharray="2 2" />]);
 /** S12 moisture wick: a strip with a drop. */

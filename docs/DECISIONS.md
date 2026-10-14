@@ -1894,3 +1894,77 @@ Decision:
 - **Carried to wave 13 (org-ui):** snapshot.ts sugarSourcesOf excludes A04; the inspector's mode and handling lines; the run file's STATE overrides the runner's PRE line about implemented.ts, as in wave 10.
 Reason: each ruling keeps a reload, 4× and the uninterrupted run equal (the mode is set where light is defined), keeps every v1.0 and v1.1 world byte-identical while nothing is enabled, and keeps what the inspector and the feed say equal to the state the simulation used.
 Owner review: no.
+
+## D-0123 · 2026-10-14 · Phase 5 wave 12 · A03–A05, P06/P07/P09/P10 handling, structures art and audio as built
+Context: wave 12 (run wf_8d1fe37e-485; task file docs/agent/g5-wave-12.tasks.js.txt; D-0122) built three disjoint tasks;
+two rules verifiers and two saves verifiers found no BLOCKER or MAJOR and 7 MINOR (docs/reports/reviews/g5-wave-12/).
+Nothing is enabled (D-0104); no schema, protocol or content change; contentHash 84c41636… unchanged; the fence unchanged.
+Decision (the builders' PROPOSED DECISIONs, accepted as built; ARCH §5, §9, §10.3, §11.3, §13 "As built, Phase 5 wave 12"):
+- **A04 modes.** Thresholds inclusive and exact on the stored effective light (Photo ≥ 0.35, Sugar ≤ 0.25). An
+  introduced A04 gets its first mode at its first stage 4, not in stage 1 (argued against the draft's commands.ts
+  inoculation: stage 1 reads no light and a reload recomputes light from the current canopy; the commands.ts mutant fails
+  the initialization proof), so mode 0 is a legal tick-0 state the import accepts. A first mode (introduction or birth)
+  is a state, not a transition: no 'modeSwitch'. A mixotroph with no binding limit reports MODE_PHOTO / MODE_SUGAR by the
+  route it fed on (limitValue = light); any binding limit keeps priority (SPEC §12.2).
+- **Predation.** A P06 captures without FLAG.attached (radius capture is the species' rule, CT §6.2). At most one attempt
+  event per predator per tick (a break ends its stage 5 turn). The start tick counts as the first contact tick (10, 40,
+  25 and 14 ticks for 1 s, 4 s, c 0.5, c 0.125). An attempt that completes but does not capture ends 'taken' with no
+  progress and no cooldown. A continuing attempt checks contact at the predator's own reach (0.5 for P10). A handler that
+  left Active ends its attempt ('rest') at its next stage 5 (unreachable today: P10 has no dormancy; a dormancy.ts hook
+  comes with that file's owner if a handler ever gains dormancy). The import refuses negative handlingProgress. P09's
+  detritus route ignores genome weights, as E08's does ("meal, else detritus").
+- **Structures art and audio.** gate_click once per gate-sheet open (keyed on the open event) and once per accepted
+  shutter toggle, never from the tracer; run badges from 12 px per cell (BADGE_CLOSE_ZOOM, between the neighborhood and
+  close presets), the selected gate's badge at every zoom; edge glyph marks scale with the zoom (close-preset counts
+  4 / 2); an S04's Dissolved, Viral and Small pips carry a one-way chevron while the words keep "0 %" / "Blocked" (D-0106);
+  region pins move to wave 14's p5.4b (no habitat region exists before p5.4a: every visible feature maps to real state).
+  The contrast audit (which exited 1 at 0316ffc with 44 unexplained Phase 5 rows) justifies them with the Phase 3
+  pattern (identity tones as Y01, V02 as V01, warmth as pH, F04 on sediment a real gap with a proposal).
+Lead integration: IMPLEMENTED_NATIVE_ABILITIES gains DETRITUS_FALLBACK, HANDLING, LOW_LIGHT_CURVE, MIXOTROPHY and
+RADIUS_CAPTURE (22, sorted); import-implemented.test's unimplemented-ability subject moves from P10's HANDLING to F03's
+TRAP (validator.test was already on TRAP since wave 11); the builders' vi.mock appends stay as harmless supersets.
+MINOR rulings:
+1. **'modeSwitch' burst** (every A04 under uniform light switches on one tick; 600 switches overflow EVENT_RING_SIZE 500
+   and evict earlier unread events): latent until A04 is enabled. The lead fixes it before the ORGANISM FLIP, with its own
+   D-number (coalesce per tick and species, or a per-tick cap with a count), and re-runs mode-saves and algae-determinism.
+2. **actionLabel** says "Eating" for a Photo-mode A04 (strings/modules.ts checks metabolism === 'photosynthesis'): wave 13
+   org-ui, with the mode line.
+3. **S01 / S02 glyphs at the phone whole-dish zoom** (below about 3 px per cell the S02 slot is no longer than the S01
+   dot; MIN_MARK_PX's header claim fails below 2.75 px per cell): P5.8 polish (wave 15), with a test sweep below 3 px.
+4. **Shutter double cue**: fixed at integration (sendLabCommand plays no 'drop' under an accepted shutter toggle;
+   gate-click.test asserts it).
+5. **Contrast justifications**: kept (the Phase 3 prefix pattern); P5.8 gives F04 the proposed sporeveilRing outline and
+   revisits identity tones at aggregation zoom (the Y01 proposal: draw them with the ink outline).
+6. **metabolism 'mixotroph' ⇔ MIXOTROPHY**: the simulation keys on the metabolism, the import on the ability; a validator
+   rule tying them lands before the ORGANISM FLIP (lead).
+7. **handling.ts header** overclaimed the import: reworded (the import refuses part of the unreachable states; the rest
+   load and run deterministically). No new refusal.
+Notes carried: the organism flip adds M02, M06, M07, M08 and M12 to strings/lab.ts FOOD_MATERIALS / CHEMISTRY_MATERIALS
+(else the new swatches never show); snapshot.ts sugarSourcesOf excludes A04 (wave 13 org-ui); cue3Of's inline 0.1 can
+read JACKET_COVERAGE_FRACTION (wave 13 e3-jacket); the open S03's Fixed pip reads 'pass' (P5.8: draw Fixed as not
+applicable); H1 and H3 read handlingNeed for every predator (hash-neutral, always 0 without HANDLING; accepted);
+climate.ts's light-reader list gains stage 4 updateMode and stage 9 commitDivision.
+Evidence: verifiers — the new and changed files (e2 9 files/106 tests, e3 3 files/26 tests plus 11 files/93 and 3
+files/18, art-audio 7 files/46 and the named suites 43 files/819); the fence 10 files/77 tests unchanged; reloads at every
+tick of a mixed predation dish (400 ticks, hash equal) and 457 reloads of an A04/A05 canopy dish (equal stateHash and full
+digest at tick 3,000); atlas 1678 frames same / 0 differing; tsc and eslint 0. Lead — import-implemented and registry
+tests 2 files/24, gate-click 1 file/9; the full npm run check before the commit.
+Reason: each ruling keeps a reload, 4× and the uninterrupted run equal and every v1.0 world byte-identical while nothing
+is enabled; the latent items are fixed before the flip that would expose them.
+Owner review: no.
+
+## D-0124 · 2026-10-14 · Phase 5 wave 13 · Wave 13 scope and the task writer's rulings (traps, the mineral jacket, organism marks and the Phase 5 relationship matrix)
+Context: the wave 13 task writer (run wf_ee9ffeed-6c9; docs/agent/g5-wave-13.tasks.js.txt; docs/reports/reviews/g5-wave-13/tasks-writer.md), lead-reviewed against SPEC §7.17, §9 (E11, §9.19), §10.5, §12.3, CT §3.3, §7.1, D02 392 and the wave 12 contract. Every PROPOSED DECISION of the writer (1–23) is accepted; the points below are the ones the canonical docs leave open or where an earlier ruling moves. A builder may still report evidence against a ruling.
+Decision:
+- **Scope.** Two stages: stage 1 e3-traps (port 4271) and e3-jacket (4272), each `critical: 'own'`; stage 2 org-ui (4273) and relmatrix (4274), not critical (no saved or hashed state). `A.verifyGroups` = [['e3-traps', 'e3-jacket'], ['org-ui', 'relmatrix']]: rules verifiers 4390 and 4391, saves verifiers 4396 (e3-traps) and 4397 (e3-jacket), re-verify 4394; 4398 stays free; never 4290.
+- **File ownership** follows the writer's decision 1, against the lead's first call: e3-jacket owns actions.ts, structures.ts (stageStructures), movement.ts, births.ts and phenotype.ts and writes the trap hooks T1–T5 that call the traps.ts API e3-traps creates first (item 0); e3-traps owns contacts.ts, intake.ts (drain calls, broth skip), maintenance.ts, ledger.ts, sample.ts, sampleSlot.ts, phase5State.ts, events.ts and constants.ts. Every cross-task line points one way, into traps.ts.
+- **The trap and a sample (SPEC §10.5 supersedes D-0106's trap clause).** SPEC §10.5 lists "trap + held prey" as one ownership unit, so the trap and its held P04 travel through Take, Transfer, Cancel and Discard together; D-0106's "its held P04 is released alive at commit" is withdrawn (it was ruled as if the docs were silent). Both pairs join sample.ts REF_COLUMNS and HELD_REFS, not LINK_REFS; the "held sample holds a trap" refusal becomes the closure (D-0108 carry-over).
+- **Trap rules.** The prey is `TRAP_TARGETS = ['P04']` by ancestor id in traps.ts (the RIVAL_TARGETS precedent; F03's content prey lists stay empty), which is also the import's "trap's prey data". No "armed" column: the state is derived from the existing columns as cue3Of does; each F03 builds one trap, once; arm thresholds inclusive; the 8 E arm cost and E11's 10 E per mineral are booked under 'construction' (no new ledger key). Capture is same-cell: the nearest Active, not-held target, ties to the lower birthId; competing traps resolve by det priority with contact KIND 5, after predation claims and before parasite attachment. The drain copies the X02 host-drain rules (D02 392); "draining" means holding a valid target at the start of stage 6; the broth skip is gated per world. Hold and cooldown advance in the stage 8 trap step with a 1e-9 tolerance (release at stage 8 of the 80th held tick; the next capture can come 301 ticks after release). Every end of a hold (timer, target death, removal) starts the 30 s cooldown. Drain death: the P04 strictly below 0.25 × its starting body, checked in stage 7 after the parasite drain death. "Caught in a trap." is derived by the inspector, never written to the reason column. A held organism does not move (T3, right after the life-state override) and cannot divide (T1, the existing "can't split" blocker; org-ui words it "Can't split while caught in a trap."). consumePrey releases a trap pair defensively. Events 'trapArmed', 'trapHold' and 'trapRelease' stay in the event ring.
+- **Import.** New refusals: a held organism that is not the trap's prey, trap state without a reserve, an invalid hold time, an invalid wait; the "reserve not counted yet" refusal is dropped (trapReserveC/N enter computeTotals and sampleTotals with a +0 term). A held organism outside its trap's cell is not refused (a transfer can round a position across a cell edge, the D-0118 channel finding). phase5-import.test.ts's two now-unreachable accepted states are re-pinned. The entities.ts comment on the reserve is corrected: it is 0.20 C taken from the F03's own body (SPEC §7.17, D02 392).
+- **E11 (the mineral jacket).** Builds at E ≥ 15, inclusive; the shared mineral pass lives in jacket.ts from one silicate snapshot and pins a scaled cell to exactly 0 silicate, as the film pass does; the mineral request reserves energy only; stage 8 action id 11. Coverage is computed in one place, wave 12's jacketCoverage, for speed, handling and the on-screen band (org-ui unifies the snapshot's body-0 case on it); a content check pins E11.json's numbers to wave 12's constants. The jacket slows only the per-tick step, only when a jacket exists and the organism carries E11; movement decisions are unchanged. The SPEC §9.19 jacket-to-grit step runs in the birth reconciliation loop after placement; the grit lands in the daughter's own cell.
+- **org-ui.** Two cue bits carry the handling-arc quarter (D-0112 needs progress over need): additions inside E_CUE3, no stride or protocol version change (worker and UI ship together; the protocol 2 golden is unaffected). New inspector fields are optional. The trap loop's "closing" frame shows for 1 s after a committed capture event; reduced motion shows "holding" only. Mark priority: live state (held, handling, trap), then glow, then mode and jacket. One name per field across screens ("rivalry chemical", "glow signal"). The experiments secretion share counts starch producers by producer bit. Lab wording for HELD_IN_TRAP, CAPTURED_HANDLING and PRED_HANDLING_IN_PROGRESS is proposed by org-ui (UX §5.2 has no rows; owner review at the gate). V02's glyph polish moves to P5.8. Trap and jacket journey cases are written skipped until TRAP is appended (integration) and E11 is implemented (the organism flip).
+- **relmatrix** adds a phase5 registry and a `--registry shipped|phase5` flag with a pre-flip report; the shipped-registry rows stay unchanged until the organism flip regenerates them.
+- **The validator subject.** After this wave every native ability is implemented, so tests/content/validator.test.ts's "unimplemented ability" case mocks the implemented list without TRAP (a made-up id is rejected by the schema first).
+- **Flip risk recorded (writer's contradiction 13):** enabling signals, rivalry and silicate at the organism flip allocates five zero fields in every new dish and stage 2 diffuses and decays three more fields per tick; trajectory digests skip zero fields, so the fence will not show it. The organism flip measures FIRST_DISH's tick cost before and after (docs/reports/perf-g5.md).
+Reason: the canonical ownership rule (SPEC §10.5) keeps a trap and its catch accountable as one unit; every other ruling keeps saves loadable at every state transition, keeps v1.0 and v1.1 worlds byte-identical while nothing is enabled, and keeps what the screen shows tied to committed state.
+Owner review: no (the HELD_IN_TRAP / CAPTURED_HANDLING wording is listed for the owner at the gate).

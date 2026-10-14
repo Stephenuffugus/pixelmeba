@@ -213,3 +213,35 @@ drying on. Each process runs a, b, a, b.
   structures (66–83 %). Nothing was optimised for the flip, and no tick was skipped or timestep changed.
 - A new dish with no structures records the systems but allocates nothing (climate arrays null, stores empty): its
   cost is the v1.0 cost, and the fence passes unchanged.
+
+## Wave 12: A04 modes and Phase 5 predation (2026-10-14)
+
+Indicative, from the builders' probes on the shared 2-vCPU codespace while other agents and a fence run were using it
+(so the numbers are inflated). The lead's quiet-machine run is still to do and is recorded here when it runs.
+
+### Stage 4 with mixotrophs (e2-light-algae, tmp/e2-light-algae/timing.ts)
+
+300 placed, mean and p95 over 300 ticks; half the dish lit 0.2 and half 0.6, sugar 0.5.
+
+| Dish | Stage 4 mean | Stage 4 p95 | Stage 6 mean | Stage 6 p95 |
+|---|---|---|---|---|
+| A01 ×300, run 1 | 0.097 ms | 0.096 ms | 0.237 ms | 1.048 ms |
+| A01 ×300, run 2 | 0.093 ms | 0.097 ms | 0.134 ms | 0.165 ms |
+| A04 ×300 (423 alive), run 1 | 0.712 ms | 2.494 ms | 0.323 ms | 1.356 ms |
+| A04 ×300 (423 alive), run 2 | 0.539 ms | 0.712 ms | 0.176 ms | 0.197 ms |
+
+A04's stage 4 cost is mostly its ordinary swimming decisions (A01 is stationary); the mode update itself is one
+comparison per organism.
+
+### Stage 5 with radius capture and handling (e3-predation, tmp/e3-predation/stage5-timing.ts)
+
+Stage 5 alone (after stage 4 to after stage 5), 20 warm-up ticks, then 300 ticks.
+
+| Dish | Mean | p95 | Activity in 300 ticks |
+|---|---|---|---|
+| 60 P06 among 400 B01 | 0.258 ms | 2.10 ms | 54 captures |
+| 20 P10 among 80 prey (P01, P02, P05, P07) and 200 B01 | 0.195 ms | 0.331 ms | 204 captures, 104 starts, 74 breaks |
+| v1.0 predator dish: 60 P01/P02 among 400 B01 (shipped registry) | 0.204 ms | 1.12 ms | 177 captures |
+
+A world without HANDLING or RADIUS_CAPTURE runs the v1.0 claim loop (the tables are null): no new column read and no
+added float operation in stage 5.

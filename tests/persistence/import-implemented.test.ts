@@ -122,11 +122,13 @@ describe('the import refuses a dish naming rules this build does not implement (
     await refusedByHost(text, message);
   });
 
-  it('a dish recording P10 (HANDLING, not implemented until wave 13) is refused naming the species and the ability', async () => {
-    expect(IMPLEMENTED_NATIVE_ABILITIES).not.toContain('HANDLING');
-    const reg = registryWith({ enabledSpecies: [...REG.manifest.enabledSpecies, 'P10'].sort() }, { allowUnimplemented: true });
+  // The subject moved from P10's HANDLING (implemented at the wave 12 integration) to F03's TRAP (wave 13); it moves
+  // again when TRAP is implemented.
+  it('a dish recording F03 (TRAP, not implemented until wave 13) is refused naming the species and the ability', async () => {
+    expect(IMPLEMENTED_NATIVE_ABILITIES).not.toContain('TRAP');
+    const reg = registryWith({ enabledSpecies: [...REG.manifest.enabledSpecies, 'F03'].sort() }, { allowUnimplemented: true });
     const text = await crafted(() => undefined, clearWater({}, reg));
-    const message = `This dish's P10 uses the native ability "HANDLING", ${CANNOT}`;
+    const message = `This dish's F03 uses the native ability "TRAP", ${CANNOT}`;
     expect(await refusal(text)).toMatchObject({ kind: 'content', message });
     await refusedByHost(text, message);
   });

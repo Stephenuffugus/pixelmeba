@@ -78,7 +78,8 @@ import { BudgetLadder, budgetFor, GHOSTS_MAX, refreshDue, STAINS_MAX, type Budge
 import { SUBSTRATE_CODES, type LabBrushRule, type LifeBrush, type SubstrateName } from '@sim/grid';
 import type { EdgeKind } from '@sim/barriers';
 import type { DeviceKind } from '@sim/devices';
-import { deviceSprites, edgeGlyphs, edgeSegment, EDGE_GLYPH_COLORS } from './structureLayer';
+import { deviceSprites, edgeDetail, edgeGlyphs, edgeSegment, EDGE_GLYPH_COLORS } from './structureLayer';
+import { BADGE_COLORS, BADGE_PX, badgeBox, badgeZoomBand, pipPointsBack, worldBadges, type PipState } from './gateBadges';
 import {
   deviceMovePreview,
   devicePreview,
@@ -284,6 +285,12 @@ export class DishRenderer {
   private edgesZoom = Number.NaN;
   /** Resin saturations the device tiles were last drawn with (redrawn only when they change). */
   private lastResinKey = '';
+  /** Wave 12: gate-class badges (gateBadges.ts), above the device tiles and below the gate tracer (UX §7.3). */
+  private readonly badgesG = new Graphics();
+  /** The gate whose sheet is open (barriers.ts edgeKey), or null; its badge shows at every zoom. */
+  private selectedGateKey: number | null = null;
+  /** Zoom the badges were last drawn at; NaN = nothing drawn. */
+  private badgesZoom = Number.NaN;
 
   private cur: SnapshotMsg | null = null;
   private curAt = 0;
@@ -427,6 +434,7 @@ export class DishRenderer {
       this.dishSprite,
       this.structuresG,
       this.deviceParticles,
+      this.badgesG,
       this.filmParticles,
       this.depositSprite,
       this.objectParticles,
@@ -602,6 +610,62 @@ export class DishRenderer {
     // Phase 5: edge glyphs and device tiles, redrawn only when the geometry changes (never per tick).
     this.drawEdges();
     this.drawDevices(s.resins);
+    this.drawBadges();
+  }
+
+  /**
+   * Wave 12 (gateBadges.ts): the gate whose sheet is open (barriers.ts edgeKey(cell, dir)), or null on close.
+   * Its badge shows at every zoom, running or paused (the tracer preview stays paused-only). UI state only.
+   */
+  setSelectedGate(key: number | null): void {
+    if (key === this.selectedGateKey) return;
+    this.selectedGateKey = key;
+    this.drawBadges();
+  }
+
+  /**
+   * Gate-class badges: one per straight run of same-code edges at the close preset, and the selected gate's at
+   * every zoom (gateBadges.ts worldBadges). Static (nothing animates). Drawn on a geometry or selection change,
+   * and when the zoom changes band or moves by more than a quarter (frame()), never per tick.
+   */
+  private drawBadges(): void {
+    const g = this.badgesG;
+    g.clear();
+    const z = Math.max(1e-6, this.camera.zoom);
+    const badges = worldBadges(this.geometry?.edges, z, this.selectedGateKey);
+    // Track the zoom whenever the dish has barriers (so zooming into the close band shows the run badges).
+    this.badgesZoom = badges.length > 0 || (this.geometry?.edges?.list.length ?? 0) > 0 ? z : Number.NaN;
+    const px = 1 / z;
+    for (const b of badges) {
+      const box = badgeBox(b, z);
+      g.roundRect(box.x, box.y, box.w, box.h, 2 * px)
+        .fill({ color: BADGE_COLORS.plate, alpha: 0.94 })
+        .stroke({ width: (b.selected ? 2 : 1) * px, color: BADGE_COLORS.pip, alpha: 1 });
+      const cy = box.y + box.h / 2;
+      const r = BADGE_PX.pipR * px;
+      b.pips.forEach((p, i) => this.drawPip(g, p.state, box.x + (BADGE_PX.pad + BADGE_PX.pitch * (i + 0.5)) * px, cy, r, px, b.dir, pipPointsBack(b.code)));
+    }
+  }
+
+  /** One pip by shape: filled = pass, half-filled = partial, hollow = blocked, a chevron (in the flow direction) = one way. */
+  private drawPip(g: Graphics, state: PipState, x: number, y: number, r: number, px: number, dir: 'R' | 'D', back: boolean): void {
+    const color = BADGE_COLORS.pip;
+    const line = { width: 1.25 * px, color, alpha: 1 };
+    if (state === 'pass') g.circle(x, y, r).fill({ color, alpha: 1 });
+    else if (state === 'blocked') g.circle(x, y, r - 0.6 * px).stroke(line);
+    else if (state === 'partial') {
+      g.circle(x, y, r - 0.6 * px).stroke(line);
+      g.moveTo(x, y - r).arc(x, y, r, -Math.PI / 2, Math.PI / 2, true).closePath().fill({ color, alpha: 1 });
+    } else {
+      // Chevron toward the flow: +x for an 'R' edge (−x with EDGE_FLOW_BACK), +y for a 'D' edge (−y back).
+      const s = back ? -1 : 1;
+      const [ux, uy] = dir === 'R' ? [s, 0] : [0, s];
+      const [vx, vy] = [-uy, ux];
+      g.moveTo(x - ux * r * 0.6 + vx * r, y - uy * r * 0.6 + vy * r)
+        .lineTo(x + ux * r * 0.8, y + uy * r * 0.8)
+        .lineTo(x - ux * r * 0.6 - vx * r, y - uy * r * 0.6 - vy * r)
+        .stroke({ width: 1.75 * px, color, alpha: 1, cap: 'round', join: 'round' });
+    }
   }
 
   /**
@@ -612,16 +676,17 @@ export class DishRenderer {
   private drawEdges(): void {
     const g = this.structuresG;
     g.clear();
-    const glyphs = edgeGlyphs(this.geometry?.edges);
     const z = this.camera.zoom;
+    // Wave 12: the glyph's marks follow the zoom's detail band, and each keeps its own minimum screen width.
+    const glyphs = edgeGlyphs(this.geometry?.edges, z);
     this.edgesZoom = glyphs.length > 0 ? z : Number.NaN;
     if (glyphs.length === 0) return;
-    const minW = 1.5 / Math.max(1e-6, z);
+    const px = 1 / Math.max(1e-6, z);
     for (const pass of [0, 1] as const) {
       for (const { glyph } of glyphs) {
         const sg = glyph.segments;
         for (let k = 0; k < sg.length; k += 4) g.moveTo(sg[k]!, sg[k + 1]!).lineTo(sg[k + 2]!, sg[k + 3]!);
-        const w = Math.max(glyph.width, minW);
+        const w = Math.max(glyph.width, glyph.minPx * px);
         if (pass === 0) g.stroke({ width: w * 2, color: EDGE_GLYPH_COLORS.halo, alpha: 0.55, cap: 'round' });
         else g.stroke({ width: w, color: glyph.color, alpha: 1, cap: 'butt' });
       }
@@ -1005,7 +1070,9 @@ export class DishRenderer {
     }
     this.drawObjects(s, now);
     // Phase 5: edge glyph widths follow big zoom changes (a redraw, not a per-tick one); the paused-only gate tracer.
-    if (!Number.isNaN(this.edgesZoom) && Math.abs(cam.zoom / this.edgesZoom - 1) > 0.25) this.drawEdges();
+    if (!Number.isNaN(this.edgesZoom) && (Math.abs(cam.zoom / this.edgesZoom - 1) > 0.25 || edgeDetail(cam.zoom) !== edgeDetail(this.edgesZoom))) this.drawEdges();
+    // Wave 12: badges keep their screen size and show runs only at the close band (a redraw on a band change or a big zoom move).
+    if (!Number.isNaN(this.badgesZoom) && (Math.abs(cam.zoom / this.badgesZoom - 1) > 0.25 || badgeZoomBand(cam.zoom) !== badgeZoomBand(this.badgesZoom))) this.drawBadges();
     this.drawGateTracer(s, now);
 
     const alpha = Math.min(1, (now - this.curAt) / this.interval);

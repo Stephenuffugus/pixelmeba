@@ -51,6 +51,11 @@ export interface SpeciesRT {
    * gains 0.25 × the local RIVAL (suitability.ts inhibitorExposure; Phase 5 wave 11).
    */
   readonly rivalTarget: boolean;
+  /**
+   * A03's LOW_LIGHT_CURVE (Phase 5 wave 12): its photosynthetic light response is min(1, light / 0.30)
+   * instead of linear (SPEC §6.5 route 2; mixotrophy.ts lowLightResponse; intake.ts).
+   */
+  readonly lowLight: boolean;
 }
 
 export function habitatBit(sub: number): number {
@@ -99,6 +104,7 @@ export function buildSpeciesTable(defs: readonly Species[]): SpeciesRT[] {
       inhibitorField,
       fungal: def.category === 'fungus',
       rivalTarget: (RIVAL_TARGETS as readonly string[]).includes(def.id),
+      lowLight: abilities.includes('LOW_LIGHT_CURVE'),
     };
   });
 }

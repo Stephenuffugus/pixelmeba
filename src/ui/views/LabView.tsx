@@ -383,7 +383,10 @@ export async function sendLabCommand(payload: CommandPayload, context?: Structur
     context ?? (payload.kind === 'removeStructures' ? { kinds: kindsOf(payload.ids) } : {});
   const res = await getClient().command(info.dishId, `lab-${++commandCounter}`, payload, true);
   reportDishCommand(info.dishId, payload, res); // the onDishCommand listeners (narration's "Add food" for a food object), as sendCommand does
-  if (res && dishInfo.value?.dishId === info.dishId) placementCue(res.accepted); // P3.10: drop / placement_error (+ haptics)
+  // P3.10: drop / placement_error (+ haptics). An accepted shutter Open / Close sounds only its soft gate_click
+  // (GateSheet.tsx shutterCue): a drop under it would mask it (wave 12 lead fix).
+  const shutterToggle = payload.kind === 'setDevice' && ctx.kinds?.includes('S03') === true;
+  if (res && dishInfo.value?.dishId === info.dishId && !(shutterToggle && res.accepted > 0)) placementCue(res.accepted);
   if (res && dishInfo.value?.dishId === info.dishId && payload.kind === 'cleanWater') {
     showToast(
       res.accepted > 0

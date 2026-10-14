@@ -16,6 +16,8 @@
  *                    one click per 5 s; bacterial and viral births never sound, UX §8.1)
  *   card_open        the experiment card page opening
  *   wake             the resting mark leaving the organism as it becomes active again
+ *   gate_click       the gate inspector sheet opening (its permission table and pips), and an accepted
+ *                    shutter Open / Close: the toast, the table's rows and pips and the button's words changing
  *
  * Nothing sounds before the first user gesture (autoplay): initAudio() runs from that gesture
  * (src/ui/main.tsx); until then every cue is silently skipped. World cues pass the rate limiter.

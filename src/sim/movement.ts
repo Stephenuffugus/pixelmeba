@@ -46,6 +46,7 @@ import { isAnchored } from './anchor';
 import { adhesionLinked } from './adhesion';
 import { brightEnough, lightScore } from './lightSeeker';
 import { withDebrisScore } from './debrisFeeder';
+import { hasMixotroph, MODE_PHOTO, updateMode } from './mixotrophy';
 import { classOf, edgeCodeBetween, edgePermits } from './barriers';
 import { cornerPermits, edgeCodesOf, markRefusedEdges, segmentPermitted, shelterRefuses, type PassageClass } from './edgePassage';
 import type { World } from './world';
@@ -297,8 +298,12 @@ function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile, cls: P
   const cross = crosser ? startCount(world, slot, sp, own) : -1;
   // E07 (lightSeeker.ts): F is effective light, and only its own cell and cells brighter by brighterBy are candidates.
   const seeker = prof.lightSeeker !== null;
+  // A04 (Phase 5 wave 12; D-0106): in Photo mode F is the effective light (lightSeeker.ts lightScore), in
+  // Sugar mode the ordinary food score (sugar); exactly one of the two. Not a light seeker: ordinary
+  // candidates, ties and wander.
+  const photoMode = sp.mixotroph && c.metabolicMode[slot] === MODE_PHOTO;
   let brighter = 0;
-  if (!seeker) prepareFoodScore(world, prof, c.E[slot]!);
+  if (!seeker && !photoMode) prepareFoodScore(world, prof, c.E[slot]!);
   // P3.12: the blocked-cell window and its prefix sums (see WIN_BLOCKED), for a non-crosser only.
   const W = 2 * r + 1;
   const win = cross < 0 && Number.isInteger(r) && W <= WIN_MAX;
@@ -330,7 +335,7 @@ function decide(world: World, slot: number, sp: SpeciesRT, prof: Profile, cls: P
       }
       if (seeker && cell !== own && !brightEnough(world, prof, own, cell)) continue;
       if (cell !== own && !(win && windowClear(W, r + Math.min(x - cx, 0), r + Math.min(y - cy, 0), r + Math.max(x - cx, 0), r + Math.max(y - cy, 0))) && traceFraction(world, sp, px, py, x + 0.5, y + 0.5, cross, cls) < 1) continue;
-      const F = seeker ? lightScore(world, cell) : foodScoreAt(world, prof, cell);
+      const F = seeker || photoMode ? lightScore(world, cell) : foodScoreAt(world, prof, cell);
       // A non-crosser reaches here only for a cell it can occupy (canOccupy is habitatCompatible), so the
       // habitat factor is passed as known instead of re-derived (P3.12; same value).
       const S = suitabilityAt(world, sp, prof, cell, true).value;
@@ -426,6 +431,8 @@ export function stageSenseAndMove(world: World): void {
   startY.set(c.y.subarray(0, e.highWater));
   // Wave 9 gate: edge barriers exist only in a world whose recorded manifest enables 'barriers'.
   const edgesOn = world.edges.length > 0;
+  // Wave 12 gate (D-0103): only a world whose species table records a mixotroph (A04) updates modes.
+  const mixo = hasMixotroph(world);
   for (let i = 0; i < e.highWater; i++) {
     if (c.alive[i] !== 1) continue;
     const sp = world.species[c.species[i]!]!;
@@ -438,6 +445,9 @@ export function stageSenseAndMove(world: World): void {
     if (c.waterCrossed[i] !== 0 && crossesWater(sp) && habitatCompatible(world, sp, cell)) c.waterCrossed[i] = 0;
     const suit = entitySuitabilityAt(world, i, sp, prof, cell);
     c.suitability[i] = suit.value;
+    // A04's saved metabolic mode (SPEC §3.2 row 4, §7.10): after suitability, before the life-state
+    // overrides, from this tick's stage 2 light (mixotrophy.ts updateMode).
+    if (mixo && sp.mixotroph) updateMode(world, i, cell);
     // Stressed shows after 3 continuous seconds below threshold and clears after 3 continuous
     // seconds recovered (D01 §4).
     const stressed = (c.flags[i]! & FLAG.stressed) !== 0;
@@ -501,7 +511,8 @@ export function stageSenseAndMove(world: World): void {
         c.preySlot[i] = -1;
         c.preyBirthId[i] = 0;
       }
-      if (c.decisionTimer[i] === 0 && hungry) {
+      // H1 (Phase 5 wave 12): a predator in an open handling attempt keeps its target (no re-acquire).
+      if (c.decisionTimer[i] === 0 && hungry && !(c.handlingNeed[i]! > 0)) {
         const found = acquirePrey(world, i, sp, Math.max(1, prof.sensing), cls);
         if (found >= 0) {
           target = found;

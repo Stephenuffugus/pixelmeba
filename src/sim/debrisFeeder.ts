@@ -1,6 +1,15 @@
 /**
  * E08 Debris feeder (SPEC §6.4, §6.5, §9 E08; CT §3.1 "E08 carriers detritus when no meal", §7.1;
- * D04 §5 "E08 Debris feeder", §13 "Detritus feeder captures live prey"; P3.7).
+ * D04 §5 "E08 Debris feeder", §13 "Detritus feeder captures live prey"; P3.7), and P09 Wheelgrazer's
+ * native DETRITUS_FALLBACK (Phase 5 wave 12; SPEC §6.5 route 1 "meal-else-detritus"; CT §1.2 P09).
+ *
+ * Both set Profile.debrisFeeder (phenotype.ts deriveProfile) and share everything below; "carrier" means
+ * either. P09 is not eligible for E08: its fallback is its own native ability, so the module card, its
+ * guide notes (moduleNotes.ts, which tries only E08's eligible ancestors) and its feature mark (the
+ * debris granule needs the E08 cue bit, render/features.ts) never describe P09's detritus intake as E08.
+ * Before wave 12 P09 already reached detritus through its foodPriority ['detritus'] on the ordinary field
+ * route, with the same request min(P, budget × avail(P)); the fallback changes the route (ROUTE_DETRITUS),
+ * its cue (FLAG.detritusIntake) and its label ("Eating detritus"), not the amount.
  *
  * - Intake (stage 6, intake.ts): with no held meal (mealC = 0) a carrier may request local detritus,
  *   with its bound detritusN, under its ordinary budget (ceiling × suitability, halved over capacity):
@@ -14,7 +23,7 @@
  *   Pursuit of a valid prey runs before decide(), so a prey in range keeps priority.
  *
  * Nothing here draws randomness. A world without carriers never reaches any of it, so every shipped
- * world (no E08 in its manifest) runs bit-identically.
+ * world (no E08 and no P09 in its manifest) runs bit-identically.
  */
 import { AVAIL_K } from './constants';
 import type { Profile } from './phenotype';
@@ -25,7 +34,7 @@ function availOf(a: number): number {
 }
 
 /**
- * Detritus carbon an E08 carrier requests in its cell this tick, or 0 when it takes no detritus
+ * Detritus carbon a carrier (E08 or DETRITUS_FALLBACK) requests in its cell this tick, or 0 when it takes no detritus
  * route: not a carrier, a held meal (exclusive priority), or no detritus here.
  */
 export function debrisRequest(world: World, prof: Profile, mealC: number, cell: number, budget: number): number {

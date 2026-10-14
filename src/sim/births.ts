@@ -30,6 +30,7 @@ import { resetDormancy, restsAtBirth, startRestingNewborn } from './dormancy';
 import { profileOf } from './profiles';
 import { R } from './reasons';
 import { clearGlow } from './signals';
+import { nextMode } from './mixotrophy';
 import { detFloat, STREAMS } from './rng';
 import { entityCell, rebuildIndex } from './spatial';
 import { classOf } from './barriers';
@@ -299,6 +300,25 @@ function commitDivision(
   c.divBlockCode[i] = R.NONE;
   c.flags[i] = (c.flags[i]! | FLAG.justBorn) & ~FLAG.capacityBlocked;
 
+  // H2 (Phase 5 wave 12; SPEC §9.19): a handling attempt is a temporary state, never inherited. A parent
+  // dividing mid-attempt ends it with one 'handlingBreak' (why 'division') under its own birthId; the
+  // retained daughter starts with no attempt (the new slot is cleared by allocate) and keeps pursuing its
+  // target, so a renewed contact starts a new attempt.
+  if (c.handlingNeed[i]! > 0) {
+    emit(world.events, world.counters, {
+      tick: world.tick,
+      type: 'handlingBreak',
+      species: c.species[i]!,
+      birthId: parentBirth,
+      cell: parentCell,
+      detail: { prey: c.preyBirthId[i]!, why: 'division', progress: c.handlingProgress[i]! },
+    });
+    c.handlingNeed[i] = 0;
+    c.handlingProgress[i] = 0;
+  }
+  // A04 (Phase 5 wave 12; D-0106): the parent's saved mode, read before either daughter's is written.
+  const parentMode = sp.mixotroph ? c.metabolicMode[i]! : 0;
+
   // Birth reconciliation (SPEC §9.19), per daughter, with its own inherited genome: both start
   // Active with fresh dormancy clocks (E03 loss therefore means Active, with no energy gift); energy
   // above the daughter's own cap (e.g. after losing E05) dissipates with a ledger record. A module
@@ -308,6 +328,9 @@ function commitDivision(
     // Phase 5 (D-0119): glow is a temporary state, never inherited; both daughters start dim with dwell 0, and
     // a glowing parent's glow ends with one 'glowOff' (why 'division') under the parent's birthId (signals.ts).
     if (c.glowState[d] !== 0 || c.glowDwell[d] !== 0) clearGlow(world, d, 'division');
+    // A04 newborn mode (D-0106): from her own cell's light (this tick's stage 2), Photo at ≥ 0.35, Sugar at
+    // ≤ 0.25, else the parent's. A first mode is a state, not a switch: no 'modeSwitch' event.
+    if (sp.mixotroph) c.metabolicMode[d] = nextMode(world.derived.light[entityCell(c.x[d]!, c.y[d]!)]!, parentMode);
     const cap = profileOf(world, d).energyCap;
     if (c.E[d]! > cap) {
       world.ledger.energy.dissipated += c.E[d]! - cap;

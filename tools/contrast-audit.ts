@@ -387,6 +387,55 @@ add({
   informative: true,
 });
 
+// --- Phase 5 structures against the substrates (wave 12 structures-art-audio; D-0120 "the edge-glyph rows") ---
+// The procedural edge glyphs (structureLayer.ts EDGE_GLYPH_COLORS reads these DISH_COLORS), the gate-class badge
+// pips (gateBadges.ts BADGE_COLORS) and the device tile outline (art/src/tiles/structures.ts, P.deviceInk).
+for (const [name, bg] of subs) {
+  for (const [id, what, fg] of [
+    ['edgeMembrane', 'S01 membrane edge glyph', rgb(DISH_COLORS.edgeMembrane)],
+    ['edgeSieve', 'S02 small gate edge glyph', rgb(DISH_COLORS.edgeSieve)],
+    ['edgeShutter', 'S03 shutter edge glyph', rgb(DISH_COLORS.edgeShutter)],
+    ['edgeChannel', 'S04 channel edge glyph', rgb(DISH_COLORS.edgeChannel)],
+    ['badgePip', 'gate badge pip', rgb(DISH_COLORS.badgePip)],
+    ['deviceInk', 'device tile outline (P.deviceInk)', hex(P.deviceInk)],
+  ] as const) {
+    add({ group: 'Dish structures and deposits', id: `${id}/${name}`, what: `${what} on ${name}`, kind: 'graphic', fg, bg });
+  }
+}
+add({
+  group: 'Dish structures and deposits',
+  id: 'edgeHalo/sediment',
+  what: 'edge glyph halo under-stroke (opaque) on sediment',
+  kind: 'graphic',
+  fg: rgb(DISH_COLORS.edgeHalo),
+  bg: rgb(DISH_COLORS.sediment),
+});
+add({
+  group: 'Dish structures and deposits',
+  id: 'edgeHalo@55/sediment',
+  what: 'edge glyph halo under-stroke as drawn (55 % over sediment)',
+  kind: 'graphic',
+  fg: over(rgb(DISH_COLORS.edgeHalo), 0.55, rgb(DISH_COLORS.sediment)),
+  bg: rgb(DISH_COLORS.sediment),
+  informative: true,
+});
+add({
+  group: 'Dish structures and deposits',
+  id: 'badgePip/badgePlate',
+  what: 'gate badge pip on its plate',
+  kind: 'graphic',
+  fg: rgb(DISH_COLORS.badgePip),
+  bg: rgb(DISH_COLORS.badgePlate),
+});
+add({
+  group: 'Dish structures and deposits',
+  id: 'gatePip/--surface',
+  what: 'gate sheet pip (.gate-pip, --text) on the sheet --surface',
+  kind: 'graphic',
+  fg: tok('text'),
+  bg: tok('surface'),
+});
+
 // --- Organisms against water, gel and sediment (art/src/index.ts SPRITES) ------------------------
 /** The grounds a species lives on (content/species/<id>.json habitats); all three when unknown. */
 function habitats(speciesId: string): readonly string[] {
@@ -503,6 +552,10 @@ for (const [name, bg] of subs)
  */
 const JUSTIFIED: readonly (readonly [string, string])[] = [
   [
+    'edgeHalo@55/',
+    'Informative: the halo is a pale under-stroke that separates a glyph from dark organisms; the glyph itself (its dark ink, ≥ 3:1 on every substrate) carries the shape.',
+  ],
+  [
     'P.muted/P.surface',
     'Not used for text: styles.css draws muted text in --text-muted #4F5F67 (6.6:1). Proposal: set P.muted to #4F5F67 in art/src/palette.ts so the palette names the colour the UI uses.',
   ],
@@ -595,6 +648,21 @@ const JUSTIFIED: readonly (readonly [string, string])[] = [
     'Trait band rings are tinted rings between two ink outlines: the ring reads against the substrate by its outline; the legend names and counts every band in text (D-0028).',
   ],
   ['inactive/outline', 'Grey ring for inactive loci: named in the legend text.'],
+  // Wave 12 (structures-art-audio): the audit had not been re-run since the Phase 5 organism art (waves 8a, 8b)
+  // and wave 9's warmth overlay; these rows were unexplained at 0316ffc. They are not this task's colours: the
+  // justifications follow the Phase 3 rulings above, and the proposals go to the organism art and render owners.
+  ...['A02', 'A03', 'A04', 'A05', 'B09', 'B10', 'B11', 'B12', 'B13', 'F03', 'F04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'X02'].map(
+    (id) => [`${id}/`, 'Phase 5 identity tone at aggregation zoom; see Y01 (the sprite outline carries the silhouette; the species list, legend and inspector name it).'] as const,
+  ),
+  ['V02/', 'As V01: viruses draw no aggregation cell (density overlay only); the identity tone appears in legends beside a text label.'],
+  [
+    'f04_sporeveil/silhouette/sediment',
+    'Sporeveil silver on sediment (outline #5F666D, body #B9BEC4, 2.3:1): a real gap, as F02 on sediment. Its spore rings still read by shape and the inspector and species list name it. Proposal (organism art owner): the F04 outline in sporeveilRing #23272B (≥ 3:1 on sediment).',
+  ],
+  [
+    'warmth/legend',
+    'Warmth is diverging (cool blue, neutral, warm orange) as pH is: both ends contrast with the neutral centre, the legend prints the values, and the cell inspector gives the local warmth in numbers.',
+  ],
   ['bar/energy', 'The meter shows its number in text beside the bar; the bar is supplementary.'],
   ['bar/health', 'The meter shows its number in text beside the bar; the bar is supplementary.'],
 ];

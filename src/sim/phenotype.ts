@@ -214,7 +214,7 @@ export interface Profile {
   readonly lightSeeker: LightSeekerRules | null;
   /** E06 shade collector rules (intake.ts photosynthetic route), or null when it does not carry E06. */
   readonly shade: ShadeRules | null;
-  /** E08 debris feeder (debrisFeeder.ts): with no held meal it may eat local detritus. */
+  /** E08 debris feeder, or native DETRITUS_FALLBACK (P09) (debrisFeeder.ts): with no held meal it may eat local detritus. */
   readonly debrisFeeder: boolean;
   /** Signal emission and glow rules (native SIGNAL_GLOW, module E02; signals.ts), or null. */
   readonly glow: GlowRules | null;
@@ -559,7 +559,8 @@ export function deriveProfile(sp: SpeciesRT, genome: Genome, modules: readonly M
     anchor,
     lightSeeker,
     shade,
-    debrisFeeder,
+    // P09's native DETRITUS_FALLBACK takes E08's route (debrisFeeder.ts; SPEC §6.5 route 1; Phase 5 wave 12).
+    debrisFeeder: debrisFeeder || sp.abilities.includes('DETRITUS_FALLBACK'),
     glow: sp.abilities.includes('SIGNAL_GLOW') ? NATIVE_GLOW : moduleGlow,
     rivalry: sp.abilities.includes('RIVALRY') ? NATIVE_RIVALRY : null,
   };

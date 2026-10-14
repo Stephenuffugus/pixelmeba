@@ -3,7 +3,8 @@
  * src/render/structureLayer.ts edge glyphs lie on the shared cell edge (R and D, at the grid's inner bounds),
  * S04 chevrons point by flow (EDGE_FLOW_BACK), every glyph colour is ≥ 3:1 against water, gel and sediment;
  * device frame picks (S08 saturation quartiles, S09/S10 on/off) and the 'device' atlas tile appended last
- * with 13 frames; the warmth and moisture overlays (packOverlay reads, never allocates; max 1; painted
+ * with 13 frames (wave 12 structures-art-audio redrew s05, s07 and s08_0–3 with the same names and order: the
+ * pins hold); the edge glyphs' mark counts by zoom and the open shutter's posts below 6 px per cell (wave 12); the warmth and moisture overlays (packOverlay reads, never allocates; max 1; painted
  * opaque with their own ramps).
  */
 import { readFileSync } from 'node:fs';
@@ -17,7 +18,7 @@ import { cellIndex } from '../../src/sim/grid';
 import { EDGE_FLOW_BACK } from '../../src/worker/protocol';
 import { packOverlay } from '../../src/worker/snapshot';
 import { colormapFor, DISH_COLORS, legendStops, paintOverlay } from '../../src/render/layers';
-import { CHEVRON_DEPTH, DEVICE_FRAME_COUNT, DEVICE_FRAMES, deviceFrame, deviceSprites, EDGE_GLYPH_COLORS, edgeGlyph, edgeGlyphs, edgeSegment, resinQuartile } from '../../src/render/structureLayer';
+import { CHEVRON_DEPTH, CHEVRON_DEPTH_COARSE, DEVICE_FRAME_COUNT, DEVICE_FRAMES, deviceFrame, deviceSprites, EDGE_GLYPH_COLORS, edgeDetail, edgeGlyph, edgeGlyphs, edgeMarks, edgeSegment, MIN_MARK_PX, resinQuartile } from '../../src/render/structureLayer';
 import { contrastRatio, fromInt, GRAPHIC_MIN } from '../../src/ui/a11y/contrast';
 import { barrierDish, clearWater } from '../helpers/world';
 
@@ -56,9 +57,12 @@ describe('edge glyphs', () => {
         }
       }
     }
-    // Shapes: S01 five short dashes, S02 three longer slots, a closed shutter one full bar, an open one two stubs.
-    const len = (code: number) => edgeGlyph(code, cellIndex(10, 10), 'R')!.segments.length / 4;
-    expect([len(EDGE_S01), len(EDGE_S02), len(EDGE_SHUTTER_CLOSED), len(EDGE_SHUTTER_OPEN)]).toEqual([5, 3, 1, 2]);
+    // Shapes: S01 short dashes, S02 longer slots, a closed shutter one full bar, an open one two stubs. Wave 12
+    // (structures-art-audio) made the counts follow the zoom (edgeMarks): at the close preset (16 px per cell, the
+    // default) four dots and two slots; wave 11's five and three from 20 and 18 px per cell (here at ZOOM_MAX 32).
+    const len = (code: number, z?: number) => edgeGlyph(code, cellIndex(10, 10), 'R', z)!.segments.length / 4;
+    expect([len(EDGE_S01), len(EDGE_S02), len(EDGE_SHUTTER_CLOSED), len(EDGE_SHUTTER_OPEN)]).toEqual([4, 2, 1, 2]);
+    expect([len(EDGE_S01, 32), len(EDGE_S02, 32), len(EDGE_SHUTTER_CLOSED, 32), len(EDGE_SHUTTER_OPEN, 32)]).toEqual([5, 3, 1, 2]);
     expect(edgeGlyph(0, cellIndex(10, 10), 'R')).toBeNull();
   });
 
@@ -92,6 +96,50 @@ describe('edge glyphs', () => {
     for (const code of [EDGE_S01, EDGE_S02, EDGE_SHUTTER_CLOSED, EDGE_SHUTTER_OPEN, EDGE_CHANNEL]) {
       const g = edgeGlyph(code, 0, 'R')!;
       for (const bg of subs) expect(contrastRatio(fromInt(g.color), bg)).toBeGreaterThanOrEqual(GRAPHIC_MIN);
+    }
+  });
+
+  it('wave 12: readable at every zoom — mark counts follow the zoom, no straight mark under 1.5 screen px, S01 dots stay apart from S02 slots', () => {
+    const cell = cellIndex(10, 10);
+    const marks = (code: number, z: number) => edgeGlyph(code, cell, 'R', z)!.segments.length / 4;
+    const at = (z: number) => [EDGE_S01, EDGE_S02, EDGE_SHUTTER_CLOSED, EDGE_SHUTTER_OPEN].map((c) => marks(c, z));
+    // Whole dish on a phone (~3 px per cell) … neighborhood (8) … close (16) … the maximum (32).
+    expect(at(3)).toEqual([1, 1, 1, 2]);
+    expect(at(8)).toEqual([2, 1, 1, 2]);
+    expect(at(16)).toEqual([4, 2, 1, 2]);
+    expect(at(32)).toEqual([5, 3, 1, 2]);
+    // S04: one chevron below 12 px per cell, two from 12 (segments: the base line + 2 per chevron).
+    expect([3, 8, 12, 16].map((z) => (marks(EDGE_CHANNEL, z) - 1) / 2)).toEqual([1, 1, 2, 2]);
+    expect([3, 8, 12, 16].map((z) => edgeMarks(EDGE_CHANNEL, z))).toEqual([1, 1, 2, 2]);
+    for (const z of [3, 4, 5, 6, 8, 12, 16, 24, 32]) {
+      for (const code of [EDGE_S01, EDGE_S02, EDGE_SHUTTER_CLOSED, EDGE_SHUTTER_OPEN]) {
+        const sg = edgeGlyph(code, cell, 'R', z)!.segments;
+        for (let k = 0; k < sg.length; k += 4) expect(Math.hypot(sg[k + 2]! - sg[k]!, sg[k + 3]! - sg[k + 1]!) * z, `${code} at ${z}`).toBeGreaterThanOrEqual(MIN_MARK_PX - 1e-9);
+      }
+      // S01 marks are short with wide gaps; S02 marks long with narrow gaps (pattern, not colour).
+      const one = (code: number) => {
+        const sg = edgeGlyph(code, cell, 'R', z)!.segments;
+        return Math.abs(sg[3]! - sg[1]!);
+      };
+      expect(one(EDGE_S02), `S02 slot vs S01 dot at ${z}`).toBeGreaterThan(one(EDGE_S01));
+    }
+    // An open shutter in the whole-dish view: two posts ACROSS the edge (x varies, y fixed for an 'R' edge).
+    expect(edgeDetail(5.9)).toBe('coarse');
+    expect(edgeDetail(6)).toBe('fine');
+    const posts = edgeGlyph(EDGE_SHUTTER_OPEN, cell, 'R', 4)!.segments;
+    for (let k = 0; k < posts.length; k += 4) {
+      expect(posts[k + 1]).toBe(posts[k + 3]);
+      expect(posts[k + 2]! - posts[k]!).toBeGreaterThan(0);
+    }
+    // The coarse chevron is larger and still points with the flow.
+    expect(edgeGlyph(EDGE_CHANNEL, cell, 'R', 4)!.segments[6]! - edgeSegment(cell, 'R')[0]).toBeCloseTo(CHEVRON_DEPTH_COARSE, 12);
+    expect(edgeGlyph(EDGE_CHANNEL | EDGE_FLOW_BACK, cell, 'R', 4)!.segments[6]! - edgeSegment(cell, 'R')[0]).toBeCloseTo(-CHEVRON_DEPTH_COARSE, 12);
+    // The shutter keeps the boldest minimum width; every glyph at least 1.5 px; colours unchanged by the zoom.
+    const minPx = (code: number) => edgeGlyph(code, cell, 'R', 4)!.minPx;
+    expect(minPx(EDGE_SHUTTER_CLOSED)).toBeGreaterThan(Math.max(minPx(EDGE_S01), minPx(EDGE_S02), minPx(EDGE_CHANNEL)));
+    for (const code of [EDGE_S01, EDGE_S02, EDGE_SHUTTER_CLOSED, EDGE_SHUTTER_OPEN, EDGE_CHANNEL]) {
+      expect(minPx(code)).toBeGreaterThanOrEqual(1.5);
+      expect(edgeGlyph(code, cell, 'R', 4)!.color).toBe(edgeGlyph(code, cell, 'R', 16)!.color);
     }
   });
 

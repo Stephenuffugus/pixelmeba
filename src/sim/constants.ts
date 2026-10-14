@@ -208,3 +208,21 @@ export const RIVAL_LOCAL_CAP = 1.0;
 export const RIVAL_RADIUS = 2;
 /** A RIVAL target's inhibitor exposure gains this × the local RIVAL (CT §3.4, §12.6 "+0.25 × RIVAL exposure"; SPEC §4.3). */
 export const RIVAL_EXPOSURE_FACTOR = 0.25;
+
+/** Light and algae (Phase 5 wave 12, P5.3 E2-LIGHT-ALGAE; SPEC §6.5, §7.10; src/sim/mixotrophy.ts). */
+/** A03 (LOW_LIGHT_CURVE) light response min(1, light / this) (CT §1.2 A03 "light/0.30"; SPEC §6.5 route 2). */
+export const LOW_LIGHT_SATURATION = 0.3;
+/** An A04 switches to (or starts in) Photo mode at light ≥ this (CT §3.1 "photosynthesis (light ≥ 0.35)"; SPEC §7.10). */
+export const MODE_PHOTO_LIGHT = 0.35;
+/** An A04 switches to Sugar mode at light ≤ this; between the two it holds (CT §3.1 "sugar (light ≤ 0.25)"; SPEC §7.10). */
+export const MODE_SUGAR_LIGHT = 0.25;
+
+/** Predation handling and radius capture (Phase 5 wave 12, P5.3 E3-PREDATION; SPEC §7.3, §9 E11; src/sim/handling.ts). */
+/** P06 (RADIUS_CAPTURE) captures within this many cells (CT §12.5 "P06 radius 1"). */
+export const RADIUS_CAPTURE_DISTANCE = 1;
+/** Handling seconds a jacketed prey adds at zero coverage (CT §12.5 "jacket 1 + 3c"). */
+export const HANDLING_JACKET_BASE_SECONDS = 1;
+/** Handling seconds per unit of jacket coverage c (CT §12.5 "jacket 1 + 3c"). */
+export const HANDLING_JACKET_SECONDS_PER_COVERAGE = 3;
+/** Jacket coverage c = clamp(jacketMineral / (this × B), 0, 1) (SPEC §9 E11 "target 0.10 per current B"; D04). */
+export const JACKET_COVERAGE_FRACTION = 0.1;
