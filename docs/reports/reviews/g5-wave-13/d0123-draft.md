@@ -1,3 +1,4 @@
+<!-- Lead draft (2026-10-14). Numbering: if wave 12's as-built entry takes D-0123 first, this entry becomes D-0124 (fill wave 13 STATE "<lead: D-number>" with the number it gets). -->
 ## D-0123 · 2026-10-14 · Phase 5 wave 13 · Wave 13 scope and the task writer's rulings (traps, the mineral jacket, organism marks and the Phase 5 relationship matrix)
 Context: the wave 13 task writer (run wf_ee9ffeed-6c9; docs/agent/g5-wave-13.tasks.js.txt; docs/reports/reviews/g5-wave-13/tasks-writer.md), lead-reviewed against SPEC §7.17, §9 (E11, §9.19), §10.5, §12.3, CT §3.3, §7.1, D02 392 and the wave 12 contract. Every PROPOSED DECISION of the writer (1–23) is accepted; the points below are the ones the canonical docs leave open or where an earlier ruling moves. A builder may still report evidence against a ruling.
 Decision:
