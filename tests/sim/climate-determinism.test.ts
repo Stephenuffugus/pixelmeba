@@ -25,7 +25,7 @@ import { run } from '../../src/sim/tick';
 import type { World, WorldContent } from '../../src/sim/world';
 import { registryWith } from '../helpers/registry';
 import { trajectoryDigest } from '../helpers/trajectory';
-import { aliveOf, clearWater, place, rebaseLedger, registry } from '../helpers/world';
+import { aliveOf, clearWater, place, preFlipRegistry, rebaseLedger, registry } from '../helpers/world';
 
 const S_IDS = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12'];
 const SHIPPED = registry().manifest;
@@ -162,9 +162,9 @@ describe('climate determinism', () => {
     console.info(`climate-determinism conservation: worst relative C ${worstC.toExponential(3)}, N ${worstN.toExponential(3)}; absolute C ${worstAbs.c.toExponential(3)}, N ${worstAbs.n.toExponential(3)}, M ${worstAbs.m.toExponential(3)}; alive ${w.ents.count}`);
   }, 600_000);
 
-  it('NEUTRAL: a dish that records climate but uses none of it keeps null arrays and evolves byte-identically to the shipped registry', () => {
+  it('NEUTRAL: a dish that records climate but uses none of it keeps null arrays and evolves byte-identically to a v1.0 (pre-flip) dish', () => {
     const a = realizeRecipe(REG, 'FIRST_DISH_V1');
-    const b = realizeRecipe(registry(), 'FIRST_DISH_V1');
+    const b = realizeRecipe(preFlipRegistry(), 'FIRST_DISH_V1');
     expect(a.content.manifest.enabledSystems).toContain('climate');
     expect(b.content.manifest.enabledSystems).not.toContain('climate');
     for (let k = 0; k < 4; k++) {

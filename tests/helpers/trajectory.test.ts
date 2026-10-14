@@ -119,7 +119,8 @@ describe('trajectoryDigest (P-17, P-18)', () => {
 
   it('ignores what is not biology: content hash and version stamps, the world id', () => {
     const a = garden(G2, 200, 'stamp-a');
-    const b = garden(registryWith({ ...G2_LISTS, contentVersion: 7, evolutionRulesVersion: 4 }), 200, 'stamp-b');
+    // A version stamp above what the simulation implements needs allowUnimplemented (D-0121 ceilings); the stamp is what is tested.
+    const b = garden(registryWith({ ...G2_LISTS, contentVersion: 7, evolutionRulesVersion: 4 }, { allowUnimplemented: true }), 200, 'stamp-b');
     expect(b.content.manifest.contentHash).not.toBe(a.content.manifest.contentHash);
     expect(stateHash(b)).not.toBe(stateHash(a));
     expect(trajectoryDigest(b, 'g2')).toBe(trajectoryDigest(a, 'g2'));

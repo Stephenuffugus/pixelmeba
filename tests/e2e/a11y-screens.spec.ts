@@ -200,6 +200,13 @@ test('pages: Home, Play, What if?, Settings, About, Saved dishes, Field Guide ta
   await page.getByTestId('home-new').click();
   await expect(page.getByTestId('new-dish-summary')).toBeVisible();
   await a.scan('New Dish: basics');
+  // Since the systems flip (D-0121): the Environment group (lid, light mode, drying).
+  await page.getByTestId('new-dish-environment').scrollIntoViewIfNeeded();
+  await expect(page.getByTestId('new-dish-environment')).toBeVisible();
+  await page.getByTestId('new-dish-light-cycle').click();
+  await expect(page.getByTestId('new-dish-light-cycle')).toHaveAttribute('aria-pressed', 'true');
+  await a.scan('New Dish: Environment');
+  await page.getByTestId('new-dish-light-fixed').click();
   const curated = page.getByTestId('new-dish-start-with-curated:L306_BORROWED_SHELTER');
   await curated.click();
   await expect(curated).toHaveAttribute('aria-checked', 'true');
@@ -228,6 +235,7 @@ test('pages: Home, Play, What if?, Settings, About, Saved dishes, Field Guide ta
     'Notebook: experiments',
     'Experiment card',
     'New Dish: basics',
+    'New Dish: Environment',
     'New Dish: a curated dish',
     'New Dish: Evolution with Advanced rates',
     'New Dish: Content and summary',
@@ -345,6 +353,10 @@ test('dish: Explore sheets, candidate list, every inspector depth, the cell insp
     const button = page.getByTestId(`lab-cat-${cat}`);
     if ((await button.getAttribute('aria-expanded')) !== 'true') await button.click();
     await expect(page.locator(`[data-testid="lab-tray"][data-category="${cat}"]`)).toBeVisible();
+    // Since the systems flip (D-0121) a new dish records climate, barriers and devices: the scans cover the
+    // light and drying controls with the wetting brush (habitat) and the Build group (tools).
+    if (cat === 'habitat') for (const id of ['lab-item-wet', 'lab-light', 'lab-drying']) await expect(page.getByTestId(id)).toBeVisible();
+    if (cat === 'tools') await expect(page.getByTestId('lab-build')).toBeVisible();
     await a.scan(`Lab tray: ${cat}`);
   }
   await page.getByTestId('lab-lineage').click();

@@ -1,0 +1,348 @@
+{
+  "id": "FENCE_BARRIER_LINE",
+  "revision": 1,
+  "name": "Fence: a membrane line with gates, a shutter, a channel and a resin",
+  "habitatId": "WATER_GARDEN",
+  "seed": 104729,
+  "lid": "open",
+  "removeStones": true,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {
+    "sugar": 0
+  },
+  "fieldPatches": [
+    {
+      "center": [
+        50,
+        64
+      ],
+      "radius": 7,
+      "substrate": "water",
+      "add": {
+        "sugar": 0.5
+      },
+      "label": "Sugar west of the line"
+    },
+    {
+      "center": [
+        72,
+        64
+      ],
+      "radius": 4,
+      "substrate": "water",
+      "add": {
+        "inhBact": 0.2
+      },
+      "label": "Bacterial inhibitor by the resin"
+    }
+  ],
+  "founders": [
+    {
+      "species": "B01",
+      "count": 24,
+      "center": [
+        50,
+        64
+      ],
+      "radius": 3
+    },
+    {
+      "species": "B04",
+      "count": 8,
+      "center": [
+        70,
+        48
+      ],
+      "radius": 2
+    },
+    {
+      "species": "A01",
+      "count": 12,
+      "center": [
+        50,
+        48
+      ],
+      "radius": 4
+    },
+    {
+      "species": "P01",
+      "count": 2,
+      "center": [
+        70,
+        76
+      ],
+      "radius": 2
+    }
+  ],
+  "scheduledCommands": [
+    {
+      "atSecond": 0,
+      "kind": "placeEdges",
+      "payload": {
+        "kind": "placeEdges",
+        "structure": "S01",
+        "edges": [
+          [
+            5180,
+            "R"
+          ],
+          [
+            5308,
+            "R"
+          ],
+          [
+            5436,
+            "R"
+          ],
+          [
+            5564,
+            "R"
+          ],
+          [
+            5692,
+            "R"
+          ],
+          [
+            5820,
+            "R"
+          ],
+          [
+            5948,
+            "R"
+          ],
+          [
+            6076,
+            "R"
+          ],
+          [
+            6204,
+            "R"
+          ],
+          [
+            6332,
+            "R"
+          ],
+          [
+            6460,
+            "R"
+          ],
+          [
+            6588,
+            "R"
+          ],
+          [
+            6716,
+            "R"
+          ],
+          [
+            6844,
+            "R"
+          ],
+          [
+            6972,
+            "R"
+          ],
+          [
+            7100,
+            "R"
+          ],
+          [
+            7228,
+            "R"
+          ],
+          [
+            7356,
+            "R"
+          ],
+          [
+            7612,
+            "R"
+          ],
+          [
+            7740,
+            "R"
+          ],
+          [
+            7868,
+            "R"
+          ],
+          [
+            8636,
+            "R"
+          ],
+          [
+            8764,
+            "R"
+          ],
+          [
+            8892,
+            "R"
+          ],
+          [
+            9148,
+            "R"
+          ],
+          [
+            9276,
+            "R"
+          ],
+          [
+            9404,
+            "R"
+          ],
+          [
+            9532,
+            "R"
+          ],
+          [
+            9660,
+            "R"
+          ],
+          [
+            9788,
+            "R"
+          ],
+          [
+            9916,
+            "R"
+          ],
+          [
+            10044,
+            "R"
+          ],
+          [
+            10172,
+            "R"
+          ],
+          [
+            10300,
+            "R"
+          ],
+          [
+            10428,
+            "R"
+          ],
+          [
+            10556,
+            "R"
+          ],
+          [
+            10684,
+            "R"
+          ],
+          [
+            10812,
+            "R"
+          ],
+          [
+            10940,
+            "R"
+          ],
+          [
+            11068,
+            "R"
+          ],
+          [
+            11196,
+            "R"
+          ],
+          [
+            11324,
+            "R"
+          ]
+        ]
+      },
+      "label": "Membrane line"
+    },
+    {
+      "atSecond": 0,
+      "kind": "placeEdges",
+      "payload": {
+        "kind": "placeEdges",
+        "structure": "S02",
+        "edges": [
+          [
+            7996,
+            "R"
+          ],
+          [
+            8124,
+            "R"
+          ],
+          [
+            8252,
+            "R"
+          ],
+          [
+            8380,
+            "R"
+          ],
+          [
+            8508,
+            "R"
+          ]
+        ]
+      },
+      "label": "Small gates"
+    },
+    {
+      "atSecond": 0,
+      "kind": "placeEdges",
+      "payload": {
+        "kind": "placeEdges",
+        "structure": "S03",
+        "edges": [
+          [
+            9020,
+            "R"
+          ]
+        ],
+        "open": false
+      },
+      "label": "Closed shutter"
+    },
+    {
+      "atSecond": 0,
+      "kind": "placeEdges",
+      "payload": {
+        "kind": "placeEdges",
+        "structure": "S04",
+        "edges": [
+          [
+            7484,
+            "R"
+          ]
+        ],
+        "flow": 1
+      },
+      "label": "One-way channel"
+    },
+    {
+      "atSecond": 0,
+      "kind": "placeDevice",
+      "payload": {
+        "kind": "placeDevice",
+        "structure": "S08",
+        "cell": 8264
+      },
+      "label": "Resin placed"
+    },
+    {
+      "atSecond": 0,
+      "kind": "setDevice",
+      "payload": {
+        "kind": "setDevice",
+        "id": 50,
+        "resinSelect": [
+          "inhBact"
+        ]
+      },
+      "label": "Resin on"
+    }
+  ],
+  "labels": [],
+  "question": "Test-only fence dish (D-0121): an S01 line with S02 gates, a closed S03 shutter, an S04 channel and an S08 resin, placed by command at tick 0.",
+  "expectedObservationsText": "Not shipped: realized only by tests/helpers/fence.ts (kind 'recipeFile').",
+  "phase": 5
+}

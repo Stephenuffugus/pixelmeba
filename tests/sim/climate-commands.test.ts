@@ -20,7 +20,7 @@ import { moistureAt } from '../../src/sim/climate';
 import { deserializeWorld, serializeWorld, stateHash } from '../../src/sim/serialize';
 import { run } from '../../src/sim/tick';
 import type { World } from '../../src/sim/world';
-import { barrierRegistry, clearWater, place } from '../helpers/world';
+import { barrierRegistry, clearWater, place, preFlipRegistry } from '../helpers/world';
 
 const REG = barrierRegistry();
 const meta = { name: 'climate commands', savedAt: '2026-10-14T00:00:00Z', recipeId: null };
@@ -116,7 +116,7 @@ describe('setLightMode and setDrying', () => {
   });
 
   it('all three are refused in a v1.0 dish (no climate)', () => {
-    const w = clearWater();
+    const w = clearWater({}, preFlipRegistry());
     const json = canonicalJson(serializeWorld(w));
     for (const p of [
       { kind: 'wetBrush', points: [[64.5, 64.5]], radius: 3 },

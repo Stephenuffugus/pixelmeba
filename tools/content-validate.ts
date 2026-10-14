@@ -273,6 +273,8 @@ export const TILE_FRAMES: Readonly<Record<string, { readonly frames: number; rea
   pellet: { frames: 4, states: 'fill quartiles 0–3' },
   wafer: { frames: 4, states: 'fill quartiles 0–3' },
   stain: { frames: 1, states: 'emptied object stain' },
+  // Phase 5 devices (wave 11, D-0120: 13 frames appended last; required since the systems flip, D-0121).
+  device: { frames: 13, states: 's05, s06, s07, s08_0–3, s09_off/on, s10_off/on, s11, s12' },
 };
 export const TILE_SIZE = 16;
 
@@ -289,7 +291,8 @@ export function tileFrameKey(tile: string, frame: number): string {
 
 /**
  * The world tiles the manifest's content needs: film textures with the film system, the pellet with
- * M10, the wafer with M11, and the emptied-object stain with either.
+ * M10, the wafer with M11, the emptied-object stain with either, and the device tile with the devices
+ * system (S05–S12; since the systems flip, D-0121).
  */
 export function enabledTiles(registry: { readonly manifest: { readonly enabledSystems: readonly string[]; readonly enabledMaterials: readonly string[] } }): AtlasTileRef[] {
   const m = registry.manifest;
@@ -298,6 +301,7 @@ export function enabledTiles(registry: { readonly manifest: { readonly enabledSy
   if (m.enabledMaterials.includes('M10')) out.push({ owner: 'M10', tile: 'pellet' });
   if (m.enabledMaterials.includes('M11')) out.push({ owner: 'M11', tile: 'wafer' });
   if (m.enabledMaterials.includes('M10') || m.enabledMaterials.includes('M11')) out.push({ owner: m.enabledMaterials.includes('M10') ? 'M10' : 'M11', tile: 'stain' });
+  if (m.enabledSystems.includes('devices')) out.push({ owner: 'devices system', tile: 'device' });
   return out;
 }
 
@@ -307,6 +311,7 @@ export const ALL_TILES: readonly AtlasTileRef[] = [
   { owner: 'M10', tile: 'pellet' },
   { owner: 'M11', tile: 'wafer' },
   { owner: 'M10', tile: 'stain' },
+  { owner: 'devices system', tile: 'device' },
 ];
 
 export const ATLAS_FILE = 'public/atlas/manifest.json';

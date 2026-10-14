@@ -1085,6 +1085,19 @@ Every one is a state the simulation cannot produce and each would crash the work
 of a dish's systems, structures and native abilities against what the build implements comes at the systems flip
 (D-0119).
 
+As built, Phase 5 systems flip (D-0121; `src/sim/content/implemented.ts`, `src/persistence/saveFile.ts`
+`unimplementedRulesProblem`): the build manifest enables 'barriers', 'climate', 'devices' and S01–S12, so a new dish
+records them (an rc1 or older save keeps its recorded ruleset and shows none of their controls). The import now also
+checks a dish against what the build *implements*, not what it enables: every recorded `enabledSystems` entry must be
+in `IMPLEMENTED_SYSTEMS` (the v1.0 systems, barriers, climate, devices, silicate, signals and rivalry; not equipment or
+developmental), every `enabledStructures` entry a cell structure or in `IMPLEMENTED_STRUCTURES` (S01–S12), and every
+recorded species' `nativeAbilities` entry in `IMPLEMENTED_NATIVE_ABILITIES`. A miss is refused by name with kind
+'content' in the module refusal's words ("This dish uses the "equipment" system, which this version of Pixelmeba
+cannot simulate. Nothing was loaded."; "… the structure "S99", …"; "This dish's P10 uses the native ability
+"HANDLING", …"), before the manifest and species schemas run, so a newer build's unknown id is named rather than
+reported as an invalid manifest. The current world is untouched (tests/persistence/import-implemented.test.ts). A
+`{kind: 'state'}` dish source in the worker comes only from a loaded save, so it needs no second check.
+
 ## 12. Android (Capacitor)
 - `appId com.lucidwinds.pixelmeba`, `appName Pixelmeba`, `webDir dist`, `android.allowMixedContent
   false`, no cleartext, no network permission beyond what Capacitor needs (none for this app).

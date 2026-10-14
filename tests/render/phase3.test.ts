@@ -307,12 +307,11 @@ describe('film, food objects and riders (UX §6.2, §6.5; SPEC §7.4)', () => {
     };
     const have = new Set(manifest.frames.map((f) => f.key));
     // Wave 11 (structure-render-worker) appended the Phase 5 'device' tile (13 frames, art/src/tiles/structures.ts;
-    // tests/render/structure-layers.test.ts pins it). The validator's TILE_FRAMES lists the tiles it requires,
-    // and 'device' is required by nothing enabled before the systems flip, so it is compared apart.
-    const PHASE5_TILES = ['device'];
-    expect(Object.keys(manifest.tiles).filter((id) => !PHASE5_TILES.includes(id)).sort()).toEqual(Object.keys(TILE_FRAMES).sort());
+    // tests/render/structure-layers.test.ts pins it). Since the systems flip (D-0121) the validator's TILE_FRAMES
+    // requires it with the devices system, so every atlas tile is compared alike.
+    expect(Object.keys(manifest.tiles).sort()).toEqual(Object.keys(TILE_FRAMES).sort());
     expect(manifest.tiles.device?.frames).toBe(13);
-    for (const [id, t] of Object.entries(manifest.tiles).filter(([id]) => !PHASE5_TILES.includes(id))) {
+    for (const [id, t] of Object.entries(manifest.tiles)) {
       expect(t.frames, id).toBe(TILE_FRAMES[id]!.frames);
       for (let f = 0; f < t.frames; f++) {
         expect(tileFrameKey(id, f)).toBe(validatorTileKey(id, f));

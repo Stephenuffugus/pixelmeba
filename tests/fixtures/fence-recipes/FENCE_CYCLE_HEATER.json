@@ -1,0 +1,119 @@
+{
+  "id": "FENCE_CYCLE_HEATER",
+  "revision": 1,
+  "name": "Fence: day and night with a heater",
+  "habitatId": "WATER_GARDEN",
+  "seed": 104729,
+  "lid": "open",
+  "lightMode": "cycle",
+  "drying": false,
+  "removeStones": false,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {
+    "sugar": 0
+  },
+  "fieldPatches": [
+    {
+      "center": [
+        48,
+        64
+      ],
+      "radius": 6,
+      "substrate": "water",
+      "add": {
+        "sugar": 0.4
+      },
+      "label": "Sugar patch"
+    },
+    {
+      "center": [
+        66,
+        64
+      ],
+      "radius": 5,
+      "substrate": "water",
+      "add": {
+        "starch": 0.6
+      },
+      "label": "Starch patch"
+    },
+    {
+      "center": [
+        66,
+        48
+      ],
+      "radius": 4,
+      "substrate": "water",
+      "add": {
+        "detritus": 0.25,
+        "detritusN": 0.025
+      },
+      "label": "Debris patch"
+    }
+  ],
+  "founders": [
+    {
+      "species": "B01",
+      "count": 24,
+      "center": [
+        48,
+        64
+      ],
+      "radius": 3
+    },
+    {
+      "species": "B06",
+      "count": 12,
+      "center": [
+        66,
+        64
+      ],
+      "radius": 2
+    },
+    {
+      "species": "B04",
+      "count": 8,
+      "center": [
+        66,
+        48
+      ],
+      "radius": 2
+    },
+    {
+      "species": "A01",
+      "count": 12,
+      "center": [
+        48,
+        48
+      ],
+      "radius": 5
+    }
+  ],
+  "scheduledCommands": [
+    {
+      "atSecond": 0,
+      "kind": "placeDevice",
+      "payload": {
+        "kind": "placeDevice",
+        "structure": "S09",
+        "cell": 7732
+      },
+      "label": "Heater placed"
+    },
+    {
+      "atSecond": 0,
+      "kind": "setDevice",
+      "payload": {
+        "kind": "setDevice",
+        "id": 1,
+        "on": true
+      },
+      "label": "Heater on"
+    }
+  ],
+  "labels": [],
+  "question": "Test-only fence dish (D-0121): FIRST_DISH_V1 with the light cycle and a heater switched on by command at tick 0.",
+  "expectedObservationsText": "Not shipped: realized only by tests/helpers/fence.ts (kind 'recipeFile').",
+  "phase": 5
+}

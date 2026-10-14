@@ -4,7 +4,7 @@
   "moduleRegistryVersion": 2,
   "phenotypeMappingVersion": 1,
   "contentVersion": 3,
-  "contentHash": "67075b0e4e53e3adaee23cf9d4c65f3045b007881b789351357311ed7f0e5311",
+  "contentHash": "84c41636fd7774852a3dbdbc3d32715f9cfe52a19d48ad605e50dd37d524c357",
   "buildPhase": 5,
   "enabledSpecies": [
     "A01",
@@ -40,8 +40,11 @@
     "E12"
   ],
   "enabledSystems": [
+    "barriers",
     "chemistry",
+    "climate",
     "core",
+    "devices",
     "enzymes",
     "film",
     "foodObjects",
@@ -85,6 +88,18 @@
   ],
   "enabledStructures": [
     "BEAD",
+    "S01",
+    "S02",
+    "S03",
+    "S04",
+    "S05",
+    "S06",
+    "S07",
+    "S08",
+    "S09",
+    "S10",
+    "S11",
+    "S12",
     "STONE",
     "WALL"
   ],

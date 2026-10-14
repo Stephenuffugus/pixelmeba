@@ -25,7 +25,7 @@ import { updateDerived } from '../../src/sim/transport';
 import type { World, WorldContent } from '../../src/sim/world';
 import type { ContentRegistry } from '../../src/sim/content/registry';
 import { registryWith } from '../helpers/registry';
-import { aliveOf, clearWater, place, registry } from '../helpers/world';
+import { aliveOf, clearWater, place, preFlipRegistry, registry } from '../helpers/world';
 
 const S_IDS = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12'];
 const SHIPPED = registry().manifest;
@@ -226,8 +226,8 @@ describe('the full formula and lightFactors', () => {
     expect(lightFactors(w, X).cycle?.secondsIntoPhase).toBeCloseTo((1149 - 900) / 10, 12);
   });
 
-  it('a shipped-registry world keeps exactly the three old keys', () => {
-    const w = clearWater();
+  it('a v1.0 (pre-flip) world keeps exactly the three old keys', () => {
+    const w = clearWater({}, preFlipRegistry());
     for (const c of [X, NEIGHBOURS[0]!]) {
       const l = w.grid.lightBase[c]! * w.grid.shade[c]!;
       expect(lightFactors(w, c)).toEqual({ baseline: w.grid.lightBase[c], shade: w.grid.shade[c], effective: l });

@@ -52,6 +52,12 @@ describe('fence-update argument refusals', () => {
     refusal(['--add', 'FIRST_DISH_V1', '--ticks', '0'], /positive integer/);
     refusal(['--add', 'FIRST_DISH_V1', '--reason', 'D-0036'], /takes no --reason/);
     refusal(['--all', '--reason', 'D-0036', '--ticks', '600'], /only goes with --add/);
+    // --add-file (D-0121): a test-only recipe file under tests/fixtures/fence-recipes/, no --reason.
+    refusal(['--add-file', 'tests/fixtures/fence-recipes/X.json', '--reason', 'D-0036'], /takes no --reason/);
+    refusal(['--add-file', 'content/recipes/FIRST_DISH_V1.json'], /under tests\/fixtures\/fence-recipes\//);
+    refusal(['--add-file', 'tests/fixtures/fence-recipes/../../../content/recipes/FIRST_DISH_V1.json'], /under tests\/fixtures\/fence-recipes\//);
+    refusal(['--add', 'NEW_V1', '--add-file', 'tests/fixtures/fence-recipes/X.json'], /one mode at a time/);
+    expect(parseArgs(['--add-file', 'tests/fixtures/fence-recipes/X.json', '--ticks', '1500']).mode).toEqual({ kind: 'addFile', file: 'tests/fixtures/fence-recipes/X.json', ticks: 1500 });
     expect(parseArgs(['--all', '--reason', 'D-0036']).mode).toEqual({ kind: 'all', reason: 'D-0036' });
     expect(parseArgs(['--recipe', 'R-G1', '--reason', 'D-0036']).mode).toEqual({ kind: 'recipe', id: 'R-G1', reason: 'D-0036' });
     expect(parseArgs(['--g2', '--reason', 'D-0036']).mode).toEqual({ kind: 'g2', reason: 'D-0036' });
@@ -253,6 +259,8 @@ describe('fence-update writes nothing when it refuses, and keeps g2Digest outsid
       [['--recipe', 'NOPE_V1', '--reason', 'D-0036'], /no fence entry "NOPE_V1"/],
       [['--add', 'FIRST_DISH_V1'], /already has an entry "FIRST_DISH_V1"/],
       [['--add', 'NOPE_V1'], /unknown recipe "NOPE_V1"/],
+      [['--add-file', 'tests/fixtures/fence-recipes/NOPE.json'], /no recipe file tests\/fixtures\/fence-recipes\/NOPE.json/],
+      [['--add-file', 'tests/fixtures/fence-recipes/FENCE_CYCLE_HEATER.json'], /already has an entry "FENCE_CYCLE_HEATER"/],
     ];
     for (const [argv, why] of cases) {
       errors.length = 0;
@@ -338,6 +346,23 @@ describe('fence-update writes nothing when it refuses, and keeps g2Digest outsid
     const added = readFence(fencePath).entries.at(-1)!;
     expect(added).toEqual({ id: 'FOOD_TRAIL_V1', kind: 'recipe', recipe: 'FOOD_TRAIL_V1', ticks: 1200, g2Digest: null, currentDigest: real.currentDigest, changedBy: [] });
   });
+});
+
+describe('fence-update --add-file (D-0121)', () => {
+  it('records a test-only recipe file entry with the digest the fence holds (g2Digest null)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fence-update-file-'));
+    const fencePath = join(dir, 'fence.json');
+    const real = readFence().entries.find((e) => e.id === 'FENCE_BARRIER_LINE')!;
+    writeFileSync(fencePath, fenceText({ ...readFence(), entries: readFence().entries.filter((e) => e.id !== 'FENCE_BARRIER_LINE') }));
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      expect(await main(['--add-file', 'tests/fixtures/fence-recipes/FENCE_BARRIER_LINE.json', '--fence', fencePath])).toBe(0);
+    } finally {
+      vi.restoreAllMocks();
+    }
+    const added = readFence(fencePath).entries.at(-1)!;
+    expect(added).toEqual({ id: 'FENCE_BARRIER_LINE', kind: 'recipeFile', file: 'tests/fixtures/fence-recipes/FENCE_BARRIER_LINE.json', ticks: 1200, g2Digest: null, currentDigest: real.currentDigest, changedBy: [] });
+  }, 300_000);
 });
 
 describe('fence-update as a command', () => {

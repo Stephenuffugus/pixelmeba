@@ -25,7 +25,7 @@ import { cellIndex, diffusionCoefficient, inMask, maskCells, transportOpen } fro
 import { run } from '../../src/sim/tick';
 import { stageEnvironment, transportCache } from '../../src/sim/transport';
 import type { World } from '../../src/sim/world';
-import { barrierDish, clearWater, pushEdges, registry, setField, verticalLine } from '../helpers/world';
+import { barrierDish, clearWater, preFlipRegistry, pushEdges, setField, verticalLine } from '../helpers/world';
 
 const X = 63;
 const Y = 64;
@@ -180,9 +180,9 @@ describe('barrier factors on ordinary diffusion (CT §5.3)', () => {
 });
 
 describe('NEUTRAL and the coefficient cache', () => {
-  it('a world recording barriers with edges [] has kR/kD byte-equal to a shipped-registry world’s and to min(ki, kj); the viral pair is the same array', () => {
+  it('a world recording barriers with edges [] has kR/kD byte-equal to a v1.0 (pre-flip) world’s and to min(ki, kj); the viral pair is the same array', () => {
     const a = dish();
-    const b = clearWater({ seed: 104729, lid: 'closed' }, registry());
+    const b = clearWater({ seed: 104729, lid: 'closed' }, preFlipRegistry());
     expect(a.content.manifest.enabledSystems).toContain('barriers');
     expect(b.content.manifest.enabledSystems).not.toContain('barriers');
     const ta = transportCache(a);

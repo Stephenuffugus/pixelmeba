@@ -266,6 +266,8 @@ describe('atlas completeness (P1.4)', () => {
         ['tile/pellet/0', 'frames[tile/pellet/0]', 'M10 (tile pellet): missing frame "tile/pellet/0"'],
         ['tile/wafer/2', 'frames[tile/wafer/2]', 'M11 (tile wafer): missing frame "tile/wafer/2"'],
         ['tile/stain/0', 'frames[tile/stain/0]', 'M10 (tile stain): missing frame "tile/stain/0"'],
+        // Since the systems flip (D-0121): the device tile (S05–S12) with the devices system.
+        ['tile/device/12', 'frames[tile/device/12]', 'devices system (tile device): missing frame "tile/device/12"'],
       ];
       for (const [key, path, message] of cases) {
         const issues = one(key);
@@ -290,6 +292,8 @@ describe('atlas completeness (P1.4)', () => {
       // What the manifest needs: film with the film system, objects with M10/M11.
       expect(enabledTiles({ manifest: { enabledSystems: ['core'], enabledMaterials: ['SUGAR'] } })).toEqual([]);
       expect(enabledTiles({ manifest: { enabledSystems: ['film'], enabledMaterials: ['M11'] } }).map((t) => t.tile)).toEqual(['film', 'wafer', 'stain']);
+      expect(enabledTiles({ manifest: { enabledSystems: ['core', 'devices'], enabledMaterials: [] } }).map((t) => t.tile)).toEqual(['device']);
+      expect(enabledTiles({ manifest: { enabledSystems: ['barriers', 'climate', 'core'], enabledMaterials: [] } })).toEqual([]);
       expect(enabledTiles(reg).map((t) => t.tile)).toEqual(expect.arrayContaining(reg.manifest.enabledSystems.includes('film') ? ['film'] : []));
     });
   });

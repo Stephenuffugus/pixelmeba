@@ -179,3 +179,37 @@ registry (60 alive in both).
 - The stage-start senses, the glow thresholds and both emissions cost about **+0.02 to +0.08 ms per tick** for 50
   emitters (the senses scan every living slot once while the world records 'signals' or 'rivalry').
 
+
+## Systems flip (D-0121) (2026-10-14)
+
+Measured by the systems-flip builder with no test run going (1-minute load 2.4 after the runs, the probe's own), after the flip's manifest edit: a NEW dish under the
+shipped (post-flip) registry, which records 'barriers', 'climate' and 'devices' and S01–S12. The probe is
+`tmp/flip/perf.ts` (`npx tsx`, not committed; adapted from wave 10's `tmp/barrier-transport-perf/perf.ts`): clear water
+(`clearWater` under `registry()`), uniform sugar 0.2 and inhBact 0.05 on every seventh cell, B01 founders, `step()`
+timed per tick. (a) no edges and no devices, fixed light, drying off (climate arrays stay null); (b) the maximum stores:
+512 edges (an S01 line at x 40, an S02 line at x 60, alternating open and closed S03 shutters at x 80, eight S04
+channels at x 100 with alternating flow, and S02 D edges on rows 20, 100, 50 and 76 up to the cap) and 256 devices
+(S05–S12 in turn on a 5 × 6 cell grid, heaters and coolers on, resins selecting inhBact), with the light cycle and
+drying on. Each process runs a, b, a, b.
+
+| Run | Agents placed / alive at end | Ticks | Tick mean / p95 / max (ms) |
+|---|---|---|---|
+| (a) none | 400 / 350 | 2,000 | 2.455 / 4.061 / 78.1 (first-run warm-up) |
+| (b) 512 edges + 256 devices, cycle, drying | 400 / 343 | 2,000 | 3.360 / 5.567 / 42.9 |
+| (a) again | 400 / 350 | 2,000 | 2.281 / 3.873 / 8.9 |
+| (b) again | 400 / 343 | 2,000 | 3.260 / 5.413 / 14.5 |
+| (a) none | 6,000 / 5,822 | 600 | 12.167 / 20.675 / 132.8 (first-run warm-up) |
+| (b) 512 edges + 256 devices, cycle, drying | 6,000 / 5,825 | 600 | 14.359 / 22.823 / 104.6 |
+| (a) again | 6,000 / 5,822 | 600 | 10.689 / 16.494 / 24.1 |
+| (b) again | 6,000 / 5,825 | 600 | 13.955 / 21.999 / 37.4 |
+
+- **Tick p95 with 512 edges and 256 devices: about 5.4–5.6 ms at ~350 organisms and about 22–23 ms at ~5,800
+  organisms** (the 6,000-agent check wave 9 deferred to the flip), against 3.9–4.1 ms and 16.5–20.7 ms without
+  structures. The structures, the light cycle and drying add about +0.9–1.0 ms per tick at ~350 organisms and about
+  +2.2–3.3 ms at ~5,800 (the per-mover edge checks of wave 9 grow with the movers, as expected).
+- At 1× (one 0.10 s tick per 100 ms) the worst p95 above uses about 23 % of the budget. At 4× (25 ms per tick) the
+  ~350-organism dish uses about 22 % and the ~5,800-organism dish with the maximum stores about 90 % of the budget at
+  p95 on this 2-vCPU codespace (Node, not a device); a full dish at 4× was already near its budget without
+  structures (66–83 %). Nothing was optimised for the flip, and no tick was skipped or timestep changed.
+- A new dish with no structures records the systems but allocates nothing (climate arrays null, stores empty): its
+  cost is the v1.0 cost, and the fence passes unchanged.

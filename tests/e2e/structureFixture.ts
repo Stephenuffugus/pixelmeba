@@ -1,9 +1,10 @@
 /**
  * The structure-ui journeys' fixture dish (P5.1/P5.2; D-0119 "Lab screens are reached by importing a fixture
- * dish built in Node against the production build, with no dev flag"). Nothing is enabled in this build
- * (D-0104), so the only way a player could reach the Build tools is a dish whose OWN recorded manifest has the
- * systems: this builds one in Node with the test registry (tests/helpers/world.ts barrierRegistry: the
- * shipped manifest plus 'barriers', 'climate' and 'devices' and S01–S12), pushes a few edges and devices,
+ * dish built in Node against the production build, with no dev flag"). Before the systems flip (D-0104) the
+ * only way a player could reach the Build tools was a dish whose OWN recorded manifest has the systems; since
+ * the flip (D-0121) a new dish has them too, and the fixture still gives the journeys a known layout. It is
+ * built in Node with the test registry (tests/helpers/world.ts barrierRegistry: the shipped manifest, which
+ * holds 'barriers', 'climate' and 'devices' and S01–S12), pushes a few edges and devices,
  * runs it 100 ticks and writes it with buildSaveFile, exactly as lineage.spec.ts builds its fixture.
  *
  * Layout (cell coordinates; the dish keeps the Water Garden's two stones, centred near (42, 45) and (83, 82)):

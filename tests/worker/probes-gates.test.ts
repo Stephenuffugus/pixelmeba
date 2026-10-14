@@ -38,6 +38,7 @@ import {
   clearWater,
   PHASE5_STRUCTURE_IDS,
   place,
+  preFlipRegistry,
   pushDevices,
   pushEdges,
   registry,
@@ -264,7 +265,7 @@ describe('boundary statuses', () => {
 /**
  * Golden: the reading HEAD's src/worker/probes.ts (before this wave; `git show HEAD:src/worker/probes.ts`
  * run on this exact scenario by a scratch script, tmp/region-charts-gates/golden.test.ts) gave. Shipped
- * registry, clear water, lid closed, background sugar 0.2, a sugar patch, three Sprinters and a Sunbead,
+ * registry before the systems flip (now preFlipRegistry, D-0121), clear water, lid closed, background sugar 0.2, a sugar patch, three Sprinters and a Sunbead,
  * 50 ticks, window 60.
  */
 const V10_GOLDEN =
@@ -272,7 +273,9 @@ const V10_GOLDEN =
 
 describe('a v1.0 dish', () => {
   it('reads as before: the old keys and boundary entries equal; gates [], salt measured, silicate absent, nothing else appended', () => {
-    const w = clearWater({ lid: 'closed', backgroundOverrides: { sugar: 0.2 } });
+    // A v1.0 dish records no Phase 5 system: the pre-flip manifest (since the systems flip, D-0121, a new
+    // dish under the shipped registry records barriers and devices and lists the decaying pools).
+    const w = clearWater({ lid: 'closed', backgroundOverrides: { sugar: 0.2 } }, preFlipRegistry());
     for (const f of ['inhBact', 'eStarch', 'breaker', 'v01', 'v02'] as const) expect(w.fields[f], f).toBeDefined();
     expect(listedDecayingFields(w)).toEqual([]);
     for (let dx = -3; dx <= 3; dx++) for (let dy = -3; dy <= 3; dy++) setField(w, 'sugar', cellIndex(60 + dx, 60 + dy), 1);

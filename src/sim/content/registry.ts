@@ -30,7 +30,7 @@ import {
   type ToolDef,
   type VariantDef,
 } from './schema';
-import { IMPLEMENTED_MODULES, IMPLEMENTED_NATIVE_ABILITIES, IMPLEMENTED_STRUCTURES } from './implemented';
+import { IMPLEMENTED_MODULES, IMPLEMENTED_NATIVE_ABILITIES, IMPLEMENTED_RULES, IMPLEMENTED_STRUCTURES, IMPLEMENTED_SYSTEMS, RULES_VERSIONS } from './implemented';
 import { expectedStructureKind, rulesOfManifest, STRUCTURE_SYSTEM_NEEDS } from './structureRules';
 import { MODULE_NATIVE_ABILITY, missingModuleParams, moduleSetProblem } from './moduleRules';
 import { MAX_WHAT_IF_CHOICES, variantPatchProblems } from '../variants';
@@ -376,6 +376,18 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
     sortedUnique(m.enabledHabitats, 'enabledHabitats');
     sortedUnique(m.enabledStructures ?? [], 'enabledStructures');
     if (!m.enabledSystems.includes('core')) err(mf, 'enabledSystems', 'must include "core"');
+    // D-0121 (lead): the import refuses a dish that records a system outside IMPLEMENTED_SYSTEMS, a rules
+    // version newer than IMPLEMENTED_RULES or developmental changes, so a manifest naming one would make every
+    // new dish (its autosave, Continue) impossible to reopen. Tests may skip this with allowUnimplemented.
+    if (!allowUnimplemented) {
+      m.enabledSystems.forEach((id, i) => {
+        if (!IMPLEMENTED_SYSTEMS.includes(id)) err(mf, `enabledSystems.${i}`, `"${id}" is not implemented by the simulation yet`);
+      });
+      for (const [key] of RULES_VERSIONS) {
+        if (m[key] > IMPLEMENTED_RULES[key]) err(mf, key, `${m[key]} is newer than the simulation implements (${IMPLEMENTED_RULES[key]})`);
+      }
+      if (m.developmentalEnabled && !IMPLEMENTED_RULES.developmental) err(mf, 'developmentalEnabled', 'developmental changes are not implemented by the simulation yet');
+    }
     m.enabledSpecies.forEach((id, i) => {
       const s = species.map[id];
       if (s === undefined) return err(mf, `enabledSpecies.${i}`, `unknown species "${id}"`);

@@ -10,6 +10,7 @@
 import { AGENT_CAP, CELL_COUNT, DT } from '@sim/constants';
 import { HabitatSchema, ManifestSchema, MaterialSchema, ModuleSchema, SpeciesSchema } from '@sim/content/schema';
 import { ENTITY_COLUMNS } from '@sim/entities';
+import { STRUCTURE_RECORD_IDS } from '@sim/grid';
 import { FIELD_DEFS, isFieldId } from '@sim/fields';
 import { isStorableFieldValue } from '@sim/fieldValue';
 import { canonicalJson, sha256Hex, base64ToBytes } from '@sim/hash';
@@ -17,7 +18,7 @@ import { missingModuleParams, moduleSetProblem } from '@sim/content/moduleRules'
 import { deserializeWorld, migrateWorldState, serializeWorld, type EncodedArray, type WorldState } from '@sim/serialize';
 import { SCHEMA_VERSION, type World } from '@sim/world';
 import { variantRecordOf } from '@sim/variants';
-import { IMPLEMENTED_MODULES } from '@sim/content/implemented';
+import { IMPLEMENTED_MODULES, IMPLEMENTED_NATIVE_ABILITIES, IMPLEMENTED_RULES, IMPLEMENTED_STRUCTURES, IMPLEMENTED_SYSTEMS, RULES_VERSIONS } from '@sim/content/implemented';
 import { MODULE_SYSTEM_NEEDS, nativeAbilityPairingProblem, speciesSystemNeeds } from '@sim/content/registry';
 import { isMutationPreset } from '@sim/mutation';
 import { historyProblem, journalProblem } from '@sim/history';
@@ -267,6 +268,62 @@ function decodeF64(e: EncodedArray): Float64Array {
   return new Float64Array(bytes.buffer, bytes.byteOffset, e.length);
 }
 
+const CELL_STRUCTURE_IDS: readonly string[] = Object.values(STRUCTURE_RECORD_IDS);
+
+/** Raw id of a recorded list entry, for naming it in a refusal ('?' when it is not a string). */
+function rawId(v: unknown): string {
+  return typeof v === 'string' ? cleanName(v) : '?';
+}
+
+/**
+ * D-0121: refuses (kind 'content') a dish whose recorded manifest names a system or structure, or whose
+ * recorded species names a native ability, that this build does not implement (IMPLEMENTED_SYSTEMS,
+ * IMPLEMENTED_STRUCTURES with the cell structures, IMPLEMENTED_NATIVE_ABILITIES). Reads the raw records:
+ * the schemas run afterwards.
+ */
+function unimplementedRulesProblem(manifest: unknown, species: unknown): void {
+  const m = (manifest !== null && typeof manifest === 'object' ? manifest : {}) as { enabledSystems?: unknown; enabledStructures?: unknown };
+  if (Array.isArray(m.enabledSystems)) {
+    for (const id of m.enabledSystems as unknown[]) {
+      if (typeof id === 'string' && (IMPLEMENTED_SYSTEMS as readonly string[]).includes(id)) continue;
+      fail('content', `This dish uses the "${rawId(id)}" system, which this version of Pixelmeba cannot simulate. Nothing was loaded.`);
+    }
+  }
+  if (Array.isArray(m.enabledStructures)) {
+    for (const id of m.enabledStructures as unknown[]) {
+      if (typeof id === 'string' && (CELL_STRUCTURE_IDS.includes(id) || IMPLEMENTED_STRUCTURES.includes(id))) continue;
+      fail('content', `This dish uses the structure "${rawId(id)}", which this version of Pixelmeba cannot simulate. Nothing was loaded.`);
+    }
+  }
+  if (Array.isArray(species)) {
+    for (const sp of species as unknown[]) {
+      const abilities = (sp as { nativeAbilities?: unknown } | null)?.nativeAbilities;
+      if (!Array.isArray(abilities)) continue;
+      for (const a of abilities as unknown[]) {
+        if (typeof a === 'string' && (IMPLEMENTED_NATIVE_ABILITIES as readonly string[]).includes(a)) continue;
+        const spId = (sp as { id?: unknown }).id;
+        fail('content', `This dish's ${rawId(spId)} uses the native ability "${rawId(a)}", which this version of Pixelmeba cannot simulate. Nothing was loaded.`);
+      }
+    }
+  }
+}
+
+/**
+ * D-0121 (the lead's ceilings): refuses (kind 'version') a dish whose recorded manifest names a newer rules
+ * version than this build implements (IMPLEMENTED_RULES: simulation rules, evolution rules, ability registry,
+ * trait mapping) or records developmental changes, which no build before Phase 7 simulates. Without it a
+ * dish recorded under newer rules would load and run under this build's older ones. Reads the raw record
+ * before the manifest schema, so the version is named; a dish at or below every version keeps its rules.
+ */
+function newerRulesProblem(manifest: unknown): void {
+  const m = (manifest !== null && typeof manifest === 'object' ? manifest : {}) as Record<string, unknown>;
+  for (const [key, words] of RULES_VERSIONS) {
+    const v = m[key];
+    if (typeof v === 'number' && v > IMPLEMENTED_RULES[key]) fail('version', `This dish needs a newer version of Pixelmeba (${words} ${v}).`);
+  }
+  if (m.developmentalEnabled === true && !IMPLEMENTED_RULES.developmental) fail('version', 'This dish needs a newer version of Pixelmeba (developmental changes).');
+}
+
 /** Parse and validate a save file's text. Returns the file; building the world is a separate step. */
 export async function parseSaveFile(text: string): Promise<SaveFile> {
   if (text.length > MAX_IMPORT_BYTES) fail('size', `The file is larger than ${MAX_IMPORT_BYTES / 1024 / 1024} MB.`);
@@ -295,6 +352,13 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
   // Embedded content must parse with the same schemas as the shipped packs.
   const c = s.content;
   if (!c) fail('content', 'The dish is missing its content definitions.');
+  // D-0121 (the systems flip): a dish can only run with rules this build implements. A system, structure
+  // or native ability this build cannot simulate is refused by name before the manifest and species
+  // schemas run, so a newer build's unknown id is named rather than reported as an invalid manifest.
+  // The line is "implemented", not "enabled": a dish keeps its recorded ruleset. Newer rules versions are
+  // named first ("needs a newer version"), since a newer build's dish usually also names newer systems.
+  newerRulesProblem(c.manifest);
+  unimplementedRulesProblem(c.manifest, c.species);
   const man = ManifestSchema.safeParse(c.manifest);
   if (!man.success) fail('content', `Manifest: ${man.error.issues[0]?.message ?? 'invalid'}`);
   if (man.data.simulationVersion !== 3) fail('version', 'Unsupported simulation version.');

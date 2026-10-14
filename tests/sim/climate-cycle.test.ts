@@ -19,7 +19,7 @@ import { stateHash } from '../../src/sim/serialize';
 import { run } from '../../src/sim/tick';
 import type { World } from '../../src/sim/world';
 import { registryWith } from '../helpers/registry';
-import { clearWater, registry } from '../helpers/world';
+import { clearWater, preFlipRegistry, registry } from '../helpers/world';
 
 const SYSTEMS = [...registry().manifest.enabledSystems, 'barriers', 'climate', 'devices'].sort() as SystemFlag[];
 const REG = registryWith({ enabledSystems: SYSTEMS });
@@ -191,7 +191,7 @@ describe('setLightMode (the state transition wave 10\'s command calls)', () => {
   });
 
   it('is refused without the climate system, and changes nothing', () => {
-    const w = clearWater();
+    const w = clearWater({}, preFlipRegistry());
     const h = stateHash(w);
     expect(setLightMode(w, 'cycle')).toBe(false);
     expect(w.settings.lightMode).toBe('fixed');

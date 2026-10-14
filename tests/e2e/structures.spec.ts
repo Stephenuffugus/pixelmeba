@@ -1,33 +1,43 @@
 /**
- * P5.1/P5.2 structure journeys (structure-ui, wave 11; D-0119). Nothing is enabled in this build (D-0104):
- * the only way to these screens is a dish whose own recorded manifest has the systems, so each journey
- * imports a fixture dish built in Node (tests/e2e/structureFixture.ts) through Saved dishes → Import, as a
- * player could, with no dev flag and no build variant. The Garden (FIRST_DISH) shows none of it.
- * No screenshot assertions; the tracer is checked through its note's visibility rule (UX words).
+ * P5.1/P5.2 structure journeys (structure-ui, wave 11; D-0119). Each journey imports a fixture dish built in
+ * Node (tests/e2e/structureFixture.ts) through Saved dishes → Import, as a player could, with no dev flag and
+ * no build variant. Since the systems flip (D-0121) a new dish (the Garden) records the systems too and shows
+ * the same controls, while a v1.0 save (the rc1 corpus) keeps its recorded ruleset and shows none of them
+ * (the D-0104 checks). No screenshot assertions; the tracer is checked through its note's visibility rule.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
+import { REPO_ROOT } from '../../tools/lib/content-fs';
 import { expectNoHorizontalOverflow, expectNoSeriousA11yViolations, expectReachable, seedSettings, startGarden } from './helpers';
 import { FIXTURE_CELLS, writeStructureFixture } from './structureFixture';
 
 let FIXTURE = '';
+/** A v1.0.0-rc1 save (tests/fixtures/saves-rc1), unzipped to a .pixelmeba file for the Import button. */
+let RC1 = '';
 
 test.beforeAll(async () => {
   test.setTimeout(180_000);
   FIXTURE = await writeStructureFixture();
+  const dir = join(REPO_ROOT, 'tmp', 'e2e-structure-ui');
+  mkdirSync(dir, { recursive: true });
+  RC1 = join(dir, `rc1-fungal-supply-line-${process.pid}.pixelmeba`);
+  writeFileSync(RC1, gunzipSync(readFileSync(join(REPO_ROOT, 'tests', 'fixtures', 'saves-rc1', 'fungal-supply-line-t900.pixelmeba.gz'))));
 });
 
 test.afterAll(() => {
   if (FIXTURE) rmSync(FIXTURE, { force: true });
+  if (RC1) rmSync(RC1, { force: true });
 });
 
 const SLOW = 420_000;
 
-async function importFixture(page: Page): Promise<void> {
+async function importFixture(page: Page, file: string = FIXTURE): Promise<void> {
   await seedSettings(page, { showPrompts: false });
   await page.goto('/');
   await page.getByRole('button', { name: 'Saved dishes' }).click();
-  await page.locator('input[aria-label="Import a dish file"]').setInputFiles(FIXTURE);
+  await page.locator('input[aria-label="Import a dish file"]').setInputFiles(file);
   await expect(page.getByTestId('dish-screen')).toBeVisible();
   await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
 }
@@ -212,7 +222,7 @@ test('the gate inspector: the S02 table, measured totals, the tracer note while 
   await expectNoHorizontalOverflow(page);
 });
 
-test('climate per dish: wetting brush, light and drying for the fixture, the climate lines; none of it in the Garden', async ({ page }) => {
+test('climate per dish: wetting brush, light and drying for the fixture, the climate lines; a new dish shows them, a v1.0 save none (D-0104)', async ({ page }) => {
   test.setTimeout(SLOW);
   await importFixture(page);
   await openLab(page);
@@ -240,8 +250,23 @@ test('climate per dish: wetting brush, light and drying for the fixture, the cli
   await expect(page.getByTestId('overlay-warmth')).toBeVisible();
   await expect(page.getByTestId('overlay-moisture')).toBeVisible();
 
-  // The Garden records no climate, structures or devices: none of these controls appear.
+  // Since the systems flip (D-0121) a new dish (the Garden) records climate, barriers, devices and S01–S12:
+  // the wetting brush, light and drying controls and the Build group appear.
   await startGarden(page);
+  await openLab(page);
+  await page.getByTestId('lab-cat-habitat').click();
+  await expect(page.getByTestId('lab-tray')).toHaveAttribute('data-category', 'habitat');
+  await expect(page.getByTestId('lab-item-wet')).toBeVisible();
+  await expect(page.getByTestId('lab-light-fixed')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('lab-drying-off')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('lab-cat-tools').click();
+  await expect(page.getByTestId('lab-tray')).toHaveAttribute('data-category', 'tools');
+  await expect(page.getByTestId('lab-build')).toBeVisible();
+  await page.getByTestId('lab-cat-observe').click();
+  await expect(page.getByTestId('overlay-warmth')).toBeVisible();
+
+  // A v1.0 save (rc1 corpus) records no climate, structures or devices: none of these controls appear.
+  await importFixture(page, RC1);
   await openLab(page);
   await page.getByTestId('lab-cat-habitat').click();
   await expect(page.getByTestId('lab-tray')).toHaveAttribute('data-category', 'habitat');

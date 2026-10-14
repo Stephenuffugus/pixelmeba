@@ -864,8 +864,9 @@ describe('Lab content comes from the world (P2.7)', () => {
       expect(reg.materials[id]!.kind).toBe('paint');
       expect(reg.materials[id]!.phase).toBe(2);
     }
-    expect(reg.manifest.enabledStructures).toEqual(['BEAD', 'STONE', 'WALL']);
-    // Phase 5 (wave 8b): S01–S12 are records too (phase 5, not enabled; tests/content/structures-p5.test.ts).
+    // Phase 5: S01–S12 are records too (phase 5), enabled since the systems flip (D-0121; tests/content/structures-p5.test.ts).
+    const P5 = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12'];
+    expect(reg.manifest.enabledStructures).toEqual(['BEAD', ...P5, 'STONE', 'WALL']);
     expect(reg.structureIds.filter((id) => reg.structures[id]!.phase <= 2)).toEqual(['BEAD', 'STONE', 'WALL']);
     // CT §4 names.
     expect(reg.structures.STONE!.name).toBe('Stone');
@@ -876,7 +877,7 @@ describe('Lab content comes from the world (P2.7)', () => {
       expect(reg.structures[id]!.phase).toBe(2);
     }
     const w = garden();
-    expect(w.content.manifest.enabledStructures).toEqual(['BEAD', 'STONE', 'WALL']);
+    expect(w.content.manifest.enabledStructures).toEqual(['BEAD', ...P5, 'STONE', 'WALL']);
     expect(w.content.materials.filter((m) => m.kind === 'paint').map((m) => m.target).sort()).toEqual(['gel', 'sediment', 'shade', 'water']);
   });
 
@@ -898,17 +899,18 @@ describe('Lab content comes from the world (P2.7)', () => {
     expect(errors((r) => withManifest(r, { enabledStructures: ['STONE', 'BEAD'] }))).toEqual([
       'content/manifest.json → enabledStructures: must be sorted ascending',
     ]);
-    // A record the simulation does not implement yet (the Phase 5 membrane, content/structures/S01.json
-    // since wave 8b) may exist but not be enabled; enabling it also needs its system (structureRules.ts).
-    expect(errors((r) => withManifest(r, { enabledStructures: ['BEAD', 'S01', 'STONE', 'WALL'] }))).toEqual([
-      'content/manifest.json → enabledStructures.1: "S01" is not implemented by the simulation yet',
+    // Enabling a Phase 5 structure needs its system (structureRules.ts). S01 is implemented since the systems
+    // flip (D-0121); the "not implemented" refusal is tests/content/structures-implemented-check.test.ts.
+    const v1Systems = (base.manifest.data as { enabledSystems: string[] }).enabledSystems.filter((x) => x !== 'barriers' && x !== 'climate' && x !== 'devices');
+    expect(errors((r) => withManifest(r, { enabledSystems: v1Systems, enabledStructures: ['BEAD', 'S01', 'STONE', 'WALL'] }))).toEqual([
       'content/manifest.json → enabledStructures.1: enabled structure "S01" (Fine membrane) needs the "barriers" system (not in enabledSystems)',
     ]);
     // A phase later than the build: buildPhase + 1 read from the manifest (it moves with each phase; D-0105).
     const buildPhase = (base.manifest.data as { buildPhase: number }).buildPhase;
     const late = { file: 'content/structures/STONE.json', data: { ...stone, phase: buildPhase + 1 } };
     expect(errors((r) => ({ ...r, structures: r.structures.map((f) => (f.file.endsWith('STONE.json') ? late : f)) }))).toEqual([
-      `content/manifest.json → enabledStructures.1: "STONE" belongs to phase ${buildPhase + 1} (build phase ${buildPhase})`,
+      // STONE's index in the shipped list (after S01–S12 since the systems flip, D-0121).
+      `content/manifest.json → enabledStructures.${(base.manifest.data as { enabledStructures: string[] }).enabledStructures.indexOf('STONE')}: "STONE" belongs to phase ${buildPhase + 1} (build phase ${buildPhase})`,
     ]);
     const bad = { file: 'content/structures/STONE.json', data: { ...stone, guide: { summary: '' } } };
     expect(errors((r) => ({ ...r, structures: r.structures.map((f) => (f.file.endsWith('STONE.json') ? bad : f)) })).length).toBeGreaterThan(0);

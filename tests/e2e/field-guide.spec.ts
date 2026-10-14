@@ -5,7 +5,7 @@
  *   Back restores its speed (4×);
  * - '/' then "vel" → Velvet with General biology, Rules of this game and its predators;
  * - Materials → Salt says "No additional modeled reaction."; Structures & tools → Sample shows
- *   Changes / Does not change / Watch for;
+ *   Changes / Does not change / Watch for, and (since the systems flip, D-0121) S01–S12 and the wetting brush;
  * - a Lab dish with Recyclers and a debris dose, run at 4×, until the Recycler entry shows
  *   "Seen in your dishes" and its badge;
  * - axe clean; body text ≥ 16 px; 48 px targets; at 200 % text nothing scrolls sideways.
@@ -129,6 +129,14 @@ test('Home → Field Guide: every tab, search with "/", Salt, Sample; axe clean,
   await expect(sample.getByTestId('guide-seen')).toContainText('This entry is none of those, so nothing is noted for it.');
   await expect(page.getByTestId('guide-entry-STONE').getByTestId('guide-seen')).toBeVisible();
   await expect(page.getByTestId('guide-entry-UNDO')).toContainText('A game tool with no lab analogue');
+  // Since the systems flip (D-0121; the D-0104 checks): the twelve Phase 5 structures and the wetting brush.
+  const S5: [string, string][] = [
+    ['S01', 'Fine membrane'], ['S02', 'Small gate'], ['S03', 'Shutter gate'], ['S04', 'One-way channel'],
+    ['S05', 'Porous shelter'], ['S06', 'Attachment mesh'], ['S07', 'Nutrient basket'], ['S08', 'Adsorption resin'],
+    ['S09', 'Heater'], ['S10', 'Cooler'], ['S11', 'Shade roof'], ['S12', 'Moisture wick'],
+  ];
+  for (const [id, name] of S5) await expect(page.getByTestId(`guide-entry-${id}`).getByRole('heading', { level: 2 }), id).toHaveText(name);
+  await expect(page.getByTestId('guide-entry-WET_BRUSH').getByRole('heading', { level: 2 })).toHaveText('Wetting brush');
   await expectNoSeriousA11yViolations(page);
 
   // Glossary.

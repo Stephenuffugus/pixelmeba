@@ -21,6 +21,23 @@ export function registry(): ContentRegistry {
   return loadRegistryFs();
 }
 
+/** The systems the systems flip enabled (D-0121); a v1.0 dish records none of them. */
+export const FLIP_SYSTEMS: readonly SystemFlag[] = ['barriers', 'climate', 'devices'];
+
+/**
+ * The registry of a dish recorded before the systems flip (D-0121), which is what a v1.0 dish records: the
+ * shipped manifest without 'barriers', 'climate', 'devices' and S01–S12 (its other content, and therefore its
+ * contentHash, equal to the pre-flip build's). For tests whose subject is a dish without the Phase 5 systems,
+ * which used the shipped registry for that before the flip.
+ */
+export function preFlipRegistry(): ContentRegistry {
+  const m = registry().manifest;
+  return registryWith({
+    enabledSystems: m.enabledSystems.filter((s) => !FLIP_SYSTEMS.includes(s)),
+    enabledStructures: (m.enabledStructures ?? []).filter((s) => !/^S\d\d$/.test(s)),
+  });
+}
+
 /**
  * A clear-water dish (Water Garden without stones), background sugar 0, no organisms. `reg` defaults
  * to the shipped registry; a test whose subject is Phase 2 passes registryWith(G2_LISTS).
@@ -205,12 +222,13 @@ export function pushDevices(world: World, devices: readonly Omit<Device, 'id'>[]
 
 /**
  * The content registry of the wave 9 barrier tests: the shipped manifest plus the 'barriers', 'climate'
- * and 'devices' systems and S01–S12 (allowUnimplemented: the lead lists the structures as implemented at
- * the Phase 5 systems flip, D-0104), as tests/content/recipe-structures.test.ts WITH_ALL does.
+ * and 'devices' systems and S01–S12. Since the systems flip (D-0121) the shipped manifest holds them all
+ * and the structures are implemented, so the lists equal the shipped ones (registryWith drops the
+ * repeats) and no allowUnimplemented is needed. Kept explicit so the barrier tests say what they need.
  */
 export function barrierRegistry(): ContentRegistry {
   const systems = [...registry().manifest.enabledSystems, 'barriers', 'climate', 'devices'].sort() as SystemFlag[];
-  return registryWith({ enabledSystems: systems, enabledStructures: ['BEAD', ...PHASE5_STRUCTURE_IDS, 'STONE', 'WALL'] }, { allowUnimplemented: true });
+  return registryWith({ enabledSystems: systems, enabledStructures: ['BEAD', ...PHASE5_STRUCTURE_IDS, 'STONE', 'WALL'] });
 }
 
 /** A clear-water dish (clearWater) that records the Phase 5 systems and S01–S12. */
@@ -222,15 +240,15 @@ export function barrierDish(overrides: Partial<RecipeDef> = {}): World {
 
 /**
  * The content registry of the wave 10 resters tests: the shipped manifest plus B12, F04, P08, X02 and
- * V02, the 'barriers', 'climate' and 'devices' systems and S01–S12. allowUnimplemented: DORMANCY and
- * RESTING_DAUGHTER are implemented by e3-resters (wave 10) but listed as implemented only by the lead at
- * integration (D-0117); the structures at the Phase 5 systems flip (D-0104).
+ * V02, the 'barriers', 'climate' and 'devices' systems and S01–S12. DORMANCY and RESTING_DAUGHTER were
+ * listed as implemented at the wave 10 integration (D-0118) and the structures at the systems flip
+ * (D-0121), so no allowUnimplemented is needed; registryWith drops the repeated systems.
  */
 export function resterRegistry(): ContentRegistry {
   const shipped = registry().manifest;
   const species = [...shipped.enabledSpecies, 'B12', 'F04', 'P08', 'V02', 'X02'].sort();
   const systems = [...shipped.enabledSystems, 'barriers', 'climate', 'devices'].sort() as SystemFlag[];
-  return registryWith({ enabledSpecies: species, enabledSystems: systems, enabledStructures: ['BEAD', ...PHASE5_STRUCTURE_IDS, 'STONE', 'WALL'] }, { allowUnimplemented: true });
+  return registryWith({ enabledSpecies: species, enabledSystems: systems, enabledStructures: ['BEAD', ...PHASE5_STRUCTURE_IDS, 'STONE', 'WALL'] });
 }
 
 /** Paint substrate `sub` (grid.ts SUB_*) on the in-dish cells of the rectangle x0…x1 × y0…y1 (test setup); bumps geometryVersion. */

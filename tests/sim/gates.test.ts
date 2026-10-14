@@ -10,6 +10,7 @@ import { realizeRecipe } from '../../src/sim/recipes';
 import { deserializeWorld, serializeWorld } from '../../src/sim/serialize';
 import { readG2SaveText } from '../helpers/g2-saves';
 import { G2_LISTS, registryWith, withEnabled } from '../helpers/registry';
+import { preFlipRegistry } from '../helpers/world';
 
 /**
  * A later build's manifest: the g2 lists plus Phase 3's B05, the film system and module E04. Built
@@ -59,9 +60,12 @@ describe('worldHasStructure reads the recorded enabledStructures (Phase 5 founda
     expect(['STONE', 'S01', 'S09'].map((id) => worldHasStructure(recorded(['S01', 'STONE']), id))).toEqual([true, true, false]);
     expect(worldHasStructure(recorded(undefined), 'STONE')).toBe(false);
     expect(worldHasStructure(recorded([]), 'WALL')).toBe(false);
-    // The shipped build lists no S-structure yet; a world realized under it records none.
+    // Since the systems flip (D-0121) the shipped build lists S01–S12 and a world realized under it records them;
+    // a world realized under the pre-flip manifest records none.
     const shipped = realizeRecipe(registryWith({}), 'FIRST_DISH_V1', { worldId: 'gates-shipped' });
-    expect(['STONE', 'WALL', 'BEAD'].every((id) => worldHasStructure(shipped, id))).toBe(true);
-    expect(['S01', 'S04', 'S08', 'S12'].some((id) => worldHasStructure(shipped, id))).toBe(false);
+    expect(['STONE', 'WALL', 'BEAD', 'S01', 'S04', 'S08', 'S12'].every((id) => worldHasStructure(shipped, id))).toBe(true);
+    const v1 = realizeRecipe(preFlipRegistry(), 'FIRST_DISH_V1', { worldId: 'gates-v1' });
+    expect(['STONE', 'WALL', 'BEAD'].every((id) => worldHasStructure(v1, id))).toBe(true);
+    expect(['S01', 'S04', 'S08', 'S12'].some((id) => worldHasStructure(v1, id))).toBe(false);
   });
 });
