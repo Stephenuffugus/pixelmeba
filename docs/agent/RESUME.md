@@ -8,15 +8,19 @@
 > as built, D‑0119 wave 11's rulings). WAVE 11 RUNNING (run `wf_79e1123b-8bf`, session 1383cb99, launched 08:01 from
 > docs/agent/g5-wave-11.run.workflow.js.txt at `934c01f`; stage 1 structure-render-worker 4271 + e2-signals 4272, both
 > critical 'own'; stage 2 structure-ui 4273 + region-charts-gates 4274). Backups every 30 min → `wip/g5-wave-11` (pid
-> tmp/lead/backup-11.pid = the loop itself). START HERE.**
+> tmp/lead/backup-11.pid = the loop itself). WAVE 12 TASK WRITER RUNNING (run `wf_f5b989a5-62e`, from
+> docs/agent/g5-wave-12-tasks.workflow.js.txt; writes docs/agent/g5-wave-12.tasks.js.txt only: e2-light-algae 4271 +
+> e3-predation 4272 critical 'own', structures-art-audio 4273, one stage of three by default). START HERE.**
 > - If the session died mid-11: if `git status` is clean, restore the tree from `wip/g5-wave-11`; read
 >   docs/reports/reviews/g5-wave-11/ and the run journal
 >   ~/.claude/projects/-workspaces-pixelmeba/1383cb99-e9f3-46ff-8724-5fe4b53c8734/subagents/workflows/wf_79e1123b-8bf/journal.jsonl;
 >   rerun only unfinished tasks (A.only + finish notes), or resumeFromRunId in the same session.
+> - If the writer died: its file may be partial; rerun the saved script (same prompt) after checking the journal.
 > - After 11: LEAD AFTER WAVE 11 in docs/agent/g5-wave-11.tasks.js.txt (append RIVALRY and SIGNAL_GLOW, E02 only if no
 >   test pins IMPLEMENTED_MODULES, move validator.test.ts's unimplemented subject to P06's RADIUS_CAPTURE), then THE
->   SYSTEMS FLIP there (item 2a: the import refuses systems, structures and native abilities the build lacks), then the
->   wave 12 task writer (e2-light-algae, e3-predation, structures-art-audio; g5-plan wave 12 row).
+>   SYSTEMS FLIP there (item 2a: the import refuses systems, structures and native abilities the build lacks), then save
+>   the wave 12 writer's final message to docs/reports/reviews/g5-wave-12/tasks-writer.md, lead-review and fill the wave 12
+>   file, its LEAD PRE-LAUNCH, launch wave 12.
 
 > **Update 2026‑10‑14 01:22 UTC — WAVE 10 RUNNING (run `wf_73d02c11-690`, session 1383cb99, launched 01:17 from
 > docs/agent/g5-wave-10.run.workflow.js.txt; stage 1 barrier-transport 4271 + structure-commands 4272 on task). Backups
