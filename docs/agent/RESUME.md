@@ -3,6 +3,24 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑14 21:52 UTC — WAVE 12 BUILT AND VERIFIED (run `wf_8d1fe37e-485` completed: 7 agents, no BLOCKER/MAJOR,
+> 7 MINOR for the lead; reports docs/reports/reviews/g5-wave-12/). The whole tree is backed up on `wip/g5-wave-12` (9547d97 and
+> later). The owner asked for a refresh at the next natural stop (the codespace stops by about 23:50 UTC): the lead is integrating
+> wave 12 (implemented.ts appends, the validator test subject → F03's TRAP, comment fixes), then ONE full `npm run check`
+> (~85 min), commit and push. START HERE.**
+> - If `git log -1` on main is NOT "feat(sim): wave 12 …": restore the tree (`git checkout wip/g5-wave-12 -- . && git reset -q`
+>   if `git status` is clean), finish LEAD AFTER WAVE 12 (docs/agent/g5-wave-12.tasks.js.txt:189) with the MINOR rulings below,
+>   run `npm run check`, commit, push.
+> - MINOR rulings (lead, 21:52): (1) modeSwitch ring burst (600 A04 switch on one tick, EVENT_RING_SIZE 500) → fix before the
+>   ORGANISM FLIP enables A04 (coalesce per tick and species; lead item in wave 13's flip checklist); (2) actionLabel 'Eating'
+>   for a Photo-mode A04 → wave 13 org-ui; (3) S01/S02 glyphs alike below 3 px/cell on phones → P5.8 polish (wave 15) unless
+>   fixed at integration; (4) shutter Open/Close plays 'drop' over 'gate_click' → lead fix in LabView sendLabCommand; (5) the
+>   contrast audit's blanket `${id}/` justifications → exact pairs, F04-on-sediment kept as a P5.8 art item; (6) metabolism
+>   'mixotroph' ⇔ MIXOTROPHY validator rule → before the organism flip; (7) handling.ts header overclaims the import → reword.
+> - Then wave 13 (fill its wave 12 placeholders; D‑0123 draft → its final number), the ORGANISM FLIP, wave 14, …
+> - Owner asks still pending: an 8-core codespace at this refresh (the check takes ~85 min here) and `env -u GITHUB_TOKEN gh
+>   auth login -h github.com -p https -w` once for the arcade deploy.
+
 > **Update 2026‑10‑14 19:31 UTC — SYSTEMS FLIP COMMITTED `c549595` (pushed; D‑0121; P5.1 and P5.2 ticked): barriers, climate,
 > devices and S01–S12 enabled, contentHash 67075b0e… → 84c41636…, fence unchanged plus two fence dishes; the import and the
 > validator refuse rules the build does not implement (IMPLEMENTED_SYSTEMS, IMPLEMENTED_RULES ceilings). Wave 11 journeys
