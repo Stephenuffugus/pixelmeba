@@ -11,15 +11,31 @@
  *    energy is discarded, and the winner's cooldown starts. One prey is never awarded twice.
  * 4. Then parasite attachment (parasites.ts) and host-specific infection (viruses.ts), P3.4.
  *
+ * Phase 5 wave 12 (P5.5; handling.ts; D-0106, D-0122), reached only in a world whose recorded species include
+ * a RADIUS_CAPTURE or HANDLING predator (both tables null otherwise: the loop above runs unchanged):
+ *  - RADIUS_CAPTURE (P06): its contact test is a centre distance ≤ 1.0 (inclusive) instead of 0.5; the ±1
+ *    cell scan covers it, and the edge rule (pairPermitted, both classes) is unchanged.
+ *  - HANDLING (P10): a handler that left Active ends an open attempt ('rest'), one no longer hungry ends it
+ *    ('hunger'); one with an open attempt checks only its target (valid, allowed, in contact on positions
+ *    after stage 4, not behind a refusing edge): progress += DT, and at progress ≥ need it joins the claim
+ *    pool above as a COMPLETING claim with the same priority; otherwise the attempt ends ('target' or
+ *    'contact') and nothing new starts this tick. One without an attempt and with its cooldown ready picks
+ *    the nearest prey in contact as above: a need of 0 is an instant claim, a need > 0 starts an attempt
+ *    (the start tick is the first contact tick). After the commits a winner's attempt ends silently (its
+ *    capture event carries detail.handled = the need) and an attempt whose target was taken, or which
+ *    completed without winning, ends as 'taken': no progress and no cooldown are kept.
+ *  - A predator held by a trap (heldBySlot ≥ 0) is not excluded: it may make contact captures (D-0106).
+ *
  * Contact kinds on the 'contact' stream (saved worlds depend on them; never renumber): 1 attack (here),
  * 2 parasite attachment (parasites.ts KIND_PARASITE), 3 infection unit order (viruses.ts KIND_INFECT),
  * 4 reserved for E12 (adhesion.ts resolves pairs by birthId and draws nothing).
  * 5. Then E12 link formation (adhesion.ts formAdhesionLinks).
  */
-import { CONTACT_DISTANCE, GRID_H, GRID_W, MEAL_CAP_MULTIPLE } from './constants';
+import { CONTACT_DISTANCE, DT, GRID_H, GRID_W, MEAL_CAP_MULTIPLE, RADIUS_CAPTURE_DISTANCE } from './constants';
 import { classOf } from './barriers';
 import { pairPermitted } from './edgePassage';
 import { emit } from './events';
+import { endAttempt, handlingNeedOf, handlingSpecies, HANDLING_EPS, radiusCaptureSpecies, startAttempt } from './handling';
 import { cellIndex } from './grid';
 import { recordDeath } from './lineage';
 import { removeAllLinks } from './links';
@@ -33,6 +49,7 @@ import { R } from './reasons';
 import { det, STREAMS } from './rng';
 import { entityCell, forEachInCell } from './spatial';
 import { markField } from './transport';
+import type { SpeciesRT } from './species';
 import type { World } from './world';
 
 const KIND_ATTACK = 1;
@@ -55,18 +72,41 @@ function predationContacts(world: World): void {
   const hw = e.highWater;
   const contact2 = CONTACT_DISTANCE * CONTACT_DISTANCE;
   const edgesOn = world.edges.length > 0; // wave 9 gate: edges exist only where 'barriers' is recorded
+  // Phase 5 wave 12 gates (handling.ts): null unless the world's recorded species include a HANDLING or a
+  // RADIUS_CAPTURE predator, so every other world runs the v1.0 loop and reads no new column.
+  const handlers = handlingSpecies(world);
+  const radius = radiusCaptureSpecies(world);
   let anyClaim = false;
+  let anyAttempt = false;
   for (let i = 0; i < hw; i++) {
     claimOf[i] = -1;
     bestClaimant[i] = -1;
   }
   // 1. Claims.
   for (let i = 0; i < hw; i++) {
-    if (c.alive[i] !== 1 || c.lifeState[i] !== 0) continue;
+    if (c.alive[i] !== 1) continue;
+    // A handler that left Active ends its open attempt ('rest'; SPEC §7.3 "continuous contact").
+    if (handlers !== null && c.lifeState[i] !== 0 && handlers[c.species[i]!] === 1 && c.handlingNeed[i]! > 0) endAttempt(world, i, 'rest');
+    if (c.lifeState[i] !== 0) continue;
     const sp = world.species[c.species[i]!]!;
     if (!sp.isPredator) continue;
     const prof = profileOf(world, i);
-    if (!hungryPredator(world, i, prof)) continue;
+    const handler = handlers !== null && handlers[sp.idx] === 1;
+    if (!hungryPredator(world, i, prof)) {
+      if (handler) endAttempt(world, i, 'hunger'); // "Predators at meal capacity stop hunting" (SPEC §7.3)
+      continue;
+    }
+    // P06 (RADIUS_CAPTURE): a fixed centre distance of 1.0 cell, not its sensing (CT §6.2, D-0106).
+    const reach2 = radius !== null && radius[sp.idx] === 1 ? RADIUS_CAPTURE_DISTANCE * RADIUS_CAPTURE_DISTANCE : contact2;
+    if (handler && c.handlingNeed[i]! > 0) {
+      // An open attempt: its own target only, in contact at every tick (D02 381).
+      anyAttempt = true;
+      if (continueAttempt(world, i, sp, reach2, edgesOn)) {
+        claim(world, i, c.preySlot[i]!);
+        anyClaim = true;
+      }
+      continue;
+    }
     if (c.attackCooldown[i]! > 0) continue;
     const px = c.x[i]!;
     const py = c.y[i]!;
@@ -86,7 +126,7 @@ function predationContacts(world: World): void {
           if (!preyAllowed(world, sp, s)) return;
           if (cls !== null && !pairPermitted(world, own, cell, cls, classOf(world, s))) return;
           const d = (c.x[s]! - px) ** 2 + (c.y[s]! - py) ** 2;
-          if (d > contact2) return;
+          if (d > reach2) return;
           const b = c.birthId[s]!;
           if (d < bestD || (d === bestD && b < bestBirth)) {
             best = s;
@@ -97,26 +137,100 @@ function predationContacts(world: World): void {
       }
     }
     if (best < 0) continue;
-    claimOf[i] = best;
-    anyClaim = true;
-    const pri = det(world.seed, STREAMS.contact, world.tick, KIND_ATTACK, c.birthId[i]!);
-    if (bestClaimant[best]! < 0 || pri > bestPriority[best]! || (pri === bestPriority[best]! && c.birthId[i]! < c.birthId[bestClaimant[best]!]!)) {
-      bestClaimant[best] = i;
-      bestPriority[best] = pri;
+    if (handler) {
+      const need = handlingNeedOf(world, sp, best);
+      if (need > 0) {
+        // The start tick is the first contact tick; only a need of one tick or less completes at once.
+        anyAttempt = true;
+        startAttempt(world, i, best, need);
+        if (c.handlingProgress[i]! < need - HANDLING_EPS) continue;
+      }
     }
+    claim(world, i, best);
+    anyClaim = true;
   }
-  if (!anyClaim) return;
+  if (!anyClaim) {
+    if (anyAttempt) endTakenAttempts(world, handlers!);
+    return;
+  }
   // 2–3. Resolve and commit in ascending predator slot order.
   for (let i = 0; i < hw; i++) {
     const prey = claimOf[i]!;
     if (prey < 0 || bestClaimant[prey] !== i) continue;
     if (c.alive[prey] !== 1 || c.alive[i] !== 1) continue;
-    consumePrey(world, i, prey);
+    if (handlers === null || !(c.handlingNeed[i]! > 0)) {
+      consumePrey(world, i, prey);
+      continue;
+    }
+    // A completed handling attempt: the capture event names the need it took; no break event.
+    consumePrey(world, i, prey, c.handlingNeed[i]);
+    endAttempt(world, i, 'capture');
+  }
+  if (anyAttempt) endTakenAttempts(world, handlers!);
+}
+
+/**
+ * Register predator `i`'s claim on `prey` with its seeded priority det(seed, 'contact', tick, KIND_ATTACK,
+ * birthId) (SPEC §3.2 row 5): the highest priority wins, then the lower birthId. Instant claims and
+ * completing handling attempts share this one pool, so no prey is claimed twice.
+ */
+function claim(world: World, i: number, prey: number): void {
+  const c = world.ents.cols;
+  claimOf[i] = prey;
+  const pri = det(world.seed, STREAMS.contact, world.tick, KIND_ATTACK, c.birthId[i]!);
+  if (bestClaimant[prey]! < 0 || pri > bestPriority[prey]! || (pri === bestPriority[prey]! && c.birthId[i]! < c.birthId[bestClaimant[prey]!]!)) {
+    bestClaimant[prey] = i;
+    bestPriority[prey] = pri;
+  }
+}
+
+/**
+ * An Active, hungry handler with an open attempt (handling.ts): its target must still be there (a valid
+ * reference to a living organism it may take), within its capture reach on positions after stage 4, and
+ * not behind an edge refusing either class. Then the attempt gains DT and returns true when it completes
+ * (progress ≥ need − EPS); otherwise the attempt ends ('target', or 'contact' when only too far) and no
+ * new attempt starts this tick.
+ */
+function continueAttempt(world: World, i: number, sp: SpeciesRT, reach2: number, edgesOn: boolean): boolean {
+  const e = world.ents;
+  const c = e.cols;
+  const t = c.preySlot[i]!;
+  if (t < 0 || !e.refValid(t, c.preyBirthId[i]!) || !preyAllowed(world, sp, t)) {
+    endAttempt(world, i, 'target');
+    return false;
+  }
+  const px = c.x[i]!;
+  const py = c.y[i]!;
+  const d = (c.x[t]! - px) ** 2 + (c.y[t]! - py) ** 2;
+  if (d > reach2) {
+    endAttempt(world, i, 'contact');
+    return false;
+  }
+  // Within reach (≤ 1 cell), so the two cells are neighbours and pairPermitted applies.
+  if (edgesOn && !pairPermitted(world, cellIndex(Math.floor(px), Math.floor(py)), entityCell(c.x[t]!, c.y[t]!), classOf(world, i), classOf(world, t))) {
+    endAttempt(world, i, 'target');
+    return false;
+  }
+  c.handlingProgress[i]! += DT;
+  return c.handlingProgress[i]! >= c.handlingNeed[i]! - HANDLING_EPS;
+}
+
+/**
+ * After the commits: an open attempt that did not end in a capture this stage and whose target is gone, or
+ * that completed without winning its target, ends as 'taken' (another claimant won the prey): the loser of
+ * a simultaneous completion keeps no progress and gets no cooldown (D02 383).
+ */
+function endTakenAttempts(world: World, handlers: Uint8Array): void {
+  const e = world.ents;
+  const c = e.cols;
+  for (let i = 0; i < e.highWater; i++) {
+    if (c.alive[i] !== 1 || !(c.handlingNeed[i]! > 0) || handlers[c.species[i]!] !== 1) continue;
+    if (!e.refValid(c.preySlot[i]!, c.preyBirthId[i]!) || c.handlingProgress[i]! >= c.handlingNeed[i]! - HANDLING_EPS) endAttempt(world, i, 'taken');
   }
 }
 
 /** Transfer a captured prey into the predator's meal and remove the prey exactly once. */
-export function consumePrey(world: World, pred: number, prey: number): void {
+export function consumePrey(world: World, pred: number, prey: number, handled = 0): void {
   const c = world.ents.cols;
   const prof = profileOf(world, pred);
   const sp = world.species[c.species[pred]!]!;
@@ -147,7 +261,9 @@ export function consumePrey(world: World, pred: number, prey: number): void {
     birthId: c.birthId[pred]!,
     cell,
     amount: take,
-    detail: { prey: c.birthId[prey]!, preySpecies: c.species[prey]! },
+    // A handled capture (handling.ts) also names the seconds of contact it needed; every other capture
+    // event is unchanged.
+    detail: handled > 0 ? { prey: c.birthId[prey]!, preySpecies: c.species[prey]!, handled } : { prey: c.birthId[prey]!, preySpecies: c.species[prey]! },
   });
   emit(world.events, world.counters, {
     tick: world.tick,

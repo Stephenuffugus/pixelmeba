@@ -14,7 +14,9 @@
  *                   virus bursts never sound)
  *   card_open       an experiment card opened
  *   wake            a resting organism woke
- * `gate_click` is deferred (P3.10 "gate click later"): no gate exists to click yet.
+ *   gate_click      the player opened a gate's inspector (once per open) or a shutter Open / Close the dish
+ *                   accepted (UX §8.1 "soft gate clicks"; Phase 5 wave 12): a soft, short tick. A UI cue (it
+ *                   answers one player action), so it bypasses the world budget; the gate tracer never sounds.
  *
  * World cues (driven by what happens in the dish) pass the rate limiter; UI cues answer one player
  * action each and bypass it. Nothing here imports the simulation.
@@ -29,7 +31,8 @@ export type CueId =
   | 'compare_result'
   | 'division'
   | 'card_open'
-  | 'wake';
+  | 'wake'
+  | 'gate_click';
 
 export const CUE_IDS: readonly CueId[] = [
   'drop',
@@ -41,6 +44,7 @@ export const CUE_IDS: readonly CueId[] = [
   'division',
   'card_open',
   'wake',
+  'gate_click',
 ];
 
 /** World cues share the ≤ 4 per second budget (CT §12.10 "sound cues ≤ 4/s"). */
@@ -183,6 +187,15 @@ export const PATCHES: Readonly<Record<CueId, CuePatch>> = {
     pitch: { hz: 330, to: 495 },
     filter: { type: 'lowpass', hz: 1800, q: 0.7 },
     gainDb: -18,
+  },
+  // A soft gate tick: band-passed noise, 2 ms attack, 45 ms in all, 4 dB under 'select' (-16 dB).
+  gate_click: {
+    cueId: 'gate_click',
+    source: { kind: 'noise' },
+    envelope: { attack: 0.002, decay: 0.028, sustain: 0, hold: 0, release: 0.015 },
+    pitch: { hz: 3200 },
+    filter: { type: 'bandpass', hz: 3200, q: 4 },
+    gainDb: -20,
   },
 };
 

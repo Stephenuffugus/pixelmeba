@@ -44,6 +44,7 @@ import { edibleFilmAt, filmWeight, orderedFilmRequest, weightedFilmRequest } fro
 import { commitHostDrains, reserveHostDrains } from './parasites';
 import { debrisRequest } from './debrisFeeder';
 import type { Profile } from './phenotype';
+import { lowLightResponse, MODE_PHOTO } from './mixotrophy';
 
 const K = 6; // max requests per organism
 const ROUTE_NONE = 0;
@@ -55,11 +56,12 @@ const ROUTE_DETRITUS = 4;
 
 /**
  * Photosynthetic light response (SPEC §6.5): linear in effective light, or for an E06 carrier
- * min(1, light / lightHalf) (SPEC §9 E06).
+ * min(1, light / lightHalf) (SPEC §9 E06), or for an A03 (`lowLight`: LOW_LIGHT_CURVE, which never carries
+ * E06) min(1, light / 0.30) (Phase 5 wave 12; mixotrophy.ts lowLightResponse).
  */
-export function photoLightResponse(prof: Profile, light: number): number {
+export function photoLightResponse(prof: Profile, light: number, lowLight = false): number {
   const shade = prof.shade;
-  return shade === null ? light : Math.min(1, light / shade.lightHalf);
+  return shade === null ? (lowLight ? lowLightResponse(light) : light) : Math.min(1, light / shade.lightHalf);
 }
 
 /**
@@ -72,11 +74,14 @@ export function photoCeilingShare(prof: Profile, light: number): number {
   return shade === null ? light : shade.ceilingFactor * Math.min(1, light / shade.lightHalf);
 }
 
-/** Whether this organism's stage 6 route this tick was photosynthesis and it fixed carbon (E06 "active now"). */
+/**
+ * Whether this organism's stage 6 route this tick was photosynthesis and it fixed carbon (E06 "active now").
+ * An A04 (mixotroph) photosynthesizes only in Photo mode (SPEC §7.10; Phase 5 wave 12).
+ */
 export function photosynthesizedThisTick(world: World, i: number): boolean {
   const c = world.ents.cols;
   const sp = world.species[c.species[i]!]!;
-  return sp.photosynthetic && !sp.mixotroph && (c.flags[i]! & FLAG.feeding) !== 0;
+  return sp.photosynthetic && (!sp.mixotroph || c.metabolicMode[i] === MODE_PHOTO) && (c.flags[i]! & FLAG.feeding) !== 0;
 }
 
 const route = new Uint8Array(AGENT_CAP);
@@ -245,10 +250,19 @@ function intakeBody(world: World): void {
         continue;
       }
     }
-    if (sp.photosynthetic && !sp.mixotroph) {
+    // A04 (mixotroph, SPEC §7.10; Phase 5 wave 12): exactly one route per tick, by its saved mode: Photo
+    // takes this photosynthetic route, Sugar the field route below (its content foods, never broth). Stage 4
+    // (mixotrophy.ts updateMode) gave every Active A04 a mode before this stage.
+    if (sp.photosynthetic && (!sp.mixotroph || c.metabolicMode[i] === MODE_PHOTO)) {
       const co2 = world.fields.co2![cell]!;
       // E06 (SPEC §9): light response min(1, light / 0.35) and the ceiling × 0.70; other limits unchanged.
-      const req = prof.shade === null ? Math.min(co2, budget * light[cell]! * availability(co2)) : Math.min(co2, budget * photoCeilingShare(prof, light[cell]!) * availability(co2));
+      // A03 (LOW_LIGHT_CURVE, never an E06 carrier): light response min(1, light / 0.30) (SPEC §6.5 route 2).
+      const req =
+        prof.shade === null
+          ? sp.lowLight
+            ? Math.min(co2, budget * lowLightResponse(light[cell]!) * availability(co2))
+            : Math.min(co2, budget * light[cell]! * availability(co2))
+          : Math.min(co2, budget * photoCeilingShare(prof, light[cell]!) * availability(co2));
       route[i] = ROUTE_PHOTO;
       addRequest(i, FIELD_INDEX.co2, req, cell);
       if (req <= 0) c.limitCode[i] = light[cell]! <= 0 ? R.LIGHT_LIMITED : R.CO2_LIMITED;
@@ -256,7 +270,8 @@ function intakeBody(world: World): void {
     }
     const foods = prof.foods;
     if (foods.length === 0) {
-      if (sp.isPredator) c.limitCode[i] = R.PRED_NO_PREY;
+      // H3 (Phase 5 wave 12): a meal-less predator in an open handling attempt shows it is holding on.
+      if (sp.isPredator) c.limitCode[i] = c.handlingNeed[i]! > 0 ? R.PRED_HANDLING_IN_PROGRESS : R.PRED_NO_PREY;
       continue;
     }
     route[i] = ROUTE_FIELD;
@@ -479,7 +494,9 @@ function intakeBody(world: World): void {
     // An E06 carrier's food access is the CO2 it got against its light-shaped photosynthetic ceiling, so
     // its light response below is compared with the other supplied fractions on equal terms.
     const shaded = route[i] === ROUTE_PHOTO && prof.shade !== null;
-    const accessBase = shaded ? budget * photoCeilingShare(prof, light[cell]!) : budget;
+    // A03's food access is likewise the CO2 it got against its low-light-shaped ceiling (Phase 5 wave 12).
+    const lowLit = route[i] === ROUTE_PHOTO && sp.lowLight;
+    const accessBase = shaded ? budget * photoCeilingShare(prof, light[cell]!) : lowLit ? budget * lowLightResponse(light[cell]!) : budget;
     const access = accessBase > 0 ? C / accessBase : 1;
     let code: number = R.NONE;
     let value = 1;
@@ -503,9 +520,9 @@ function intakeBody(world: World): void {
       value = fracSi;
     }
     // The carrier's light response (raw light without E06) competes; the measured light is what the Lab prints.
-    if (route[i] === ROUTE_PHOTO && photoLightResponse(prof, light[cell]!) < value) {
+    if (route[i] === ROUTE_PHOTO && photoLightResponse(prof, light[cell]!, sp.lowLight) < value) {
       code = R.LIGHT_LIMITED;
-      value = photoLightResponse(prof, light[cell]!);
+      value = photoLightResponse(prof, light[cell]!, sp.lowLight);
     }
     if ((c.flags[i]! & FLAG.overCapacity) !== 0 && 0.5 <= value) {
       code = R.CROWDING_INTAKE_HALVED;
@@ -513,6 +530,12 @@ function intakeBody(world: World): void {
     }
     c.limitCode[i] = code;
     c.limitValue[i] = code === R.LIGHT_LIMITED ? light[cell]! : value;
+    // A04 (Phase 5 wave 12; SPEC §12.2): with no binding limit the reason is the mode it fed in this tick,
+    // with the light it read; any binding limit (light, oxygen, nutrient, food access, crowding) keeps priority.
+    if (code === R.NONE && sp.mixotroph) {
+      c.limitCode[i] = route[i] === ROUTE_PHOTO ? R.MODE_PHOTO : R.MODE_SUGAR;
+      c.limitValue[i] = light[cell]!;
+    }
   }
 
   // Reserved host drains commit after the ordinary commit (their products are not consumed this stage).

@@ -40,6 +40,11 @@ const C = {
   edgeShutter: [0x17, 0x2c, 0x35],
   edgeChannel: [0x10, 0x2a, 0x44],
   edgeHalo: [0xf5, 0xf4, 0xef],
+  // Gate-class badges (wave 12 structures-art-audio, src/render/gateBadges.ts): dark pips (≥ 3:1 against water,
+  // gel and sediment, and against their own pale plate) on a pale plate with a dark rim. The pip's SHAPE carries
+  // its meaning (filled, half, hollow, chevron), never the colour.
+  badgePip: [0x17, 0x2c, 0x35],
+  badgePlate: [0xf5, 0xf4, 0xef],
   // Refusal preview (red) and accepted preview (amber), as the Lab brush preview draws them.
   previewOk: [0xf2, 0xb8, 0x4b],
   previewRefused: [0xb3, 0x47, 0x3f],

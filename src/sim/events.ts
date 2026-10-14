@@ -41,7 +41,26 @@ export type EventType =
    * dim). Event ring only: the snapshot's visual events leave them out (the feed and P5.6 read them later).
    */
   | 'glowOn'
-  | 'glowOff';
+  | 'glowOff'
+  /**
+   * Mixotrophy (Phase 5 wave 12; SPEC §7.10, §12.3; src/sim/mixotrophy.ts): an A04 (MIXOTROPHY) changed its
+   * saved metabolic mode in stage 4 (Photo -> Sugar or Sugar -> Photo; never at initialization or birth).
+   * cause R.MODE_PHOTO or R.MODE_SUGAR (the new mode); species, birthId, cell; detail.light = the effective
+   * light it read. Event ring only: the snapshot's visual events leave it out.
+   */
+  | 'modeSwitch'
+  /**
+   * Handling (Phase 5 wave 12; SPEC §7.3, §9.19; src/sim/handling.ts): a HANDLING predator began a
+   * continuous-contact attempt. cause R.PRED_HANDLING_IN_PROGRESS; species, birthId, cell; detail.prey (the
+   * prey's birthId), detail.preySpecies (species index), detail.need (seconds). Event ring only.
+   */
+  | 'handlingStart'
+  /**
+   * Handling (Phase 5 wave 12): an attempt ended without a capture. species, birthId, cell; detail.prey,
+   * detail.why 'contact' | 'target' | 'hunger' | 'taken' | 'rest' | 'division', detail.progress (seconds held).
+   * Event ring only.
+   */
+  | 'handlingBreak';
 
 export interface SimEvent {
   readonly id: number;

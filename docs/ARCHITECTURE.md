@@ -262,6 +262,38 @@ As built, Phase 5 wave 11 (P5.3 signals and rivalry; D-0119, D-0120; `src/sim/si
 - **Energy.** A new ledger category 'signal' (S_GLOW emission and glowing); E02's 0.02 E/s is 'surcharge'. Older
   saves load signal 0, and a v1.0 world now serializes `energy.signal: 0` (the energy ledger is not hashed).
 
+As built, Phase 5 wave 12 (P5.3 A03–A05, P5.5 P06/P07/P09/P10; D-0122, D-0123; `src/sim/mixotrophy.ts`, `handling.ts`,
+`intake.ts`, `movement.ts`, `births.ts`, `contacts.ts`, `phenotype.ts`, `events.ts`, `constants.ts`). Nothing is enabled
+(D-0104); a world recording none of these species takes the old paths (WeakMap tables keyed on `world.species`, null
+without the ability; the fence is unchanged):
+- **A04's saved mode (stage 4).** Per living slot: suitability, then `updateMode` (only when the world has a mixotroph and
+  this species is one), then the stress display, the life-state override and movement. `updateMode` reads this tick's
+  stage 2 light at the organism's cell (D-0113): `nextMode` gives Photo at ≥ 0.35 and Sugar at ≤ 0.25 (both inclusive
+  and exact) and otherwise keeps the mode; an organism without one (mode 0) takes `initialMode` (Photo at ≥ 0.35, else
+  Sugar). An introduced A04 gets its first mode at its first stage 4, never in stage 1 (stage 1 reads no light,
+  and a reload recomputes light from the current canopy), so mode 0 is a legal tick-0 state. A first mode emits no event;
+  a real switch emits one 'modeSwitch' {light} (cause MODE_PHOTO / MODE_SUGAR). A newborn takes nextMode(its cell's light,
+  the parent's mode) in stage 9. Photo-mode movement scores light, Sugar-mode scores sugar.
+- **Intake routes (stage 6).** A non-mixotroph photosynthesizer requests `min(co2, budget × L × av)` as before (E06 its
+  ceiling form); A03 (`SpeciesRT.lowLight`) `min(co2, budget × min(1, L / 0.30) × av)`; an A04 in Photo mode takes the
+  photosynthetic route, in Sugar mode the field route with ['sugar'] only (never broth): exactly one route per tick
+  (`photosynthesizedThisTick`). E06 applies in Photo mode only. A mixotroph with no binding limit reports MODE_PHOTO or
+  MODE_SUGAR with the light as its value; a meal-less handler reports PRED_HANDLING_IN_PROGRESS (hook H3).
+- **Stage 5 claims (contacts.ts).** P06 (RADIUS_CAPTURE) reaches a fixed Euclidean centre distance of 1.0, inclusive,
+  without FLAG.attached; the edge check stays. P10 (HANDLING): the nearest prey in reach with need > 0 opens an attempt
+  (`startAttempt`: need sampled once, contactSeconds or 1 + 3c for a jacketed prey; progress = DT; 'handlingStart'
+  {prey, preySpecies, need}); each later tick a continuing attempt checks only its target (gone or not allowed or behind
+  a refusing edge → 'target'; out of the predator's own reach → 'contact') and adds DT; at progress ≥ need − 1e-9 it
+  joins the one claim pool with the ordinary KIND_ATTACK priority (no new stream or kind). The winner captures
+  (`consumePrey`, `detail.handled` = need; cooldown only at a capture); a loser or an attempt whose prey was taken ends
+  'taken' with no progress and no cooldown. A break (also 'hunger', 'rest' at the handler's next stage 5, 'division' in
+  stage 9 by hook H2) zeroes need and progress together and keeps preySlot; at most one attempt event per predator per
+  tick, and movement does not re-acquire while an attempt is open (hook H1). P09 (DETRITUS_FALLBACK) eats through E08's
+  detritus route, genome weights ignored. Tick-boundary invariant: need > 0 ⇒ 0 < progress < need.
+- **Events.** 'modeSwitch', 'handlingStart' and 'handlingBreak' {prey, why, progress} stay in the event ring (not visual
+  events). Constants: LOW_LIGHT_SATURATION 0.3, MODE_PHOTO_LIGHT 0.35, MODE_SUGAR_LIGHT 0.25, RADIUS_CAPTURE_DISTANCE 1,
+  HANDLING_JACKET_BASE_SECONDS 1, HANDLING_JACKET_SECONDS_PER_COVERAGE 3, JACKET_COVERAGE_FRACTION 0.1.
+
 ## 6. Determinism primitives
 ```ts
 // 32-bit mixer (murmur3 fmix / splitmix32 style) over canonical encoding of args
@@ -688,6 +720,16 @@ As built, Phase 5 wave 11 (D-0119, D-0120; `src/render/renderer.ts`, `structureL
   back before the edge, the Fixed tokens never move, an S04 shows only its directed transfer; reduced motion shows
   the end frame.
 
+As built, Phase 5 wave 12 (D-0122, D-0123; `src/render/structureLayer.ts`, `gateBadges.ts`, `renderer.ts`,
+`art/src/tiles/structures.ts`): edge glyph marks scale with the zoom (S01 1–5 dots, S02 1–3 slots, an open S03 drawn
+as two posts across the edge below 6 px per cell, S04 one or two chevrons; each glyph has a minimum screen width).
+Gate-class badges (`gateBadges.ts`, pure) are a static seven-pip strip (Dissolved, Activity, Viral, Small, Medium,
+Large, Fixed) from `edgeFactor` / `edgePermits`, an S04's one-way pips from `tracerCrosses`; one badge per straight
+run from 12 px per cell up and the selected gate's badge at every zoom, on a constant-size plate beside the line,
+in `badgesG` just above the device particles; redrawn on a geometry, selection or zoom-band change, never per tick.
+The device tile keeps its 13 frames (s05, s07 and s08_0–3 redrawn; every other atlas frame byte-identical; atlas
+exportHash 08fb56e6…, 1691 frames, 1024 × 2048).
+
 ## 10. Art and audio pipelines
 
 ### 10.1 Art authoring model
@@ -776,6 +818,13 @@ As built, the narrator (P4.9; `src/audio/narration.ts`, `src/ui/narration.ts`):
   followed family; followFamily — a new guide notice whose id ends in ':follow'; saved — a new "Saved “…”"
   toast; undoRewinds — the accepted Undo toast. feederEmpty, lightOn and lightOff have no evidence in a
   v1.0 dish (equipment is Phase 6) and are never spoken.
+
+As built, Phase 5 wave 12 (D-0123; `src/audio/patches.ts`, `cues.ts`; `src/ui/panels/GateSheet.tsx`): 'gate_click' is
+appended last to CUE_IDS, a UI cue (not a world cue, no coalescing, never limited): band-passed noise at 3200 Hz, Q 4,
+2 ms attack, 45 ms in all, −20 dB (4 dB under 'select'). It plays once per opening of the gate sheet (keyed on the open
+event, so a remount does not replay it) and once per accepted shutter Open / Close (sendLabCommand then plays no
+'drop' under it); a refused toggle sounds 'placement_error'; the tracer and the badges import no audio. Visible
+equivalents: the sheet opening, the toast, the table rows and pips.
 
 ## 11. Persistence
 
@@ -1093,10 +1142,17 @@ in `IMPLEMENTED_SYSTEMS` (the v1.0 systems, barriers, climate, devices, silicate
 developmental), every `enabledStructures` entry a cell structure or in `IMPLEMENTED_STRUCTURES` (S01–S12), and every
 recorded species' `nativeAbilities` entry in `IMPLEMENTED_NATIVE_ABILITIES`. A miss is refused by name with kind
 'content' in the module refusal's words ("This dish uses the "equipment" system, which this version of Pixelmeba
-cannot simulate. Nothing was loaded."; "… the structure "S99", …"; "This dish's P10 uses the native ability
-"HANDLING", …"), before the manifest and species schemas run, so a newer build's unknown id is named rather than
+cannot simulate. Nothing was loaded."; "… the structure "S99", …"; "This dish's F03 uses the native ability
+"TRAP", …"), before the manifest and species schemas run, so a newer build's unknown id is named rather than
 reported as an invalid manifest. The current world is untouched (tests/persistence/import-implemented.test.ts). A
 `{kind: 'state'}` dish source in the worker comes only from a loaded save, so it needs no second check.
+
+As built, Phase 5 wave 12 (D-0123; `src/persistence/phase5State.ts`): the organism rules add handling progress — a
+negative progress, progress on a species without HANDLING, progress without an attempt (need 0) and progress ≥ need are
+refused; a need with progress 0, a need with no prey slot and an outsized need are unreachable and load and run
+deterministically. A non-zero metabolicMode needs MIXOTROPHY; mode 0 (a tick-0 founder) is accepted. Since the wave 12
+integration IMPLEMENTED_NATIVE_ABILITIES also lists DETRITUS_FALLBACK, HANDLING, LOW_LIGHT_CURVE, MIXOTROPHY and
+RADIUS_CAPTURE (22 abilities).
 
 ## 12. Android (Capacitor)
 - `appId com.lucidwinds.pixelmeba`, `appName Pixelmeba`, `webDir dist`, `android.allowMixedContent
@@ -1191,6 +1247,11 @@ geometry, resins, environment and one cell inspector) costs about 2 to 3 ms mean
 organisms with 512 edges, 256 devices and 8 resins (the geometry is rebuilt only when `geometryVersion` moves);
 region probes with six regions and about 530 organisms add about 0.25 ms per tick for organism crossings; the stage
 8 signal pass costs about +0.02 to +0.08 ms per tick for 50 emitters.
+
+As built, Phase 5 wave 12 (builders' numbers, indicative, contended; docs/reports/perf-g5.md): stage 4 with 300 A04
+(423 alive) about 0.54–0.71 ms mean against about 0.09 ms for 300 stationary A01 (mostly A04's ordinary swimming
+decisions; the mode update is one comparison); stage 5 with 60 P06 among 400 B01 about 0.26 ms mean, 20 P10 handling
+among 80 prey about 0.20 ms, a v1.0 predator dish (60 P01/P02 among 400 B01) about 0.20 ms.
 
 ## 14. Web and arcade build
 - `npm run build` → `dist/` with relative asset URLs; works from any subpath and inside an

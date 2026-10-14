@@ -4,17 +4,21 @@
  * structure-render-worker, D-0119). One atlas tile id 'device', 16×16, one heading, appended LAST to
  * art/src/tiles TILES so no earlier frame moves. Frames, in this order:
  *
- *    0 s05      porous shelter: an arch with pores
+ *    0 s05      porous shelter: a tall arch on two legs with dark pores through the band, doorway open
  *    1 s06      attachment mesh: a grid
- *    2 s07      nutrient basket: an open cup outline
- *    3 s08_0    adsorption resin, saturation quartile 0 (a pale block) …
- *    6 s08_3    … quartile 3 (a dark, densely dotted block): darker and denser by quartile
- *    7 s09_off  heater: a coil
- *    8 s09_on   heater on: the coil with a warm accent and heat ticks
- *    9 s10_off  cooler: a snowflake-like fin
- *   10 s10_on   cooler on: the fin with a cool accent and frost tips
+ *    2 s07      nutrient basket: an open cup outline (thick rim, woven slanted walls, empty inside)
+ *    3 s08_0    adsorption resin, saturation quartile 0: a pale, empty block …
+ *    6 s08_3    … quartile 3: each quartile darker AND fuller (a pale fill line over dark grains rising
+ *               through 0, 2, 4, 6 of the 8 inside rows), so saturation reads by value and by shape
+ *    7 s09_off  heater: a coil between two posts on a base plate
+ *    8 s09_on   heater on: the coil in the warm accent AND three heat ticks above it (a shape, not only colour)
+ *    9 s10_off  cooler: a six-armed fin
+ *   10 s10_on   cooler on: the fin in the cool accent AND frost dots beyond its six tips
  *   11 s11      shade roof: an OUTLINE only (organisms under it stay visible)
  *   12 s12      moisture wick: a strand with a drop
+ *
+ * Wave 12 (structures-art-audio) redrew s05, s07 and s08_0–s08_3 to UX §6.5 (neutral outline, one accent)
+ * with the same 13 names in the same order; s06 and s09–s12 are wave 11's drawings (D-0120).
  *
  * The renderer picks a frame from snapshot data only (src/render/structureLayer.ts deviceFrame): the
  * device kind, S09/S10 `on` (GeometryMsg.devices) and a resin's saturation (SnapshotMsg.resins). Silhouette
@@ -30,20 +34,19 @@ const S = 16;
 
 const K = { ink: 1, body: 2, shade: 3, light: 4, r0: 5, r1: 6, r2: 7, r3: 8, warm: 9, glow: 10, cool: 11, frost: 12, strand: 13, drop: 14 } as const;
 
-/** Porous shelter: a thick arch over the cell with a row of pores through it. */
+/**
+ * Porous shelter: a tall pointed arch on two legs (an ellipse band), its doorway transparent, with dark pores
+ * through the band (value and shape, so the pores read in grayscale) and a light left / shaded right face.
+ */
 function shelter(): Px {
   const p = new Px(S, S);
-  for (let y = 2; y < 14; y++)
-    for (let x = 1; x < 15; x++) {
-      const d = Math.hypot(x + 0.5 - 8, y + 0.5 - 13);
-      if (d <= 6.6 && d >= 3.4 && y < 13) p.set(x, y, K.body);
-    }
-  // Feet on the floor line.
-  p.fillRect(2, 12, 3, 2, K.body).fillRect(11, 12, 3, 2, K.body);
-  p.shadeEdge([K.body], K.shade, 1, 1);
-  // Pores: holes along the arch (value pattern that reads in grayscale).
-  for (const [x, y] of [[4, 9], [5, 6], [8, 5], [11, 6], [12, 9]] as const) p.set(x, y, 0);
-  return p.outline(K.ink);
+  const inside = (x: number, y: number, rx: number, ry: number) => ((x + 0.5 - 8) / rx) ** 2 + ((y + 0.5 - 14) / ry) ** 2 <= 1;
+  for (let y = 0; y <= 13; y++) for (let x = 0; x < S; x++) if (inside(x, y, 6.9, 11.6) && !inside(x, y, 3.3, 7.6)) p.set(x, y, K.body);
+  p.shadeEdge([K.body], K.shade, 1, 0);
+  p.outline(K.ink);
+  // Pores along the middle of the band (after the outline, so each stays one dark pixel on the light band).
+  for (const [x, y] of [[2, 11], [3, 8], [5, 5], [10, 5], [12, 8], [13, 11]] as const) p.set(x, y, K.ink);
+  return p;
 }
 
 /** Attachment mesh: a square lattice (period 3) inside a frame. */
@@ -61,29 +64,40 @@ function mesh(): Px {
   return p;
 }
 
-/** Nutrient basket: an open cup outline (a U with a rim lip), empty inside. */
+/** Nutrient basket: an open cup outline (a thick rim over slanted woven walls and a floor), empty inside. */
 function basket(): Px {
   const p = new Px(S, S);
-  p.line(2, 5, 13, 5, K.ink); // rim lip
-  p.line(3, 6, 4, 12, K.ink).line(12, 6, 11, 12, K.ink);
-  p.line(4, 13, 11, 13, K.ink);
-  // Weave ticks on the walls.
-  for (const y of [7, 9, 11]) p.set(y === 7 ? 3 : 4, y, K.shade).set(y === 7 ? 12 : 11, y, K.shade);
-  p.line(5, 13, 10, 13, K.shade);
-  p.set(2, 4, K.ink).set(13, 4, K.ink);
-  return p;
+  p.fillRect(1, 4, 14, 2, K.body); // rim
+  p.line(1, 4, 14, 4, K.light);
+  for (let y = 6; y <= 12; y++) {
+    const inset = Math.round(((y - 6) * 2) / 7);
+    const weave = y % 2 === 0 ? K.body : K.shade;
+    p.set(2 + inset, y, weave).set(13 - inset, y, weave);
+  }
+  for (let x = 4; x <= 11; x++) p.set(x, 13, x % 2 === 0 ? K.body : K.shade); // woven floor
+  return p.outline(K.ink);
 }
 
-/** Adsorption resin at saturation quartile q (0–3): a block that darkens, with denser dark dots, as it fills. */
+/** Fill rows (of the 8 inside the block) per saturation quartile: empty, a quarter, half, three quarters. */
+export const RESIN_FILL_ROWS = [0, 2, 4, 6] as const;
+/** The block's inside rows (y 4–11) and columns (x 4–11). */
+const RESIN_IN = { x0: 4, x1: 11, y0: 4, y1: 11 } as const;
+
+/**
+ * Adsorption resin at saturation quartile q (0–3): a block that darkens by quartile (the four resin fills)
+ * AND fills from the bottom: below a pale fill line, dark grains take a quarter, a half, three quarters of
+ * the inside, so saturation reads by value and by the rising line in grayscale. Quartile 0 is empty.
+ */
 function resin(q: number): Px {
   const p = new Px(S, S);
-  const fill = [K.r0, K.r1, K.r2, K.r3][q]!;
-  p.fillRect(3, 3, 10, 10, fill);
-  // A bead texture: more dark grains per quartile (a deterministic lattice), so value reads in grayscale.
-  for (let y = 4; y < 12; y++)
-    for (let x = 4; x < 12; x++) {
-      const grain = (x * 5 + y * 3) % 7;
-      if (grain < q + 1) p.set(x, y, q >= 2 ? K.ink : K.r2);
+  const body = [K.r0, K.r1, K.r2, K.r3][q]!;
+  p.fillRect(3, 3, 10, 10, body);
+  const rows = RESIN_FILL_ROWS[q]!;
+  const top = RESIN_IN.y1 + 1 - rows; // the first filled row
+  for (let y = top; y <= RESIN_IN.y1; y++)
+    for (let x = RESIN_IN.x0; x <= RESIN_IN.x1; x++) {
+      if (y === top) p.set(x, y, K.light); // the fill line
+      else p.set(x, y, (x + 2 * y) % 3 === 0 ? K.r3 : K.ink); // packed dark grains
     }
   p.line(3, 3, 12, 3, K.light); // top highlight
   return p.outline(K.ink);

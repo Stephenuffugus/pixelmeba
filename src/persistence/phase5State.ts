@@ -65,6 +65,15 @@ function organismProblem(get: Row, ctx: Phase5CheckContext): string | null {
   const need = get('handlingNeed');
   if (need < 0) return "An organism's handling time is negative.";
   if (need !== 0 && !has('HANDLING')) return 'An organism is handling prey although it has no handling ability.';
+  // Handling progress (Phase 5 wave 12; src/sim/handling.ts): written only by a HANDLING predator's attempt,
+  // and zeroed with the need when it ends, so at a tick boundary need > 0 means 0 < progress < need and
+  // need 0 means progress 0. No v1.0 code writes handlingProgress, so no real save holds anything else. A
+  // stale target reference is legal (a later-stage death), so the prey is not checked here.
+  const progress = get('handlingProgress');
+  if (progress < 0) return "An organism's handling progress is negative.";
+  if (progress !== 0 && !has('HANDLING')) return 'An organism is handling prey although it has no handling ability.';
+  if (need === 0 && progress !== 0) return "An organism's handling has no attempt.";
+  if (need > 0 && progress >= need) return "An organism's handling is already complete.";
   // Shell and jacket mineral (wave 10 lead fixes). boundMineral is written only for a species with native
   // SHELL (inoculation, stage 6 binding) and split between same-species daughters, so any other organism
   // holding it is unreachable. jacketMineral has no writer yet (E11 is not implemented; division halves
