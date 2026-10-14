@@ -256,8 +256,8 @@
 //     skipped until the flip.
 //  3. npm run check; the FENCE, both corpora and the flip's two dishes unchanged: npx vitest run tests/fixtures/g2-replay.test.ts
 //     tests/fixtures/rc1-replay.test.ts tests/fixtures/trajectory-fence tests/fixtures/conservation-closed-lid.test.ts
-//     tests/fixtures/determinism.test.ts tests/fixtures/determinism-g3.test.ts <lead: systems flip as built — the two added fence dishes'
-//     test files, if separate> (no digest, hashAtLoad or hashPlus1000 may move); npm run art:build -- --check (up to date: org-ui moves
+//     tests/fixtures/determinism.test.ts tests/fixtures/determinism-g3.test.ts (the systems flip's two dishes run in tests/fixtures/trajectory-fence-files.test.ts and trajectory-fence-current, both
+//     matched by the trajectory-fence filter) (no digest, hashAtLoad or hashPlus1000 may move); npm run art:build -- --check (up to date: org-ui moves
 //     no pixel, every frame byte-identical, still 1024x2048); npm run content:validate (contentHash unchanged: no content edit);
 //     npx tsx tools/relationship-matrix.ts --out tmp/lead/relationships-w13.md (shipped registry: every row passes, the v1.0 rows unchanged); a second look at the combined
 //     diffs for a missed shared symbol (EventType, Profile, ActionContext, STAGE8_ACTIONS, the constants, EntityInspect, CUE3_*,
@@ -303,9 +303,20 @@
 //     its recorded digest exactly; then explain every moved digest by a module draw that now lands on E02 or E11 (name the birth, tick and
 //     module). An unexplained move is a defect (a leak through species indices, fields or ordering), not a re-record. Then
 //     npx tsx tools/fence-update.ts --all --reason D-<flip>; g2Digest values, both corpora (g2 and rc1 saves: their recorded rulesets have
-//     none of this) and the systems flip's two dishes (their recorded rulesets say whether they move: <lead: systems flip as built — the
-//     two dishes' recorded manifests>) unchanged. Re-pin trajectory tests that follow moved draws with the new module names (D-0059's
+//     none of this) and the systems flip's two dishes (their recorded rulesets say whether they move: as built (c549595): both are recipe files realized by
+//     fenceStart under the registry the test passes (the shipped one in trajectory-fence-current), so they behave like the recipe
+//     entries: their FIRST_DISH-derived founders can draw E02 or E11 after the flip and get the same proof) unchanged. Re-pin trajectory tests that follow moved draws with the new module names (D-0059's
 //     list), and tests that pin the shipped manifest read their own lists (the G2_LISTS / rc1-manifest pattern).
+//  3b. Test helpers that stand for older dishes (wave 14 writer's finding, docs/reports/reviews/g5-wave-14/tasks-writer.md
+//     contradictions 5-6): tests/helpers/world.ts preFlipRegistry() derives "a v1.0 dish" from the CURRENT shipped manifest minus the
+//     systems flip's additions, and its contentHash from the content files. After this flip it would include the organism flip's
+//     species, modules, materials and systems, and any new content file (wave 14's habitats) moves its contentHash, which breaks
+//     tests/worker/protocol3-v1-equivalence.test.ts's golden. In the flip commit: make preFlipRegistry() pin the v1.0 lists explicitly
+//     (the systems flip's pre-flip manifest = 9d22ec0's content/manifest.json lists; or tests/fixtures/saves-rc1/rc1-manifest.json if it
+//     matches) and return the validated registry's copy with manifest.contentHash set to an exported PRE_FLIP_CONTENT_HASH
+//     (67075b0e4e53e3adaee23cf9d4c65f3045b007881b789351357311ed7f0e5311) with a comment that a v1.0 dish records that hash; check
+//     git grep -ln "preFlipRegistry" tests and run those files. tests/tools/listing.test.ts pins 19 species (and 3 habitats): re-pin
+//     the species count by cause in the flip commit.
 //  4. Species indices (g5-plan Risks 128-129): enabling species renumbers the species index of every species after A01 in new dishes.
 //     Prove that no RNG key or ordering uses an index: git grep -nE "det(Float|Int)?\(" src/sim | grep -v birthId (expect only keys of
 //     birthIds, ticks and constant KINDs: births.ts placement and commands.ts jitter use birthIds); git grep -nE "sort\(" src/sim and
