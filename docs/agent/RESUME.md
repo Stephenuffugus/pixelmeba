@@ -3,6 +3,38 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑14 14:55 UTC — WAVE 11 COMMITTED `9d22ec0` (pushed): check 275 files after three stale pins were re-pinned
+> (shared-budget's synthetic E02 → E99 and the module tier E01/E02/E09/E10; view-switch's shelterBlocked from
+> freeClassOfSpecies), tsc/eslint 0, art 1691 frames, contentHash unchanged; wave 11 journeys tmp/lead/e2e-w11.sh RUNNING
+> (50 tests, desktop + phone-portrait, port 4300; log tmp/lead/e2e-w11.log) — results not yet recorded anywhere. SYSTEMS
+> FLIP RUNNING (run `wf_b8052ced-f51`, session 913596e0, from docs/agent/g5-systems-flip.workflow.js.txt, args {base:
+> '9d22ec0'}: builder → saves verifier → fix only for BLOCKER/MAJOR; reports docs/reports/reviews/g5-flip/). WAVE 13 TASK
+> WRITER RUNNING (run `wf_ee9ffeed-6c9`, writes docs/agent/g5-wave-13.tasks.js.txt + docs/reports/reviews/g5-wave-13/
+> tasks-writer.md). Backups → `wip/g5-flip` (pid tmp/lead/backup-flip.pid). START HERE.**
+> - If the session died mid-flip: if `git status` is clean, restore from `wip/g5-flip`; read docs/reports/reviews/g5-flip/
+>   and the run journal ~/.claude/projects/-workspaces-pixelmeba/913596e0-c750-44b2-b415-32a935e5b304/subagents/workflows/
+>   wf_b8052ced-f51/journal.jsonl; rerun only what is unfinished (edit the scratch copy to skip the builder, or resumeFromRunId
+>   in the same session).
+> - After the flip: lead writes D‑0121 from the builder's PROPOSED text, ticks P5.1/P5.2 only on the builder's Build-list
+>   table, commits; then the wave 12 pre-launch (docs/agent/g5-systems-flip-plan.md "Then the wave 12 pre-launch"; D‑0122).
+> - Phase 6 is planned: docs/agent/g6-briefs.md (wf_4d2c3a93-612) and the lead draft docs/agent/g6-plan.md.
+
+> **Update 2026‑10‑14 13:35 UTC — RESUMED after the codespace stopped ≈ 13:04 (owner: "get back to work … I want all the
+> expansions built … and live"). NOTHING WAS LOST: the tree == `wip/g5-wave-11` = `dae3ec1` (tree 1819ae6, pushed). Wave 11
+> run wf_79e1123b-8bf had FINISHED (builds, verifiers, fix1, reverify1 ok); the lead integration (D‑0120, ARCH/UX/perf notes,
+> docs/agent/g5-systems-flip-plan.md) is in the tree. Running (session 913596e0): the full check tmp/lead/check-w11.sh →
+> tmp/lead/check-w11.log (EXIT / ART_EXIT / CONTENT_EXIT lines; started 13:26, ≈ 72 min); backup loop pid tmp/lead/backup-11.pid;
+> Phase 6 read-only mappers wf_4d2c3a93-612 (three briefs → docs/agent/g6-briefs.md, then the lead's g6-plan.md). START HERE.**
+> - Next: check green → wave 11 journeys (LEAD AFTER WAVE 11 step 3: structures, region-charts, lab-tools, new-dish, inspector,
+>   observe, observe-tools, place-and-undo on desktop + phone-portrait; E2E_PORT=4300 E2E_OUTDIR=tmp/lead/e2e-dist) → commit
+>   wave 11 (message in LEAD AFTER step 5) + WORKLOG notes (scratchpad worklog_w11.py logic: dated notes on P5.1/P5.2/P5.3/P5.7) →
+>   push → launch THE SYSTEMS FLIP from docs/agent/g5-systems-flip.workflow.js.txt (copy to the scratchpad as .js; args
+>   {base: '<wave 11 sha>'}) → lead: D‑0121, WORKLOG ticks, commit → wave 12 fill + D‑0122 + launch (g5-systems-flip-plan.md
+>   "Then the wave 12 pre-launch").
+> - Owner asks pending: (1) an 8-core codespace would cut the 72-min check to ~10–15 min (vitest runs ONE worker on 2 cores) and
+>   allow 4–6 agents; (2) the arcade deploy (tools/deploy-arcade.mjs) needs a credential that can push Stephenuffugus/lucid-winds
+>   (the codespace token gets 403) — `env -u GITHUB_TOKEN gh auth login` once; lucidwinds.com still serves the 2026‑09‑29 build.
+
 > **Update 2026‑10‑14 08:02 UTC — WAVE 10 COMMITTED `bdf7f7c` (check 255 files / 2928 tests incl. the fence and both
 > corpora; art and contentHash unchanged; lab-tools + sample-transfer journeys 12 passed on desktop + phone-portrait; D‑0118
 > as built, D‑0119 wave 11's rulings). WAVE 11 RUNNING (run `wf_79e1123b-8bf`, session 1383cb99, launched 08:01 from
