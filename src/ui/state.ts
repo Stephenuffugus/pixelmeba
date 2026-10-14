@@ -120,7 +120,7 @@ export const selection = signal<Selection | null>(null);
 export const inspector = signal<InspectorPayload | null>(null);
 export const candidates = signal<{ x: number; y: number; items: { birthId: number; species: number }[] } | null>(null);
 export const tool = signal<Tool>({ kind: 'look' });
-export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | 'save' | 'history' | 'lineage' | 'evolution' | 'favorite' | 'trySetup' | 'tryHorizon' | 'share' | 'relationshipMap' | 'probes' | 'bookmark' | 'challenge'>('none');
+export const sheet = signal<'none' | 'addLife' | 'feed' | 'inspect' | 'more' | 'save' | 'history' | 'lineage' | 'evolution' | 'favorite' | 'trySetup' | 'tryHorizon' | 'share' | 'relationshipMap' | 'probes' | 'bookmark' | 'challenge' | 'device' | 'gate'>('none');
 /** P2.2: the open dish's evolution setting, rates and recorded changes (from its snapshots). */
 export const evolution = signal<EvolutionState | null>(null);
 export const overlay = signal<OverlayId | null>(null);
@@ -699,16 +699,42 @@ export async function startCustom(
     empty: boolean;
     /** P3.2: a habitat preset instead of the recipe's own (an 'Empty Gel Colony' start). */
     habitatId?: string;
+    /**
+     * P5.1 (wave 11): the New Dish Environment group's changed keys only (src/ui/environment.ts
+     * environmentOverrides), so an untouched group records nothing.
+     */
+    environment?: Pick<RecipeOverrides, 'lid' | 'lightMode' | 'drying'>;
   },
   onStarted?: (info: DishInfo) => void,
 ): Promise<ReplaceOutcome> {
-  const source: DishSource = {
+  return startDish(customDishSource(opts), opts.name, null, onStarted);
+}
+
+/** The DishSource New Dish → Create asks the worker for (startCustom), exported for its unit test. */
+export function customDishSource(opts: {
+  recipeId: string;
+  seed: number;
+  mutationPreset: 'standard' | 'accelerated' | 'fixed';
+  founderMode: 'identical' | 'varied' | 'diverse';
+  empty: boolean;
+  habitatId?: string;
+  environment?: Pick<RecipeOverrides, 'lid' | 'lightMode' | 'drying'>;
+}): DishSource {
+  const env = opts.environment ?? {};
+  return {
     kind: 'recipe',
     recipeId: opts.recipeId,
     seed: opts.seed,
-    overrides: { mutationPreset: opts.mutationPreset, founderMode: opts.founderMode, empty: opts.empty, ...(opts.habitatId !== undefined ? { habitatId: opts.habitatId } : {}) },
+    overrides: {
+      mutationPreset: opts.mutationPreset,
+      founderMode: opts.founderMode,
+      empty: opts.empty,
+      ...(opts.habitatId !== undefined ? { habitatId: opts.habitatId } : {}),
+      ...(env.lid !== undefined ? { lid: env.lid } : {}),
+      ...(env.lightMode !== undefined ? { lightMode: env.lightMode } : {}),
+      ...(env.drying !== undefined ? { drying: env.drying } : {}),
+    },
   };
-  return startDish(source, opts.name, null, onStarted);
 }
 
 /** The start prompt of a Play shelf dish (cleared when the dish first runs). */
@@ -1021,7 +1047,8 @@ export function select(sel: Selection | null): void {
 export function inspectedSelection(): Selection | null {
   // Only while the dish screen itself is showing: leaving for Home or the Notebook keeps the sheet
   // state for the way back, but nothing is being inspected meanwhile.
-  return route.value.name === 'dish' && sheet.value === 'inspect' ? selection.value : null;
+  // Phase 5 (wave 11): the device settings and gate sheets read the same cell's live inspector payload.
+  return route.value.name === 'dish' && (sheet.value === 'inspect' || sheet.value === 'device' || sheet.value === 'gate') ? selection.value : null;
 }
 
 let viewSent: { readonly dishId: string; readonly overlay: OverlayId | null; readonly selection: Selection | null } | null = null;

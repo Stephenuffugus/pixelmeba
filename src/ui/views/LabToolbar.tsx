@@ -14,9 +14,12 @@ import { LabTray, categoryOf, itemCopy } from '../panels/LabTray';
 import { toolAvailable } from '../panels/LabTrayContent';
 import { IconChemistry, IconHabitat, IconInspect, IconObserve, IconTools } from '../panels/LabTrayIcons';
 import { ProbeOutlines, ProbeSessionPanel } from '../panels/ProbeSession';
+import { BUILD_COPY } from '../strings/structures';
 import {
   brushInfo,
   brushRule,
+  deviceKindOf,
+  edgeKindOf,
   labRadius,
   labTool,
   labShowsDish,
@@ -88,6 +91,8 @@ function BrushCount() {
   const id = labTool.value;
   const b = brushInfo.value;
   if (!b) return null;
+  // P5.1/P5.2: an edge stroke or a removal states its own line (edges and the reasons edges are crossed out).
+  if (b.text !== undefined) return <span data-testid="brush-info">{b.text}</span>;
   let total = '';
   if (id.startsWith('material:')) {
     const mid = id.slice('material:'.length);
@@ -110,9 +115,15 @@ function StripInfo() {
     const hint =
       id === 'inspect'
         ? LAB_TEXT.inspectHint
-        : id.startsWith('life:') || id.startsWith('object:')
-          ? LAB_TEXT.lifeHint
-          : LAB_TEXT.brushHint;
+        : edgeKindOf(id) !== null
+          ? BUILD_COPY.edgeHint
+          : deviceKindOf(id) !== null
+            ? BUILD_COPY.deviceHint
+            : id === 'build:remove'
+              ? BUILD_COPY.removeHint
+              : id.startsWith('life:') || id.startsWith('object:')
+                ? LAB_TEXT.lifeHint
+                : LAB_TEXT.brushHint;
     return <span class="lab-hint">{hint}</span>;
   }
   return (
@@ -124,7 +135,7 @@ function StripInfo() {
 
 function ToolStrip() {
   const id = labTool.value;
-  const radiusTool = brushRule(id) !== null || id.startsWith('life:');
+  const radiusTool = brushRule(id) !== null || id.startsWith('life:') || id === 'wet';
   const cat = categoryOf(id);
   return (
     <div class="lab-strip" data-testid="lab-strip">

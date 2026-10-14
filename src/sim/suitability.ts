@@ -8,6 +8,7 @@ import type { SpeciesRT } from './species';
 import { habitatBit } from './species';
 import { ST_BEAD, ST_NONE } from './grid';
 import { attachmentBits, onAttachmentSurface } from './attachment';
+import { RIVAL_EXPOSURE_FACTOR } from './constants';
 import type { World } from './world';
 
 export const SHOULDER_PH = 1.0;
@@ -51,15 +52,38 @@ export function habitatCompatible(world: World, sp: SpeciesRT, cell: number): bo
   return bits < 0 || onAttachmentSurface(world, bits, cell);
 }
 
+/**
+ * An organism's inhibitor exposure in `cell` (SPEC §4.3; CT §3.4): the inhibitor that targets its category,
+ * plus 0.25 × RIVAL for a RIVAL target (B01, B10, B11; Phase 5 wave 11, rivalry.ts) in a world with the RIVAL
+ * field, then × 0.5 once when the cell holds film. Every other species, and every world without the RIVAL
+ * field, runs exactly the old operations.
+ */
 export function inhibitorExposure(world: World, sp: SpeciesRT, cell: number): number {
   let exposure = 0;
   if (sp.inhibitorField) {
     const f = world.fields[sp.inhibitorField];
     if (f) exposure += f[cell]!;
   }
+  if (sp.rivalTarget) {
+    const r = world.fields.rival;
+    if (r) exposure += RIVAL_EXPOSURE_FACTOR * r[cell]!;
+  }
   const film = world.fields.film;
   if (film && film[cell]! > 0 && exposure > 0) exposure *= 0.5;
   return exposure;
+}
+
+/**
+ * Whether the RIVAL term of a target's exposure is larger than its inhibitor part (Phase 5 wave 11; PROPOSED
+ * DECISION D-0119: the reason is RIVAL_EXPOSURE then, else INHIBITOR_EXPOSURE). Film halves both parts alike,
+ * so the comparison is made before it. Computed only for a RIVAL target in a world with the RIVAL field.
+ */
+function rivalLeads(world: World, sp: SpeciesRT, cell: number): boolean {
+  if (!sp.rivalTarget) return false;
+  const r = world.fields.rival;
+  if (!r) return false;
+  const f = sp.inhibitorField ? world.fields[sp.inhibitorField] : undefined;
+  return RIVAL_EXPOSURE_FACTOR * r[cell]! > (f ? f[cell]! : 0);
 }
 
 /**
@@ -101,7 +125,7 @@ export function suitabilityAt(world: World, sp: SpeciesRT, prof: Profile, cell: 
   const exposure = inhibitorExposure(world, sp, cell);
   if (exposure > 0) {
     const gf = 1 / (1 + exposure);
-    if (gf < v) reason = R.INHIBITOR_EXPOSURE;
+    if (gf < v) reason = rivalLeads(world, sp, cell) ? R.RIVAL_EXPOSURE : R.INHIBITOR_EXPOSURE;
     v *= gf;
   }
   if (sp.abilities.includes('OXYGEN_SUPPRESSED')) {

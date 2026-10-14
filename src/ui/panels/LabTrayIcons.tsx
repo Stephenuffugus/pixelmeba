@@ -92,3 +92,61 @@ export const IconSnapshot = () =>
     <circle cx="12" cy="13" r="3.5" />,
     <path d="M8 7l2-3h4l2 3" />,
   ]);
+
+// ---- P5.1/P5.2 (wave 11): the Build group and the wetting brush (UX §6.4: 24 px, currentColor; each
+// reads as its CT §4 object, and every button also carries its content name).
+
+/** S01 fine membrane: a dotted line on one edge between two cell outlines. */
+export const IconMembrane = () =>
+  svg([
+    <rect x="3" y="6" width="8" height="12" rx="1" />,
+    <rect x="13" y="6" width="8" height="12" rx="1" />,
+    <path d="M12 4v16" stroke-dasharray="1.5 2.5" />,
+  ]);
+/** S02 small gate: an edge with slots. */
+export const IconSmallGate = () =>
+  svg([<path d="M12 3v4M12 10v4M12 17v4" />, <path d="M8 8.5h8M8 15.5h8" />]);
+/** S03 shutter gate: a hinged tab across an edge. */
+export const IconShutter = () =>
+  svg([<path d="M12 3v18" />, <path d="M12 7l6 3v6l-6 2" />, <circle cx="12" cy="7" r="1.2" fill="currentColor" />]);
+/** S04 one-way channel: an arrow through an edge. */
+export const IconChannel = () =>
+  svg([<path d="M12 3v5M12 16v5" />, <path d="M4 12h15" />, <path d="m15 8 4 4-4 4" />]);
+/** S05 porous shelter: an arch with holes. */
+export const IconShelter = () =>
+  svg([
+    <path d="M4 19v-7a8 8 0 0 1 16 0v7" />,
+    <path d="M3 19h18" />,
+    <circle cx="9" cy="12" r="1" fill="currentColor" />,
+    <circle cx="15" cy="12" r="1" fill="currentColor" />,
+  ]);
+/** S06 attachment mesh: a grid. */
+export const IconMesh = () =>
+  svg([<rect x="4" y="4" width="16" height="16" rx="1" />, <path d="M4 9.3h16M4 14.6h16M9.3 4v16M14.6 4v16" />]);
+/** S07 nutrient basket: a cup holding a pellet. */
+export const IconBasket = () =>
+  svg([<path d="M4 10h16l-2 9H6z" />, <path d="M8 10 10 5M16 10l-2-5" />, <circle cx="12" cy="14.5" r="2" />]);
+/** S08 adsorption resin: a block with a fill line. */
+export const IconResin = () =>
+  svg([<rect x="5" y="5" width="14" height="14" rx="2" />, <path d="M5 13h14" />, <path d="M8 16h2M12 16h4" />]);
+/** S09 heater: a coil. */
+export const IconHeater = () =>
+  svg([<path d="M5 20V9M19 20V9" />, <path d="M5 9c2-3 4 3 7 0s5 3 7 0" />, <path d="M5 14c2-3 4 3 7 0s5 3 7 0" />]);
+/** S10 cooler: fins. */
+export const IconCooler = () =>
+  svg([<rect x="4" y="4" width="16" height="16" rx="2" />, <path d="M8 4v16M12 4v16M16 4v16" />]);
+/** S11 shade roof: a roof outline over a cell. */
+export const IconRoof = () => svg([<path d="M3 11 12 4l9 7" />, <rect x="6" y="11" width="12" height="9" stroke-dasharray="2 2" />]);
+/** S12 moisture wick: a strip with a drop. */
+export const IconWick = () =>
+  svg([<path d="M3 18c4-2 7 2 11 0s5-2 7-1" />, <path d="M12 3c2 3 4 5 4 7.5a4 4 0 0 1-8 0C8 8 10 6 12 3z" />]);
+/** Build → Remove: a cross over an edge and a cell. */
+export const IconRemoveStructure = () =>
+  svg([<rect x="3" y="7" width="10" height="10" rx="1" />, <path d="M17 4v16" />, <path d="m6 10 4 4M10 10l-4 4" />]);
+/** The wetting brush: a drop over a gel cell. */
+export const IconWet = () =>
+  svg([
+    <path d="M12 3c2.5 3.5 5 6 5 9a5 5 0 0 1-10 0c0-3 2.5-5.5 5-9z" />,
+    <path d="M4 20h16" />,
+    <path d="M9.5 13a2.5 2.5 0 0 0 2.5 2.5" />,
+  ]);

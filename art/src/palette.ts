@@ -276,6 +276,24 @@ export const P = {
   waferOutline: '#4E4A22',
   stain: '#C2B48C',
   stainDeep: '#A99A70',
+
+  // Phase 5 furnishings and devices (UX §6.5 "equipment props as small readable lab pieces with neutral
+  // outlines"; wave 11 structure-render-worker; art/src/tiles/structures.ts). Neutral greys carry each
+  // piece; the heater's warm and the cooler's cool accent appear only in their On frames.
+  deviceInk: '#18262D',
+  deviceBody: '#C5CDD1',
+  deviceShade: '#8E9BA2',
+  deviceLight: '#F2F4F3',
+  resinFill0: '#E3DED2',
+  resinFill1: '#B3A992',
+  resinFill2: '#7E7461',
+  resinFill3: '#463F33',
+  heaterWarm: '#E0703A',
+  heaterGlow: '#F6C27A',
+  coolerCool: '#4D9CD3',
+  coolerFrost: '#CDE8F7',
+  wickStrand: '#8A6E4F',
+  wickDrop: '#3F82B8',
 } as const;
 
 export type ColorName = keyof typeof P;

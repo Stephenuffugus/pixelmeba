@@ -29,6 +29,7 @@ import { canonicalJson, sha256Hex } from '../../src/sim/hash';
 import { CELL_COUNT } from '../../src/sim/constants';
 import { cellIndex, ST_BEAD, ST_NONE } from '../../src/sim/grid';
 import { buildSpeciesTable } from '../../src/sim/species';
+import { freeClassOfSpecies } from '../../src/sim/barriers';
 import { DISH_PX_PER_CELL, DISH_TEX, paintDish, paintOverlay } from '../../src/render/layers';
 import { registry } from '../helpers/world';
 
@@ -386,12 +387,16 @@ describe('Lab trays offer what the dish records (content is data; D-0024)', () =
     const table = buildSpeciesTable(info.speciesIds.map((id) => reg.species[id]!));
     for (const sp of table) {
       // A phage dose fills fields (W2-14); an attached species also needs one of its recorded surfaces (P3.2).
+      // Wave 11 (D-0120): a Medium or Large free class is refused by an S05 shelter cell, read from the species
+      // record (barriers.ts freeClassOfSpecies) independently of DishInfo.speciesFreeClass.
+      const cls = freeClassOfSpecies(sp.def);
+      const shelter = cls === 'medium' || cls === 'large' ? { shelterBlocked: true } : {};
       const expected =
         sp.def.metabolism === 'viral'
           ? { habitatMask: 0, attached: false, viral: true }
           : sp.def.attachment
-            ? { habitatMask: sp.habitatMask, attached: true, surfaces: [...sp.def.attachment.surfaces] }
-            : { habitatMask: sp.habitatMask, attached: sp.attached };
+            ? { habitatMask: sp.habitatMask, attached: true, surfaces: [...sp.def.attachment.surfaces], ...shelter }
+            : { habitatMask: sp.habitatMask, attached: sp.attached, ...shelter };
       expect(content.lifeBrushFor(info, sp.id), sp.id).toEqual(expected);
     }
     expect(content.lifeBrushFor(info, 'X99')).toBeNull();

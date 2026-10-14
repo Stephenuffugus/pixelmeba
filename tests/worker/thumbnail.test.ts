@@ -12,6 +12,7 @@ import { run } from '../../src/sim/tick';
 import { MemoryBackend, SaveStore } from '../../src/persistence/store';
 import { DishHost } from '../../src/worker/host';
 import type { FromWorker, SnapshotMsg, ToWorker } from '../../src/worker/protocol';
+import { ENT_STRIDE } from '../../src/worker/protocol';
 import { dishThumb, parseThumb, THUMB_SIZE, thumbFromSnapshot, thumbFromState } from '../../src/worker/thumbnail';
 import { FakeClockHost } from '../helpers/host';
 import { clearWater, place, registry } from '../helpers/world';
@@ -109,7 +110,7 @@ describe('thumbFromSnapshot', () => {
     const w = clearWater();
     const slot = place(w, 'B01', 40.5, 64.5);
     w.ents.cols.x[slot] = 43.99999999999; // f64 block 10; float32 rounds it to 44 → block 11
-    const ents = new Float32Array(14);
+    const ents = new Float32Array(ENT_STRIDE); // one entity record (15 slots since protocol 3)
     ents[1] = w.ents.cols.species[slot]!;
     ents[2] = w.ents.cols.x[slot]!;
     ents[3] = w.ents.cols.y[slot]!;

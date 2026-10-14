@@ -343,6 +343,8 @@ each with reduced motion on and off). Locomotion is never removed: it is real ve
 | favorite glyphs | unchanged: static outlines in both modes | `src/render/renderer.ts: drawFavorites` |
 | probe outlines | unchanged: static dashed outlines in both modes | `src/render/renderer.ts: drawProbes` |
 | selection ring, lineage marks, adhesion links, infection glyph, brush preview | unchanged: static in both modes | `src/render/renderer.ts: selectionG, drawLineage, drawLinks, infectionGlyphShown, setBrushPreview` |
+| gate preview tracer (Phase 5, wave 11) | a static frame: every token at its end position (crossed tokens on the far side, blocked ones back at their start; the Fixed tokens never move in either mode); drawn only while paused, in both modes | `src/render/gateTracer.ts: tracerToken, tracerDrawList`; `src/render/renderer.ts: setGatePreview, drawGateTracer` |
+| edge glyphs, device and furnishing tiles, structure, edge and remove previews (Phase 5, wave 11) | unchanged: static in both modes | `src/render/structureLayer.ts`; `src/render/renderer.ts: drawEdges, drawDevices, setEdgePreview, setRemovePreview` |
 | share picture | always the reduced‑motion frames (a still picture) | `src/render/picture.ts: composePicture` |
 | tray and guide sprite icons | a single still frame in both modes | `src/ui/atlas.ts: drawFrame` |
 | prompt "Show me" highlight | the outline stays; the pulse is removed | `src/ui/styles.css: show-me-pulse, reduced-motion` |

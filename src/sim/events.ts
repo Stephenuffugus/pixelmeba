@@ -32,7 +32,16 @@ export type EventType =
   /** E12 (P3.7): a colony link that would exceed a cap was refused, at no cost. detail.kind 'adhesion', detail.partner, detail.reason 'links' | 'component'. */
   | 'linkRefused'
   /** Food objects (P3.6): an M10 pellet or M11 wafer ran out and left the store. detail.cell, detail.kind, detail.id. */
-  | 'objectEmptied';
+  | 'objectEmptied'
+  /**
+   * Glow (Phase 5 wave 11; SPEC §7.8, §12.3; src/sim/signals.ts): an organism with native SIGNAL_GLOW or E02
+   * started / stopped glowing. cause R.GLOW_ON / R.GLOW_OFF; species, birthId, cell; detail.sensed = the
+   * signal it sensed (S_GLOW / (1 + quencher)); 'glowOff' also detail.why: 'signal' (≤ 0.15 for 5 s),
+   * 'energy' (E < 15), 'rest' (it left Active) or 'division' (a glowing parent divided: both daughters start
+   * dim). Event ring only: the snapshot's visual events leave them out (the feed and P5.6 read them later).
+   */
+  | 'glowOn'
+  | 'glowOff';
 
 export interface SimEvent {
   readonly id: number;

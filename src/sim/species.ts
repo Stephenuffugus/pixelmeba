@@ -6,6 +6,7 @@
 import type { FieldId } from './fields';
 import type { Food, NativeAbilityId, Species } from './content/schema';
 import { SUB_GEL, SUB_SEDIMENT, SUB_WATER } from './grid';
+import { RIVAL_TARGETS } from './rivalry';
 
 export const PREY_NONE = -1;
 export const PREY_ANY = 0;
@@ -45,6 +46,11 @@ export interface SpeciesRT {
   readonly secretesStarch: boolean;
   readonly inhibitorField: FieldId | null;
   readonly fungal: boolean;
+  /**
+   * A RIVAL target by ancestor id (CT §3.4: B01, B10, B11; rivalry.ts RIVAL_TARGETS): its inhibitor exposure
+   * gains 0.25 × the local RIVAL (suitability.ts inhibitorExposure; Phase 5 wave 11).
+   */
+  readonly rivalTarget: boolean;
 }
 
 export function habitatBit(sub: number): number {
@@ -92,6 +98,7 @@ export function buildSpeciesTable(defs: readonly Species[]): SpeciesRT[] {
       secretesStarch: abilities.includes('E_STARCH_SECRETION'),
       inhibitorField,
       fungal: def.category === 'fungus',
+      rivalTarget: (RIVAL_TARGETS as readonly string[]).includes(def.id),
     };
   });
 }

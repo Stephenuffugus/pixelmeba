@@ -8,6 +8,7 @@
 import type { CommandPayload, CommandResult } from '@sim/commands';
 import { NOT_IN_DISH } from '@sim/grid';
 import { inSentence, paintName, structureName, structureNames } from '../panels/LabTrayNames';
+import { structureMissingText, structureOutcome } from './structures';
 
 export type LabCategory = 'inspect' | 'life' | 'food' | 'chemistry' | 'habitat' | 'tools' | 'observe';
 
@@ -113,7 +114,7 @@ export interface ItemCopy {
   readonly lives?: string;
 }
 
-export type HabitatToolId = 'paint:water' | 'paint:gel' | 'paint:sediment' | 'shade:paint' | 'shade:erase';
+export type HabitatToolId = 'paint:water' | 'paint:gel' | 'paint:sediment' | 'shade:paint' | 'shade:erase' | 'wet';
 export type StructureToolId = 'place:stone' | 'place:wall' | 'place:bead' | 'erase';
 
 const OPEN_CELLS =
@@ -500,6 +501,9 @@ export const OVERLAYS: readonly { readonly id: string; readonly copy: OverlayCop
   { id: 'v01', copy: { name: 'Pinphage', unit: 'units per cell' } },
   // P3.6 (SPEC §10.8): food the selected organism can eat here, or with none selected, food enzymes made last second.
   { id: 'foodAccess', copy: { name: 'Food access', unit: 'C per cell: food the selected organism can eat, or with none selected, food enzymes made in the last second' } },
+  // P5.2 (wave 11): the climate indexes, offered only in a dish that records 'climate' (OverlayPicker).
+  { id: 'warmth', copy: { name: 'Warmth', unit: 'Local warmth, 0 to 1; 0.50 is the usual ambient' } },
+  { id: 'moisture', copy: { name: 'Moisture', unit: 'Moisture, 0 to 1; water is always 1' } },
 ];
 
 export function overlayCopy(id: string): OverlayCopy {
@@ -516,6 +520,9 @@ function skippedText(r: CommandResult): string {
   if (k.organism > 0) parts.push(`${k.organism} had an organism in ${k.organism === 1 ? 'it' : 'them'}`);
   if (k.structure > 0) parts.push(`${k.structure} already had a structure`);
   if (k.object !== undefined && k.object > 0) parts.push(`${k.object} held a food object`);
+  // Phase 5 (D-0111, D-0117): present only when > 0, so older dishes read exactly as before.
+  if (k.device !== undefined && k.device > 0) parts.push(`${k.device} held a furnishing or device`);
+  if (k.barrier !== undefined && k.barrier > 0) parts.push(`${k.barrier} ${k.barrier === 1 ? 'was a side' : 'were sides'} of a one-way channel`);
   if (k.enclosed > 0)
     parts.push(`${k.enclosed} had no open neighbour to take ${k.enclosed === 1 ? 'its' : 'their'} contents`);
   if (k.rim > 0) parts.push(`${k.rim} ${k.rim === 1 ? 'was' : 'were'} outside the rim`);
@@ -535,6 +542,16 @@ function movedText(r: CommandResult): string {
 /** What an edit refused as "not in this dish" names, in content words ("Impermeable wall is"). */
 function missingText(p: CommandPayload): string {
   switch (p.kind) {
+    // Phase 5 structure and climate commands ("Fine membrane is", "Heater is").
+    case 'placeEdges':
+    case 'placeDevice':
+    case 'removeStructures':
+    case 'moveDevice':
+    case 'setDevice':
+    case 'wetBrush':
+    case 'setLightMode':
+    case 'setDrying':
+      return structureMissingText(p);
     case 'paintSubstrate':
       return `${paintName(null, p.substrate)} is`;
     case 'paintShade':
@@ -576,7 +593,8 @@ export function habitatEditOutcome(p: CommandPayload, r: CommandResult, label = 
         ? 'Nothing to erase here.'
         : `Removed structures from ${r.accepted} cell${s(r.accepted)}; what was underneath is back.`;
     default:
-      return '';
+      // Phase 5 structure and climate commands (strings/structures.ts structureOutcome).
+      return structureOutcome(p, r) ?? '';
   }
 }
 

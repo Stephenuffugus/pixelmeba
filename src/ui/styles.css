@@ -3878,3 +3878,90 @@ html[data-text-scale='2'] .tab-context {
   margin-top: 0.75rem;
   overflow-wrap: break-word;
 }
+
+/* ---- P5.1/P5.2 (wave 11): the Build group, edge and device lines, the gate table, the device sheet. */
+.lab-build {
+  margin: 0.5rem 0;
+  border-top: 1px solid var(--line);
+  padding-top: 0.5rem;
+}
+.lab-group-title {
+  font-size: var(--fs-body);
+  margin: 0.25rem 0;
+}
+.cell-structure-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: var(--fs-body);
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+.cell-structure-line > span {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.gate-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.gate-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--fs-body);
+  margin: 0.25rem 0 0.5rem;
+  table-layout: fixed;
+  word-break: break-word;
+}
+.gate-table caption {
+  text-align: left;
+  font-weight: 600;
+  padding: 0.25rem 0;
+}
+.gate-table th,
+.gate-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.gate-table thead th {
+  background: var(--surface-2);
+}
+.device-targets {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0.5rem;
+  margin: 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--target);
+  font-size: var(--fs-body);
+  cursor: pointer;
+}
+.check-row input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+.sheet.device-move {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+.sheet.device-move p {
+  flex: 1 1 14rem;
+  margin: 0;
+  font-size: var(--fs-body);
+}

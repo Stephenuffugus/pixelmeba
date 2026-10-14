@@ -121,10 +121,11 @@ describe('C08 shared budget (D04 §2): one energy budget, reserved in order', ()
     const slot = placeAt(w, 'B06', 35.03);
     const log: Attempt[] = [];
     const ledger0 = { ...w.ledger.energy };
-    stageStructures(w, buildActionTable([...STAGE8_ACTIONS, moduleAction('E02', always, needs35(log, 'E02'))]));
+    // A synthetic module number no content uses: E02 has a real stage 8 action since wave 11 (signal emission, D-0120).
+    stageStructures(w, buildActionTable([...STAGE8_ACTIONS, moduleAction('E99', always, needs35(log, 'E99'))]));
     expect(w.ents.cols.secretionCode[slot]).toBe(R.SECRETING);
     expect(w.ledger.energy.secretion - ledger0.secretion).toBe(0.4 * DT);
-    expect(log).toEqual([{ name: 'E02', seen: 35.03 - 0.4 * DT, outcome: R.ENERGY_LOW }]);
+    expect(log).toEqual([{ name: 'E99', seen: 35.03 - 0.4 * DT, outcome: R.ENERGY_LOW }]);
     expect(35.03 - w.ents.cols.E[slot]!).toBeCloseTo(spentTotal(w.ledger.energy) - spentTotal(ledger0), 13);
   });
 
@@ -205,7 +206,8 @@ describe('C08 shared budget with real modules (W4-17): a B04 carrying E01 + E09 
     expect(prof.protein?.source).toBe('E09');
     expect(prof.builder).toEqual({ source: 'E10', minEnergy: 35, ratePerSecond: 0.02, bodyFloor: 1.2, energyPerC: 2, filmCap: 0.5 });
     const keys = STAGE8_ACTIONS.filter((a) => a.tier === 'module').map((a) => a.key);
-    expect(keys).toEqual(['E01', 'E09', 'E10']);
+    // E02's signal emission joined the module tier at wave 11 (D-0119, D-0120); the table stays ascending.
+    expect(keys).toEqual(['E01', 'E02', 'E09', 'E10']);
   });
 
   it('shipped order through step (energy set at stage 7): E01 releases, E09 releases, E10 is refused for energy and builds nothing', () => {

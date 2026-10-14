@@ -1,7 +1,8 @@
 /**
  * The dish renderer (ARCH §9, UX §6–§7). Draws snapshots; never touches simulation state.
  *
- * Layers (bottom → top, UX §7.3): dish substrates · film tiles · deposits · food objects and stains ·
+ * Layers (bottom → top, UX §7.3): dish substrates · structures (Phase 5 edge glyphs, furnishing and device
+ * tiles; src/render/structureLayer.ts) · film tiles · deposits · food objects and stains ·
  * overlay · wide-zoom aggregation · organisms and fungal segment tiles (one ParticleContainer over the
  * organism atlas) · feature rims · status marks (infection glyph) · adhesion links · effects ·
  * selection. Fungi are drawn as connection-mask tiles from E_LINKMASK, never through the body path;
@@ -74,7 +75,22 @@ import {
   type LayerPick,
 } from './features';
 import { BudgetLadder, budgetFor, GHOSTS_MAX, refreshDue, STAINS_MAX, type Budget, type BudgetLevel } from './budgets';
-import { brushCellOutcome, lifeCellOutcome, ST_NONE, ST_STONE, SUB_WATER, type LabBrushRule, type LifeBrush } from '@sim/grid';
+import { SUBSTRATE_CODES, type LabBrushRule, type LifeBrush, type SubstrateName } from '@sim/grid';
+import type { EdgeKind } from '@sim/barriers';
+import type { DeviceKind } from '@sim/devices';
+import { deviceSprites, edgeGlyphs, edgeSegment, EDGE_GLYPH_COLORS } from './structureLayer';
+import {
+  deviceMovePreview,
+  devicePreview,
+  edgeStrokePreview,
+  labCellPreview,
+  lifeCellPreview,
+  previewModel,
+  removePreview,
+  wetPreview,
+  type StructurePreviewModel,
+} from './structurePreviewModel';
+import { tracerDrawList, tracerPoint } from './gateTracer';
 import type { LineageMarks } from '@worker/protocol';
 import type { FavoriteMarks } from '@worker/protocol';
 import type { ProbeMask } from '@worker/probes';
@@ -259,6 +275,15 @@ export class DishRenderer {
   /** Largest sprite frame in the atlas (px), for the off-screen cull margin. */
   private maxFrameSize = 16;
   private structure: Uint8Array | null = null;
+  /** Phase 5 (protocol 3): the latest geometry (edges and devices too), and its structures layer. */
+  private geometry: SnapshotMsg['geometry'] = null;
+  private readonly structuresG = new Graphics();
+  private deviceParticles!: ParticleContainer;
+  private devicePool: Particle[] = [];
+  /** Zoom the edge glyphs were last stroked at (their minimum screen width); NaN = not drawn. */
+  private edgesZoom = Number.NaN;
+  /** Resin saturations the device tiles were last drawn with (redrawn only when they change). */
+  private lastResinKey = '';
 
   private cur: SnapshotMsg | null = null;
   private curAt = 0;
@@ -394,11 +419,14 @@ export class DishRenderer {
         roundPixels: false,
       });
     this.filmParticles = tileContainer();
+    this.deviceParticles = tileContainer();
     this.objectParticles = tileContainer();
     this.statusParticles = tileContainer();
     this.drawRim();
     this.world.addChild(
       this.dishSprite,
+      this.structuresG,
+      this.deviceParticles,
       this.filmParticles,
       this.depositSprite,
       this.objectParticles,
@@ -564,17 +592,76 @@ export class DishRenderer {
   applyGeometry(s: SnapshotMsg): void {
     if (this.destroyed || !s.geometry) return;
     this.structure = s.geometry.structure;
-    this.brushSubstrate = s.geometry.substrate;
+    this.geometry = s.geometry;
+    this.previewCache = null;
     const ctx = this.dishCanvas.getContext('2d')!;
     const img = ctx.createImageData(DISH_TEX, DISH_TEX);
     paintDish(img, s.geometry.substrate, s.geometry.structure, s.geometry.shade);
     ctx.putImageData(img, 0, 0);
     this.dishTex.source.update();
+    // Phase 5: edge glyphs and device tiles, redrawn only when the geometry changes (never per tick).
+    this.drawEdges();
+    this.drawDevices(s.resins);
+  }
+
+  /**
+   * Edge-barrier glyphs (structureLayer.ts edgeGlyph) on the shared cell edges, a pale halo stroke under
+   * each dark glyph, at least ~1.5 screen pixels wide so they read at every zoom preset. Drawn when the
+   * geometry changes, or when the zoom moved by more than a quarter since (frame() checks; not per tick).
+   */
+  private drawEdges(): void {
+    const g = this.structuresG;
+    g.clear();
+    const glyphs = edgeGlyphs(this.geometry?.edges);
+    const z = this.camera.zoom;
+    this.edgesZoom = glyphs.length > 0 ? z : Number.NaN;
+    if (glyphs.length === 0) return;
+    const minW = 1.5 / Math.max(1e-6, z);
+    for (const pass of [0, 1] as const) {
+      for (const { glyph } of glyphs) {
+        const sg = glyph.segments;
+        for (let k = 0; k < sg.length; k += 4) g.moveTo(sg[k]!, sg[k + 1]!).lineTo(sg[k + 2]!, sg[k + 3]!);
+        const w = Math.max(glyph.width, minW);
+        if (pass === 0) g.stroke({ width: w * 2, color: EDGE_GLYPH_COLORS.halo, alpha: 0.55, cap: 'round' });
+        else g.stroke({ width: w, color: glyph.color, alpha: 1, cap: 'butt' });
+      }
+    }
+  }
+
+  /** Furnishing and device tiles ('device' atlas tile; structureLayer.ts deviceFrame), S08 by its snapshot saturation. */
+  private drawDevices(resins: SnapshotMsg['resins']): void {
+    const list = this.deviceParticles.particleChildren;
+    const sprites = deviceSprites(this.geometry?.devices, resins);
+    let n = 0;
+    const size = this.manifest.tiles?.device?.size ?? 16;
+    for (const d of sprites) {
+      const tex = this.frames[tileFrameKey('device', d.frame)];
+      if (!tex) continue;
+      let p = this.devicePool[n];
+      if (!p) {
+        p = new Particle({ texture: tex, anchorX: 0.5, anchorY: 0.5 });
+        this.devicePool[n] = p;
+      }
+      p.texture = tex;
+      p.x = d.x;
+      p.y = d.y;
+      p.scaleX = 1 / size;
+      p.scaleY = 1 / size;
+      list[n++] = p;
+    }
+    if (list.length !== n || n > 0) {
+      list.length = n;
+      this.deviceParticles.update();
+    }
+    this.lastResinKey = resinKey(resins);
   }
 
   applySnapshot(s: SnapshotMsg, now = performance.now()): void {
     if (this.destroyed) return;
     if (s.geometry) this.applyGeometry(s);
+    // Phase 5: a resin's saturation travels per snapshot (no geometry resend): retile only when it changed.
+    else if (s.resins && resinKey(s.resins) !== this.lastResinKey) this.drawDevices(s.resins);
+    this.previewCache = null;
     // Deposits: repaint only the cells whose bands changed (byte-identical to a full repaint) and
     // touch the canvas/texture only when something did.
     {
@@ -917,6 +1004,9 @@ export class DishRenderer {
       this.pendingOverlay = null;
     }
     this.drawObjects(s, now);
+    // Phase 5: edge glyph widths follow big zoom changes (a redraw, not a per-tick one); the paused-only gate tracer.
+    if (!Number.isNaN(this.edgesZoom) && Math.abs(cam.zoom / this.edgesZoom - 1) > 0.25) this.drawEdges();
+    this.drawGateTracer(s, now);
 
     const alpha = Math.min(1, (now - this.curAt) / this.interval);
     const pxScale = cam.spritePixelScale();
@@ -1484,8 +1574,6 @@ export class DishRenderer {
   // Lab brush preview (UX §4.2; P2.7): drawn above everything, cosmetic only.
 
   private brushG: Graphics | null = null;
-  /** Substrate codes from the latest geometry (the Life brush preview's habitat rule). */
-  private brushSubstrate: Uint8Array | null = null;
   /** Follows the host element's size (see create()). */
   private hostObserver: ResizeObserver | null = null;
 
@@ -1500,8 +1588,11 @@ export class DishRenderer {
    */
   setBrushPreview(
     p:
-      | { readonly cells: readonly number[]; readonly rule: LabBrushRule }
+      | { readonly cells: readonly number[]; readonly rule: LabBrushRule; readonly substrate?: SubstrateName }
       | { readonly cells: readonly number[]; readonly rule: 'life'; readonly life: LifeBrush }
+      | { readonly cells: readonly number[]; readonly rule: 'device'; readonly structure: DeviceKind }
+      | { readonly cells: readonly number[]; readonly rule: 'move'; readonly structure: DeviceKind; readonly from: number }
+      | { readonly cells: readonly number[]; readonly rule: 'wet' }
       | null,
   ): { ok: number; refused: number } {
     if (this.destroyed) return { ok: 0, refused: 0 };
@@ -1512,37 +1603,36 @@ export class DishRenderer {
     const g = this.brushG;
     g.clear();
     if (!p) return { ok: 0, refused: 0 };
-    const occupied = new Uint8Array(CELL_COUNT);
-    const s = this.cur;
-    if (s && p.rule === 'place') {
-      for (let k = 0; k < s.count; k++) {
-        const cell = Math.floor(s.ents[k * ENT_STRIDE + E_Y]!) * GRID_W + Math.floor(s.ents[k * ENT_STRIDE + E_X]!);
-        if (cell >= 0 && cell < CELL_COUNT) occupied[cell] = 1;
-      }
-    }
-    // P3.6: cells holding a food object (snapshot objects) refuse a structure and a second object.
-    let objectCells: Uint8Array | null = null;
-    if (s && (p.rule === 'place' || p.rule === 'object') && s.objects && s.objects.length > 0) {
-      objectCells = new Uint8Array(CELL_COUNT);
-      for (const ob of s.objects) {
-        const cell = Math.floor(ob.y) * GRID_W + Math.floor(ob.x);
-        if (cell >= 0 && cell < CELL_COUNT) objectCells[cell] = 1;
-      }
-    }
+    // Phase 5 (wave 11): every rule goes through structurePreviewModel.ts, which calls the commands' own
+    // functions (brushCellOutcome, labCellConflict, lifeCellOutcome with extras, devicePlacementOutcome,
+    // wetCellOutcome). A geometry without edges or devices gives exactly the protocol 2 outcomes.
+    const m = this.previewModelNow();
+    const okCells: number[] = [];
     const refused: number[] = [];
-    let ok = 0;
-    for (const cell of p.cells) {
-      const st = this.structure ? this.structure[cell]! : ST_NONE;
-      const o =
-        p.rule === 'life'
-          ? lifeCellOutcome(st, this.brushSubstrate ? this.brushSubstrate[cell]! : SUB_WATER, p.life, this.stoneEdgeAt(cell))
-          : brushCellOutcome(p.rule, st, occupied[cell] === 1, objectCells !== null && objectCells[cell] === 1);
-      if (o === 'ok') {
-        ok++;
-        g.rect(cell % GRID_W, Math.floor(cell / GRID_W), 1, 1);
-      } else if (o !== 'noop') refused.push(cell);
+    if (p.rule === 'device') {
+      for (const r of devicePreview(m, p.cells)) (r.outcome === 'ok' ? okCells : refused).push(r.cell);
+    } else if (p.rule === 'move') {
+      for (const cell of p.cells) (deviceMovePreview(m, p.from, cell, p.structure) === 'ok' ? okCells : refused).push(cell);
+    } else if (p.rule === 'wet') {
+      // Water is a no-op (always moisture 1): neither tinted nor crossed, as an erase on an empty cell.
+      for (const r of wetPreview(m, p.cells)) if (r.outcome === 'ok') okCells.push(r.cell);
+      else if (r.outcome === 'refused') refused.push(r.cell);
+    } else {
+      const paint = p.rule === 'substrate' && 'substrate' in p && p.substrate !== undefined ? SUBSTRATE_CODES[p.substrate] : null;
+      for (const cell of p.cells) {
+        const o = p.rule === 'life' ? lifeCellPreview(m, p.life, cell) : labCellPreview(m, p.rule, cell, paint);
+        if (o === 'ok') okCells.push(cell);
+        else if (o !== 'noop') refused.push(cell);
+      }
     }
-    if (ok > 0) g.fill({ color: 0xf2b84b, alpha: 0.45 });
+    this.paintCells(g, okCells, refused);
+    return { ok: okCells.length, refused: refused.length };
+  }
+
+  /** Accepted cells tinted amber; refused cells tinted red and crossed (the Lab brush preview's look). */
+  private paintCells(g: Graphics, okCells: readonly number[], refused: readonly number[]): void {
+    for (const cell of okCells) g.rect(cell % GRID_W, Math.floor(cell / GRID_W), 1, 1);
+    if (okCells.length > 0) g.fill({ color: 0xf2b84b, alpha: 0.45 });
     if (refused.length > 0) {
       for (const cell of refused) g.rect(cell % GRID_W, Math.floor(cell / GRID_W), 1, 1);
       g.fill({ color: 0xb3473f, alpha: 0.35 });
@@ -1553,24 +1643,135 @@ export class DishRenderer {
       }
       g.stroke({ width: 0.16, color: 0x172c35, alpha: 0.9 });
     }
-    return { ok, refused: refused.length };
   }
 
-  /**
-   * Whether an open cell is four-adjacent to stone in the latest geometry (grid.ts isStoneEdge, the
-   * attachment surface 'stoneEdge'), for the Life brush preview of attached species.
-   */
-  private stoneEdgeAt(cell: number): boolean {
-    const st = this.structure;
-    if (!st || st[cell] !== ST_NONE) return false;
-    const x = cell % GRID_W;
-    return (
-      (x + 1 < GRID_W && st[cell + 1] === ST_STONE) ||
-      (x > 0 && st[cell - 1] === ST_STONE) ||
-      (cell + GRID_W < CELL_COUNT && st[cell + GRID_W] === ST_STONE) ||
-      (cell >= GRID_W && st[cell - GRID_W] === ST_STONE)
-    );
+  /** The preview model for the latest geometry and snapshot (rebuilt only when either changed). */
+  private previewCache: StructurePreviewModel | null = null;
+  private previewModelNow(): StructurePreviewModel {
+    return (this.previewCache ??= previewModel(this.geometry, this.cur));
   }
+
+  private edgePreviewG: Graphics | null = null;
+
+  /**
+   * Phase 5 (D-0106 "a refusal preview before commit"): preview a placeEdges stroke. Each distinct edge, in
+   * edgeKey order with the running cap, goes through the command's own edgePlacementOutcome
+   * (structurePreviewModel.ts edgeStrokePreview): accepted edges are tinted along the edge, refused ones red
+   * with a cross at the midpoint. Returns the counts and the refusals by reason ('rim', 'structure',
+   * 'barrier', 'channel', 'cap'); null clears it. Cosmetic only; the command's result stays authoritative.
+   */
+  setEdgePreview(
+    p: { readonly edges: ReadonlyArray<readonly [number, 'R' | 'D']>; readonly structure: EdgeKind } | null,
+  ): { ok: number; refused: number; reasons: Readonly<Partial<Record<string, number>>> } {
+    if (this.destroyed) return { ok: 0, refused: 0, reasons: {} };
+    const g = (this.edgePreviewG ??= this.world.addChild(new Graphics()));
+    g.clear();
+    if (!p) return { ok: 0, refused: 0, reasons: {} };
+    const r = edgeStrokePreview(this.previewModelNow(), p.structure, p.edges);
+    const z = Math.max(1e-6, this.camera.zoom);
+    const w = Math.max(0.3, 3 / z);
+    for (const it of r.items) {
+      if (it.outcome !== 'ok') continue;
+      const [x1, y1, x2, y2] = edgeSegment(it.cell, it.dir);
+      g.moveTo(x1, y1).lineTo(x2, y2);
+    }
+    if (r.ok > 0) g.stroke({ width: w, color: 0xf2b84b, alpha: 0.85 });
+    for (const it of r.items) {
+      if (it.outcome === 'ok') continue;
+      const [x1, y1, x2, y2] = edgeSegment(it.cell, it.dir);
+      g.moveTo(x1, y1).lineTo(x2, y2);
+    }
+    if (r.refused > 0) g.stroke({ width: w, color: 0xb3473f, alpha: 0.85 });
+    const c = Math.max(0.18, 4 / z);
+    for (const it of r.items) {
+      if (it.outcome === 'ok') continue;
+      const [x1, y1, x2, y2] = edgeSegment(it.cell, it.dir);
+      const mx = (x1 + x2) / 2;
+      const my = (y1 + y2) / 2;
+      g.moveTo(mx - c, my - c).lineTo(mx + c, my + c).moveTo(mx + c, my - c).lineTo(mx - c, my + c);
+    }
+    if (r.refused > 0) g.stroke({ width: Math.max(0.08, 1.5 / z), color: 0x172c35, alpha: 0.9 });
+    return { ok: r.ok, refused: r.refused, reasons: r.reasons };
+  }
+
+  private removePreviewG: Graphics | null = null;
+
+  /**
+   * Phase 5: outline the edges and devices a removeStructures command would take (ids from the latest
+   * geometry; an id naming nothing is not drawn). Returns how many of each it found; null clears it.
+   */
+  setRemovePreview(p: { readonly ids: readonly number[] } | null): { edges: number; devices: number; missing: number } {
+    if (this.destroyed) return { edges: 0, devices: 0, missing: 0 };
+    const g = (this.removePreviewG ??= this.world.addChild(new Graphics()));
+    g.clear();
+    if (!p) return { edges: 0, devices: 0, missing: 0 };
+    const r = removePreview(this.previewModelNow(), p.ids);
+    const z = Math.max(1e-6, this.camera.zoom);
+    for (const e of r.edges) {
+      const [x1, y1, x2, y2] = edgeSegment(e.cell, e.dir);
+      g.moveTo(x1, y1).lineTo(x2, y2);
+    }
+    for (const d of r.devices) g.rect(d.cell % GRID_W, Math.floor(d.cell / GRID_W), 1, 1);
+    if (r.edges.length + r.devices.length > 0) {
+      g.stroke({ width: Math.max(0.2, 4 / z), color: 0x172c35, alpha: 0.9 });
+      for (const e of r.edges) {
+        const [x1, y1, x2, y2] = edgeSegment(e.cell, e.dir);
+        g.moveTo(x1, y1).lineTo(x2, y2);
+      }
+      for (const d of r.devices) g.rect(d.cell % GRID_W, Math.floor(d.cell / GRID_W), 1, 1);
+      g.stroke({ width: Math.max(0.1, 2 / z), color: 0xb3473f, alpha: 1 });
+    }
+    return { edges: r.edges.length, devices: r.devices.length, missing: r.missing };
+  }
+
+  // Gate preview tracer (P5.2; src/render/gateTracer.ts): cosmetic, paused only.
+  private gateSel: { readonly cell: number; readonly dir: 'R' | 'D' } | null = null;
+  private gateStart = 0;
+  private gateG: Graphics | null = null;
+
+  /**
+   * Phase 5 (SPEC §4.9 last line, D-0119): show the gate preview tracer for the edge (cell, dir), or clear it
+   * with null. It reads only that edge's current code from the latest geometry, moves nothing, sends no
+   * command and draws no simulation randomness; it draws nothing while the current snapshot's speed is not
+   * 0 (the UI also clears it on Run). Reduced motion: a static frame (every token at its end position).
+   */
+  setGatePreview(sel: { readonly cell: number; readonly dir: 'R' | 'D' } | null): void {
+    this.gateSel = sel;
+    this.gateStart = performance.now();
+    if (sel === null && this.gateG) this.gateG.clear();
+  }
+
+  private drawGateTracer(s: SnapshotMsg, now: number): void {
+    const sel = this.gateSel;
+    const e = this.geometry?.edges;
+    const code = sel && e ? (sel.dir === 'R' ? e.r : e.d)[sel.cell] ?? 0 : 0;
+    const tokens = tracerDrawList(sel, s.speed, code, now - this.gateStart, this.opts.reducedMotion);
+    if (tokens === null) {
+      if (this.gateG && this.gateDrawn) {
+        this.gateG.clear();
+        this.gateDrawn = false;
+      }
+      return;
+    }
+    const g = (this.gateG ??= this.world.addChild(new Graphics()));
+    g.clear();
+    this.gateDrawn = true;
+    const z = Math.max(1e-6, this.camera.zoom);
+    const r = Math.max(0.05, 2.5 / z);
+    for (const t of tokens) {
+      const [x, y] = tracerPoint(t, sel!.cell, sel!.dir);
+      const color = TRACER_COLORS[t.cls] ?? 0xf5f4ef;
+      // Field classes leave a trail whose density is the edge's factor (dots behind the token).
+      const dots = Math.round(4 * t.trail);
+      for (let k = 1; k <= dots; k++) {
+        // A token moves toward −side; its trail lies behind it, toward +side.
+        const back = tracerPoint({ along: t.along, across: t.across + t.side * 0.09 * k }, sel!.cell, sel!.dir);
+        g.circle(back[0], back[1], r * 0.45).fill({ color, alpha: 0.5 });
+      }
+      g.circle(x, y, r).fill({ color, alpha: 1 }).stroke({ width: r * 0.4, color: 0x172c35, alpha: 0.9 });
+    }
+  }
+  private gateDrawn = false;
 
   destroy(): void {
     this.hostObserver?.disconnect();
@@ -1578,6 +1779,25 @@ export class DishRenderer {
     this.app.destroy(true, { children: true, texture: true });
   }
 }
+
+/** A key for a snapshot's resin saturations (device tiles are retiled only when it changes). */
+function resinKey(resins: SnapshotMsg['resins']): string {
+  if (!resins || resins.length === 0) return '';
+  let k = '';
+  for (const r of resins) k += `${r.id}:${r.saturation};`;
+  return k;
+}
+
+/** Gate tracer token colours by transport class (neutral and distinct; the class is also its lane along the edge). */
+const TRACER_COLORS: Readonly<Record<string, number>> = {
+  dissolved: 0xf3c95c,
+  activity: 0xbe8ce6,
+  viral: 0x3e7bc4,
+  small: 0xef7b6c,
+  medium: 0x8cba4b,
+  large: 0xd99ba6,
+  fixed: 0x6e7b84,
+};
 
 /** A region's outline in world units: cells are [x, x+1); integer cell indices are the mask's centres. */
 export function probeOutline(m: ProbeMask): number[] {

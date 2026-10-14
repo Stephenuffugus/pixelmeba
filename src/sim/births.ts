@@ -29,6 +29,7 @@ import { proposeDaughters } from './mutation';
 import { resetDormancy, restsAtBirth, startRestingNewborn } from './dormancy';
 import { profileOf } from './profiles';
 import { R } from './reasons';
+import { clearGlow } from './signals';
 import { detFloat, STREAMS } from './rng';
 import { entityCell, rebuildIndex } from './spatial';
 import { classOf } from './barriers';
@@ -304,6 +305,9 @@ function commitDivision(
   // loss frees no material: modules are rules, not stored carbon, nutrient or mineral.
   for (const d of [i, slot]) {
     resetDormancy(world, d);
+    // Phase 5 (D-0119): glow is a temporary state, never inherited; both daughters start dim with dwell 0, and
+    // a glowing parent's glow ends with one 'glowOff' (why 'division') under the parent's birthId (signals.ts).
+    if (c.glowState[d] !== 0 || c.glowDwell[d] !== 0) clearGlow(world, d, 'division');
     const cap = profileOf(world, d).energyCap;
     if (c.E[d]! > cap) {
       world.ledger.energy.dissipated += c.E[d]! - cap;

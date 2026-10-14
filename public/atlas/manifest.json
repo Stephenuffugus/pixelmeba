@@ -5,7 +5,7 @@
  "width": 1024,
  "height": 2048,
  "padding": 2,
- "exportHash": "695ad0f2554dc3b5a92eeec4d8c0fca9e56c491e4c437a4992f78b8f382dcfc9",
+ "exportHash": "393e81b629bcda4678ebe1f3a1daf2c5b0b83cf060aa6ff571c19a40ee18ce9f",
  "sprites": {
   "a01_sunbead": {
    "speciesId": "A01",
@@ -1665,6 +1665,25 @@
    "frames": 1,
    "frameNames": [
     "emptied object stain"
+   ]
+  },
+  "device": {
+   "size": 16,
+   "frames": 13,
+   "frameNames": [
+    "s05",
+    "s06",
+    "s07",
+    "s08_0",
+    "s08_1",
+    "s08_2",
+    "s08_3",
+    "s09_off",
+    "s09_on",
+    "s10_off",
+    "s10_on",
+    "s11",
+    "s12"
    ]
   }
  },
@@ -21491,6 +21510,123 @@
    "index": 0,
    "x": 1002,
    "y": 1426,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/device/0",
+   "tile": "device",
+   "index": 0,
+   "x": 2,
+   "y": 1446,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/device/1",
+   "tile": "device",
+   "index": 1,
+   "x": 22,
+   "y": 1446,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/device/2",
+   "tile": "device",
+   "index": 2,
+   "x": 42,
+   "y": 1446,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/device/3",
+   "tile": "device",
+   "index": 3,
+   "x": 62,
+   "y": 1446,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/device/4",
+   "tile": "device",
+   "index": 4,
+   "x": 82,
+   "y": 1446,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/device/5",
+   "tile": "device",
+   "index": 5,
+   "x": 102,
+   "y": 1446,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/device/6",
+   "tile": "device",
+   "index": 6,
+   "x": 122,
+   "y": 1446,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/device/7",
+   "tile": "device",
+   "index": 7,
+   "x": 142,
+   "y": 1446,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/device/8",
+   "tile": "device",
+   "index": 8,
+   "x": 162,
+   "y": 1446,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/device/9",
+   "tile": "device",
+   "index": 9,
+   "x": 182,
+   "y": 1446,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/device/10",
+   "tile": "device",
+   "index": 10,
+   "x": 202,
+   "y": 1446,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/device/11",
+   "tile": "device",
+   "index": 11,
+   "x": 222,
+   "y": 1446,
+   "w": 16,
+   "h": 16
+  },
+  {
+   "key": "tile/device/12",
+   "tile": "device",
+   "index": 12,
+   "x": 242,
+   "y": 1446,
    "w": 16,
    "h": 16
   }

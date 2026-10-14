@@ -16,7 +16,7 @@ import { step } from '@sim/tick';
 import type { World } from '@sim/world';
 import { allocatedFieldIds } from '@sim/fields';
 import { worldHasSystem } from '@sim/gates';
-import { buildFamily, buildInspector, lociOfBirth, packDeposits, packEntities, packLinks, packObjects, packOverlay, visualEvents } from './snapshot';
+import { buildFamily, buildInspector, lociOfBirth, packDeposits, packEntities, packEnvironment, packGeometry, packLinks, packObjects, packOverlay, packResins, speciesFreeClasses, visualEvents } from './snapshot';
 import { buildLineage, packLineageMarks } from '@sim/lineage';
 import type { LineageMarks, LineageView } from './protocol';
 import { stamp, type DishInfo, type DishSource, type Envelope, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
@@ -2158,6 +2158,15 @@ export class DishHost {
       // P3.2: only a habitat preset this build enables.
       if (o0?.habitatId !== undefined && (typeof o0.habitatId !== 'string' || !this.registry.manifest.enabledHabitats.includes(o0.habitatId) || !this.registry.habitats[o0.habitatId]))
         throw new Error(`There is no habitat "${String(o0.habitatId)}" in this version of Pixelmeba.`);
+      // Protocol 3 (P5.1 New Dish Environment; D-0111 carry-over): only known values, and a cycle or drying only
+      // with this build's 'climate' system, refused here in the player's words before anything is built (so
+      // realizeRecipe's RecipeError never reaches the player as a raw message).
+      if (o0?.lid !== undefined && o0.lid !== 'open' && o0.lid !== 'closed') throw new Error(`Unknown lid setting "${String(o0.lid)}".`);
+      if (o0?.lightMode !== undefined && o0.lightMode !== 'fixed' && o0.lightMode !== 'cycle') throw new Error(`Unknown light setting "${String(o0.lightMode)}".`);
+      if (o0?.drying !== undefined && typeof o0.drying !== 'boolean') throw new Error(`Unknown drying setting "${String(o0.drying)}".`);
+      const climate = this.registry.manifest.enabledSystems.includes('climate');
+      if (o0?.lightMode === 'cycle' && !climate) throw new Error("Day and night light needs the climate system, which this dish's content does not include.");
+      if (o0?.drying === true && !climate) throw new Error("Drying needs the climate system, which this dish's content does not include.");
       const o = source.overrides;
       return realizeRecipe(this.registry, source.recipeId, {
         worldId: dishId,
@@ -2179,6 +2188,10 @@ export class DishHost {
       ...(o?.founderMode ? { founderMode: o.founderMode } : {}),
       ...(o?.empty ? { empty: true } : {}),
       ...(o?.habitatId !== undefined ? { habitatId: o.habitatId } : {}),
+      // Protocol 3: exactly the environment keys given (none when absent: byte-identical to a protocol 2 build).
+      ...(o?.lid !== undefined ? { lid: o.lid } : {}),
+      ...(o?.lightMode !== undefined ? { lightMode: o.lightMode } : {}),
+      ...(o?.drying !== undefined ? { drying: o.drying } : {}),
     };
     return { recipeId: source.recipeId, recipeRevision: this.registry.recipes[source.recipeId]?.revision ?? null, createdFrom: 'recipe', overrides };
   }
@@ -3303,6 +3316,9 @@ export class DishHost {
       registry: this.registryInfo(w.content.manifest, w.content.modules),
       // P4.7: a Try my dish turn's record (its notebook's), so the UI can show the turn badge after any open.
       ...(!d.arm && turnOf(d.notebook) ? { turn: turnOf(d.notebook)! } : {}),
+      // Protocol 3: the world's own systems (per-dish gating, D-0111) and each species' free transport class.
+      systems: [...m.enabledSystems],
+      speciesFreeClass: speciesFreeClasses(w),
     };
   }
 
@@ -3377,6 +3393,9 @@ export class DishHost {
       registry: this.registryInfo(w.content.manifest, w.content.modules),
       // P4.3: the Play shelf's live-state picture of this start (the same world the dish would start as).
       thumb: dishThumb(w),
+      // Protocol 3: the start's environment (overrides, else the recipe's, else the habitat's) and whether it records climate.
+      environment: { lid: w.settings.lid, lightMode: w.settings.lightMode, drying: w.settings.drying },
+      climate: worldHasSystem(w, 'climate'),
     };
   }
 
@@ -3518,14 +3537,13 @@ export class DishHost {
     d.lastEventId = w.counters.nextEventId - 1;
     let geometry: SnapshotMsg['geometry'] = null;
     if (d.lastGeometryVersion !== w.grid.geometryVersion) {
-      geometry = {
-        version: w.grid.geometryVersion,
-        substrate: new Uint8Array(w.grid.substrate),
-        structure: new Uint8Array(w.grid.structure),
-        shade: new Float32Array(w.grid.shade),
-      };
+      // Protocol 3: with the edge barriers and devices (snapshot.ts packGeometry), only when the geometry moved.
+      geometry = packGeometry(w);
       d.lastGeometryVersion = w.grid.geometryVersion;
     }
+    // Protocol 3: resin saturation (bound changes in stage 2 without a geometry bump) and the climate settings, per snapshot.
+    const resins = packResins(w);
+    const environment = packEnvironment(w);
     const msg: SnapshotMsg = {
       type: 'snapshot',
       dishId: d.id,
@@ -3557,12 +3575,15 @@ export class DishHost {
       ...(favorites ? { favorites } : {}),
       // P4.13: the worker's timings while diagnostics are on (the snapshot time is the previous one's).
       ...(this.diagnostics ? { perf: this.perf.sample() } : {}),
+      ...(resins ? { resins } : {}),
+      ...(environment ? { environment } : {}),
     };
     const transfer: Transferable[] = [packed.ents.buffer, packed.ids.buffer, deposits.buffer, links.buffer];
     if (overlay) transfer.push(overlay.data.buffer);
     if (lineage) transfer.push(lineage.marks.buffer as ArrayBuffer);
     if (favorites) transfer.push(favorites.marks.buffer as ArrayBuffer, favorites.member.buffer as ArrayBuffer);
     if (geometry) transfer.push(geometry.substrate.buffer, geometry.structure.buffer, geometry.shade.buffer);
+    if (geometry?.edges) transfer.push(geometry.edges.r.buffer as ArrayBuffer, geometry.edges.d.buffer as ArrayBuffer);
     this.post(msg, transfer);
     if (this.diagnostics) this.perf.recordSnapshot(performance.now() - p0);
   }

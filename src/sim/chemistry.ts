@@ -15,10 +15,11 @@
  *   from src/sim/climate.ts (lamps: Phase 6).
  */
 import { climateLightAt, hasCanopySpecies, type CyclePhaseName } from './climate';
-import { INHIBITOR_DAMAGE } from './constants';
+import { INHIBITOR_DAMAGE, RIVAL_EXPOSURE_FACTOR } from './constants';
 import type { Species } from './content/schema';
 import type { FieldId } from './fields';
 import { worldHasStructure, worldHasSystem } from './gates';
+import { RIVAL_TARGETS } from './rivalry';
 import type { World } from './world';
 
 export const PH_MIN = 2;
@@ -77,6 +78,12 @@ export interface ExposureBreakdown {
   readonly filmHalves: boolean;
   /** One line per inhibitor this world allocates (its 'chemistry' system), in CT §3.4 order. */
   readonly lines: readonly ExposureLine[];
+  /**
+   * Phase 5 (wave 11; SPEC §7.9, §4.3; CT §3.4): present only in a world with the RIVAL field whose cell holds
+   * RIVAL > 0. `exposure` is the part a RIVAL target gains here, 0.25 × amount, × 0.5 when film halves the
+   * total; `targets` are the RIVAL target species ids this dish records (rivalry.ts RIVAL_TARGETS order).
+   */
+  readonly rival?: { readonly amount: number; readonly exposure: number; readonly targets: readonly string[] };
 }
 
 /**
@@ -100,7 +107,12 @@ export function exposureBreakdown(world: World, cell: number): ExposureBreakdown
       damagePerSecond: INHIBITOR_DAMAGE * exposure,
     });
   }
-  return { filmHalves, lines };
+  const r = world.fields.rival;
+  const amount = r === undefined ? 0 : r[cell]!;
+  if (!(amount > 0)) return { filmHalves, lines };
+  const term = RIVAL_EXPOSURE_FACTOR * amount;
+  const targets = RIVAL_TARGETS.filter((id) => world.species.some((sp) => sp.id === id));
+  return { filmHalves, lines, rival: { amount, exposure: filmHalves ? term * 0.5 : term, targets } };
 }
 
 export interface LightFactors {

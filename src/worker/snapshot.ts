@@ -27,6 +27,34 @@ import { entityCell, forEachInCell } from '@sim/spatial';
 import { response, SHOULDER_PH, SHOULDER_SALINITY, SHOULDER_WARMTH } from '@sim/suitability';
 import { entitySuitabilityAt } from '@sim/crossing';
 import type { World } from '@sim/world';
+import { edgeCodeArrays, edgeNeighbour, freeClassOfSpecies, type EdgeBarrier } from '@sim/barriers';
+import { RESIN_CAPACITY, RESIN_TARGETS, type Device } from '@sim/devices';
+import { localWarmthAt } from '@sim/climate';
+import {
+  CUE3_GLOWING,
+  CUE3_HANDLING,
+  CUE3_HELD,
+  CUE3_JACKET_SHIFT,
+  CUE3_JACKETED,
+  CUE3_MOD_E02,
+  CUE3_MOD_E11,
+  CUE3_MODE_SHIFT,
+  CUE3_SHELL,
+  CUE3_TRAP_SHIFT,
+  DEPOSIT_GRIT_BAND,
+  E_CUE3,
+  EDGE_FLOW_BACK,
+  type CellClimate,
+  type CellDeviceLine,
+  type CellEdgeLine,
+  type CellLightFactors,
+  type GeometryDevice,
+  type GeometryEdge,
+  type GeometryEdges,
+  type GeometryMsg,
+  type SnapshotEnvironment,
+  type SnapshotResin,
+} from './protocol';
 import {
   CUE2_ANCHORED,
   CUE2_INFECTED,
@@ -100,6 +128,8 @@ export function packEntities(world: World, ents: Float32Array | null, ids: Uint3
   const speciesCounts = new Array<number>(world.species.length).fill(0);
   // P3.12: the fungal link columns resolved once per pack instead of by name for every organism.
   const fl = fungalLinkCols(world);
+  // Protocol 3: which species build shells (SHELL), resolved once per pack.
+  const shell = world.species.map((s) => s.abilities.includes('SHELL'));
   let k = 0;
   for (let i = 0; i < e.highWater; i++) {
     if (c.alive[i] !== 1) continue;
@@ -136,6 +166,7 @@ export function packEntities(world: World, ents: Float32Array | null, ids: Uint3
     // Protocol 2: every slot is written for every entity (pooled buffers), 0 when nothing applies.
     outE[o + E_CUE2] = cue2Of(world, i, mods, flags);
     outE[o + E_LINKMASK] = linkMaskOf(world, i, fl);
+    outE[o + E_CUE3] = cue3Of(world, i, mods, shell[c.species[i]!] === true);
     outI[k * ID_STRIDE] = c.birthId[i]!;
     outI[k * ID_STRIDE + 1] = c.entityId[i]!;
     speciesCounts[c.species[i]!]!++;
@@ -177,6 +208,41 @@ function cue2Of(world: World, i: number, mods: readonly string[], flags: number)
     if (mods.includes('E12')) cue2 |= CUE2_MOD_E12;
   }
   return cue2;
+}
+
+/**
+ * Phase 5 cue bits (protocol 3, CUE3_*; D-0119) of one living organism, read from authoritative entity
+ * columns only (protocol.ts documents each rule). 0 for every organism of a world holding no Phase 5 state.
+ */
+export function cue3Of(world: World, i: number, mods: readonly string[], shellSpecies: boolean): number {
+  const c = world.ents.cols;
+  const e = world.ents;
+  let cue3 = 0;
+  if (c.glowState[i] === 1) cue3 |= CUE3_GLOWING;
+  if (mods.length > 0) {
+    if (mods.includes('E02')) cue3 |= CUE3_MOD_E02;
+    if (mods.includes('E11')) cue3 |= CUE3_MOD_E11;
+  }
+  const mode = c.metabolicMode[i]!;
+  if (mode === 1 || mode === 2) cue3 |= mode << CUE3_MODE_SHIFT;
+  const held = c.heldBySlot[i]!;
+  if (held >= 0 && e.refValid(held, c.heldByBirthId[i]!)) cue3 |= CUE3_HELD;
+  if (c.handlingNeed[i]! > 0) {
+    const prey = c.preySlot[i]!;
+    if (prey >= 0 && e.refValid(prey, c.preyBirthId[i]!)) cue3 |= CUE3_HANDLING;
+  }
+  const ts = c.trapSlot[i]!;
+  const holding = ts >= 0 && e.refValid(ts, c.trapBirthId[i]!);
+  const trap = holding ? 2 : c.trapCooldown[i]! > 0 ? 3 : c.trapReserveC[i]! > 0 && ts < 0 ? 1 : 0;
+  if (trap !== 0) cue3 |= trap << CUE3_TRAP_SHIFT;
+  const jacket = c.jacketMineral[i]!;
+  if (jacket > 0) {
+    const B = c.B[i]!;
+    const cov = B > 0 ? Math.min(1, jacket / (0.1 * B)) : 1;
+    cue3 |= CUE3_JACKETED | (Math.min(3, Math.max(0, Math.ceil(4 * cov) - 1)) << CUE3_JACKET_SHIFT);
+  }
+  if (shellSpecies && c.boundMineral[i]! > 0) cue3 |= CUE3_SHELL;
+  return cue3;
 }
 
 const FUNGAL_LINK_COLUMNS = [
@@ -313,8 +379,8 @@ function packFilmBand(world: World, buf: Uint8Array, base: number): void {
 }
 
 /** Deposit glyph bands: starch, detritus, oil, protein, sugar haze → 0–255 on a soft log scale. */
-/** Bands: starch, detritus, oil, protein, sugar haze, catalysis (carbon converted last tick), film (protocol 2). */
-export const DEPOSIT_BANDS = 7;
+/** Bands: starch, detritus, oil, protein, sugar haze, catalysis (carbon converted last tick), film (protocol 2), grit (protocol 3). */
+export const DEPOSIT_BANDS = 8;
 export function packDeposits(world: World, out: Uint8Array | null): Uint8Array {
   const buf = out && out.length === CELL_COUNT * DEPOSIT_BANDS ? out : new Uint8Array(CELL_COUNT * DEPOSIT_BANDS);
   packFilmBand(world, buf, DEPOSIT_FILM_BAND * CELL_COUNT);
@@ -327,7 +393,10 @@ export function packDeposits(world: World, out: Uint8Array | null): Uint8Array {
     buf[cbase + i] = v <= 1e-7 ? 0 : Math.min(255, Math.max(1, Math.round((Math.log10(1 + v * 1e5) / 3) * 255)));
   }
   const kinds: FieldId[] = ['starch', 'detritus', 'oil', 'protein', 'sugar'];
-  kinds.forEach((id, k) => {
+  // Protocol 3: band DEPOSIT_GRIT_BAND is grit on the same scale (0 where the world has no grit field).
+  const bands: [FieldId, number][] = kinds.map((id, k) => [id, k]);
+  bands.push(['grit', DEPOSIT_GRIT_BAND]);
+  bands.forEach(([id, k]) => {
     const f = world.fields[id];
     const base = k * CELL_COUNT;
     if (!f) {
@@ -345,6 +414,14 @@ export function packDeposits(world: World, out: Uint8Array | null): Uint8Array {
 export function packOverlay(world: World, id: OverlayId, out: Float32Array | null, selection: Selection | null = null): { data: Float32Array; max: number } | null {
   const buf = out && out.length === CELL_COUNT ? out : new Float32Array(CELL_COUNT);
   if (id === 'foodAccess') return { data: buf, max: packFoodAccess(world, buf, selection) };
+  // Protocol 3: local warmth (the array, else the ambient setting everywhere) and moisture, a 0–1 index
+  // with max 1. Read only: packing never allocates a climate array (g5-plan "Lazy climate arrays").
+  if (id === 'warmth' || id === 'moisture') {
+    const arr = id === 'warmth' ? world.climate.warmth : world.derived.moisture;
+    if (arr === null) buf.fill(world.settings.warmth);
+    else for (let i = 0; i < CELL_COUNT; i++) buf[i] = arr[i]!;
+    return { data: buf, max: 1 };
+  }
   let src: Float64Array | undefined;
   if (id === 'light') src = world.derived.light;
   else if (id === 'ph') src = world.derived.ph;
@@ -535,7 +612,8 @@ function inspectEntity(world: World, slot: number): EntityInspect {
     predation,
     suitFactors: {
       ph: response(world.derived.ph[cell]!, prof.ph[0], prof.ph[1], SHOULDER_PH),
-      warmth: response(world.settings.warmth, prof.warmth[0], prof.warmth[1], SHOULDER_WARMTH),
+      // Wave 9 carry-over: the local warmth suitability reads (identical to settings.warmth without the array).
+      warmth: response(localWarmthAt(world, cell), prof.warmth[0], prof.warmth[1], SHOULDER_WARMTH),
       salinity: response(world.fields.salt![cell]!, prof.salinity[0], prof.salinity[1], SHOULDER_SALINITY),
       reason: suit.reason,
     },
@@ -645,7 +723,160 @@ function inspectCell(world: World, cell: number): CellInspect {
     ...chemistryLines(world, cell),
     ...reactionLines(world, cell),
     ...objectLine(world, cell),
+    // Protocol 3: climate, the light factors beyond baseline and shade, edge barriers and the device.
+    ...climateLines(world, cell),
+    ...cellEdgeLines(world, cell),
+    ...cellDeviceLine(world, cell),
   };
+}
+
+/** Protocol 3 (SPEC §4.4, §4.7, §4.8): local warmth and moisture, only in a world recording 'climate'; lightFactors beyond baseline and shade. */
+export function climateLines(world: World, cell: number): Pick<CellInspect, 'climate' | 'lightFactors'> {
+  const out: { climate?: CellClimate; lightFactors?: CellLightFactors } = {};
+  if (worldHasSystem(world, 'climate')) {
+    const w = world.climate.warmth;
+    out.climate = {
+      warmth: w === null ? world.settings.warmth : w[cell]!,
+      ambientWarmth: world.settings.warmth,
+      warmthLocal: w !== null,
+      moisture: world.derived.moisture[cell]!,
+      moistureLocal: world.climate.moisture !== null,
+    };
+  }
+  const lf = lightFactors(world, cell);
+  if (lf.cycle !== undefined || lf.roof !== undefined || lf.canopy !== undefined) {
+    out.lightFactors = {
+      ...(lf.cycle !== undefined ? { cycle: { phase: lf.cycle.phase, factor: lf.cycle.factor, secondsIntoPhase: lf.cycle.secondsIntoPhase } } : {}),
+      ...(lf.roof !== undefined ? { roof: lf.roof } : {}),
+      ...(lf.canopy !== undefined ? { canopy: lf.canopy } : {}),
+    };
+  }
+  return out;
+}
+
+/** Protocol 3: the edge barriers on a cell's four sides (N, E, S, W), each with its gate tally; absent when none. */
+export function cellEdgeLines(world: World, cell: number): Pick<CellInspect, 'edges'> {
+  if (world.edges.length === 0) return {};
+  const x = cell % GRID_W;
+  const sides: { side: CellEdgeLine['side']; lower: number; dir: 'R' | 'D'; mine: boolean }[] = [];
+  if (cell >= GRID_W) sides.push({ side: 'N', lower: cell - GRID_W, dir: 'D', mine: false });
+  if (x + 1 < GRID_W) sides.push({ side: 'E', lower: cell, dir: 'R', mine: true });
+  if (cell + GRID_W < CELL_COUNT) sides.push({ side: 'S', lower: cell, dir: 'D', mine: true });
+  if (x > 0) sides.push({ side: 'W', lower: cell - 1, dir: 'R', mine: false });
+  const lines: CellEdgeLine[] = [];
+  for (const sd of sides) {
+    const e = world.edges.find((b) => b.cell === sd.lower && b.dir === sd.dir);
+    if (!e) continue;
+    const code = edgeCodeArrays([e])[sd.dir === 'R' ? 'r' : 'd'][e.cell]!;
+    const t = world.gateTally.find((g) => g.id === e.id);
+    const fields: Record<string, number> = {};
+    if (t) for (const id of FIELD_IDS) if (t.fields[id] !== undefined) fields[id] = t.fields[id]!;
+    lines.push({
+      id: e.id,
+      kind: e.kind,
+      side: sd.side,
+      neighbour: sd.mine ? edgeNeighbour(e.cell, e.dir) : e.cell,
+      code,
+      ...(e.kind === 'S03' ? { open: e.open === true } : {}),
+      // flow +1 carries from e.cell to its neighbour: 'out' for the edge's own (lower) cell.
+      ...(e.kind === 'S04' ? { flow: ((e.flow ?? 1) === 1) === sd.mine ? ('out' as const) : ('in' as const) } : {}),
+      tally: t ? { fields, organisms: t.organisms } : null,
+    });
+  }
+  return lines.length > 0 ? { edges: lines } : {};
+}
+
+/** A resin's saturation: min(1, Σ bound / RESIN_CAPACITY), summed in RESIN_TARGETS order; 0 with nothing bound. */
+export function resinSaturation(d: Pick<Device, 'bound'>): number {
+  if (!d.bound) return 0;
+  let sum = 0;
+  for (const t of RESIN_TARGETS) sum += d.bound[t] ?? 0;
+  return Math.min(1, sum / RESIN_CAPACITY);
+}
+
+/** Protocol 3: the furnishing or device on a cell (its settings; a resin's bound amounts and saturation). */
+export function cellDeviceLine(world: World, cell: number): Pick<CellInspect, 'device'> {
+  if (world.devices.length === 0) return {};
+  const d = world.devices.find((v) => v.cell === cell);
+  if (!d) return {};
+  const line: CellDeviceLine = {
+    id: d.id,
+    kind: d.kind,
+    ...(d.on !== undefined ? { on: d.on } : {}),
+    ...(d.kind === 'S08'
+      ? {
+          resinSelect: [...(d.resinSelect ?? [])],
+          bound: Object.fromEntries(RESIN_TARGETS.filter((t) => d.bound?.[t] !== undefined).map((t) => [t, d.bound![t]!])),
+          saturation: resinSaturation(d),
+        }
+      : {}),
+  };
+  return { device: line };
+}
+
+/**
+ * The dish geometry (GeometryMsg; protocol 3 adds edges and devices). Built only when geometryVersion
+ * moved; fresh copies, so the arrays can be transferred.
+ */
+export function packGeometry(world: World): GeometryMsg {
+  return {
+    version: world.grid.geometryVersion,
+    substrate: new Uint8Array(world.grid.substrate),
+    structure: new Uint8Array(world.grid.structure),
+    shade: new Float32Array(world.grid.shade),
+    edges: packEdges(world.edges),
+    devices: world.devices.map(geometryDevice),
+  };
+}
+
+/** GeometryMsg.edges: per-cell codes (EDGE_FLOW_BACK on a backward S04) and the list; null for none. */
+export function packEdges(edges: readonly EdgeBarrier[]): GeometryEdges | null {
+  if (edges.length === 0) return null;
+  const { r, d } = edgeCodeArrays(edges);
+  const list: GeometryEdge[] = [];
+  for (const e of edges) {
+    if (e.kind === 'S04' && e.flow === -1) {
+      const arr = e.dir === 'R' ? r : d;
+      arr[e.cell] = arr[e.cell]! | EDGE_FLOW_BACK;
+    }
+    list.push({
+      id: e.id,
+      kind: e.kind,
+      cell: e.cell,
+      dir: e.dir,
+      ...(e.open !== undefined ? { open: e.open } : {}),
+      ...(e.flow !== undefined ? { flow: e.flow } : {}),
+    });
+  }
+  return { r, d, list };
+}
+
+function geometryDevice(d: Device): GeometryDevice {
+  return {
+    id: d.id,
+    kind: d.kind,
+    cell: d.cell,
+    ...(d.on !== undefined ? { on: d.on } : {}),
+    ...(d.resinSelect !== undefined ? { resinSelect: [...d.resinSelect] } : {}),
+  };
+}
+
+/** SnapshotMsg.resins: every S08's saturation, in world.devices order; undefined when the dish has none. */
+export function packResins(world: World): SnapshotResin[] | undefined {
+  let out: SnapshotResin[] | undefined;
+  for (const d of world.devices) if (d.kind === 'S08') (out ??= []).push({ id: d.id, cell: d.cell, saturation: resinSaturation(d) });
+  return out;
+}
+
+/** SnapshotMsg.environment: the light mode and drying, only when the world records 'climate'. */
+export function packEnvironment(world: World): SnapshotEnvironment | undefined {
+  if (!worldHasSystem(world, 'climate')) return undefined;
+  return { lightMode: world.settings.lightMode, drying: world.settings.drying };
+}
+
+/** DishInfo.speciesFreeClass: each species' free transport class (barriers.ts freeClassOfSpecies). */
+export function speciesFreeClasses(world: World): ReturnType<typeof freeClassOfSpecies>[] {
+  return world.species.map((s) => freeClassOfSpecies(s.def));
 }
 
 /** P3.6: the cell's finite food object, if any: its kind and remaining inventory (C per pool, bound N). */

@@ -353,7 +353,8 @@ describe('the committed atlas (npm run art:build)', () => {
     const OLD_SPECIES = ['A01', 'B01', 'B04', 'B06', 'P01', 'B02', 'B03', 'B05', 'B07', 'B08', 'F01', 'F02', 'P02', 'P03', 'P04', 'V01', 'X01', 'Y01', 'Y02'];
     const OLD_LAYERS = ['starch_notch', 'reserve_pocket', 'resting_seam', 'anchor_foot', 'shade_patch', 'light_trail', 'debris_granule', 'protein_notches', 'matrix_edge', 'adhesion_link'];
     const old = manifest.frames
-      .filter((f) => (f.speciesId !== undefined && OLD_SPECIES.includes(f.speciesId)) || (f.layer !== undefined && OLD_LAYERS.includes(f.layer)) || f.tile !== undefined)
+      // The v1.0 world tiles; wave 11's Phase 5 'device' tile (appended last, tests/render/structure-layers.test.ts) is not a v1.0 frame.
+      .filter((f) => (f.speciesId !== undefined && OLD_SPECIES.includes(f.speciesId)) || (f.layer !== undefined && OLD_LAYERS.includes(f.layer)) || (f.tile !== undefined && f.tile !== 'device'))
       .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
     const h = createHash('sha256');
     for (const f of old) {

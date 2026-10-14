@@ -8,7 +8,7 @@
  * src/render may import this module (ARCH §3: the renderer may read @sim; the ESLint boundary forbids
  * only UI and art imports there). It imports only grid.ts, barriers.ts, devices.ts and constants.ts.
  */
-import { CELL_COUNT, DEVICE_CAP, EDGE_BARRIER_CAP, GRID_H, GRID_W } from './constants';
+import { CELL_COUNT, DEVICE_CAP, EDGE_BARRIER_CAP, GRID_W } from './constants';
 import {
   cellInDish,
   EDGE_CHANNEL,
@@ -19,7 +19,7 @@ import {
   type EdgeDir,
   type EdgeKind,
 } from './barriers';
-import { ST_NONE, ST_STONE, ST_WALL, SUB_WATER, type Grid, type LabBrushRule } from './grid';
+import { ST_NONE, ST_OUTSIDE, ST_STONE, ST_WALL, SUB_WATER, type Grid, type LabBrushRule } from './grid';
 
 /** Why an edge of a placeEdges stroke is refused (or 'ok'), in the order they are checked. */
 export type EdgePlacementOutcome = 'ok' | 'rim' | 'structure' | 'barrier' | 'channel' | 'cap';
@@ -140,30 +140,22 @@ export function labCellConflict(rule: LabBrushRule, substrate: number | null, ha
   return null;
 }
 
-/**
- * The grid edge nearest to a continuous point (x, y) (cell (i, j) spans [i, i + 1) × [j, j + 1)), as
- * [lower cell, dir] (barriers.ts EdgeBarrier.cell/dir), or null when that edge has no cell on one side of
- * it inside the grid. Ties go to the vertical edge ('R'). For the wave 11 tap/drag snapping (D-0106).
- */
-export function nearestEdge(x: number, y: number): readonly [number, EdgeDir] | null {
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-  const vx = Math.round(x); // nearest vertical grid line
-  const hy = Math.round(y); // nearest horizontal grid line
-  const dV = Math.abs(x - vx);
-  const dH = Math.abs(y - hy);
-  if (dV <= dH) {
-    const cx = vx - 1;
-    const cy = Math.floor(y);
-    if (cx < 0 || cx + 1 >= GRID_W || cy < 0 || cy >= GRID_H) return null;
-    return [cy * GRID_W + cx, 'R'];
-  }
-  const cx = Math.floor(x);
-  const cy = hy - 1;
-  if (cx < 0 || cx >= GRID_W || cy < 0 || cy + 1 >= GRID_H) return null;
-  return [cy * GRID_W + cx, 'D'];
-}
-
 /** The canonical order of a stroke's edges (barriers.ts edgeKey), as the command sorts them. */
 export function sortStrokeEdges(edges: ReadonlyArray<readonly [number, EdgeDir]>): Array<readonly [number, EdgeDir]> {
   return [...edges].sort((a, b) => edgeKey(a[0], a[1]) - edgeKey(b[0], b[1]));
+}
+
+/** How one covered cell responds to the wetting brush (or 'ok'). */
+export type WetCellOutcome = 'ok' | 'noop' | 'refused';
+
+/**
+ * The per-cell form of structureEdits.ts wetBrush's rule (wave 11, for the renderer's preview): a cell
+ * outside the dish is 'refused'; open water is a 'noop' (it is always moisture 1; wetBrush counts it
+ * rejected too); every other dish cell — gel or sediment, whatever its structure — is 'ok' (climate.ts
+ * wetCells sets it to 0.9). wetBrush's `accepted` is the number of 'ok' cells of its footprint and its
+ * `rejected` the rest. `structure` ST_OUTSIDE is exactly barriers.ts cellInDish being false.
+ */
+export function wetCellOutcome(substrate: number, structure: number): WetCellOutcome {
+  if (structure === ST_OUTSIDE) return 'refused';
+  return substrate === SUB_WATER ? 'noop' : 'ok';
 }

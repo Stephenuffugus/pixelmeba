@@ -32,6 +32,7 @@ import { CELL_COUNT, GRID_H, GRID_W } from './constants';
 import { FLAG, LIFE_ACTIVE } from './entities';
 import { FIELD_DEFS, FIELD_IDS } from './fields';
 import { dormancyStep } from './dormancy';
+import { glowThresholds, stage8Senses } from './signals';
 import { ActionContext, releaseInvalidLinks, runActions, STAGE8_ACTIONS, type Stage8Action } from './actions';
 import { constructionPass } from './construction';
 import { recordMatrixBuilt } from './matrixBuilder';
@@ -80,6 +81,7 @@ export function stageStructures(world: World, actions: readonly Stage8Action[] =
   const e = world.ents;
   const c = e.cols;
   const ctx = new ActionContext(world);
+  stage8Senses(world); // Phase 5: stage-start sensed signal and RIVAL targets (signals.ts; inert without 'signals' or 'rivalry')
   for (let i = 0; i < e.highWater; i++) {
     if (c.alive[i] !== 1) continue;
     c.secreting[i] = 0;
@@ -87,6 +89,7 @@ export function stageStructures(world: World, actions: readonly Stage8Action[] =
     const prof = profileOf(world, i);
     // 1. Mandatory transitions.
     dormancyStep(world, i, prof);
+    glowThresholds(world, i, prof); // Phase 5: glow on/off and its cost, before the link release (SPEC §3.2 stage 8; signals.ts)
     releaseInvalidLinks(world, i, prof);
     if (c.lifeState[i] !== LIFE_ACTIVE) continue;
     // 2–3. Mandatory table entries, native optional actions by ID, modules ascending.

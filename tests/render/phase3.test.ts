@@ -306,8 +306,13 @@ describe('film, food objects and riders (UX §6.2, §6.5; SPEC §7.4)', () => {
       frames: { key: string }[];
     };
     const have = new Set(manifest.frames.map((f) => f.key));
-    expect(Object.keys(manifest.tiles).sort()).toEqual(Object.keys(TILE_FRAMES).sort());
-    for (const [id, t] of Object.entries(manifest.tiles)) {
+    // Wave 11 (structure-render-worker) appended the Phase 5 'device' tile (13 frames, art/src/tiles/structures.ts;
+    // tests/render/structure-layers.test.ts pins it). The validator's TILE_FRAMES lists the tiles it requires,
+    // and 'device' is required by nothing enabled before the systems flip, so it is compared apart.
+    const PHASE5_TILES = ['device'];
+    expect(Object.keys(manifest.tiles).filter((id) => !PHASE5_TILES.includes(id)).sort()).toEqual(Object.keys(TILE_FRAMES).sort());
+    expect(manifest.tiles.device?.frames).toBe(13);
+    for (const [id, t] of Object.entries(manifest.tiles).filter(([id]) => !PHASE5_TILES.includes(id))) {
       expect(t.frames, id).toBe(TILE_FRAMES[id]!.frames);
       for (let f = 0; f < t.frames; f++) {
         expect(tileFrameKey(id, f)).toBe(validatorTileKey(id, f));
@@ -333,7 +338,10 @@ describe('module boundary (ARCH §3, W2-30)', () => {
         const spec = m[1]!;
         seen.add(spec);
         expect(spec, `${f}: ${spec}`).not.toMatch(/(^@art\/|art\/src)/);
-        if (spec.startsWith('@sim/')) expect(['@sim/constants', '@sim/grid'], `${f}: ${spec}`).toContain(spec);
+        // Wave 11 (D-0117, D-0119): the renderer's structure preview and gate tracer call the commands' own PURE
+        // rules (structurePreview.ts, which imports only constants, barriers, grid and devices; barriers.ts's
+        // CT §5.3 table; devices.ts's kinds), so a preview can never promise what a command refuses.
+        if (spec.startsWith('@sim/')) expect(['@sim/constants', '@sim/grid', '@sim/structurePreview', '@sim/barriers', '@sim/devices'], `${f}: ${spec}`).toContain(spec);
         expect(spec.startsWith('../'), `${f}: ${spec}`).toBe(false);
       }
     }

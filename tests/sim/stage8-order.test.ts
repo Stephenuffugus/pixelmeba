@@ -122,14 +122,27 @@ describe('P3.7 stage 8: the action table', () => {
     expect(() => moduleAction('X01', always, () => R.NONE)).toThrow(/not a module id/);
   });
 
-  it('the shipped table: native starch, oil, protein producers, biofilm (wave 2), then E01, E09, E10 — frozen and untouched by test tables', () => {
+  // Re-pinned in Phase 5 wave 11 (e2-signals, D-0119): native SIGNAL_GLOW (5) and RIVALRY (6) and module E02 (2)
+  // joined the shipped table; the synthetic native that proves registration order is now TRAP (7).
+  it('the shipped table: native starch, oil, protein producers, biofilm, SIGNAL_GLOW, RIVALRY, then E01, E02, E09, E10 — frozen and untouched by test tables', () => {
     const shape = (t: readonly Stage8Action[]) => t.map((a) => `${a.tier}:${a.key}:${a.id}`);
     const before = shape(STAGE8_ACTIONS);
-    expect(before).toEqual(['native:E_STARCH_SECRETION:0', 'native:E_OIL_SECRETION:1', 'native:E_PROTEIN_SECRETION:2', 'native:BIOFILM:3', 'module:E01:1', 'module:E09:9', 'module:E10:10']);
+    expect(before).toEqual([
+      'native:E_STARCH_SECRETION:0',
+      'native:E_OIL_SECRETION:1',
+      'native:E_PROTEIN_SECRETION:2',
+      'native:BIOFILM:3',
+      'native:SIGNAL_GLOW:5',
+      'native:RIVALRY:6',
+      'module:E01:1',
+      'module:E02:2',
+      'module:E09:9',
+      'module:E10:10',
+    ]);
     expect(Object.isFrozen(STAGE8_ACTIONS)).toBe(true);
     const log: LogRow[] = [];
-    const t = buildActionTable([testModule(log, 'E04'), ...STAGE8_ACTIONS, testNative(log, 'SIGNAL_GLOW'), testMandatory(log, 'M', 0)]);
-    expect(shape(t)).toEqual(['mandatory:M:0', ...before.slice(0, 4), 'native:SIGNAL_GLOW:5', 'module:E01:1', 'module:E04:4', 'module:E09:9', 'module:E10:10']);
+    const t = buildActionTable([testModule(log, 'E04'), ...STAGE8_ACTIONS, testNative(log, 'TRAP'), testMandatory(log, 'M', 0)]);
+    expect(shape(t)).toEqual(['mandatory:M:0', ...before.slice(0, 6), 'native:TRAP:7', 'module:E01:1', 'module:E02:2', 'module:E04:4', 'module:E09:9', 'module:E10:10']);
     expect(shape(STAGE8_ACTIONS)).toEqual(before);
     expect(() => buildActionTable([testModule(log, 'E04'), testModule(log, 'E04')])).toThrow(/duplicate/);
   });
@@ -187,15 +200,15 @@ describe('P3.7 stage 8: reservation order', () => {
       stageStructures(w, buildActionTable([...STAGE8_ACTIONS, ...extra(log)]));
       return { w, s, log };
     };
-    // A native test action (SIGNAL_GLOW, ID 5) runs before the E01 module action and takes 0.04.
-    const a = run((log) => [testNative(log, 'SIGNAL_GLOW', 35, 0.04)]);
-    expect(a.log.map((r) => [r.key, r.outcome])).toEqual([['SIGNAL_GLOW', R.NONE]]);
+    // A native test action (TRAP, ID 7; SIGNAL_GLOW ships since wave 11, D-0119) runs before the E01 module action and takes 0.04.
+    const a = run((log) => [testNative(log, 'TRAP', 35, 0.04)]);
+    expect(a.log.map((r) => [r.key, r.outcome])).toEqual([['TRAP', R.NONE]]);
     expect(a.w.ents.cols.secretionCode[a.s]).toBe(R.SECRETION_ENERGY_LOW);
     expect(a.w.ledger.energy.secretion).toBe(0);
-    // A module test action after E01 (E02) is the one refused, with its own code ENERGY_LOW.
-    const b = run((log) => [testModule(log, 'E02', 35, 0.04)]);
+    // A module test action after E01 (E04; E02 ships since wave 11) is the one refused, with its own code ENERGY_LOW.
+    const b = run((log) => [testModule(log, 'E04', 35, 0.04)]);
     expect(b.w.ents.cols.secretionCode[b.s]).toBe(R.SECRETING);
-    expect(b.log.map((r) => [r.key, r.outcome])).toEqual([['E02', R.ENERGY_LOW]]);
+    expect(b.log.map((r) => [r.key, r.outcome])).toEqual([['E04', R.ENERGY_LOW]]);
     expect(b.log[0]!.seen).toBe(35.03 - 0.4 * DT);
   });
 
@@ -223,7 +236,7 @@ describe('P3.7 stage 8: reservation order', () => {
     c.secreting[s] = 1;
     c.flags[s] = c.flags[s]! | FLAG.secreting;
     const log: LogRow[] = [];
-    stageStructures(w, buildActionTable([...STAGE8_ACTIONS, testMandatory(log, 'M', 0), testModule(log, 'E02')]));
+    stageStructures(w, buildActionTable([...STAGE8_ACTIONS, testMandatory(log, 'M', 0), testModule(log, 'E04')])); // E04: E02 ships since wave 11 (D-0119)
     expect(log).toEqual([]);
     expect(c.secretionCode[s]).toBe(R.SECRETION_SATURATED);
     expect(c.secreting[s]).toBe(0);
