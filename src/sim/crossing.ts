@@ -24,9 +24,10 @@
  * hash-neutral.
  */
 import { shelterRefuses } from './edgePassage';
-import { SUB_WATER, ST_NONE } from './grid';
+import { FLAG, LIFE_ACTIVE } from './entities';
+import { SUB_WATER, ST_BEAD, ST_NONE } from './grid';
 import type { Profile } from './phenotype';
-import type { SpeciesRT } from './species';
+import { habitatBit, type SpeciesRT } from './species';
 import { habitatCompatible, suitabilityAt, type SuitResult } from './suitability';
 import type { World } from './world';
 
@@ -106,11 +107,26 @@ export function startCount(world: World, slot: number, sp: SpeciesRT, cell: numb
 }
 
 /**
+ * The habitat factor of a resting newborn (FLAG.restNewborn, not Active; wave 10 lead ruling on
+ * D-0106 "unattached, Small while resting; attachability is part of waking" and D-0117): her habitat only,
+ * structure and substrate exactly as habitatCompatible checks them, without the attachment-surface rule.
+ * Whether she may wake there is the wake condition `attachable` (dormancy.ts), unchanged.
+ */
+function restingNewbornHabitat(world: World, sp: SpeciesRT, cell: number): boolean {
+  const st = world.grid.structure[cell]!;
+  if (st !== ST_NONE && !(st === ST_BEAD && sp.attached)) return false;
+  return (sp.habitatMask & habitatBit(world.grid.substrate[cell]!)) !== 0;
+}
+
+/**
  * Suitability of the organism in `slot` at `cell` as stage 4 computes it (and the inspector shows
- * it): for a crosser the habitat factor is `crossingCompatible`; every other species gets exactly
- * suitabilityAt. Returns suitabilityAt's shared result object.
+ * it): for a resting newborn the habitat factor is her habitat only (restingNewbornHabitat); for a
+ * crosser it is `crossingCompatible`; every other organism gets exactly suitabilityAt. Returns
+ * suitabilityAt's shared result object.
  */
 export function entitySuitabilityAt(world: World, slot: number, sp: SpeciesRT, prof: Profile, cell: number): SuitResult {
+  const c = world.ents.cols;
+  if ((c.flags[slot]! & FLAG.restNewborn) !== 0 && c.lifeState[slot] !== LIFE_ACTIVE) return suitabilityAt(world, sp, prof, cell, restingNewbornHabitat(world, sp, cell));
   if (!crossesWater(sp)) return suitabilityAt(world, sp, prof, cell);
   return suitabilityAt(world, sp, prof, cell, crossingCompatible(world, slot, sp, cell));
 }

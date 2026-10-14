@@ -222,6 +222,8 @@ describe('schema 5 state is hash-neutral only while empty (D-0035 rule)', () => 
 
 // Wave 9's climate stage reads this world's warmth store and its On heater (the world records 'climate'),
 // so warmth now evolves; the edge and device stores are still carried unchanged (lead, wave 9 integration).
+// Wave 10's gate tallies keep counting in a world that records 'barriers', so the tally only grows from
+// the stored literal and 4× must equal 1× (lead, wave 10 integration).
 describe('the stores are carried, and 4× equals 1×', () => {
   it('4× equals 1×: run(400) and four run(100) give the same hash on a world holding every store', () => {
     const a = storesWorld();
@@ -232,7 +234,12 @@ describe('the stores are carried, and 4× equals 1×', () => {
     expect(stateHash(b)).toBe(stateHash(a));
     expect(a.edges).toEqual(EDGES);
     expect(a.devices).toEqual(DEVICES);
-    expect(a.gateTally).toEqual(TALLY);
+    expect(b.gateTally).toEqual(a.gateTally);
+    for (const t of TALLY) {
+      const now = a.gateTally.find((g) => g.id === t.id)!;
+      expect(now.organisms).toBeGreaterThanOrEqual(t.organisms);
+      for (const [k, v] of Object.entries(t.fields)) expect(now.fields[k as keyof typeof now.fields]!).toBeGreaterThanOrEqual(v);
+    }
     expect(Array.from(b.climate.warmth!)).toEqual(Array.from(a.climate.warmth!));
     expect(a.climate.warmth![cellIndex(74, 70)]).not.toBe(0.75); // the climate stage acted on it
   });

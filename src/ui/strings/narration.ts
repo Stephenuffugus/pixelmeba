@@ -47,7 +47,7 @@ export const NARRATION_EVIDENCE: Readonly<Record<PhraseId, { readonly evidence: 
     visible: 'The inspector\'s reason line ("Needs room to split.").',
   },
   resting: {
-    evidence: 'The inspector\'s leading reason is RESTING_FOOD_SCARCE or RESTING_DRY.',
+    evidence: 'The inspector\'s leading reason is RESTING_FOOD_SCARCE, RESTING_DRY or RESTING_NEWBORN.',
     visible: 'The inspector\'s reason line ("Resting …").',
   },
   cellSplit: {

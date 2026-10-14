@@ -909,7 +909,7 @@ export interface DormancyInspect {
   readonly source: string;
   /** Life state: 0 Active, 1 Preparing, 2 Resting, 3 Waking. */
   readonly state: number;
-  /** Reason code for the current rest (RESTING_FOOD_SCARCE / RESTING_DRY), or NONE while Active. */
+  /** Reason code for the current rest (RESTING_FOOD_SCARCE / RESTING_DRY / RESTING_NEWBORN, D-0106), or NONE while Active. */
   readonly cause: number;
   /** Seconds elapsed in Preparing/Waking; seconds the wake conditions have held while Resting. */
   readonly stateSeconds: number;
@@ -920,8 +920,11 @@ export interface DormancyInspect {
   /** While Active: seconds with moisture suitability below drySuitability, and the trigger. */
   readonly drySeconds: number;
   readonly dryTriggerSeconds: number;
-  /** Current wake conditions (evaluated at its cell now). */
-  readonly wake: { readonly food: boolean; readonly moisture: boolean; readonly environment: boolean };
+  /**
+   * Current wake conditions (evaluated at its cell now). `attachable` (additive, no protocol bump) only for a
+   * resting newborn (D-0106: her cell offers one of her surfaces; @sim/dormancy wakeConditions).
+   */
+  readonly wake: { readonly food: boolean; readonly moisture: boolean; readonly environment: boolean; readonly attachable?: boolean };
   readonly rules: {
     readonly prepareSeconds: number;
     readonly prepareCost: number;

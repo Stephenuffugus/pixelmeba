@@ -226,12 +226,25 @@ export function dormancyLines(d: DormancyInspect, E: number): string[] {
       lines.push('It does not feed, move or split while getting ready.');
       break;
     case LIFE_RESTING: {
-      lines.push(d.cause === R.RESTING_DRY ? `Resting because it was too dry for ${secs(d.dryTriggerSeconds)} s.` : 'Resting because food stayed scarce.');
-      const need = (ok: boolean, what: string) => `${what}: ${ok ? 'yes' : 'not yet'}`;
+      // A resting newborn (D-0106: RESTING_NEWBORN) never rested for food or water: she began Resting at birth.
       lines.push(
-        `It wakes after ${secs(r.wakeConditionSeconds)} s of usable food, wet enough water and suitable conditions, with at least ${num(r.wakeMinEnergy, 0)} energy (it has ${num(E, 1)}).`,
+        d.cause === R.RESTING_NEWBORN
+          ? 'Resting since it formed.'
+          : d.cause === R.RESTING_DRY
+            ? `Resting because it was too dry for ${secs(d.dryTriggerSeconds)} s.`
+            : 'Resting because food stayed scarce.',
       );
-      lines.push(`${need(d.wake.food, 'Food here')} · ${need(d.wake.moisture, 'Wet enough')} · ${need(d.wake.environment, 'Conditions suitable')} · held ${secs(d.stateSeconds)} of ${secs(r.wakeConditionSeconds)} s.`);
+      const need = (ok: boolean, what: string) => `${what}: ${ok ? 'yes' : 'not yet'}`;
+      // `attachable` is present only for a resting newborn: her wake also needs a surface to hold (D-0106).
+      const surface = d.wake.attachable;
+      lines.push(
+        surface === undefined
+          ? `It wakes after ${secs(r.wakeConditionSeconds)} s of usable food, wet enough water and suitable conditions, with at least ${num(r.wakeMinEnergy, 0)} energy (it has ${num(E, 1)}).`
+          : `It wakes after ${secs(r.wakeConditionSeconds)} s of usable food, wet enough water, suitable conditions and a surface to hold, with at least ${num(r.wakeMinEnergy, 0)} energy (it has ${num(E, 1)}).`,
+      );
+      const checks = [need(d.wake.food, 'Food here'), need(d.wake.moisture, 'Wet enough'), need(d.wake.environment, 'Conditions suitable')];
+      if (surface !== undefined) checks.push(need(surface, 'Surface to hold'));
+      lines.push(`${checks.join(' · ')} · held ${secs(d.stateSeconds)} of ${secs(r.wakeConditionSeconds)} s.`);
       if (E < r.wakeMinEnergy) lines.push(`It has too little energy to pay the ${num(r.wakeCost, 0)} energy it costs to wake. Nothing will give it more.`);
       lines.push(
         `While resting it uses ${num(r.restMaintenance)} energy/s, and harsh water or inhibitors do ${Math.round(r.damageFactor * 100)} % of their usual harm. It still ages, still starves at 0 energy, and can still be eaten.`,

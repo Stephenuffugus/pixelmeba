@@ -26,7 +26,7 @@ import { beginFungalBirths, branchLinkRefused, fungalPlacement, joinBranch } fro
 import { canOccupy, initialDecisionTimer } from './movement';
 import { onDaughter, onParentEnds } from './branches';
 import { proposeDaughters } from './mutation';
-import { resetDormancy } from './dormancy';
+import { resetDormancy, restsAtBirth, startRestingNewborn } from './dormancy';
 import { profileOf } from './profiles';
 import { R } from './reasons';
 import { detFloat, STREAMS } from './rng';
@@ -197,10 +197,13 @@ export function stageBirths(world: World): void {
     }
     // Parent and daughter segments are joined (SPEC §7.2, §7.7) unless the parent already has 4 links:
     // then the daughter is placed unlinked and the birth event says so (fungi.ts joinBranch).
-    const unlinked = fungal && branchLinkRefused(world, i);
-    commitDivision(world, i, slot, target, unlinked ? { link: 'degree' } : undefined);
+    // A RESTING_DAUGHTER parent's new daughter (F04) begins Resting and is never linked (D-0106): the birth
+    // event says `resting: 1` instead (dormancy.ts startRestingNewborn, from commitDivision).
+    const resting = restsAtBirth(sp);
+    const unlinked = fungal && !resting && branchLinkRefused(world, i);
+    commitDivision(world, i, slot, target, resting ? { resting: 1 } : unlinked ? { link: 'degree' } : undefined);
     if (fungal) {
-      joinBranch(world, i, slot);
+      if (!resting) joinBranch(world, i, slot);
       fungi.occupied[target] = 1;
       fungi.count++;
     }
@@ -307,6 +310,9 @@ function commitDivision(
       c.E[d] = cap;
     }
   }
+  // SPEC §6.9 step 2, §7.6 (D-0106): the new daughter of a RESTING_DAUGHTER parent begins Resting with her
+  // post-cost half (the retained daughter stays Active in the parent's cell).
+  if (restsAtBirth(sp)) startRestingNewborn(world, slot);
 
   const tick = world.tick;
   recordDivisionEnd(world.lineage, parentBirth, tick);

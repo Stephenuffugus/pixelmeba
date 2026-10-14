@@ -11,7 +11,7 @@
  * Nothing in the shipped content or the v1.0 corpus uses a light cycle, drying or any Phase 5 store (CT §8.1),
  * so these refusals reject nothing a real save holds.
  */
-import { CELL_COUNT } from '@sim/constants';
+import { CELL_COUNT, CHANNEL_ORGANISM_TICKS } from '@sim/constants';
 import { edgeStoreProblem } from '@sim/barriers';
 import { deviceStoreProblem } from '@sim/devices';
 import { emptyValueOf, FLAG, LIFE_ACTIVE, type ColumnName } from '@sim/entities';
@@ -65,6 +65,14 @@ function organismProblem(get: Row, ctx: Phase5CheckContext): string | null {
   const need = get('handlingNeed');
   if (need < 0) return "An organism's handling time is negative.";
   if (need !== 0 && !has('HANDLING')) return 'An organism is handling prey although it has no handling ability.';
+  // Shell and jacket mineral (wave 10 lead fixes). boundMineral is written only for a species with native
+  // SHELL (inoculation, stage 6 binding) and split between same-species daughters, so any other organism
+  // holding it is unreachable. jacketMineral has no writer yet (E11 is not implemented; division halves
+  // it), but E11 needs the silicate system and module loss at division may one day leave a jacket on a
+  // daughter without E11, so the rule is the system only: without it a death or capture could not put the
+  // mineral anywhere (maintenance.ts killEntity, contacts.ts).
+  if (get('boundMineral') > 0 && !has('SHELL')) return 'An organism carries shell mineral although it cannot build a shell.';
+  if (get('jacketMineral') > 0 && !ctx.systems.includes('silicate')) return "An organism carries jacket mineral although the dish's rules have no silicate.";
   if ((get('flags') & FLAG.restNewborn) !== 0) {
     if (!has('RESTING_DAUGHTER')) return 'An organism is marked as a resting newborn although its kind has no resting daughters.';
     if (get('lifeState') === LIFE_ACTIVE) return 'An active organism is marked as a resting newborn.';
@@ -153,6 +161,12 @@ export function phase5StateProblem(s: WorldState, cols: Readonly<Record<string, 
   const grid = { substrate: base64ToBytes(s.grid.substrate.b64), structure: base64ToBytes(s.grid.structure.b64) };
   const edgeError = edgeStoreProblem(edges, grid, { enabledStructures: ctx.enabledStructures });
   if (edgeError) return edgeError;
+  // A channel's organism wait is written only by its own transfer (channel.ts moveOrganisms: stage 2 of
+  // tick T writes T + CHANNEL_ORGANISM_TICKS, then the tick advances to T + 1), so a saved wait never lies
+  // more than CHANNEL_ORGANISM_TICKS past the saved tick; a later one would switch the transfer off for good.
+  for (const e of edges as readonly { readonly kind: string; readonly nextOrganismTick?: number }[]) {
+    if (e.kind === 'S04' && e.nextOrganismTick !== undefined && !(e.nextOrganismTick <= s.tick + CHANNEL_ORGANISM_TICKS)) return 'A one-way channel has an invalid organism wait.';
+  }
   const deviceError = deviceStoreProblem(devices, grid, { enabledStructures: ctx.enabledStructures });
   if (deviceError) return deviceError;
   const savedNext = (s.counters as { nextDeviceId?: unknown }).nextDeviceId;

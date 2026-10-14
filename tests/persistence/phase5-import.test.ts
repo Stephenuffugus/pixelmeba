@@ -12,8 +12,10 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildSaveFile, loadSaveFile, parseSaveFile } from '../../src/persistence/saveFile';
+import { applyNow } from '../../src/sim/commands';
+import { speciesSystemNeeds } from '../../src/sim/content/registry';
 import type { EdgeBarrier } from '../../src/sim/barriers';
-import { CELL_COUNT } from '../../src/sim/constants';
+import { CELL_COUNT, CHANNEL_ORGANISM_TICKS } from '../../src/sim/constants';
 import type { Device } from '../../src/sim/devices';
 import { ENTITY_COLUMNS, FLAG, LIFE_RESTING, type ColumnName } from '../../src/sim/entities';
 import type { SystemFlag } from '../../src/sim/fields';
@@ -217,6 +219,23 @@ describe('the import refuses schema 5 stores the dish does not record or that ar
     for (const n of [0, 1.5]) await expectRefused(await resave(text, (s) => (s.counters = { ...s.counters, nextDeviceId: n })), /^The structure counter is invalid\./);
   });
 
+  it('a channel’s organism wait more than CHANNEL_ORGANISM_TICKS past the saved tick is refused; the boundary loads', async () => {
+    const { w } = dish();
+    w.tick = 500;
+    const withWait = (n: number) => w.edges.map((e) => (e.kind === 'S04' ? { ...e, nextOrganismTick: n } : e));
+    // The transfer of tick 499 writes 499 + 10 and the tick then advances to 500: the latest real wait is 509.
+    for (const n of [0, 509, 500 + CHANNEL_ORGANISM_TICKS]) {
+      w.edges = withWait(n);
+      const { world } = await loadSaveFile(await saved(w));
+      expect(world.edges.find((e) => e.kind === 'S04')!.nextOrganismTick).toBe(n);
+      expect(stateHash(world)).toBe(stateHash(w));
+    }
+    for (const n of [500 + CHANNEL_ORGANISM_TICKS + 1, 1e12]) {
+      w.edges = withWait(n);
+      await expectRefused(await saved(w), /^A one-way channel has an invalid organism wait\./);
+    }
+  });
+
   it('a present store or counter must be well formed: null is not absent (D-0108)', async () => {
     const text = await saved(dish().w);
     const edit = async (e: (s: EditableState) => void, re: RegExp) => expectRefused(await resave(text, e), re);
@@ -388,4 +407,123 @@ describe('the import refuses a held sample with a trap, a held organism or impos
       await expectRefused(await saved(d.w), re);
     });
   }
+});
+
+// ---- Wave 10 lead fixes: a dish whose own rules are inconsistent, and shell and jacket mineral ----------
+
+/** Shipped manifest + A02 and P05 (native SHELL) and the silicate system. */
+const SHELL_REG = registryWith({
+  enabledSpecies: [...SHIPPED.enabledSpecies, 'A02', 'P05'].sort(),
+  enabledSystems: [...SHIPPED.enabledSystems, 'silicate'].sort() as SystemFlag[],
+  enabledMaterials: [...SHIPPED.enabledMaterials, 'M02', 'M12'].sort(),
+});
+
+async function expectContentRefused(text: string, sentence: RegExp): Promise<void> {
+  const err = await parseSaveFile(text).then(
+    () => null,
+    (e: unknown) => e as Error & { kind?: string },
+  );
+  expect(err, `expected a refusal matching ${sentence}`).not.toBeNull();
+  expect(err!.kind).toBe('content');
+  expect(err!.message).toMatch(sentence);
+  expect(err!.message).toMatch(/ Nothing was loaded\.$/);
+}
+
+describe("the import refuses a dish whose own rules are inconsistent (the validator's rules; the first tick would throw)", () => {
+  it('A02 (SHELL) recorded without the silicate system, its fields removed too', async () => {
+    const w = clearWater({}, SHELL_REG);
+    place(w, 'A02', 60.5, 60.5);
+    const text = await saved(w);
+    await expect(loadSaveFile(text)).resolves.toBeDefined(); // control: the consistent dish loads
+    await expectContentRefused(
+      await resave(text, (s) => {
+        withoutSystem(s, 'silicate');
+        const f = s.fields as Record<string, unknown>;
+        delete f.silicate;
+        delete f.grit;
+      }),
+      /^This dish's rules are inconsistent: A02 uses SHELL, which needs the silicate system, and the dish's rules do not include it\./,
+    );
+  });
+
+  it('X01 without the parasites system and F01 without the fungi system (shipped species)', async () => {
+    const w = clearWater({}, registry());
+    place(w, 'X01', 60.5, 60.5);
+    place(w, 'F01', 40.5, 64.5);
+    const text = await saved(w);
+    await expect(loadSaveFile(text)).resolves.toBeDefined();
+    await expectContentRefused(await resave(text, (s) => withoutSystem(s, 'parasites')), /^This dish's rules are inconsistent: X01 uses HOST_DRAIN, which needs the parasites system/);
+    await expectContentRefused(await resave(text, (s) => withoutSystem(s, 'fungi')), /^This dish's rules are inconsistent: F0[12] uses (BRANCHING|TRANSPORT_LINKS), which needs the fungi system/);
+  });
+
+  it('a recorded module without the system it uses (E10 without film; the species that use film removed too)', async () => {
+    const w = clearWater({}, registry());
+    place(w, 'B01', 60.5, 60.5);
+    const text = await saved(w);
+    const usesFilm = (sp: WorldState['content']['species'][number]) => speciesSystemNeeds(sp).some(([sys]) => sys === 'film');
+    expect(registry().manifest.enabledModules).toContain('E10');
+    await expectContentRefused(
+      await resave(text, (s) => {
+        const keep = s.content.species.filter((sp) => !usesFilm(sp));
+        expect(keep.length).toBeLessThan(s.content.species.length);
+        expect(keep.map((sp) => sp.id)).toContain('B01');
+        withoutSystem(s, 'film');
+        const m = s.content.manifest;
+        s.content = { ...s.content, species: keep, manifest: { ...m, enabledSpecies: keep.map((sp) => sp.id) } };
+      }),
+      /^This dish's rules are inconsistent: the extra ability "[^"]+" \(E10\) needs the film system, and the dish's rules do not include it\./,
+    );
+  });
+
+  it('a recorded species with RESTING_DAUGHTER but without DORMANCY', async () => {
+    const text = await saved(dish().w);
+    await expectContentRefused(
+      await resave(text, (s) => {
+        s.content = { ...s.content, species: s.content.species.map((sp) => (sp.id === 'F04' ? { ...sp, nativeAbilities: sp.nativeAbilities.filter((a) => a !== 'DORMANCY') } : sp)) };
+      }),
+      /^This dish's rules are inconsistent: F04 lists RESTING_DAUGHTER without DORMANCY/,
+    );
+  });
+});
+
+describe('the import refuses shell or jacket mineral the rules could not have left (a death or capture would throw)', () => {
+  it('a B01 carrying shell mineral, in a shipped dish and in a silicate dish', async () => {
+    for (const reg of [registry(), SHELL_REG]) {
+      const w = clearWater({}, reg);
+      const s = place(w, 'B01', 60.5, 60.5);
+      w.ents.cols.boundMineral[s] = 0.5;
+      await expectRefused(await saved(w), /^An organism carries shell mineral although it cannot build a shell\./);
+    }
+  });
+
+  it('an A02 carrying shell mineral loads and round-trips (the control)', async () => {
+    const w = clearWater({}, SHELL_REG);
+    const s = place(w, 'A02', 60.5, 60.5);
+    expect(w.ents.cols.boundMineral[s]).toBeGreaterThan(0);
+    const { world } = await loadSaveFile(await saved(w));
+    expect(stateHash(world)).toBe(stateHash(w));
+  });
+
+  it('jacket mineral in a dish without the silicate system is refused; with the system it loads', async () => {
+    const shipped = clearWater({}, registry());
+    shipped.ents.cols.jacketMineral[place(shipped, 'B01', 60.5, 60.5)] = 0.25;
+    await expectRefused(await saved(shipped), /^An organism carries jacket mineral although the dish's rules have no silicate\./);
+    const si = clearWater({}, SHELL_REG);
+    si.ents.cols.jacketMineral[place(si, 'B01', 60.5, 60.5)] = 0.25;
+    const { world } = await loadSaveFile(await saved(si));
+    expect(stateHash(world)).toBe(stateHash(si));
+  });
+
+  it('a held sample row carrying shell mineral without the ability is refused', async () => {
+    const w = clearWater({}, SHELL_REG);
+    const s = place(w, 'B01', 60.5, 60.5);
+    expect(applyNow(w, 'take', { kind: 'sampleTake', x: 60.5, y: 60.5, radius: 1, mode: 'life' }).result!.accepted).toBeGreaterThan(0);
+    expect(w.ents.cols.alive[s]).toBe(0);
+    await expect(loadSaveFile(await saved(w))).resolves.toBeDefined(); // control: the plain held B01 loads
+    (w.sample!.rows[0]!.cols as Record<string, number>).boundMineral = 0.5;
+    await expectRefused(
+      await saved(w),
+      /^The held sample cannot be loaded\. An organism carries shell mineral although it cannot build a shell\./,
+    );
+  });
 });

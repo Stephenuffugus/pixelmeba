@@ -14,7 +14,16 @@
  *               environment and usable food have persisted 10 s and E ≥ 5, paying 5 E once.
  *   Waking    — 5 s; no feeding or reproduction; ordinary damage. Then Active with a 30 s lockout.
  * Age continues in every state. Nothing grants energy: a resting organism without waking energy
- * stays resting until it starves. Clocks live in entity columns (see entities.ts), so saving and
+ * stays resting until it starves.
+ *
+ * Resting newborns (Phase 5 wave 10; SPEC §6.9 step 2, §7.2, §7.6; D-0106, D-0108, D-0117): the new
+ * daughter of a species with RESTING_DAUGHTER (F04) begins Resting at birth (`startRestingNewborn`, from
+ * births.ts) with FLAG.restNewborn, her post-cost half of every pool and fresh clocks; no Preparing, no
+ * entry cost, no 'rest' event (the 'birth' event says `resting: 1`). While she is not Active her reason is
+ * RESTING_NEWBORN and barriers.ts classOf makes her Small. Her wake test adds `attachable`: her cell must
+ * offer one of her surfaces (movement.ts canOccupy), "attachability is part of waking". FLAG.restNewborn
+ * clears in the tick she becomes Active (the import refuses it on an Active organism), with the usual
+ * lockout. A cell that never offers a surface keeps her resting: nothing rescues her. Clocks live in entity columns (see entities.ts), so saving and
  * reloading never changes a transition.
  *
  * Reasons (SPEC §12.2 States): Preparing/Resting/Waking record PREPARING, RESTING_DRY or
@@ -26,11 +35,12 @@ import { DT, GRID_H, GRID_W, STRESS_THRESHOLD, USABLE_FOOD_MIN } from './constan
 import { FLAG, LIFE_ACTIVE, LIFE_PREPARING, LIFE_RESTING, LIFE_WAKING, MOVE_NONE, type EntityColumns } from './entities';
 import { emit, milestone } from './events';
 import { cellIndex } from './grid';
-import { preyAllowed } from './movement';
+import { canOccupy, preyAllowed } from './movement';
 import type { DormancyRules, Profile } from './phenotype';
 import { profileOf } from './profiles';
 import { R } from './reasons';
 import { entityCell, forEachInCell } from './spatial';
+import type { SpeciesRT } from './species';
 import { responseBelowOnly, SHOULDER_MOISTURE } from './suitability';
 import type { World } from './world';
 
@@ -83,18 +93,33 @@ export interface WakeConditions {
   readonly food: boolean;
   readonly moisture: boolean;
   readonly environment: boolean;
+  /**
+   * Resting newborns only (FLAG.restNewborn, not Active; absent for everyone else): her cell offers one
+   * of her surfaces (canOccupy), D-0106 "attachability is part of waking".
+   */
+  readonly attachable?: boolean;
 }
 
-/** The three wake conditions for a resting organism at its current cell (SPEC §7.6). */
+/** Whether the species' new daughter begins Resting at birth (native RESTING_DAUGHTER: F04). */
+export function restsAtBirth(sp: SpeciesRT): boolean {
+  return sp.abilities.includes('RESTING_DAUGHTER');
+}
+
+/** Whether organism `i` is a resting newborn: FLAG.restNewborn while not Active (D-0108). */
+export function isRestingNewborn(c: EntityColumns, i: number): boolean {
+  return (c.flags[i]! & FLAG.restNewborn) !== 0 && c.lifeState[i] !== LIFE_ACTIVE;
+}
+
+/** The wake conditions for a resting organism at its current cell (SPEC §7.6; `attachable` for a resting newborn). */
 export function wakeConditions(world: World, i: number, prof: Profile, rules: DormancyRules): WakeConditions {
   const c = world.ents.cols;
   const cell = entityCell(c.x[i]!, c.y[i]!);
-  return {
-    food: usableFoodHere(world, i, prof),
-    moisture: moistureSuitability(world, prof, cell) >= rules.drySuitability,
-    // "Suitable environment": the cell is not in the stress band (suitability ≥ 0.10).
-    environment: c.suitability[i]! >= STRESS_THRESHOLD,
-  };
+  const food = usableFoodHere(world, i, prof);
+  const moisture = moistureSuitability(world, prof, cell) >= rules.drySuitability;
+  // "Suitable environment": the cell is not in the stress band (suitability ≥ 0.10).
+  const environment = c.suitability[i]! >= STRESS_THRESHOLD;
+  if (!isRestingNewborn(c, i)) return { food, moisture, environment };
+  return { food, moisture, environment, attachable: canOccupy(world, world.species[c.species[i]!]!, cell) };
 }
 
 function haltMotion(world: World, i: number): void {
@@ -135,6 +160,12 @@ export interface DormancyReason {
   restHeld: boolean;
 }
 
+/** Why a non-Active organism rests: RESTING_NEWBORN (began Resting at birth), RESTING_DRY or RESTING_FOOD_SCARCE. */
+export function restingCause(c: EntityColumns, i: number): number {
+  if ((c.flags[i]! & FLAG.restNewborn) !== 0) return R.RESTING_NEWBORN;
+  return (c.flags[i]! & FLAG.restDry) !== 0 ? R.RESTING_DRY : R.RESTING_FOOD_SCARCE;
+}
+
 function readReason(c: EntityColumns, i: number, prof: Profile, rules: DormancyRules, out: DormancyReason): DormancyReason {
   out.restHeld = false;
   switch (c.lifeState[i]) {
@@ -143,7 +174,7 @@ function readReason(c: EntityColumns, i: number, prof: Profile, rules: DormancyR
       out.value = Math.max(0, rules.prepareSeconds - c.stateTimer[i]!);
       break;
     case LIFE_RESTING:
-      out.code = (c.flags[i]! & FLAG.restDry) !== 0 ? R.RESTING_DRY : R.RESTING_FOOD_SCARCE;
+      out.code = restingCause(c, i);
       out.value = c.stateTimer[i]!;
       break;
     case LIFE_WAKING:
@@ -242,7 +273,8 @@ export function dormancyStep(world: World, i: number, prof: Profile): void {
     }
     case LIFE_RESTING: {
       const w = wakeConditions(world, i, prof, rules);
-      const ok = w.food && w.moisture && w.environment;
+      // A resting newborn also needs a surface to hold (`attachable` is absent for everyone else).
+      const ok = w.food && w.moisture && w.environment && w.attachable !== false;
       c.stateTimer[i] = ok ? Math.min(rules.wakeConditionSeconds, c.stateTimer[i]! + DT) : 0;
       if (ok && c.stateTimer[i] >= rules.wakeConditionSeconds - EPS && c.E[i]! >= rules.wakeMinEnergy) {
         c.E[i]! -= rules.wakeCost;
@@ -259,7 +291,8 @@ export function dormancyStep(world: World, i: number, prof: Profile): void {
         c.stateTimer[i] = 0;
         c.dryTimer[i] = 0;
         c.lockoutTimer[i] = rules.lockoutSeconds;
-        c.flags[i] = c.flags[i]! & ~FLAG.restDry;
+        // A resting newborn is an ordinary Active organism from this tick on (D-0108: never flagged while Active).
+        c.flags[i] = c.flags[i]! & ~(FLAG.restDry | FLAG.restNewborn);
         emit(world.events, world.counters, {
           tick: world.tick,
           type: 'wake',
@@ -285,4 +318,25 @@ export function resetDormancy(world: World, i: number): void {
   c.lockoutTimer[i] = 0;
   c.dryTimer[i] = 0;
   c.flags[i] = c.flags[i]! & ~FLAG.restDry;
+}
+
+/**
+ * Births (births.ts commitDivision, after the reconciliation that reset both daughters' clocks): the new
+ * daughter `slot` of a RESTING_DAUGHTER parent begins Resting with fresh clocks and FLAG.restNewborn,
+ * keeping the pools the split gave her (no gift, no cost). Her reason is RESTING_NEWBORN from this tick, so
+ * the inspector never shows a food or dry rest she never entered. She is never attached and never linked
+ * (births.ts skips the branch link).
+ */
+export function startRestingNewborn(world: World, slot: number): void {
+  const c = world.ents.cols;
+  const prof = profileOf(world, slot);
+  const rules = prof.dormancy;
+  if (rules === null) throw new Error(`organism ${c.birthId[slot]!} begins Resting at birth without a resting ability`);
+  c.lifeState[slot] = LIFE_RESTING;
+  c.stateTimer[slot] = 0;
+  c.dryTimer[slot] = 0;
+  c.lockoutTimer[slot] = 0;
+  c.flags[slot] = (c.flags[slot]! | FLAG.restNewborn) & ~(FLAG.restDry | FLAG.attached);
+  haltMotion(world, slot);
+  stateReason(world, slot, prof, rules);
 }

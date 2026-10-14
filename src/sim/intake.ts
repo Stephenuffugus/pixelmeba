@@ -8,6 +8,12 @@
  *    fraction L scales everything it consumes.
  * 4. Commit once. Unused food stays in the pool and is not re-offered this tick. Surplus bound
  *    nutrient and byproducts appear in the pools for the next tick's allocation.
+ *
+ * Shell builders (native SHELL: A02, P05; Phase 5 E2-SHELLS, SPEC §6.5, §7.11, CT §12.3) also need
+ * free silicate: needSi = 0.10 × 0.50·C on every ordinary route, allocated per cell with nutrient and
+ * oxygen, and L = min(fracN, fracO, fracSi) for a shell builder only. Every other organism keeps
+ * exactly L = min(fracN, fracO) and never reads silicate, so a world without shell builders takes the
+ * v1.0 path unchanged. The bound silicate (0.10 per unit of biomass gained) moves into boundMineral.
  */
 import {
   AVAIL_K,
@@ -21,6 +27,7 @@ import {
   O2_PER_CARBON_AEROBIC,
   PHOTO_O2_PER_CARBON,
   PHOTO_SUGAR_FRACTION,
+  SHELL_MINERAL_PER_BIOMASS,
   USABLE_INTAKE_FRACTION,
 } from './constants';
 import { FLAG } from './entities';
@@ -85,6 +92,10 @@ const carbonIn = new Float64Array(AGENT_CAP);
 const boundN = new Float64Array(AGENT_CAP);
 const needN = new Float64Array(AGENT_CAP);
 const needO2 = new Float64Array(AGENT_CAP);
+/** Silicate need of a shell builder this tick (written and read only while the world has shell builders). */
+const needSi = new Float64Array(AGENT_CAP);
+/** 1 where the routed organism in this slot is a shell builder (written and read only with shell builders). */
+const shellEnt = new Uint8Array(AGENT_CAP);
 const scaleFrac = new Float64Array(AGENT_CAP);
 
 const FIELD_INDEX: Readonly<Record<FieldId, number>> = Object.fromEntries(FIELD_IDS.map((id, i) => [id, i])) as Record<FieldId, number>;
@@ -102,6 +113,11 @@ const fieldAt: (Float64Array | undefined)[] = new Array<Float64Array | undefined
 const demand: (Float64Array | undefined)[] = [];
 const demandN = new Float64Array(CELL_COUNT);
 const demandO2 = new Float64Array(CELL_COUNT);
+const demandSi = new Float64Array(CELL_COUNT);
+/** Cells whose demandSi was written this stage (cleared in clearScratch; empty without shell builders). */
+const touchedSi: number[] = [];
+/** Shell builders by species index, rebuilt every stage 6 from sp.abilities (never a species id). */
+let shellSpecies = new Uint8Array(0);
 const touched: number[] = [];
 
 function demandFor(fieldIdx: number): Float64Array {
@@ -186,6 +202,9 @@ function intakeBody(world: World): void {
   seen.tick = world.tick;
   // Host drains are reserved before any ordinary request (SPEC §3.2 row 6, §6.5; parasites.ts).
   reserveHostDrains(world);
+  // Shell builders by species index (E2-SHELLS). A world without one never reads silicate below.
+  const anyShell = buildShellTable(world);
+  const silicate = world.fields.silicate;
 
   // ---------------------------------------------------------------- 1. requests
   for (let i = 0; i < e.highWater; i++) {
@@ -330,6 +349,21 @@ function intakeBody(world: World): void {
     needO2[i] = oNeed;
     demandN[cell]! += nNeed;
     demandO2[cell]! += oNeed;
+    if (anyShell) {
+      // SPEC §6.5: needSi = shellBuilder ? 0.10 × 0.50·C : 0, on every ordinary route (host drains are
+      // parasites.ts and never shell builders).
+      const isShell = shellSpecies[c.species[i]!]!;
+      shellEnt[i] = isShell;
+      if (isShell === 1) {
+        if (!silicate) throw new Error(`stageIntake: shell builder ${sp.id} in a world without the silicate system`);
+        const siNeed = SHELL_MINERAL_PER_BIOMASS * BIOMASS_FRACTION * C;
+        needSi[i] = siNeed;
+        if (siNeed > 0) {
+          if (demandSi[cell] === 0) touchedSi.push(cell);
+          demandSi[cell]! += siNeed;
+        }
+      }
+    }
   }
 
   // ------------------------------------------- 3. limiting fractions from the stage snapshot
@@ -343,6 +377,8 @@ function intakeBody(world: World): void {
     fracStamp[cell] = stamp;
     fracNCell[cell] = demandN[cell]! > 0 ? Math.min(1, nutrient[cell]! / demandN[cell]!) : 1;
     fracOCell[cell] = demandO2[cell]! > 0 ? Math.min(1, oxygen[cell]! / demandO2[cell]!) : 1;
+    // Silicate from the same snapshot, only where a shell builder asked for it this stage.
+    if (anyShell) fracSiCell[cell] = demandSi[cell]! > 0 ? Math.min(1, silicate![cell]! / demandSi[cell]!) : 1;
   }
 
   // ----------------------------------------------------------------------------- 4. commit
@@ -366,7 +402,11 @@ function intakeBody(world: World): void {
     const nO = needO2[i]!;
     const fracN = nN > 0 ? fracNCell[cell]! : 1;
     const fracO = nO > 0 ? fracOCell[cell]! : 1;
-    const L = Math.min(fracN, fracO);
+    // A shell builder is also limited by the silicate it got (SPEC §6.5); every other organism keeps
+    // exactly min(fracN, fracO) and reads no silicate.
+    const shell = anyShell && shellEnt[i] === 1;
+    const fracSi = shell && needSi[i]! > 0 ? fracSiCell[cell]! : 1;
+    const L = shell ? Math.min(fracN, fracO, fracSi) : Math.min(fracN, fracO);
     const Cs = C * L;
     if (Cs > 0) anyConsumed = true;
 
@@ -394,6 +434,15 @@ function intakeBody(world: World): void {
     subtractPool(world, nutrient, cell, freeUsed, 'n');
     nutrient[cell]! += surplusN;
     c.N[i]! += gainN;
+
+    if (shell) {
+      // CT §12.3: 0.10 silicate bound into the shell per unit of biomass gained (an internal move).
+      const bind = SHELL_MINERAL_PER_BIOMASS * (BIOMASS_FRACTION * Cs);
+      if (bind > 0) {
+        subtractPool(world, silicate!, cell, bind, 'm');
+        c.boundMineral[i]! += bind;
+      }
+    }
 
     let energyGain: number;
     if (route[i] === ROUTE_PHOTO) {
@@ -449,6 +498,10 @@ function intakeBody(world: World): void {
       code = R.OXYGEN_LIMITED;
       value = fracO;
     }
+    if (fracSi < value && fracSi < 1) {
+      code = R.SILICATE_LIMITED;
+      value = fracSi;
+    }
     // The carrier's light response (raw light without E06) competes; the measured light is what the Lab prints.
     if (route[i] === ROUTE_PHOTO && photoLightResponse(prof, light[cell]!) < value) {
       code = R.LIGHT_LIMITED;
@@ -487,10 +540,30 @@ function clearScratch(): void {
   fieldAt.fill(undefined); // never keep another world's arrays alive between stages
   demandN.fill(0);
   demandO2.fill(0);
+  for (let t = 0; t < touchedSi.length; t++) demandSi[touchedSi[t]!] = 0;
+  touchedSi.length = 0;
+}
+
+/**
+ * Fill shellSpecies (1 per species index whose native abilities include SHELL) for this stage and
+ * return whether any species of this world is a shell builder. Only worlds recording a SHELL species
+ * (A02, P05; the registry requires the silicate system for them) return true.
+ */
+function buildShellTable(world: World): boolean {
+  const n = world.species.length;
+  if (shellSpecies.length < n) shellSpecies = new Uint8Array(n);
+  let any = false;
+  for (let s = 0; s < n; s++) {
+    const isShell = world.species[s]!.abilities.includes('SHELL') ? 1 : 0;
+    shellSpecies[s] = isShell;
+    if (isShell === 1) any = true;
+  }
+  return any;
 }
 
 const fracNCell = new Float64Array(CELL_COUNT);
 const fracOCell = new Float64Array(CELL_COUNT);
+const fracSiCell = new Float64Array(CELL_COUNT);
 const fracStamp = new Uint32Array(CELL_COUNT);
 let stamp = 0;
 

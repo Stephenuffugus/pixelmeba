@@ -41,6 +41,17 @@ describe('content validation (P0.2)', () => {
     expect(errs2.some((e) => e.file === 'content/species/B04.json' && e.path.startsWith('tolerances.ph'))).toBe(true);
   });
 
+  it('refuses a species that lists RESTING_DAUGHTER without DORMANCY, naming the species file and both abilities (F04 lists both)', () => {
+    expect(errorsOf(raw).filter((e) => e.message.includes('RESTING_DAUGHTER'))).toEqual([]);
+    const errs = errorsOf(
+      mutate(raw, 'species', 'F04.json', (d) => {
+        d.nativeAbilities = (d.nativeAbilities as string[]).filter((a) => a !== 'DORMANCY');
+      }),
+    );
+    const hit = errs.filter((e) => e.file === 'content/species/F04.json' && e.path === 'nativeAbilities' && e.message.includes('RESTING_DAUGHTER') && e.message.includes('DORMANCY'));
+    expect(hit, errs.map((e) => `${e.file} ${e.path}: ${e.message}`).join('\n')).toHaveLength(1);
+  });
+
   it('rejects unknown ids in references', () => {
     const errs = errorsOf(
       mutate(raw, 'species', 'P01.json', (d) => {

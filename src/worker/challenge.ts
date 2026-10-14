@@ -98,6 +98,18 @@ export function toolGroupOf(p: CommandPayload): ChallengeToolGroup | null {
       return 'evolution';
     case 'lineage':
       return p.op === 'spawnSpecimen' ? 'addLife' : null;
+    // Phase 5 structure commands (structureEdits.ts; D-0117): building and the wetting brush shape the
+    // habitat; the light mode and drying are environment settings, like the lid.
+    case 'placeEdges':
+    case 'placeDevice':
+    case 'removeStructures':
+    case 'moveDevice':
+    case 'setDevice':
+    case 'wetBrush':
+      return 'habitat';
+    case 'setLightMode':
+    case 'setDrying':
+      return 'lid';
   }
 }
 
@@ -108,7 +120,17 @@ export function toolGroupOf(p: CommandPayload): ChallengeToolGroup | null {
  * challenge can still disallow them; setLid reports accepted 1 even when the lid was already in that state).
  */
 export function countsAgainstBudget(p: CommandPayload): boolean {
-  return toolGroupOf(p) !== null && p.kind !== 'sampleTransfer' && p.kind !== 'sampleDiscard' && p.kind !== 'setLid' && p.kind !== 'setMutationPreset';
+  return (
+    toolGroupOf(p) !== null &&
+    p.kind !== 'sampleTransfer' &&
+    p.kind !== 'sampleDiscard' &&
+    p.kind !== 'setLid' &&
+    p.kind !== 'setMutationPreset' &&
+    // Phase 5 (D-0117): a device setting, the light mode and drying configure the dish.
+    p.kind !== 'setDevice' &&
+    p.kind !== 'setLightMode' &&
+    p.kind !== 'setDrying'
+  );
 }
 
 /** The actions a challenge turn has used: accepted counted commands logged at or after its start (Undo gives one back). */

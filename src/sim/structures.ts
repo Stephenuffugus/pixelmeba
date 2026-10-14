@@ -60,6 +60,8 @@ import { profileOf } from './profiles';
 import { entityCell } from './spatial';
 import { markField } from './transport';
 import { moistureOnRepaint } from './climate';
+import { deviceKindsOf, edgeCodesOf } from './edgePassage';
+import { channelSides, labCellConflict } from './structurePreview';
 import type { World } from './world';
 
 /**
@@ -156,6 +158,10 @@ export interface HabitatSkips {
   readonly enclosed: number;
   /** Cells holding a finite food object (P3.6); present only when some were skipped. */
   readonly object?: number;
+  /** Phase 5 (D-0111, D-0117): cells holding a furnishing or device (stone, wall, bead); present only when > 0. */
+  readonly device?: number;
+  /** Phase 5 (D-0111, D-0117): sides of an S04 channel (stone, wall, bead, gel or sediment paint); present only when > 0. */
+  readonly barrier?: number;
 }
 
 /** Conserved material a new stone or wall moved into neighboring open cells (totals unchanged). */
@@ -214,11 +220,27 @@ export function occupiedCells(world: World): Uint8Array {
 
 /** A malformed payload (from a damaged file or a bug) is refused whole: reason, or null when valid. */
 export function invalidHabitatEdit(p: HabitatEditPayload): string | null {
+  const bad = invalidLabStroke(p.points, p.radius);
+  if (bad) return bad;
+  if (p.kind === 'paintSubstrate' && !Object.prototype.hasOwnProperty.call(SUBSTRATE_CODES, p.substrate))
+    return `unknown substrate ${String(p.substrate)}`;
+  if (p.kind === 'paintShade' && typeof p.erase !== 'boolean') return 'invalid shade mode';
+  if (p.kind === 'placeStructure' && !Object.prototype.hasOwnProperty.call(STRUCTURE_CODES, p.structure))
+    return `unknown structure ${String(p.structure)}`;
+  return null;
+}
+
+/**
+ * Why a Lab stroke (points and radius) is malformed, or null: the radius is exactly 1, 3 or 6 (CT §5.1),
+ * the points are finite and near the grid, at most LAB_MAX_POINTS of them and LAB_MAX_STROKE_SAMPLES
+ * sampled disks. Shared by the habitat edits and the Phase 5 wetting brush (structureEdits.ts).
+ */
+export function invalidLabStroke(points: unknown, radius: unknown): string | null {
   // CT §5.1: the Lab brush radius is 1, 3 or 6, nothing in between.
-  if (!isLabRadius(p.radius)) return 'invalid radius';
-  if (!Array.isArray(p.points) || p.points.length === 0) return 'empty stroke';
-  if (p.points.length > LAB_MAX_POINTS) return 'stroke too long';
-  for (const pt of p.points as readonly unknown[]) {
+  if (!isLabRadius(radius)) return 'invalid radius';
+  if (!Array.isArray(points) || points.length === 0) return 'empty stroke';
+  if (points.length > LAB_MAX_POINTS) return 'stroke too long';
+  for (const pt of points as readonly unknown[]) {
     if (!Array.isArray(pt) || pt.length !== 2) return 'invalid point';
     const x: unknown = pt[0];
     const y: unknown = pt[1];
@@ -228,12 +250,7 @@ export function invalidHabitatEdit(p: HabitatEditPayload): string | null {
       return 'point outside the dish area';
   }
   // The footprint walks every sampled cell of the path: bound the path, not only the point count.
-  if (strokeSampleCount(p.points, LAB_MAX_STROKE_SAMPLES) > LAB_MAX_STROKE_SAMPLES) return 'stroke too long';
-  if (p.kind === 'paintSubstrate' && !Object.prototype.hasOwnProperty.call(SUBSTRATE_CODES, p.substrate))
-    return `unknown substrate ${String(p.substrate)}`;
-  if (p.kind === 'paintShade' && typeof p.erase !== 'boolean') return 'invalid shade mode';
-  if (p.kind === 'placeStructure' && !Object.prototype.hasOwnProperty.call(STRUCTURE_CODES, p.structure))
-    return `unknown structure ${String(p.structure)}`;
+  if (strokeSampleCount(points as LabStroke, LAB_MAX_STROKE_SAMPLES) > LAB_MAX_STROKE_SAMPLES) return 'stroke too long';
   return null;
 }
 
@@ -285,15 +302,25 @@ export function applyHabitatEdit(world: World, p: HabitatEditPayload): HabitatEd
   const g = world.grid;
   const rule = habitatEditRule(p.kind);
   const occupied = rule === 'place' ? occupiedCells(world) : null;
-  const skipped: { rim: number; structure: number; organism: number; enclosed: number; object?: number } = { rim: 0, structure: 0, organism: 0, enclosed: 0 };
+  const skipped: { rim: number; structure: number; organism: number; enclosed: number; object?: number; device?: number; barrier?: number } = { rim: 0, structure: 0, organism: 0, enclosed: 0 };
   // P3.6: a stone, wall or bead is never placed on a finite food object (one store lookup per cell).
   const objectCells = rule === 'place' && world.objects.length > 0 ? new Uint8Array(CELL_COUNT) : null;
   if (objectCells) for (const ob of world.objects) objectCells[ob.cell] = 1;
+  // Phase 5 (D-0111, D-0117; structurePreview.ts labCellConflict): a stone, wall or bead never covers a
+  // furnishing or device, and nothing but water paint touches a side of an S04 channel. Read only when the
+  // stores hold something, so a world without edges or devices takes exactly the old path.
+  const deviceKinds = rule === 'place' ? deviceKindsOf(world) : null;
+  const sides = rule === 'place' || rule === 'substrate' ? channelSides(edgeCodesOf(world)) : null;
+  const paintCode = p.kind === 'paintSubstrate' ? SUBSTRATE_CODES[p.substrate] : null;
   const ok: number[] = [];
   for (const cell of strokeFootprint(p.points, p.radius)) {
     const o = brushCellOutcome(rule, g.structure[cell]!, occupied !== null && occupied[cell] === 1, objectCells !== null && objectCells[cell] === 1);
-    if (o === 'ok') ok.push(cell);
-    else if (o === 'object') skipped.object = (skipped.object ?? 0) + 1;
+    if (o === 'ok') {
+      const conflict =
+        deviceKinds === null && sides === null ? null : labCellConflict(rule, paintCode, deviceKinds !== null && deviceKinds[cell] !== 0, sides !== null && sides[cell] === 1);
+      if (conflict === null) ok.push(cell);
+      else skipped[conflict] = (skipped[conflict] ?? 0) + 1;
+    } else if (o === 'object') skipped.object = (skipped.object ?? 0) + 1;
     else if (o !== 'noop') skipped[o]++;
   }
   let changed = false;
@@ -346,7 +373,7 @@ export function applyHabitatEdit(world: World, p: HabitatEditPayload): HabitatEd
     }
   }
   if (changed) g.geometryVersion++;
-  const rejected = skipped.rim + skipped.structure + skipped.organism + skipped.enclosed + (skipped.object ?? 0);
+  const rejected = skipped.rim + skipped.structure + skipped.organism + skipped.enclosed + (skipped.object ?? 0) + (skipped.device ?? 0) + (skipped.barrier ?? 0);
   const note =
     applied > 0
       ? null

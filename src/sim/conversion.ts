@@ -1,11 +1,12 @@
 /**
  * Stage 3 — conversion (SPEC §5): finite food release (objects.ts releaseFoodObjects, P3.6), grit
- * dissolution (later) and enzyme catalysis. Each enzyme converts its own substrate into its product from the pre-reaction pools:
+ * dissolution (SPEC §5.2, CT §12.2: 0.01 × remaining grit per second into free silicate, only where
+ * the world records the silicate system) and enzyme catalysis. Each enzyme converts its own substrate into its product from the pre-reaction pools:
  *   converted = min(substrate, 0.10 × activity/(1 + breaker) × dt)
  * Carbon and its proportional bound nutrient move together; products are available to feeding in
  * this same tick (stage 6) and cannot chain through another enzyme until the next tick.
  */
-import { DT, ENZYME_CONVERSION } from './constants';
+import { DT, ENZYME_CONVERSION, GRIT_DISSOLVE_PER_SECOND } from './constants';
 import { milestone } from './events';
 import type { FieldId } from './fields';
 import { maskCells } from './grid';
@@ -37,9 +38,38 @@ export interface ConversionTally {
   protein: number;
 }
 
+/** Share of the remaining grit dissolved per tick (CT §12.2: 0.01 per second × dt). */
+const GRIT_DISSOLVE_PER_TICK = GRIT_DISSOLVE_PER_SECOND * DT;
+
+/**
+ * Shell grit dissolves into free silicate (SPEC §5.2, CT §12.2): d = grit × 0.01 × dt per cell, an
+ * internal mineral move with no ledger line. Runs only while the world has the grit and silicate fields
+ * (the 'silicate' system). Every cell is scanned, not only while grit is marked active: the grit writers
+ * (killEntity, predation) do not mark the field, and grit never diffuses (D-0117). Grit is not food.
+ */
+export function dissolveGrit(world: World): void {
+  const grit = world.fields.grit;
+  const silicate = world.fields.silicate;
+  if (!grit || !silicate) return;
+  const cells = maskCells();
+  let moved = false;
+  for (let k = 0; k < cells.length; k++) {
+    const i = cells[k]!;
+    const g = grit[i]!;
+    if (g <= 0) continue;
+    const d = g * GRIT_DISSOLVE_PER_TICK;
+    grit[i] = g - d;
+    silicate[i]! += d;
+    moved = true;
+  }
+  if (moved) markField(world, 'silicate');
+}
+
 export function stageConversion(world: World): void {
   // SPEC §3.2 row 3, §5.1: finite food first; enzymes then read the pools it left (pre-reaction).
   releaseFoodObjects(world);
+  // SPEC §3.2 row 3: grit dissolution after the food release and before catalysis (inert without 'silicate').
+  dissolveGrit(world);
   const cells = maskCells();
   const breaker = world.fields.breaker;
   const tally = world.conversionTally;

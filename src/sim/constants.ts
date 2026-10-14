@@ -150,3 +150,23 @@ export const MOISTURE_FLOOR = 0.1;
 export const WETTING_MOISTURE = 0.9;
 export const WICK_TARGET = 0.8;
 export const WICK_PER_SECOND = 0.01;
+
+/**
+ * Barrier transport (Phase 5 wave 10, P5.2; SPEC §4.9; CT §4, §12.2; src/sim/channel.ts, src/sim/resin.ts).
+ * Per-second rates are converted to per-tick amounts once (rate × DT) where they are used.
+ */
+/** S04 one-way channel: share of every eligible dissolved/viral pool of the source cell requested per second (CT §12.2 "channel 2 %/s pools"). */
+export const CHANNEL_POOL_FRACTION_PER_SECOND = 0.02;
+/** S04 one-way channel: ticks between two Small organism transfers (CT §12.2 "1 Small/s"). */
+export const CHANNEL_ORGANISM_TICKS = 10;
+/** S08 adsorption resin: activity units removed per second at most (CT §4, §12.2 "resin 0.05/s"; capacity: devices.ts RESIN_CAPACITY). */
+export const RESIN_RATE_PER_SECOND = 0.05;
+
+/**
+ * Shells and silicate (Phase 5 wave 10, P5.3 E2-SHELLS; SPEC §5.2, §6.5, §7.11; CT §12.2, §12.3;
+ * src/sim/intake.ts, src/sim/conversion.ts). Per-tick amounts are rate × DT, computed once where used.
+ */
+/** Silicate a shell builder (native SHELL: A02, P05) binds as shell mineral per unit of new biomass (CT §12.3). */
+export const SHELL_MINERAL_PER_BIOMASS = 0.1;
+/** Share of the remaining shell grit that dissolves into free silicate per second (CT §12.2). */
+export const GRIT_DISSOLVE_PER_SECOND = 0.01;

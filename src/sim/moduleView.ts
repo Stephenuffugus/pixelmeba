@@ -4,7 +4,7 @@
  * read back by the simulation, and every value maps to a recorded rule or a measured column.
  */
 import { FLAG, LIFE_ACTIVE, LIFE_RESTING } from './entities';
-import { dormancyReason, wakeConditions, type DormancyReason } from './dormancy';
+import { dormancyReason, restingCause, wakeConditions, type DormancyReason, type WakeConditions } from './dormancy';
 import type { Profile } from './phenotype';
 import { profileOf } from './profiles';
 import { anchorUpkeepPerSecond } from './anchor';
@@ -122,7 +122,8 @@ export interface DormancySummary {
   readonly triggerSeconds: number;
   readonly drySeconds: number;
   readonly dryTriggerSeconds: number;
-  readonly wake: { readonly food: boolean; readonly moisture: boolean; readonly environment: boolean };
+  /** The wake conditions; `attachable` only for a resting newborn (D-0106). */
+  readonly wake: WakeConditions;
   readonly rules: {
     readonly prepareSeconds: number;
     readonly prepareCost: number;
@@ -150,7 +151,7 @@ export function dormancySummary(world: World, i: number): DormancySummary | null
   return {
     source: rules.source,
     state,
-    cause: active ? R.NONE : (c.flags[i]! & FLAG.restDry) !== 0 ? R.RESTING_DRY : R.RESTING_FOOD_SCARCE,
+    cause: active ? R.NONE : restingCause(c, i),
     stateSeconds: active ? 0 : c.stateTimer[i]!,
     lockoutSeconds: c.lockoutTimer[i]!,
     noIntakeSeconds: active ? c.stateTimer[i]! : 0,

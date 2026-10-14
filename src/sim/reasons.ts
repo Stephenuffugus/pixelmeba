@@ -90,6 +90,9 @@ export const REASONS = [
   'HISTORY_COMPACTED',
   'EVIDENCE_EXPIRED',
   'MIXED_CAUSES',
+  // Appended in Phase 5 wave 10 (D-0106, D-0117): an F04 daughter that began Resting at birth. Codes are
+  // saved in entity columns, so new codes go at the end, never into their group above.
+  'RESTING_NEWBORN',
 ] as const;
 
 export type ReasonName = (typeof REASONS)[number];

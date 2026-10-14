@@ -5,6 +5,12 @@
  * A virus never becomes an entity: a dose adds units to cells, infection moves one unit into a host,
  * lysis moves part of the host back into units.
  *
+ * V02 Lacephage (Phase 5 wave 10; SPEC §7.5, CT §3.3 / §12.5): units in its own `v02` field (code 2), host
+ * B02 only and only in a cell whose film is ≥ 0.10 (V02_FILM_MIN; without the film field it never infects).
+ * Its units diffuse at half V01's coefficient (fields.ts 'viralHalf', transport.ts). V01's pass runs
+ * first, then V02's (VIRUSES order); their hosts and fields are disjoint. Units, lysis and decay are the
+ * same code for both.
+ *
  * Everything here needs the world's recorded manifest to enable the viruses system (so the v01 field
  * exists) and the virus species; a g2 save has neither and never runs any of it.
  *
@@ -45,8 +51,17 @@ export const LYSIS_UNIT_FRACTION = 0.4;
 /** Largest phage dose per cell a command may carry (the tools send 1, 5 or 20; SPEC §10.2). */
 export const PHAGE_DOSE_MAX = 20;
 
-/** The viruses this build simulates: species ID → its unit field and the code stored in `infectedBy`. */
-const VIRUSES: ReadonlyArray<{ readonly id: string; readonly field: FieldId; readonly code: number }> = [{ id: 'V01', field: 'v01', code: 1 }];
+/** V02 infects only where its host's cell holds at least this much film (CT §3.3, §12.5; SPEC §7.5). */
+export const V02_FILM_MIN = 0.1;
+
+/**
+ * The viruses this build simulates: species ID → its unit field, the code stored in `infectedBy` (saved:
+ * never renumber) and, for V02, the film its host's cell must hold. The order is the stage 5 pass order.
+ */
+const VIRUSES: ReadonlyArray<{ readonly id: string; readonly field: FieldId; readonly code: number; readonly filmMin?: number }> = [
+  { id: 'V01', field: 'v01', code: 1 },
+  { id: 'V02', field: 'v02', code: 2, filmMin: V02_FILM_MIN },
+];
 
 /** The virus species ID for an `infectedBy` code, or null. */
 export function virusIdOfCode(code: number): string | null {
@@ -136,21 +151,26 @@ export function infectHosts(world: World): void {
   for (const virus of VIRUSES) {
     const v = virusIn(world, virus.id);
     if (!v) continue;
-    infectWith(world, v.field, v.fieldId, v.code, v.spIdx);
+    infectWith(world, v.field, v.fieldId, v.code, v.spIdx, virus.filmMin);
   }
 }
 
-function infectWith(world: World, field: Float64Array, fieldId: FieldId, code: number, virusIdx: number): void {
+function infectWith(world: World, field: Float64Array, fieldId: FieldId, code: number, virusIdx: number, filmMin?: number): void {
   const c = world.ents.cols;
   const hostIds = world.species[virusIdx]!.def.hostIds;
   const isHost = world.species.map((s) => hostIds.includes(s.id));
   if (!isHost.includes(true)) return;
+  // V02's film gate (filmMin set): without the film field no cell qualifies, so it never infects.
+  const film = filmMin === undefined ? null : world.fields.film;
+  if (film === undefined) return;
   candidates.length = 0;
   for (let i = 0; i < world.ents.highWater; i++) {
     if (c.alive[i] !== 1 || c.infectedBy[i] !== 0 || !isHost[c.species[i]!]) continue;
     const cell = entityCell(c.x[i]!, c.y[i]!);
     const units = field[cell]!;
     if (!(units >= 1)) continue; // fewer than one whole unit cannot infect (SPEC §7.5)
+    // Skipped before its draw: the draw is a pure hash of (seed, tick, birthId), so no stream moves.
+    if (film !== null && !(film[cell]! >= filmMin!)) continue;
     const p = 1 - Math.exp(-INFECTION_RATE * units * DT);
     if (detFloat(world.seed, STREAMS.infect, world.tick, c.birthId[i]!) >= p) continue;
     candidates.push(i);

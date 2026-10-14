@@ -69,6 +69,23 @@ export function describeChange(info: DishInfo, payload: CommandPayload, result: 
       return accepted > 0 ? 'Held sample discarded' : 'No sample discarded';
     case 'cleanWater':
       return `Clean water (${CLEAN_WATER_LABELS[String(payload.fraction)] ?? payload.fraction}) on ${accepted} cell${accepted === 1 ? '' : 's'}`;
+    // Phase 5 structures and climate (structureEdits.ts), in plain words without internal codes.
+    case 'placeEdges':
+      return `Edge barriers placed on ${accepted} edge${accepted === 1 ? '' : 's'}`;
+    case 'placeDevice':
+      return accepted > 0 ? 'A furnishing or device placed' : 'No furnishing or device placed';
+    case 'removeStructures':
+      return `${accepted} structure${accepted === 1 ? '' : 's'} removed`;
+    case 'moveDevice':
+      return accepted > 0 ? 'A device moved' : 'No device moved';
+    case 'setDevice':
+      return accepted > 0 ? 'A device setting changed' : 'No device setting changed';
+    case 'wetBrush':
+      return `Wetting brush on ${accepted} cell${accepted === 1 ? '' : 's'}`;
+    case 'setLightMode':
+      return payload.mode === 'cycle' ? 'Light: day and night cycle' : 'Light: fixed';
+    case 'setDrying':
+      return payload.drying ? 'Drying on' : 'Drying off';
   }
 }
 
