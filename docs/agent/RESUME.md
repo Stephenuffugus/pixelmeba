@@ -3,6 +3,23 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑14 23:25 UTC — WAVE 12 COMMITTED `ecf058b` (pushed; D‑0123): npm run check green (299 files, 3,269
+> tests, 5,044 s; typecheck and lint 0), content:validate 84c41636… unchanged, atlas 1691 frames 08fb56e6, contrast audit
+> 0 unexplained. WORKLOG notes on P5.3/P5.5/P5.7 (nothing ticked before the organism flip). The owner refreshed the
+> codespace here. WAVE 13 IS READY TO LAUNCH. START HERE.**
+> 1. Launch wave 13: copy docs/agent/g5-wave-13.run.workflow.js.txt to the scratchpad as .js and run it with the Workflow
+>    tool (keys e3-traps 4271 + e3-jacket 4272 critical 'own', then org-ui 4273 + relmatrix 4274; verifyGroups set; D‑0124
+>    holds the writer's rulings). Start a backup loop: `nohup tools/lead/backup-loop.sh wip/g5-wave-13 "wip: wave 13 in
+>    flight" >/dev/null 2>&1 & echo $! > tmp/lead/backup-13.pid`.
+> 2. While wave 13 builds, owed from wave 12: the lead's journeys in an isolated worktree at ecf058b (desktop +
+>    phone-portrait: structures-art, structures, structures-environment, lab-tools, inspector, sound-settings,
+>    a11y-screens; tmp/lead/e2e-w11-iso.sh is the pattern) and a quiet-machine perf run for docs/reports/perf-g5.md.
+> 3. After wave 13: LEAD AFTER WAVE 13, then THE ORGANISM FLIP — its item 2b first (D‑0123 MINOR 1 the modeSwitch burst,
+>    MINOR 6 the mixotroph ⇔ MIXOTROPHY validator rule, lab.ts materials), item 3b (preFlipRegistry pins), and
+>    moduleRegistryVersion 3 in the manifest AND IMPLEMENTED_RULES together. Then wave 14 (docs/agent/g5-wave-14.tasks.js.txt).
+> - Owner asks still pending: an 8-core codespace (the check takes ~85 min on 2 cores) and `env -u GITHUB_TOKEN gh auth
+>   login -h github.com -p https -w` once for the arcade deploy.
+
 > **Update 2026‑10‑14 21:52 UTC — WAVE 12 BUILT AND VERIFIED (run `wf_8d1fe37e-485` completed: 7 agents, no BLOCKER/MAJOR,
 > 7 MINOR for the lead; reports docs/reports/reviews/g5-wave-12/). The whole tree is backed up on `wip/g5-wave-12` (9547d97 and
 > later). The owner asked for a refresh at the next natural stop (the codespace stops by about 23:50 UTC): the lead is integrating
