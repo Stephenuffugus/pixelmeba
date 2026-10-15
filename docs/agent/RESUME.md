@@ -8,7 +8,10 @@
 > tmp/wt-w11 at 1504640 (tmp/lead/e2e-w13-iso.sh → tmp/lead/e2e-w13.log; includes wave 12's two desktop timeouts); THE ORGANISM
 > FLIP builder (Agent, uncommitted edits in the main tree; report docs/reports/reviews/g5-organism-flip/flip-build.md; D-0126
 > modeSwitch, D-0127 the flip). Backups still → wip/g5-wave-13. START HERE.** If the session died mid-flip: if `git status` is clean,
-> restore from wip/g5-wave-13 and read the report; then the saves verifier (flip item 10), full check, journeys (item 7), WORKLOG
+> restore from wip/g5-wave-13 and read the report; wave 13 journeys at 1504640 (3,932 s, flip builder running alongside): 49 passed,
+> 2 skipped, 3 failed — organisms-p5:139 trap case on both projects (its fixture also records E11, refused until the flip: lead's
+> early un-skip; passes only after the flip, check in flip item 7) and inspector.spec.ts:95 desktop (second timeout under load;
+> passed in org-ui's fix run — rerun ALONE on a quiet machine before calling it a bug). a11y-screens:773 now passes (was load); then the saves verifier (flip item 10), full check, journeys (item 7), WORKLOG
 > ticks (item 9), commit, push; then the wave 14 task file (docs/agent/g5-wave-14.tasks.js.txt).
 
 > **Update 2026‑10‑15 ~06:10 UTC — WAVE 13 BUILT AND VERIFIED (wf_d51abc7b-b19: 10 agents, org-ui MAJOR fixed and re-verified,
