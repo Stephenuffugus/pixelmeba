@@ -3,6 +3,16 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑15 11:25 UTC — OWNER REFRESH. ORGANISM FLIP BUILT AND SAVES-VERIFIED, NOT COMMITTED. The whole tree is backed
+> up on `wip/g5-organism-flip` (also wip/g5-wave-13). Saves verifier: no BLOCKER/MAJOR, 6/6 points OK
+> (docs/reports/reviews/g5-organism-flip/saves-verify.md; MINORs logged in g5-plan). The full check was running (typecheck + lint
+> passed; vitest unfinished) when the codespace stopped. START HERE.**
+> 1. If `git status` is clean (work missing): `git checkout wip/g5-organism-flip -- . && git reset -q`; verify D-0127 is in docs/DECISIONS.md.
+> 2. `npm run check` (~90 min on 2 cores) → fix anything red.
+> 3. Flip journeys (item 7) desktop + phone-portrait, incl. organisms-p5 (trap and jacket cases) and inspector.spec.ts:95 ALONE.
+> 4. WORKLOG: tick P5.3 and P5.5 from flip-build.md's evidence tables; commit "feat(content): THE ORGANISM FLIP …; D-0126, D-0127"; push.
+> 5. Then wave 14 (docs/agent/g5-wave-14.tasks.js.txt → build its run file with tools/lead/build-run-file.py, fill placeholders).
+
 > **Update 2026‑10‑15 — ORGANISM FLIP BUILT (uncommitted in the main tree; backed up on wip/g5-wave-13; report
 > docs/reports/reviews/g5-organism-flip/flip-build.md; D-0126 modeSwitch coalescing, D-0127 the flip; contentHash 84c41636 →
 > 2640a5f4; fence: 27/27 reproduce pre-flip, L303 and L304 moved, every move explained). Running: full check (tmp/lead/check-flip.log)
