@@ -3,6 +3,13 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑15 — ORGANISM FLIP BUILT (uncommitted in the main tree; backed up on wip/g5-wave-13; report
+> docs/reports/reviews/g5-organism-flip/flip-build.md; D-0126 modeSwitch coalescing, D-0127 the flip; contentHash 84c41636 →
+> 2640a5f4; fence: 27/27 reproduce pre-flip, L303 and L304 moved, every move explained). Running: full check (tmp/lead/check-flip.log)
+> and the saves verifier (→ docs/reports/reviews/g5-organism-flip/saves-verify.md). START HERE.** Then: fix BLOCKER/MAJOR, flip
+> journeys item 7 (incl. the trap case and inspector:95 alone), WORKLOG ticks P5.3 + P5.5 from flip-build.md's evidence tables,
+> commit, push, then the wave 14 run. Owner item: store/listing.md is still the v1.0 listing (19 species).
+
 > **Update 2026‑10‑15 ~07:45 UTC — WAVE 13 COMMITTED `1504640` (D-0125; check 315 files, 3,455 tests, 5,375 s; art 1691 frames
 > 08fb56e6; contentHash 84c41636 unchanged; relmatrix 711/711) + WORKLOG notes `ed0bf52`, pushed. Running: wave 13 journeys in
 > tmp/wt-w11 at 1504640 (tmp/lead/e2e-w13-iso.sh → tmp/lead/e2e-w13.log; includes wave 12's two desktop timeouts); THE ORGANISM
