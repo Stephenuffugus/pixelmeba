@@ -3,6 +3,14 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑15 ~07:45 UTC — WAVE 13 COMMITTED `1504640` (D-0125; check 315 files, 3,455 tests, 5,375 s; art 1691 frames
+> 08fb56e6; contentHash 84c41636 unchanged; relmatrix 711/711) + WORKLOG notes `ed0bf52`, pushed. Running: wave 13 journeys in
+> tmp/wt-w11 at 1504640 (tmp/lead/e2e-w13-iso.sh → tmp/lead/e2e-w13.log; includes wave 12's two desktop timeouts); THE ORGANISM
+> FLIP builder (Agent, uncommitted edits in the main tree; report docs/reports/reviews/g5-organism-flip/flip-build.md; D-0126
+> modeSwitch, D-0127 the flip). Backups still → wip/g5-wave-13. START HERE.** If the session died mid-flip: if `git status` is clean,
+> restore from wip/g5-wave-13 and read the report; then the saves verifier (flip item 10), full check, journeys (item 7), WORKLOG
+> ticks (item 9), commit, push; then the wave 14 task file (docs/agent/g5-wave-14.tasks.js.txt).
+
 > **Update 2026‑10‑15 ~06:10 UTC — WAVE 13 BUILT AND VERIFIED (wf_d51abc7b-b19: 10 agents, org-ui MAJOR fixed and re-verified,
 > nothing blocking). LEAD INTEGRATION IN THE TREE (uncommitted; backed up on wip/g5-wave-13): TRAP appended to
 > IMPLEMENTED_NATIVE_ABILITIES, validator case → tests/content/validator-unimplemented.test.ts, import-implemented F03 case → "loads",
