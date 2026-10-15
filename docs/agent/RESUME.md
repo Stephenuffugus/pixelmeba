@@ -3,10 +3,29 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑15 21:15 UTC — CODESPACE CLOSES ABOUT 23:00. WAVE 14 COMMITTED 68b591c (D-0129; check 332 files / 3,644
+> tests) + WORKLOG notes, pushed; tree also on wip/g5-wave-14 (2d7be56). Running at the close: the wave 14 journeys
+> (tmp/lead/e2e-w14.sh → tmp/lead/e2e-w14.log, started 20:56, ~90 min). START HERE after the restart:**
+> 1. If tmp/lead/e2e-w14.log has no EXIT line (tmp/ survives a restart; /tmp does not), rerun `tmp/lead/e2e-w14.sh` and
+>    record the result in the WORKLOG P5.4 note and D-0129 (it says "running at the commit").
+> 2. The owner checks the game on a phone through port 4310: `npx vite build --outDir tmp/lead/phone-dist --emptyOutDir &&
+>    nohup npx vite preview --outDir tmp/lead/phone-dist --port 4310 --strictPort --host 127.0.0.1 &` (URL
+>    https://friendly-waddle-gv7wpw4xpgxhvvpg-4310.app.github.dev/; the offline copy updates after the app is fully closed).
+> 3. THE HABITAT ENABLE (its checklist in docs/agent/g5-wave-14.tasks.js.txt; listing.test needs no re-pin since D-0127),
+>    then the full e2e sweep owed (g5-plan), then wave 15 pre-launch (fill its placeholders; append
+>    docs/agent/g5-wave-15-calls-draft.md as its D-entry; add the stage 2 contentHash note), wave 15, wave 16 (G5 gate).
+
+> **Update 2026‑10‑15 19:05 UTC — WAVE 14 BUILT AND VERIFIED (4 builders, 4 verifiers, no BLOCKER/MAJOR; backup wip/g5-wave-14
+> 0bf0e58). Running: the MINOR fix round (Workflow wf_7ceb591d-311 → docs/reports/reviews/g5-wave-14/fix-minors.md) and the tile
+> journeys (tmp/lead/e2e-tiles.sh). Done in the tree: ARCH/UX/CT wave 14 notes; D-0129 draft at docs/agent/g5-wave-14-asbuilt-draft.md
+> (fill FIXES/FINAL_HASH/PERF/EVIDENCE, append to DECISIONS, delete the draft). Next: perf probe tmp/lead/perf-w14.ts (perf-g5.md
+> "Wave 14"), npm run check, fence + content + art, journeys (habitats-p5, region-pins, new-dish, chemistry-habitats, cordweaver,
+> curated-dishes, a11y-screens; desktop + phone), commit, WORKLOG notes (P5.4/P5.7 not ticked), then THE HABITAT ENABLE. START HERE.**
+
 > **Update 2026‑10‑15 17:45 UTC — owner saw giant organism tiles: FIXED b7fdff4 (`.viewport canvas` → `.viewport > canvas`, the
-> phone Lab tray thumbnails no longer fill their tiles; Add Life species as compact rows). OWED when the machine is quiet: journeys
-> add-life-w2, keyboard, place-and-undo, lab-tools on desktop + phone-portrait (they crashed under wave 14's load, not on the change;
-> tmp/lead/e2e-tiles.sh, port 4310). The owner dropped the cloud move for now ("just keep building").**
+> phone Lab tray thumbnails no longer fill their tiles; Add Life species as compact rows). Its journeys add-life-w2, keyboard,
+> place-and-undo, lab-tools on desktop + phone-portrait: 20/20 passed at 19:25 on a quiet machine (the 17:30 run crashed under
+> wave 14's load; tmp/lead/e2e-tiles.sh, port 4310). The owner dropped the cloud move for now ("just keep building").**
 
 > **Update 2026‑10‑15 16:20 UTC — WAVE 14 RUNNING (Workflow run wf_5c689362-ca9 from docs/agent/g5-wave-14.run.workflow.js.txt,
 > committed 1c9d8a2; stage 1 habitat-geometry 4271 + region-pins 4272, then stage 2 habitat-communities 4271 + new-dish-habitats
