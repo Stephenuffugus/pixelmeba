@@ -3,6 +3,13 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑15 16:13 UTC — THE ORGANISM FLIP COMMITTED `9aeeee6` (D-0126, D-0127; P5.3 and P5.5 ticked in the docs(worklog) commit after it),
+> pushed. Next: wave 14 pre-launch `tmp/lead/prelaunch-14.sh 9aeeee6` (fills the task file, appends D-0128, builds
+> docs/agent/g5-wave-14.run.workflow.js.txt with verify groups), commit, free ports 4271-4274/4390-4398, start the backup
+> loop on wip/g5-wave-14, launch wave 14 (Workflow, scriptPath = a .js copy of the run file), then the wave 15 task writer
+> (docs/agent/g5-wave-15-tasks.workflow.js.txt) while wave 14 builds. After wave 14: LEAD AFTER WAVE 14, THE HABITAT ENABLE
+> (its checklist in the wave 14 task file), wave 15, wave 16 (G5 gate, v1.1.0). START HERE.**
+
 > **Update 2026‑10‑15 11:25 UTC — OWNER REFRESH. ORGANISM FLIP BUILT AND SAVES-VERIFIED, NOT COMMITTED. The whole tree is backed
 > up on `wip/g5-organism-flip` (also wip/g5-wave-13). Saves verifier: no BLOCKER/MAJOR, 6/6 points OK
 > (docs/reports/reviews/g5-organism-flip/saves-verify.md; MINORs logged in g5-plan). The full check was running (typecheck + lint
