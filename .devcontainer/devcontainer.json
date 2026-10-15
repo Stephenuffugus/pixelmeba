@@ -1,0 +1,8 @@
+{
+  "name": "pixelmeba",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "remoteEnv": {
+    "PATH": "/home/codespace/.local/bin:${containerEnv:PATH}"
+  },
+  "postCreateCommand": "test -x /home/codespace/.local/bin/claude || curl -fsSL https://claude.ai/install.sh | bash"
+}
