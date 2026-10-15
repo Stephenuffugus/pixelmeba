@@ -6,8 +6,7 @@
 > **Update 2026‑10‑15 21:15 UTC — CODESPACE CLOSES ABOUT 23:00. WAVE 14 COMMITTED 68b591c (D-0129; check 332 files / 3,644
 > tests) + WORKLOG notes, pushed; tree also on wip/g5-wave-14 (2d7be56). Running at the close: the wave 14 journeys
 > (tmp/lead/e2e-w14.sh → tmp/lead/e2e-w14.log, started 20:56, ~90 min). START HERE after the restart:**
-> 1. If tmp/lead/e2e-w14.log has no EXIT line (tmp/ survives a restart; /tmp does not), rerun `tmp/lead/e2e-w14.sh` and
->    record the result in the WORKLOG P5.4 note and D-0129 (it says "running at the commit").
+> 1. The wave 14 journeys finished at 21:40: 40 passed, 4 skipped (recorded in D-0129 and the WORKLOG P5.4 note). Nothing owed.
 > 2. The owner checks the game on a phone through port 4310: `npx vite build --outDir tmp/lead/phone-dist --emptyOutDir &&
 >    nohup npx vite preview --outDir tmp/lead/phone-dist --port 4310 --strictPort --host 127.0.0.1 &` (URL
 >    https://friendly-waddle-gv7wpw4xpgxhvvpg-4310.app.github.dev/; the offline copy updates after the app is fully closed).
