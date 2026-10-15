@@ -3,6 +3,11 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑15 17:45 UTC — owner saw giant organism tiles: FIXED b7fdff4 (`.viewport canvas` → `.viewport > canvas`, the
+> phone Lab tray thumbnails no longer fill their tiles; Add Life species as compact rows). OWED when the machine is quiet: journeys
+> add-life-w2, keyboard, place-and-undo, lab-tools on desktop + phone-portrait (they crashed under wave 14's load, not on the change;
+> tmp/lead/e2e-tiles.sh, port 4310). The owner dropped the cloud move for now ("just keep building").**
+
 > **Update 2026‑10‑15 16:20 UTC — WAVE 14 RUNNING (Workflow run wf_5c689362-ca9 from docs/agent/g5-wave-14.run.workflow.js.txt,
 > committed 1c9d8a2; stage 1 habitat-geometry 4271 + region-pins 4272, then stage 2 habitat-communities 4271 + new-dish-habitats
 > 4272; reports in docs/reports/reviews/g5-wave-14/) and the WAVE 15 TASK WRITER (run wf_0ed0eb60-3e8 → docs/agent/g5-wave-15.tasks.js.txt
