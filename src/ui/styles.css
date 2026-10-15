@@ -260,7 +260,9 @@ textarea {
   overflow: hidden;
   touch-action: none;
 }
-.viewport canvas {
+/* Only the dish's own canvas (the renderer appends it to .viewport) fills the viewport. A plain descendant rule also
+   stretched the Lab tray's 32 px organism thumbnails on a phone, where the tray sheet sits inside the viewport. */
+.viewport > canvas {
   width: 100%;
   height: 100%;
 }
@@ -543,22 +545,33 @@ textarea {
     margin-bottom: 0.4rem;
   }
 }
+/* Add Life: each species is one compact row (its picture, then its name over its diet line), so a sheet of 38
+   species shows several at once with every name whole; wider sheets fit two or more columns. */
 .species-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
+  gap: 0.4rem;
 }
 .species-tile {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  column-gap: 0.6rem;
+  row-gap: 0.1rem;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.5rem;
-  min-height: 96px;
+  justify-items: start;
+  justify-content: stretch;
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  min-height: 56px;
+}
+.species-tile > :not(canvas) {
+  grid-column: 2;
 }
 .species-tile canvas {
-  width: 48px;
-  height: 48px;
+  grid-column: 1;
+  grid-row: 1 / span 3;
+  width: 40px;
+  height: 40px;
   image-rendering: pixelated;
 }
 .segmented {

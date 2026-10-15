@@ -79,12 +79,7 @@ export function AddLifeSheet() {
             ))}
           </div>
         </div>
-        {phages.map((id) => (
-          <p key={id} class="sub" data-testid={`phage-note-${id}`}>
-            {LIFE_COPY.phageCountNote(info.speciesNames[info.speciesIds.indexOf(id)] ?? id)}
-          </p>
-        ))}
-        <div class="species-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(9.5rem, 1fr))' }}>
+        <div class="species-grid">
           {info.speciesIds.map((id, i) => {
             if (!offered(id)) return null;
             // D-0127: a tile names at most seven prey (38 species make some lists too long for a phone tile).
@@ -121,6 +116,12 @@ export function AddLifeSheet() {
             );
           })}
         </div>
+        {/* Below the list, so a phone shows the organisms first; each phage tile also reads its units per cell. */}
+        {phages.map((id) => (
+          <p key={id} class="sub" data-testid={`phage-note-${id}`}>
+            {LIFE_COPY.phageCountNote(info.speciesNames[info.speciesIds.indexOf(id)] ?? id)}
+          </p>
+        ))}
       </div>
     </section>
   );
