@@ -4,6 +4,7 @@
  * "helps", "needs", "depends on" or "better": "resource exchange observed" is the only summary label,
  * and only where two species each have an arrow to the other in the window (D02 line 149).
  */
+import { FIELD_NAMES } from './fields';
 import type { MapEdgeKind } from '@worker/relationshipMap';
 
 export type MapWindowSeconds = 60 | 180 | 600;
@@ -196,9 +197,10 @@ export const MEAN_NAMES: Readonly<Record<string, string>> = {
   eOil: 'Oil enzyme',
   eProtein: 'Protein enzyme',
   breaker: 'Enzyme breaker',
-  sGlow: 'Lantern signal',
-  quencher: 'Signal quencher',
-  rival: 'Rivalry extract',
+  // Wave 13 (D-0120 carry-over): the field's own name, one per field across screens (strings/fields.ts).
+  sGlow: FIELD_NAMES.sGlow,
+  quencher: FIELD_NAMES.quencher,
+  rival: FIELD_NAMES.rival,
   v01: 'Pinphage',
   v02: 'Lacephage',
 };

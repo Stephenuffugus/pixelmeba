@@ -13,10 +13,16 @@
  *      Each checks the energy and body carbon remaining after earlier commits and reservations, and
  *      either commits at once (secretion: 0.40 E/s) or reserves its full cost for the shared
  *      construction pass (BIOFILM, E10). Nothing is retried; no later action is refunded.
+ *      Phase 5 (inert in a world that records none of them): native SIGNAL_GLOW 5, RIVALRY 6 (wave 11)
+ *      and TRAP 7 (F03 arming, traps.ts; wave 13); modules E02 (wave 11) and E11 (the mineral jacket's
+ *      request, jacket.ts; wave 13).
  * After the per-organism pass: shared construction (construction.ts: one film snapshot, proportional
  * 0.50 headroom shared by B02 and every E10 builder, one commit, energy charged per accepted carbon,
- * unused reservations returned), then the F02 transport pass (`fungalTransportPass`), then births in
- * stage 9.
+ * unused reservations returned), then the shared mineral pass (jacket.ts jacketPass: one silicate
+ * snapshot, proportional headroom shared by every E11 carrier of a cell, 10 E per accepted mineral,
+ * unused reservations returned), then the trap step (traps.ts trapStep), then the F02 transport pass
+ * (`fungalTransportPass`), then births in stage 9 (SPEC §3.2 row 8: "shared film/mineral construction
+ * with proportional headroom; traps; then F02 transport").
  *
  * The other modules act outside this table, where their rule belongs: E04 anchoring and E12 severance
  * in the release hook above (the usable-intake clock first); E04 (anchored speed 0) and E07 (light
@@ -36,6 +42,8 @@ import { glowThresholds, stage8Senses } from './signals';
 import { ActionContext, releaseInvalidLinks, runActions, STAGE8_ACTIONS, type Stage8Action } from './actions';
 import { constructionPass } from './construction';
 import { recordMatrixBuilt } from './matrixBuilder';
+import { jacketPass, recordJacketBuilt } from './jacket';
+import { trapStep } from './traps';
 import { fungalTransport } from './fungalTransport';
 import type { MaterialDef } from './content/schema';
 import {
@@ -97,6 +105,8 @@ export function stageStructures(world: World, actions: readonly Stage8Action[] =
   }
   // Shared construction, then F02 transport, both before births.
   recordMatrixBuilt(world, constructionPass(world, ctx.requests)); // E10 "active now" (observation only)
+  recordJacketBuilt(world, jacketPass(world, ctx.mineralRequests)); // E11 shared mineral pass; "active now" (observation only)
+  trapStep(world); // F03 traps after shared film/mineral construction, before F02 transport (SPEC §3.2 row 8; traps.ts)
   fungalTransportPass(world);
 }
 

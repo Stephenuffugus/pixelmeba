@@ -40,6 +40,9 @@ import { notebook } from '../favorites';
 import { buildGalleryEntry, saveSpecimen } from '../gallery';
 import { GALLERY_UI } from '../strings/notebookTools';
 import { CellClimateLines, cellLightFactors, CellStructureLines } from '../inspector/CellStructureLines';
+import { OrganismLines } from '../inspector/OrganismLines';
+import { FIELD_NAMES } from '../strings/fields';
+import { cellRivalText } from '../strings/organisms';
 
 /**
  * P4.8b Save to gallery: an entry from a COPY of the latest published snapshot and this inspector answer
@@ -98,7 +101,7 @@ const FOOD_NAMES: Record<string, string> = {
  * Cell panel names (m15): what a field holds, capitalised like "Ground" (fallback: the field id). The
  * "…N" fields are the mineral nutrient bound in a food.
  */
-const CELL_FIELD_NAMES: Record<string, string> = {
+export const CELL_FIELD_NAMES: Record<string, string> = {
   sugar: 'Sugar',
   sugarN: 'Nutrient in sugar',
   starch: 'Starch',
@@ -129,10 +132,15 @@ const CELL_FIELD_NAMES: Record<string, string> = {
   inhBact: 'Bacterial inhibitor',
   inhFung: 'Fungal inhibitor',
   inhPhoto: 'Photosynthetic inhibitor',
+  // Wave 13 (D-0120 carry-over): the field's own name, one per field across screens (strings/fields.ts).
+  breaker: 'Enzyme breaker',
+  rival: FIELD_NAMES.rival,
+  sGlow: FIELD_NAMES.sGlow,
+  quencher: FIELD_NAMES.quencher,
 };
 
 /** Pools with their own cell lines (P3.1), left out of the generic pool list. */
-const OWN_CELL_LINES: readonly string[] = ['salt', 'oxygen', 'inhBact', 'inhFung', 'inhPhoto'];
+const OWN_CELL_LINES: readonly string[] = ['salt', 'oxygen', 'inhBact', 'inhFung', 'inhPhoto', 'rival'];
 
 /** Who each inhibitor targets (CT §3.4), as the cell inspector names it. */
 const EXPOSURE_WHO: Record<string, string> = {
@@ -345,8 +353,8 @@ function EntityView({ e }: { e: EntityInspect }) {
   const answerRef = useRef<HTMLDivElement>(null);
   const name = info?.speciesNames[e.speciesIdx] ?? e.speciesId;
   const c = leadConstraint(e);
-  const cw = constraintWords(e, c.code, c.value);
-  const stop = stopAnswer(e);
+  const cw = constraintWords(e, c.code, c.value, info?.speciesNames ?? []);
+  const stop = stopAnswer(e, info?.speciesNames ?? []);
   const fam = familyView.value;
   const family = fam && fam.birthId === e.birthId ? fam : null;
   // P4.1: the followed family this organism belongs to, if any (from the notebook record).
@@ -578,6 +586,8 @@ function EntityView({ e }: { e: EntityInspect }) {
                   ))}
                 </section>
               ) : null}
+              {/* Wave 13 (P5.7): the Phase 5 organism lines, each from one optional inspector field (absent in a v1.0 dish). */}
+              <OrganismLines e={e} view={dishView.value} names={info?.speciesNames ?? []} />
               {/* P3.4: infections, attached parasites and the host a parasite rides, from recorded state
                   (UX §5.2: Explore wording in Explore, Lab wording with the measured value in Lab), as
                   body text above the small key/value grid. */}
@@ -807,10 +817,17 @@ export function InspectorSheet() {
               {/* P5.2: every light factor (cycle, roof, canopy) when the dish has any; else the habitat × shade line. */}
               <dd data-testid="cell-light">{cellLightFactors(p.cell) ?? lightText(p.cell)}</dd>
               <CellClimateLines cell={p.cell} />
-              {p.cell.exposure ? (
+              {p.cell.exposure && p.cell.exposure.lines.length > 0 ? (
                 <>
                   <dt>Inhibitor exposure</dt>
                   <dd data-testid="cell-exposure">{exposureText(p.cell.exposure)}</dd>
+                </>
+              ) : null}
+              {/* Wave 13 (SPEC §7.9; D-0120): rivalry chemical here, its exposure and the kinds it acts on, by name. */}
+              {p.cell.exposure?.rival ? (
+                <>
+                  <dt>{FIELD_NAMES.rival}</dt>
+                  <dd data-testid="cell-rival">{cellRivalText(p.cell.exposure.rival, dishInfo.value?.speciesIds ?? [], dishInfo.value?.speciesNames ?? [])}</dd>
                 </>
               ) : null}
               {Object.entries(p.cell.fields ?? {})

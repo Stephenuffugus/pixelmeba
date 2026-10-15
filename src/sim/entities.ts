@@ -140,9 +140,10 @@ export const ENTITY_COLUMNS = [
   ['glowDwell', 'f64'],
   // A04 mixotrophy (SPEC §7.10): 0 no mode (every organism without MIXOTROPHY), 1 Photo, 2 Sugar.
   ['metabolicMode', 'u8'],
-  // F03 trap (SPEC §7.17): the reserve drained from the held organism (carbon, nutrient; ledgered by the
-  // trap stage), the held P04 (slot −1 = none, birthId), seconds the current target has been held, and
-  // the cooldown seconds left.
+  // F03 trap (SPEC §7.17; src/sim/traps.ts): the reserve, i.e. the carbon and nutrient the owner moved out of
+  // its own body to build its trap (0.20 C with proportional N; D02 392; an accounted compartment counted by
+  // computeTotals, not food drained from the held organism), the held P04 (slot −1 = none, birthId), seconds
+  // the current target has been held, and the cooldown seconds left.
   ['trapReserveC', 'f64'],
   ['trapReserveN', 'f64'],
   ['trapSlot', 'i32'],

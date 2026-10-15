@@ -28,8 +28,14 @@
  *
  * Contact kinds on the 'contact' stream (saved worlds depend on them; never renumber): 1 attack (here),
  * 2 parasite attachment (parasites.ts KIND_PARASITE), 3 infection unit order (viruses.ts KIND_INFECT),
- * 4 reserved for E12 (adhesion.ts resolves pairs by birthId and draws nothing).
+ * 4 reserved for E12 (adhesion.ts resolves pairs by birthId and draws nothing), 5 trap capture (traps.ts KIND_TRAP;
+ * Phase 5 wave 13: its claims keep their own pool, since a hold removes nothing).
  * 5. Then E12 link formation (adhesion.ts formAdhesionLinks).
+ *
+ * Phase 5 wave 13 (P5.5 E3-TRAPS; traps.ts; D-0124): right after predation, armed F03 traps catch a P04 in their
+ * own cell (`trapCaptures`, SPEC §3.2 row 5 "Predation claims and handling progress; trap capture; parasite
+ * attachment"); it returns at once in a world whose recorded species include no TRAP species. consumePrey
+ * releases a trap pair either end of which it removes (defensive: no CT prey list names P04 or F03).
  */
 import { CONTACT_DISTANCE, DT, GRID_H, GRID_W, MEAL_CAP_MULTIPLE, RADIUS_CAPTURE_DISTANCE } from './constants';
 import { classOf } from './barriers';
@@ -42,6 +48,7 @@ import { removeAllLinks } from './links';
 import { attachParasites, releaseHostPair } from './parasites';
 import { formAdhesionLinks, severOnRemoval } from './adhesion';
 import { infectHosts } from './viruses';
+import { releaseTrapOnRemoval, trapCaptures } from './traps';
 import { onDeath } from './branches';
 import { hungryPredator, preyAllowed } from './movement';
 import { profileOf } from './profiles';
@@ -60,6 +67,7 @@ const bestPriority = new Float64Array(6000);
 
 export function stageContacts(world: World): void {
   predationContacts(world);
+  trapCaptures(world); // Phase 5 wave 13 (traps.ts): F03 trap capture, after predation (SPEC §3.2 row 5)
   // SPEC §3.2 row 5: predation, then parasite attachment, then host-specific infection.
   attachParasites(world);
   infectHosts(world);
@@ -276,6 +284,7 @@ export function consumePrey(world: World, pred: number, prey: number, handled = 
   });
   recordDeath(world.lineage, c.birthId[prey]!, world.tick, R.DEATH_PREDATION);
   onDeath(world, prey);
+  releaseTrapOnRemoval(world, prey, true); // Phase 5 wave 13 (traps.ts): a trap pair either end of which leaves
   releaseHostPair(world, prey); // SPEC §6.8, §7.4: an attached parasite is released alive
   const preySp = c.species[prey]!;
   world.history.pendingDeaths[preySp] = (world.history.pendingDeaths[preySp] ?? 0) + 1;

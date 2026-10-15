@@ -206,8 +206,9 @@ describe('C08 shared budget with real modules (W4-17): a B04 carrying E01 + E09 
     expect(prof.protein?.source).toBe('E09');
     expect(prof.builder).toEqual({ source: 'E10', minEnergy: 35, ratePerSecond: 0.02, bodyFloor: 1.2, energyPerC: 2, filmCap: 0.5 });
     const keys = STAGE8_ACTIONS.filter((a) => a.tier === 'module').map((a) => a.key);
-    // E02's signal emission joined the module tier at wave 11 (D-0119, D-0120); the table stays ascending.
-    expect(keys).toEqual(['E01', 'E02', 'E09', 'E10']);
+    // E02's signal emission joined the module tier at wave 11 (D-0119, D-0120) and E11's mineral jacket at wave 13
+    // (e3-jacket); the table stays ascending.
+    expect(keys).toEqual(['E01', 'E02', 'E09', 'E10', 'E11']);
   });
 
   it('shipped order through step (energy set at stage 7): E01 releases, E09 releases, E10 is refused for energy and builds nothing', () => {

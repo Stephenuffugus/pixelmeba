@@ -134,7 +134,19 @@ export interface DietRow {
   readonly photosynthesis: boolean;
   /** "when no meal" (P09, E08 carriers). */
   readonly whenNoMeal: boolean;
+  /**
+   * Light-qualified routes ("photosynthesis (light ≥ 0.35) / sugar (light ≤ 0.25)", A04): each route with
+   * the light bound it needs (Phase 5 wave 13, relmatrix). Empty for every other entry.
+   */
+  readonly modes: readonly DietMode[];
   readonly raw: string;
+}
+
+export interface DietMode {
+  /** 'photosynthesis' or a field food. */
+  readonly food: string;
+  readonly op: '≥' | '≤';
+  readonly light: number;
 }
 
 const FIELD_FOODS = ['sugar', 'starch', 'oil', 'protein', 'broth', 'detritus', 'metabolite'] as const;
@@ -156,7 +168,9 @@ export function dietTable(): DietRow[] {
       .split(/[,/]/)
       .map((t) => t.trim().split(' ')[0]!)
       .filter((t): t is (typeof FIELD_FOODS)[number] => (FIELD_FOODS as readonly string[]).includes(t));
-    for (const id of ids) out.push({ id, foods, film, photosynthesis, whenNoMeal: /when no meal/.test(rest), raw: entry });
+    const modes: DietMode[] = [];
+    for (const mm of rest.matchAll(/([a-z]+) \(light ([≥≤]) ([0-9.]+)\)/g)) modes.push({ food: mm[1]!, op: mm[2] as '≥' | '≤', light: Number(mm[3]) });
+    for (const id of ids) out.push({ id, foods, film, photosynthesis, whenNoMeal: /when no meal/.test(rest), modes, raw: entry });
   }
   return out;
 }
@@ -169,6 +183,11 @@ export interface PreyRow {
   readonly prey: Readonly<Record<string, PreyRequirement>>;
   /** "within 1 cell": radius capture (P06), applies to the whole row. */
   readonly withinCells: number | null;
+  /**
+   * Seconds of continuous contact a capture needs, per listed prey ("(P05 requires 4 s continuous contact;
+   * others 1 s)", P10); empty when the row names none (an instant capture). Phase 5 wave 13, relmatrix.
+   */
+  readonly contactSeconds: Readonly<Record<string, number>>;
   readonly raw: string;
 }
 
@@ -191,8 +210,27 @@ export function preyTable(): PreyRow[] {
         const req: PreyRequirement = /^free\b/.test(token) ? 'free' : /while in sediment$/.test(token) ? 'inSediment' : 'any';
         for (const p of expandIds(token)) prey[p] = req;
       }
-      return { id: id!, name: name.join(' '), prey, withinCells, raw: r[1]! };
+      const contactSeconds: Record<string, number> = {};
+      const note = /\(([^)]*continuous contact[^)]*)\)/.exec(r[1]!);
+      if (note) {
+        for (const m of note[1]!.matchAll(/([A-Z][0-9]{2}) requires ([0-9.]+) s/g)) contactSeconds[m[1]!] = Number(m[2]);
+        const others = /others ([0-9.]+) s/.exec(note[1]!);
+        if (others) for (const p of Object.keys(prey)) contactSeconds[p] ??= Number(others[1]);
+      }
+      return { id: id!, name: name.join(' '), prey, withinCells, contactSeconds, raw: r[1]! };
     });
+}
+
+export interface PreyOnlyNote {
+  readonly prey: string;
+  readonly predators: readonly string[];
+}
+
+/** CT §3.2's prose notes "A05 is prey only for P08" (Phase 5 wave 13, relmatrix). */
+export function preyOnlyNotes(): PreyOnlyNote[] {
+  const md = readFileSync(DOC, 'utf8');
+  const text = prose(section(md, '### 3.2', '### 3.3'));
+  return [...text.matchAll(/([A-Z][0-9]{2}) is prey only for ([A-Z][0-9]{2}(?:(?:, | and )[A-Z][0-9]{2})*)/g)].map((m) => ({ prey: m[1]!, predators: expandIds(m[2]!) }));
 }
 
 export interface HostRow {
@@ -366,4 +404,123 @@ export function identityTable(): IdentityRow[] {
     phase: Number(r[4]),
     role: r[5]!,
   }));
+}
+
+// ---- Phase 5 wave 13 (relmatrix): the oracles the Phase 5 families need ------------------------------
+
+export interface MetabolismRow {
+  readonly id: string;
+  /** CT §1.2's Metabolism column as written ("photosynthesis + silicate", "photosynthesis (light/0.30)"). */
+  readonly metabolism: string;
+  /** "+ silicate": a shell builder (A02, P05; CT §12.3 "shell … silicate 0.10 per new biomass"). */
+  readonly shell: boolean;
+  /** "(light/0.30)": the light at which the low-light curve saturates (A03), else null. */
+  readonly lightSaturation: number | null;
+}
+
+/** CT §1.2 metabolism column. */
+export function metabolismTable(): MetabolismRow[] {
+  const md = readFileSync(DOC, 'utf8');
+  return rows(section(md, '### 1.2', '### 1.3')).map((r) => {
+    const m = /light\/([0-9.]+)/.exec(r[6]!);
+    return { id: r[0]!, metabolism: r[6]!, shell: /\+ silicate/.test(r[6]!), lightSaturation: m ? Number(m[1]) : null };
+  });
+}
+
+export interface ToleranceRow {
+  readonly group: string;
+  readonly members: readonly string[];
+  readonly ph: readonly [number, number];
+  readonly salinity: readonly [number, number];
+}
+
+function range(s: string): [number, number] {
+  const m = /([0-9.]+)\s*[–-]\s*([0-9.]+)/.exec(s);
+  if (!m) throw new Error(`CT §2: cannot read range "${s}"`);
+  return [Number(m[1]), Number(m[2])];
+}
+
+/** CT §2 tolerance groups (pH and salinity ranges; members with ranges expanded). */
+export function toleranceTable(): ToleranceRow[] {
+  const md = readFileSync(DOC, 'utf8');
+  return tableRows(section(md, '## 2.', '## 3.'))
+    .filter((r) => r.length >= 6)
+    .map((r) => ({ group: r[0]!, members: expandIds(r[1]!), ph: range(r[2]!), salinity: range(r[4]!) }));
+}
+
+/** The prose of a CT §12 constants subsection (one line). */
+function constants(startHeading: string, endHeading: string): string {
+  const md = readFileSync(DOC, 'utf8');
+  return prose(section(md, startHeading, endHeading));
+}
+
+function num(text: string, re: RegExp, what: string): number {
+  const m = re.exec(text);
+  if (!m) throw new Error(`CT: ${what} not found`);
+  return Number(m[1]);
+}
+
+export interface HandlingRules {
+  /** "jacket 1 + 3c": seconds = base + perCoverage × c. */
+  readonly jacketBase: number;
+  readonly jacketPerCoverage: number;
+  /** "P06 radius 1". */
+  readonly radius: number;
+}
+
+/** CT §12.5 handling and radius numbers. */
+export function handlingRules(): HandlingRules {
+  const t = constants('### 12.5', '### 12.6');
+  const j = /jacket ([0-9.]+) \+ ([0-9.]+)c/.exec(t);
+  if (!j) throw new Error('CT §12.5: jacket handling not found');
+  return { jacketBase: Number(j[1]), jacketPerCoverage: Number(j[2]), radius: num(t, /P06 radius ([0-9.]+)/, '§12.5 P06 radius') };
+}
+
+export interface TrapRules {
+  readonly minEnergy: number;
+  readonly minBodyMultiple: number;
+  readonly reserveC: number;
+  readonly armEnergy: number;
+  readonly holdSeconds: number;
+  readonly drainPerSecond: number;
+  readonly cooldownSeconds: number;
+}
+
+/** CT §12.5 "trap: E ≥ 50, B ≥ 1.3 B0', 0.20 C + 8 E; hold 8 s; drain 0.03 C/s; cooldown 30 s". */
+export function trapRules(): TrapRules {
+  const t = constants('### 12.5', '### 12.6');
+  const m = /trap: E ≥ ([0-9.]+), B ≥ ([0-9.]+) B0', ([0-9.]+) C \+ ([0-9.]+) E; hold ([0-9.]+) s; drain ([0-9.]+) C\/s; cooldown ([0-9.]+) s/.exec(t);
+  if (!m) throw new Error('CT §12.5: trap rules not found');
+  const [minEnergy, minBodyMultiple, reserveC, armEnergy, holdSeconds, drainPerSecond, cooldownSeconds] = m.slice(1).map(Number) as [number, number, number, number, number, number, number];
+  return { minEnergy, minBodyMultiple, reserveC, armEnergy, holdSeconds, drainPerSecond, cooldownSeconds };
+}
+
+export interface RivalRules {
+  readonly rate: number;
+  readonly energyPerSecond: number;
+  /** "E > 50". */
+  readonly minEnergy: number;
+  /** "targets within 2 cells". */
+  readonly radius: number;
+  /** "local < 1.0". */
+  readonly localCap: number;
+}
+
+/** CT §12.6 "RIVAL: 0.02/s, 0.60 E/s, E > 50, targets within 2 cells, local < 1.0". */
+export function rivalRules(): RivalRules {
+  const t = constants('### 12.6', '### 12.7');
+  const m = /RIVAL: ([0-9.]+)\/s, ([0-9.]+) E\/s, E > ([0-9.]+), targets within ([0-9]+) cells, local < ([0-9.]+)/.exec(t);
+  if (!m) throw new Error('CT §12.6: RIVAL rules not found');
+  const [rate, energyPerSecond, minEnergy, radius, localCap] = m.slice(1).map(Number) as [number, number, number, number, number];
+  return { rate, energyPerSecond, minEnergy, radius, localCap };
+}
+
+/** CT §12.3 "shell/jacket silicate 0.10 per new biomass". */
+export function silicatePerBiomass(): number {
+  return num(constants('### 12.3', '### 12.4'), /shell\/jacket silicate ([0-9.]+) per new biomass/, '§12.3 shell silicate');
+}
+
+/** CT §12.2 "grit → silicate 0.01 × remaining/s". */
+export function gritDissolvePerSecond(): number {
+  return num(constants('### 12.2', '### 12.3'), /grit → silicate ([0-9.]+) × remaining\/s/, '§12.2 grit');
 }

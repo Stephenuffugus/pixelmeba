@@ -13,6 +13,7 @@ import { photosynthesizedThisTick } from './intake';
 import { R } from './reasons';
 import { EMITTER_BIT, PRODUCER_BIT } from './secretion';
 import { matrixBuiltNow } from './matrixBuilder';
+import { jacketBuiltNow } from './jacket';
 import type { World } from './world';
 
 /**
@@ -84,6 +85,8 @@ function moduleActiveNow(world: World, i: number, id: string): boolean {
       return (c.secreting[i]! & PRODUCER_BIT.protein) !== 0; // released protein enzyme this tick (secretion.ts)
     case 'E10':
       return matrixBuiltNow(world, i); // its film request was accepted in this tick's shared construction pass (matrixBuilder.ts)
+    case 'E11':
+      return jacketBuiltNow(world, i); // its mineral request was accepted in this tick's shared mineral pass (jacket.ts; wave 13)
     case 'E12':
       return adhesionLinked(world, i); // holds at least one valid colony link (adhesion.ts)
     default:

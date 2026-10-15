@@ -306,6 +306,11 @@
 //       the import on the ability), with a tests/content/validator.test.ts case.
 //     - src/ui/strings/lab.ts FOOD_MATERIALS / CHEMISTRY_MATERIALS gain M02, M06, M07, M08 and M12 (wave 12's swatches .sw-m02 ... .sw-m12
 //       exist in styles.css; without the list entries the tray never shows them).
+//     - D-0125 (amends D-0118): the import's jacket rule (src/persistence/phase5State.ts:86-92) refuses jacketMineral > 0 on an
+//       organism whose genome lacks E11 (unreachable since wave 13's SPEC 9.19 reconcile drops it at birth; today such a crafted
+//       file loads with the 1 + 3c handling penalty and no speed penalty). Refresh the comment (E11 now writes the column). Test in
+//       tests/persistence/phase5-import.test.ts: a plain P01 with jacketMineral 0.1 (inputs.m rebased) is refused with the open dish
+//       untouched, and a P01 carrying E11 with the same jacket loads.
 //  3. The D-0059-style proof BEFORE any re-record. E02 joins the module-gain lists of B01-B08 and E11 those of P01, P02 and P07 (CT
 //     §7.1), so module draws (mutation and Diverse founders) pick among larger lists. For every fence entry and pinned trajectory test:
 //     realize it under registryWith({ enabledModules: the pre-flip list, moduleRegistryVersion: 2, … the pre-flip lists }) and reproduce

@@ -61,6 +61,7 @@ import { entityCell } from './spatial';
 import { LIFE_ACTIVE } from './entities';
 import { profileOf } from './profiles';
 import { R, reasonName } from './reasons';
+import { PRODUCER_BIT } from './secretion';
 import { deserializeWorld, serializeWorld, stateHash } from './serialize';
 import { step } from './tick';
 import { updateDerived } from './transport';
@@ -386,6 +387,17 @@ function shares(counts: Record<string, number>, n: number): Record<string, numbe
   return out;
 }
 
+/**
+ * The secretion share's code for an Active starch producer (wave 13, D-0120 carry-over): SECRETING only when it
+ * released starch enzyme this tick (its PRODUCER_BIT.starch), never because another emitter succeeded (an E02
+ * B06's glow signal, a protein producer): secretionCode is SECRETING if ANY emitter succeeded. Then the starch
+ * refusal was not kept, so it counts under NONE (nothing recorded), never as starch secretion.
+ */
+export function starchSecretionCode(secreting: number, secretionCode: number): number {
+  if ((secreting & PRODUCER_BIT.starch) !== 0) return R.SECRETING;
+  return secretionCode === R.SECRETING ? R.NONE : secretionCode;
+}
+
 /** One timeline sample of an arm (exported for tests). */
 export function sampleArm(world: World, obs: Pick<ArmObserver, 'everPresent'>): TimelineSample {
   const c = world.ents.cols;
@@ -413,7 +425,7 @@ export function sampleArm(world: World, obs: Pick<ArmObserver, 'everPresent'>): 
       // Producer rules come from the organism's profile (native producer or E01 carrier), never the
       // species alone; one that is not Active is counted under its state reason (as tools/sim-tune.ts).
       if (profileOf(world, i).starch !== null) {
-        const sec = reasonName(c.lifeState[i] === LIFE_ACTIVE ? c.secretionCode[i]! : c.limitCode[i]!);
+        const sec = reasonName(c.lifeState[i] === LIFE_ACTIVE ? starchSecretionCode(c.secreting[i]!, c.secretionCode[i]!) : c.limitCode[i]!);
         secretion[sec] = (secretion[sec] ?? 0) + 1;
       }
       const blk = reasonName(divisionBlocker(world, i));

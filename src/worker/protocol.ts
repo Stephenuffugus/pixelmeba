@@ -489,7 +489,7 @@ export const CUE2_RELEASING_PROTEIN = 8192;
  * - TRAP (2 bits at CUE3_TRAP_SHIFT): 0 none or idle, 1 armed (trapReserveC > 0, no target), 2 holding
  *   (trapSlot ≥ 0, valid), 3 cooldown (trapCooldown > 0); holding wins over cooldown, cooldown over armed.
  * - JACKET (2 bits at CUE3_JACKET_SHIFT): the jacket_rim frame, min(3, max(0, ⌈4c⌉ − 1)) with
- *   c = min(1, jacketMineral / (0.10 × B)). JACKETED: jacketMineral > 0.
+ *   c = min(1, jacketMineral / (0.10 × B)) (wave 13: handling.ts jacketCoverage, 0 at B ≤ 0). JACKETED: jacketMineral > 0.
  * - SHELL: the species has SHELL and boundMineral > 0.
  */
 export const CUE3_GLOWING = 1;
@@ -505,6 +505,23 @@ export const CUE3_JACKET_MASK = 3 << CUE3_JACKET_SHIFT;
 export const CUE3_JACKETED = 1024;
 export const CUE3_MOD_E11 = 2048;
 export const CUE3_SHELL = 4096;
+/**
+ * Wave 13 (org-ui; D-0124; additive inside E_CUE3: no stride, band or version change, every value still below
+ * 2^24, and each is 0 for every organism of a v1.0 dish, so the protocol 2 golden holds):
+ * - HANDLING_QUARTER (2 bits at CUE3_HANDLING_QUARTER_SHIFT), packed only while CUE3_HANDLING is set: the
+ *   handling_arc frame (D-0112) min(3, max(0, ⌈4 × handlingProgress / handlingNeed⌉ − 1)), so the arc shows on
+ *   every handler on screen, not only the selected one.
+ * - HOLD_CLOSING, packed only with CUE3_HELD: the hold is in its first second (the holding trap's trapTimer ≤ 1 s
+ *   since the committed capture), the trap_loop 'closing' frame; 'holding' after (reduced motion: 'holding' only).
+ * - GLOWER: the organism has glow rules (native SIGNAL_GLOW or a recorded E02; Profile.glow), so glow_center can
+ *   show its dim frame on a native glower that is not glowing (E02 carriers also carry CUE3_MOD_E02).
+ * The JACKET band reads src/sim/handling.ts jacketCoverage, the one coverage the simulation uses for speed and
+ * handling (c = 0 at B ≤ 0, where wave 11's inline expression gave 1: unreachable for a living organism).
+ */
+export const CUE3_HANDLING_QUARTER_SHIFT = 13;
+export const CUE3_HANDLING_QUARTER_MASK = 3 << CUE3_HANDLING_QUARTER_SHIFT;
+export const CUE3_HOLD_CLOSING = 1 << 15;
+export const CUE3_GLOWER = 1 << 16;
 
 /**
  * E_LINKMASK (protocol 2): the low four bits are the directions of the segment's live fungal links
@@ -951,8 +968,10 @@ export interface EntityInspect {
     /**
      * Species of this world that can put sugar into the water under its recorded rules (G2 comprehension
      * M5): `makers` make food from light and release part of it as sugar; `enzyme` turn starch into sugar.
+     * Wave 13: `inLight` (present only when non-empty) lists the makers that release it only in their Photo
+     * mode (mixotrophs, A04), so the words say "in light".
      */
-    readonly sugarSources?: { readonly makers: readonly number[]; readonly enzyme: readonly number[] };
+    readonly sugarSources?: { readonly makers: readonly number[]; readonly enzyme: readonly number[]; readonly inLight?: readonly number[] };
   };
   /** Loci that act for this genome: the template's plus module activations (E03 → dormancy). */
   readonly lociActiveEffective: readonly boolean[];
@@ -1001,6 +1020,100 @@ export interface EntityInspect {
   readonly parasite?: { readonly speciesIdx: number; readonly birthId: number; readonly rate: number };
   /** P3.4: for an attached parasite, the host it rides. Absent when free or not a parasite. */
   readonly host?: { readonly speciesIdx: number; readonly birthId: number };
+  // ---- Phase 5 organism lines (wave 13 org-ui; D-0124). Each is optional and absent when it does not apply,
+  // so a v1.0 dish's payload is exactly what it was (tests/worker/inspect-p5.test.ts).
+  /** A trap owner (native TRAP, F03): its trap, read by src/sim/traps.ts trapView; absent for every other organism. */
+  readonly trap?: TrapInspect;
+  /** An organism a trap holds (src/sim/traps.ts heldView): HELD_IN_TRAP is derived from this, never a recorded reason. */
+  readonly heldBy?: HeldInspect;
+  /** A predator in a handling attempt (handlingNeed > 0 with a valid prey reference; SPEC §7.3). */
+  readonly handling?: HandlingInspect;
+  /**
+   * Every living handler whose valid prey reference (preySlot and preyBirthId) is this organism and whose
+   * handlingNeed > 0: CAPTURED_HANDLING ("Being caught.") is derived from this, never written by the simulation.
+   */
+  readonly beingHandled?: readonly BeingHandledInspect[];
+  /** A mixotroph (A04, SPEC §7.10): its recorded metabolicMode (0 not chosen yet, 1 Photo, 2 Sugar) and the light at its cell. */
+  readonly mode?: { readonly mode: number; readonly light: number };
+  /** An E11 carrier or an organism holding a jacket (src/sim/jacket.ts jacketView). */
+  readonly jacket?: JacketInspect;
+  /** An organism with glow rules (native SIGNAL_GLOW or E02; SPEC §7.8): what it senses at its cell and its glow. */
+  readonly signal?: SignalInspect;
+  /**
+   * A Phase 5 emitter (glow or rivalry rules): this tick's recorded secretionCode, the `secreting` bits (enzyme
+   * 1/2/4, rival 8, signal 16) and which emitter's refusal the code holds when nothing was released (the last
+   * emitter in the stage 8 action order), so the words name what it really emits (D-0120 carry-over).
+   */
+  readonly secretion?: { readonly code: number; readonly bits: number; readonly refusalOf: 'enzyme' | 'signal' | 'rival' };
+  /**
+   * A RIVAL target species (rivalry.ts RIVAL_TARGETS) in a cell holding rivalry chemical (SPEC §7.9; chemistry.ts
+   * exposureBreakdown): the amount, the exposure it adds (0.25 × amount, halved by film), and its whole exposure
+   * now (inhibitors and rival: growth factor and health loss per second, as suitability.ts applies them).
+   */
+  readonly rival?: { readonly amount: number; readonly exposure: number; readonly totalExposure: number; readonly growthFactor: number; readonly damagePerSecond: number };
+}
+
+/** EntityInspect.trap (src/sim/traps.ts TrapView, plus the hold time the rules use). */
+export interface TrapInspect {
+  readonly state: 'none' | 'armed' | 'holding' | 'cooldown';
+  readonly reserveC: number;
+  readonly reserveN: number;
+  readonly target: { readonly birthId: number; readonly speciesIdx: number } | null;
+  /** Seconds the current target has been held (0 unless holding). */
+  readonly heldSeconds: number;
+  /** The hold length (TRAP_HOLD_SECONDS, CT §7.1). */
+  readonly holdSeconds: number;
+  /** Cooldown seconds left (0 unless cooling down). */
+  readonly cooldownLeft: number;
+}
+
+/** EntityInspect.heldBy (src/sim/traps.ts HeldView, plus the hold length). */
+export interface HeldInspect {
+  readonly ownerBirthId: number;
+  readonly ownerSpeciesIdx: number;
+  readonly heldSeconds: number;
+  readonly holdSeconds: number;
+  /** The carbon the trap owner actually took in the last whole second (its intakeLastSecond: the measured drain). */
+  readonly drained: number;
+}
+
+/** EntityInspect.handling: the attempt in the predator's own columns. */
+export interface HandlingInspect {
+  readonly preyBirthId: number;
+  readonly preySpeciesIdx: number;
+  /** Seconds of contact so far (handlingProgress) and the seconds needed (handlingNeed, sampled at the attempt start). */
+  readonly progress: number;
+  readonly need: number;
+}
+
+/** One handler of an organism (EntityInspect.beingHandled). */
+export interface BeingHandledInspect {
+  readonly predatorBirthId: number;
+  readonly predatorSpeciesIdx: number;
+  readonly progress: number;
+  readonly need: number;
+}
+
+/** EntityInspect.jacket (src/sim/jacket.ts JacketView). */
+export interface JacketInspect {
+  readonly mineral: number;
+  /** targetPerBody × current B (0 when it no longer carries E11). */
+  readonly target: number;
+  /** jacketCoverage(mineral, B), 0..1. */
+  readonly coverage: number;
+  /** The stage 4 speed factor, 1 − speedPenalty × c (1 without E11). */
+  readonly speedFactor: number;
+}
+
+/** EntityInspect.signal (src/sim/signals.ts sensedSignal and the organism's glow rules). */
+export interface SignalInspect {
+  /** S_GLOW / (1 + quencher) at its cell now. */
+  readonly sensed: number;
+  /** Glow on after sensed ≥ onThreshold for dwellSeconds; off after ≤ offThreshold (Profile.glow). */
+  readonly onThreshold: number;
+  readonly offThreshold: number;
+  readonly dwellSeconds: number;
+  readonly glowing: boolean;
 }
 
 /** One carried supplementary module and its recorded numbers (world's versioned registry). */

@@ -30,10 +30,25 @@ import {
   SPLIT_FLASH_MS,
   SPLIT_STATIC_MS,
   stainAlphaAt,
+  trapLoopFrame,
+  trapPoseFrame,
+  dormantPoseFrame,
   type LayerPick,
 } from '../../src/render/features';
 import { fungalPick, PULSE_FRAME_MS, STAIN_MS, stainAlpha } from '../../src/render/world3';
-import { CUE2_DETRITUS_INTAKE, CUE2_MOD_E07, CUE2_MOD_E08, CUE2_SEEKING_LIGHT } from '../../src/worker/protocol';
+import {
+  CUE2_DETRITUS_INTAKE,
+  CUE2_MOD_E07,
+  CUE2_MOD_E08,
+  CUE2_SEEKING_LIGHT,
+  CUE3_GLOWER,
+  CUE3_GLOWING,
+  CUE3_HANDLING,
+  CUE3_HANDLING_QUARTER_SHIFT,
+  CUE3_HELD,
+  CUE3_HOLD_CLOSING,
+  CUE3_TRAP_SHIFT,
+} from '../../src/worker/protocol';
 
 const ROOT = join(__dirname, '..', '..');
 const read = (...p: string[]) => readFileSync(join(ROOT, ...p), 'utf8');
@@ -112,6 +127,42 @@ describe('UX §7.4 reduced motion, effect by effect', () => {
     const cue2 = CUE2_MOD_E07 | CUE2_SEEKING_LIGHT;
     expect(featureLayers(0, 0, true, out, cue2, { reduced: false }) && out.slice(0, 1).map((p) => p.layer)).toEqual(['light_trail']);
     expect(featureLayers(0, 0, true, out, cue2, { reduced: true })).toBe(0);
+  });
+
+  // Wave 13 (org-ui): the three Phase 5 rows. Each mark is a still keyed to recorded state in both modes; the
+  // proposed "As built" cells name src/render/features.ts featureLayers, trapLoopFrame (and the poses' functions).
+  it('handling arc → static ring with progress ticks: the same quarter still with motion on and off (it reads no clock)', () => {
+    const out: LayerPick[] = [];
+    for (const q of [0, 1, 2, 3]) {
+      const cue3 = CUE3_HANDLING | (q << CUE3_HANDLING_QUARTER_SHIFT);
+      for (const reduced of [false, true]) {
+        for (const pulseOn of [true, false]) {
+          featureLayers(0, 0, true, out, 0, { cue3, reduced, pulseOn });
+          expect(out[0]).toEqual({ layer: 'handling_arc', frame: q });
+        }
+      }
+    }
+  });
+
+  it('trap loop → the holding frame only in reduced motion; with motion on, closing only in a committed hold\'s first second', () => {
+    expect(trapLoopFrame(CUE3_HELD | CUE3_HOLD_CLOSING, false)).toBe(0);
+    expect(trapLoopFrame(CUE3_HELD | CUE3_HOLD_CLOSING, true)).toBe(1);
+    expect(trapLoopFrame(CUE3_HELD, false)).toBe(1);
+    expect(trapLoopFrame(CUE3_HELD, true)).toBe(1);
+    // F03's own trap pose and the native resters' poses are state stills in both modes.
+    expect(trapPoseFrame(2 << CUE3_TRAP_SHIFT)).toBe(1);
+    expect([1, 2, 3].map(dormantPoseFrame)).toEqual([0, 1, 2]);
+  });
+
+  it('glow halo → static bright center: the glow frame while glowing, the dim frame otherwise, in both modes (no pulse)', () => {
+    const out: LayerPick[] = [];
+    for (const reduced of [false, true])
+      for (const pulseOn of [true, false]) {
+        featureLayers(0, 0, true, out, 0, { cue3: CUE3_GLOWER | CUE3_GLOWING, reduced, pulseOn });
+        expect(out[0]).toEqual({ layer: 'glow_center', frame: 1 });
+        featureLayers(0, 0, true, out, 0, { cue3: CUE3_GLOWER, reduced, pulseOn });
+        expect(out[0]).toEqual({ layer: 'glow_center', frame: 0 });
+      }
   });
 
   it('deposit/placement ring → a still ring at full radius for 1 s', () => {

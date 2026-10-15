@@ -60,7 +60,26 @@ export type EventType =
    * detail.why 'contact' | 'target' | 'hunger' | 'taken' | 'rest' | 'division', detail.progress (seconds held).
    * Event ring only.
    */
-  | 'handlingBreak';
+  | 'handlingBreak'
+  /**
+   * Traps (Phase 5 wave 13; SPEC §7.17, §12.3; src/sim/traps.ts): an F03 (TRAP) built its one trap in stage 8,
+   * moving body carbon and nutrient into its reserve. species, birthId, cell of the owner; amount = the carbon
+   * moved; detail.reserveN (the nutrient moved), detail.energy (the energy spent). Event ring only.
+   */
+  | 'trapArmed'
+  /**
+   * Traps (Phase 5 wave 13): an armed trap caught a target in its owner's cell in stage 5. cause
+   * R.HELD_IN_TRAP; the owner's species, birthId, cell; detail.target (the held organism's birthId),
+   * detail.targetSpecies (species index). Event ring only (org-ui decides what drives a visual).
+   */
+  | 'trapHold'
+  /**
+   * Traps (Phase 5 wave 13): a hold ended. The owner's species, birthId, cell; detail.target (birthId),
+   * detail.why 'timer' (8 s, stage 8) | 'targetDied' (the held organism died) | 'ownerDied' (the owner died;
+   * the target is released alive in place) | 'removed' (a capture took one end), detail.seconds (the hold time,
+   * to the tick). Event ring only.
+   */
+  | 'trapRelease';
 
 export interface SimEvent {
   readonly id: number;

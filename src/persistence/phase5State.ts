@@ -11,7 +11,7 @@
  * Nothing in the shipped content or the v1.0 corpus uses a light cycle, drying or any Phase 5 store (CT §8.1),
  * so these refusals reject nothing a real save holds.
  */
-import { CELL_COUNT, CHANNEL_ORGANISM_TICKS } from '@sim/constants';
+import { CELL_COUNT, CHANNEL_ORGANISM_TICKS, TRAP_COOLDOWN_SECONDS, TRAP_HOLD_SECONDS } from '@sim/constants';
 import { edgeStoreProblem } from '@sim/barriers';
 import { deviceStoreProblem } from '@sim/devices';
 import { emptyValueOf, FLAG, LIFE_ACTIVE, type ColumnName } from '@sim/entities';
@@ -19,10 +19,11 @@ import { isFieldId } from '@sim/fields';
 import { base64ToBytes } from '@sim/hash';
 import { decodeSample } from '@sim/sampleSlot';
 import { COLUMNS_ADDED_IN, type WorldState } from '@sim/serialize';
+import { TRAP_TARGETS } from '@sim/traps';
 
 /** What the check needs to know about the dish (all from its own recorded content). */
 export interface Phase5CheckContext {
-  readonly species: readonly { readonly nativeAbilities: readonly string[] }[];
+  readonly species: readonly { readonly id: string; readonly nativeAbilities: readonly string[] }[];
   readonly genomes: readonly { readonly modules: readonly string[] }[];
   readonly modules: readonly { readonly id: string }[];
   readonly systems: readonly string[];
@@ -58,10 +59,17 @@ function organismProblem(get: Row, ctx: Phase5CheckContext): string | null {
   for (const name of ['trapReserveC', 'trapReserveN', 'trapTimer', 'trapCooldown'] as const) {
     if (get(name) < 0) return `An organism's trap ${name === 'trapTimer' ? 'hold time' : name === 'trapCooldown' ? 'wait' : 'reserve'} is negative.`;
   }
-  // computeTotals and sampleTotals do not count a trap reserve yet: e3-traps adds it to both and replaces this rule (D-0108).
-  if (get('trapReserveC') !== 0 || get('trapReserveN') !== 0) return 'A trap holds a food reserve that this version does not count yet.';
   if (get('trapSlot') < -1 || (get('trapSlot') === -1 && get('trapBirthId') !== 0)) return 'A trap names an organism it does not hold.';
   if (get('heldBySlot') < -1 || (get('heldBySlot') === -1 && get('heldByBirthId') !== 0)) return 'An organism names a trap that does not hold it.';
+  // Phase 5 wave 13 (src/sim/traps.ts; D-0124): the reserve is counted by computeTotals and sampleTotals, and
+  // every other trap state exists only once the trap is built (trapReserveC = 0.20 > 0); the hold time lies in
+  // (0, 8) only while holding (released at 8 s in the stage 8 trap step), and the wait lies in [0, 30], never
+  // while holding.
+  const reserveC = get('trapReserveC');
+  const holding = get('trapSlot') >= 0;
+  if (reserveC === 0 && (holding || get('trapTimer') !== 0 || get('trapCooldown') !== 0 || get('trapReserveN') !== 0)) return 'A trap acts without a reserve.';
+  if ((get('trapTimer') !== 0 && !holding) || get('trapTimer') >= TRAP_HOLD_SECONDS) return "A trap's hold time is invalid.";
+  if (get('trapCooldown') > TRAP_COOLDOWN_SECONDS || (get('trapCooldown') > 0 && holding)) return "A trap's wait is invalid.";
   const need = get('handlingNeed');
   if (need < 0) return "An organism's handling time is negative.";
   if (need !== 0 && !has('HANDLING')) return 'An organism is handling prey although it has no handling ability.';
@@ -87,6 +95,12 @@ function organismProblem(get: Row, ctx: Phase5CheckContext): string | null {
     if (get('lifeState') === LIFE_ACTIVE) return 'An active organism is marked as a resting newborn.';
   }
   return null;
+}
+
+/** Whether a trap may hold an organism of species index `sp` (TRAP_TARGETS by ancestor id; CT §3.3). */
+function trapCanHold(ctx: Phase5CheckContext, sp: number): boolean {
+  const def = ctx.species[sp];
+  return def !== undefined && TRAP_TARGETS.includes(def.id);
 }
 
 function climateProblem(name: string, enc: unknown): string | null {
@@ -203,6 +217,7 @@ export function phase5StateProblem(s: WorldState, cols: Readonly<Record<string, 
       if (t === i) return 'A trap holds itself.';
       if (t >= hw || cols.alive![t] !== 1 || cols.birthId![t] !== cols.trapBirthId![i]) return 'A trap holds an organism that is not there.';
       if (cols.heldBySlot![t] !== i || cols.heldByBirthId![t] !== cols.birthId![i]) return 'A trap and the organism it holds do not refer to each other.';
+      if (!trapCanHold(ctx, cols.species![t]!)) return 'A trap holds an organism it cannot catch.';
     }
     const h = cols.heldBySlot![i]!;
     if (h >= 0) {
@@ -213,17 +228,21 @@ export function phase5StateProblem(s: WorldState, cols: Readonly<Record<string, 
 
   // Held sample rows (already decodable: phase3StateProblem checked the sample first).
   if (s.sample) {
-    let rows: readonly { readonly cols: Readonly<Record<ColumnName, number>> }[];
+    let rows: readonly { readonly slot: number; readonly cols: Readonly<Record<ColumnName, number>> }[];
     try {
       rows = decodeSample(s.sample).rows;
     } catch (e) {
       return `The held sample cannot be loaded (${(e as Error).message}).`;
     }
+    // A trap and its held target travel together (Phase 5 wave 13, D-0124): sampleSlot.ts HELD_REFS checks that
+    // each pair leads mutually to another held row; here each row's own trap state and the target's kind.
     for (const r of rows) {
-      // The trap's sample closure (a trap and its prey move together) lands with the trap stage, which replaces this rule.
-      if (r.cols.trapSlot >= 0 || r.cols.heldBySlot >= 0) return 'The held sample holds a trap or a trapped organism.';
       const p = organismProblem((name) => r.cols[name], ctx);
       if (p) return `The held sample cannot be loaded. ${p}`;
+      if (r.cols.trapSlot >= 0) {
+        const t = rows.find((x) => x.slot === r.cols.trapSlot);
+        if (t && !trapCanHold(ctx, t.cols.species)) return 'The held sample cannot be loaded. A trap holds an organism it cannot catch.';
+      }
     }
   }
   return null;

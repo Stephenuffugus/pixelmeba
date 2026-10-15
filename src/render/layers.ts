@@ -31,6 +31,11 @@ const C = {
   sugarHaze: [0xf3, 0xc9, 0x5c],
   // Catalysis dust: the Crumbsmith's deep ochre (palette crumbDeep), where enzyme is converting starch.
   catalysis: [0x9e, 0x72, 0x29],
+  // Grit (Phase 5 wave 13, D-0109/D-0112: procedural, deposit band 7): pale angular mineral specks, each with a
+  // dark slate corner so a speck reads on pale water and gel (the corner) and on dark sediment (the pale face).
+  // Cool grey, not starch's cream nor detritus's brown; measured in tests/render/features-p5.test.ts.
+  gritPale: [0xe9, 0xee, 0xf2],
+  gritEdge: [0x45, 0x52, 0x5c],
   // Phase 5 edge-barrier glyphs (wave 11, src/render/structureLayer.ts): neutral dark outlines, each ≥ 3:1
   // against water, gel and sediment (UX §4.1 essential graphics; tests/render/structure-layers.test.ts).
   // The kind is carried by shape (S01 dotted, S02 slotted, S03 bar or hinge stubs, S04 chevrons), the halo
@@ -112,7 +117,10 @@ export function paintDish(img: ImageData, substrate: Uint8Array, structure: Uint
   }
 }
 
-/** Deposit glyphs from the four 0–255 bands: starch grains, detritus flecks, oil sheen, protein motes. */
+/**
+ * Deposit glyphs from the 0–255 bands: starch grains, detritus flecks, oil sheen, protein motes, sugar haze,
+ * catalysis dust and (Phase 5, band 7) grit specks. Film (band 6) is drawn as atlas tiles, not here.
+ */
 export function paintDeposits(img: ImageData, bands: Uint8Array): void {
   img.data.fill(0);
   const hasSugar = bands.length >= 5 * CELL_COUNT;
@@ -138,6 +146,8 @@ export function repaintDepositCells(img: ImageData, bands: Uint8Array, prev: Uin
   const hasSugar = bands.length >= 5 * CELL_COUNT;
   // The glyph bands only (starch … catalysis): film (band 6, protocol 2) is drawn as atlas tiles, not here.
   const nb = Math.min(bands.length, prev.length, 6 * CELL_COUNT) / CELL_COUNT;
+  // Phase 5 (wave 13): the grit band 7, when both band sets carry it (always 0 in a v1.0 dish).
+  const grit = bands.length >= 8 * CELL_COUNT && prev.length >= 8 * CELL_COUNT ? GRIT_BAND * CELL_COUNT : -1;
   let x0 = GRID_W;
   let y0 = GRID_W;
   let x1 = -1;
@@ -150,6 +160,10 @@ export function repaintDepositCells(img: ImageData, bands: Uint8Array, prev: Uin
         same = false;
         prev[o] = bands[o]!;
       }
+    }
+    if (grit >= 0 && bands[grit + i] !== prev[grit + i]) {
+      same = false;
+      prev[grit + i] = bands[grit + i]!;
     }
     if (same) continue;
     const gx = i % GRID_W;
@@ -174,6 +188,9 @@ export function repaintDepositCells(img: ImageData, bands: Uint8Array, prev: Uin
   return out;
 }
 
+/** Deposit band of grit (protocol 3 DEPOSIT_GRIT_BAND). */
+const GRIT_BAND = 7;
+
 function paintDepositCell(img: ImageData, bands: Uint8Array, i: number, hasSugar: boolean): void {
   const S = DISH_PX_PER_CELL;
   const starch = bands[i]!;
@@ -182,7 +199,8 @@ function paintDepositCell(img: ImageData, bands: Uint8Array, i: number, hasSugar
   const prot = bands[3 * CELL_COUNT + i]!;
   const sugar = hasSugar ? bands[4 * CELL_COUNT + i]! : 0;
   const cat = bands.length >= 6 * CELL_COUNT ? bands[5 * CELL_COUNT + i]! : 0;
-  if ((starch | det | oil | prot | sugar | cat) === 0) return;
+  const grit = bands.length >= 8 * CELL_COUNT ? bands[GRIT_BAND * CELL_COUNT + i]! : 0;
+  if ((starch | det | oil | prot | sugar | cat | grit) === 0) return;
   const cx = (i % GRID_W) * S;
   const cy = Math.floor(i / GRID_W) * S;
   for (let y = 0; y < S; y++) {
@@ -197,6 +215,23 @@ function paintDepositCell(img: ImageData, bands: Uint8Array, i: number, hasSugar
       // Catalysis dust over everything: bright specks, denser where more starch was converted.
       if (cat > 0 && cosmetic(i * 16 + k, 23) < 0.02 + (cat / 255) * 0.08) put(img, cx + x, cy + y, C.catalysis);
     }
+  }
+  if (grit > 0) paintGrit(img, cx, cy, i, grit);
+}
+
+/**
+ * Grit specks (Phase 5 wave 13; D-0109/D-0112 "the grit glyph is procedural"): angular two-pixel specks, a pale
+ * face with its dark corner below and to the right, more of them where more grit lies (1 at the lowest band, up
+ * to 3). Positions come from the cosmetic hash, so a cell's glyph is stable; drawn over the other deposits.
+ */
+function paintGrit(img: ImageData, cx: number, cy: number, i: number, grit: number): void {
+  const S = DISH_PX_PER_CELL;
+  const n = grit >= 170 ? 3 : grit >= 85 ? 2 : 1;
+  for (let k = 0; k < n; k++) {
+    const x = Math.floor(cosmetic(i * 4 + k, 29) * (S - 1));
+    const y = Math.floor(cosmetic(i * 4 + k, 31) * (S - 1));
+    put(img, cx + x, cy + y, C.gritPale);
+    put(img, cx + x + 1, cy + y + 1, C.gritEdge);
   }
 }
 

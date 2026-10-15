@@ -20,7 +20,8 @@ import { join } from 'node:path';
 import { PNG } from 'pngjs';
 import { describe, expect, it } from 'vitest';
 import { SPRITES } from '../../art/src/index';
-import { ATLAS_FEATURE_LAYERS, FEATURE_LAYERS, PHASE5_FEATURE_LAYERS, type AtlasFeatureLayerId, type FeatureLayerDef } from '../../art/src/layers/modules';
+import { ATLAS_FEATURE_LAYERS, FEATURE_LAYERS, type AtlasFeatureLayerId, type FeatureLayerDef } from '../../art/src/layers/modules';
+import { FEATURE_LAYER_IDS } from '../../src/render/features';
 import { P } from '../../art/src/palette';
 import type { Px } from '../../art/src/px';
 import { LARGE_REQUIRED, type AnimName, type SpriteDef } from '../../art/src/sprite';
@@ -248,10 +249,12 @@ describe('each UX §6.1 accent is only in the part UX §6.3 names (D-0046 "a col
 describe('effect marks map to recorded state (UX §6.5 "handling arc, trap loop", §7.2 handling/held)', () => {
   const dist = (x: number, y: number) => Math.hypot(x + 0.5 - 8, y + 0.5 - 8);
 
-  it('are packed after stage 1\'s Phase 5 marks with their EFFECT_MARKS counts; the renderer vocabulary is unchanged', () => {
-    expect(PHASE5_FEATURE_LAYERS.map((l) => l.id)).toEqual(['glow_center', 'jacket_rim', 'mode_half', 'handling_arc', 'trap_loop']);
+  it('are packed after stage 1\'s Phase 5 marks with their EFFECT_MARKS counts; the renderer draws them since wave 13', () => {
+    // Re-pinned in wave 13 (org-ui, D-0109/D-0112): the marks moved from PHASE5_FEATURE_LAYERS into
+    // FEATURE_LAYERS (the renderer's vocabulary), last and in the same order, so no atlas frame moved.
+    expect(FEATURE_LAYERS.slice(-5).map((l) => l.id)).toEqual(['glow_center', 'jacket_rim', 'mode_half', 'handling_arc', 'trap_loop']);
     expect(ATLAS_FEATURE_LAYERS.map((l) => l.id).slice(-2)).toEqual(['handling_arc', 'trap_loop']);
-    expect(FEATURE_LAYERS.map((l) => l.id)).not.toContain('handling_arc');
+    expect(FEATURE_LAYER_IDS.slice(-2)).toEqual(['handling_arc', 'trap_loop']);
     expect(EFFECT_MARKS).toEqual({
       handling_arc: { frames: 4, states: 'handling quarters 1–4', ability: 'HANDLING', drawnOn: expect.stringContaining('handlingProgress / handlingNeed') as string },
       trap_loop: { frames: 2, states: 'closing, holding', ability: 'TRAP', drawnOn: expect.stringContaining('heldBySlot') as string },

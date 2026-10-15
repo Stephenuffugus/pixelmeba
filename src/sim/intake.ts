@@ -42,6 +42,7 @@ import { markField } from './transport';
 import { subtractPool } from './ledger';
 import { edibleFilmAt, filmWeight, orderedFilmRequest, weightedFilmRequest } from './film';
 import { commitHostDrains, reserveHostDrains } from './parasites';
+import { commitTrapDrains, reserveTrapDrains, trapHoldsTarget, trapSpeciesOf } from './traps';
 import { debrisRequest } from './debrisFeeder';
 import type { Profile } from './phenotype';
 import { lowLightResponse, MODE_PHOTO } from './mixotrophy';
@@ -207,6 +208,9 @@ function intakeBody(world: World): void {
   seen.tick = world.tick;
   // Host drains are reserved before any ordinary request (SPEC §3.2 row 6, §6.5; parasites.ts).
   reserveHostDrains(world);
+  reserveTrapDrains(world); // Phase 5 wave 13 (traps.ts): F03 drains its held P04 like a host drain (SPEC §6.5)
+  // F03 skips broth while draining (SPEC §6.5): TRAP species by index, null in a world without one.
+  const trapSp = trapSpeciesOf(world);
   // Shell builders by species index (E2-SHELLS). A world without one never reads silicate below.
   const anyShell = buildShellTable(world);
   const silicate = world.fields.silicate;
@@ -269,6 +273,8 @@ function intakeBody(world: World): void {
       continue;
     }
     const foods = prof.foods;
+    // "Draining" = holding a valid target at the start of stage 6 (D-0124): no broth request this tick.
+    const skipBroth = trapSp !== null && trapSp[sp.idx] === 1 && trapHoldsTarget(world, i);
     if (foods.length === 0) {
       // H3 (Phase 5 wave 12): a meal-less predator in an open handling attempt shows it is holding on.
       if (sp.isPredator) c.limitCode[i] = c.handlingNeed[i]! > 0 ? R.PRED_HANDLING_IN_PROGRESS : R.PRED_NO_PREY;
@@ -279,7 +285,7 @@ function intakeBody(world: World): void {
       let rem = budget;
       for (let k = 0; k < foods.length && rem > 0; k++) {
         const f = world.fields[foods[k]!];
-        if (!f) continue;
+        if (!f || (skipBroth && foods[k] === 'broth')) continue;
         const P = f[cell]!;
         if (P <= 0) continue;
         const r = Math.min(rem * availability(P), P);
@@ -294,7 +300,7 @@ function intakeBody(world: World): void {
       let anyPresent = false;
       for (let k = 0; k < foods.length; k++) {
         const f = world.fields[foods[k]!];
-        if (!f || f[cell]! <= 0) continue;
+        if (!f || f[cell]! <= 0 || (skipBroth && foods[k] === 'broth')) continue;
         anyPresent = true;
         W += w[k] ?? 0;
       }
@@ -313,7 +319,7 @@ function intakeBody(world: World): void {
       // redistributed once, proportionally (D03 §5). Availability still scales each request.
       for (let k = 0; k < foods.length; k++) {
         const f = world.fields[foods[k]!];
-        if (!f) continue;
+        if (!f || (skipBroth && foods[k] === 'broth')) continue;
         const P = f[cell]!;
         const wk = w[k] ?? 0;
         if (P <= 0 || wk <= 0) continue;
@@ -540,6 +546,7 @@ function intakeBody(world: World): void {
 
   // Reserved host drains commit after the ordinary commit (their products are not consumed this stage).
   commitHostDrains(world);
+  commitTrapDrains(world); // Phase 5 wave 13 (traps.ts), after the host drains
 
   if (anyConsumed) {
     markField(world, 'co2');

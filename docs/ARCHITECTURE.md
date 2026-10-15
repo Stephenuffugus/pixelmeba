@@ -294,6 +294,59 @@ without the ability; the fence is unchanged):
   events). Constants: LOW_LIGHT_SATURATION 0.3, MODE_PHOTO_LIGHT 0.35, MODE_SUGAR_LIGHT 0.25, RADIUS_CAPTURE_DISTANCE 1,
   HANDLING_JACKET_BASE_SECONDS 1, HANDLING_JACKET_SECONDS_PER_COVERAGE 3, JACKET_COVERAGE_FRACTION 0.1.
 
+As built, Phase 5 wave 13 (P5.5 F03 traps and E11; D-0124, D-0125; `src/sim/traps.ts`, `jacket.ts`, `contacts.ts`,
+`intake.ts`, `maintenance.ts`, `structures.ts`, `actions.ts`, `movement.ts`, `births.ts`, `phenotype.ts`, `ledger.ts`,
+`sample.ts`, `sampleSlot.ts`, `events.ts`, `constants.ts`). Nothing is enabled (D-0104); a world without a TRAP species
+or an E11 carrier reads no trap or jacket column in any stage (WeakMap tables keyed on `world.species`, null without
+the ability; `worldHasTraps` once per stage 7; the fence is unchanged):
+- **The trap state is derived, not stored.** From the existing columns, as `cue3Of` does: none (reserve 0), armed
+  (reserve > 0, no target, cooldown 0), holding (trapSlot ≥ 0, with trapBirthId and the target's heldBySlot /
+  heldByBirthId mutual), cooldown (trapCooldown > 0). The prey is `TRAP_TARGETS = ['P04']` by ancestor id. Each F03
+  builds one trap, once.
+- **Stage 8 arm** (native action TRAP, id 7, after RIVALRY; Active only): E ≥ 50, B ≥ 1.3·B0' and B − 0.2 ≥ B0', all
+  inclusive; moves 0.20 C (and N·0.2/B) from the owner's body into trapReserveC/N, spends 8 E under 'construction';
+  'trapArmed'. **Stage 5 capture** (`trapCaptures`, right after the predation claims, before parasite attachment):
+  each armed owner takes the nearest Active, not-held P04 in its own cell (also checked by the target's centre cell),
+  ties to the lower birthId; competing owners resolve by det(seed, 'contact', tick, KIND_TRAP 5, owner birthId), then
+  the lower birthId; 'trapHold'. **Stage 6 drain** (`reserveTrapDrains` / `commitTrapDrains`, beside the host-drain
+  calls; X02 rules, D02 392): C = min(drainRate·DT, B) from the held P04 (0.003 per tick), the owner gains 0.5C B,
+  0.05C N and 30C E (capped), the target's cell gets 0.3C CO2, 0.2C metabolite and the nutrient balance; a holding
+  owner requests no broth (gated per world). **Stage 7**: the drain death (the P04 strictly below 0.25 × its starting
+  body) after the parasite drain death; `killEntity` and `consumePrey` call `releaseTrapOnRemoval` (the owner's reserve
+  to detritus in its cell on any removal; a held target is freed alive in place). **Stage 8 step** (`trapStep`, T5,
+  after `jacketPass` and before the fungal transport pass): trapTimer += DT; release at stage 8 of the 80th held tick
+  (≥ 8 s − 1e-9, 'trapRelease' why 'timer'); a cooldown counts down by DT and snaps to 0 at ≤ 1e-9. Every end of a
+  hold (timer, target died, removed) starts the 30 s cooldown. **Stage 9**: a held organism cannot divide (T1,
+  DIV_BLOCK_STATE); a dividing owner keeps the hold on the retained daughter (T2 re-keys heldByBirthId). Stage 4: a
+  held organism does not move and its decision timer is frozen (T3, right after the life-state override).
+  Timeline: armed A, held A+1, 80 drains A+1…A+80, released at stage 8 of A+80, cooldown 0 at A+380, caught again at
+  A+381.
+- **The release-tick scratch (D-0125 constraint).** A cooldown started in a tick first counts down at the next tick's
+  stage 8, whatever stage ended the hold (so every release is followed by exactly 300 capture-free ticks). traps.ts
+  keeps the release tick in `releaseTickByWorld`, a per-world WeakMap that is never saved or iterated. This is correct
+  only because every release happens inside `step()` before that tick's stage 8 (stages 5 and 7) and saves happen only
+  between ticks. **Any future path that ends a hold outside `step()` or after stage 8 (a remove tool, a lineage cull,
+  an `applyNow` edit, a stage-9 death) must replace the scratch with saved state in the same change**; otherwise a
+  reload diverges one tick later (cooldown 30 against 29.9).
+- **Ledger and samples.** trapReserveC/N enter `computeTotals` and `sampleTotals` as +0 terms (`trapC`, `trapN`
+  breakdown keys; v1.0 sums are bit-identical). Both trap pairs join `sample.ts` REF_COLUMNS and `sampleSlot.ts`
+  HELD_REFS (not LINK_REFS): a trap and its held P04 are one ownership unit through Take, Transfer, Cancel and
+  Discard (SPEC §10.5), and nothing is released by a sample move.
+- **E11, the mineral jacket (stage 8, action id 11, after E10).** `jacketRequest` skips in order: no silicate system or
+  field, held, remaining E < 15 (15 itself builds), full (deficit = 0.10 × current B − jacket ≤ 0); otherwise it
+  requests min(0.005 · B0' · DT, deficit), cut to what the energy can pay, through `requestMineral` (reserves energy
+  only, never biomass). `jacketPass` (from `stageStructures`, once per tick): requests in canonical order (cell, slot,
+  submission), one silicate snapshot, per-cell proportional scaling when a cell's requests exceed its headroom; jacket
+  += a, silicate −= a, 10 E per accepted mineral under 'construction', the rest of the reserve returned; a scaled cell
+  (or one a float subtraction left below 0) is pinned to exactly 0 with the dust (≤ 1e-12, else a throw) in
+  roundoff.m. Coverage c is `jacketCoverage(jacket, B)` everywhere (speed, handling need, the cue band, the inspector).
+  Stage 4 scales only the per-tick displacement by (1 − 0.20c), and only when the profile has E11 and a jacket exists
+  (an organism without E11 evaluates the old `prof.speed * DT` exactly). **The SPEC §9.19 reconcile** runs in stage 9's
+  per-daughter loop after placement: a daughter without E11 drops her half of the jacket as grit in her own cell.
+- **Events.** 'trapArmed', 'trapHold' (cause HELD_IN_TRAP) and 'trapRelease' {why: timer | targetDied | ownerDied |
+  removed, seconds (rounded to the tick)} stay in the event ring. HELD_IN_TRAP is never written to the reason column:
+  the inspector derives "Caught in a trap." from heldBy.
+
 ## 6. Determinism primitives
 ```ts
 // 32-bit mixer (murmur3 fmix / splitmix32 style) over canonical encoding of args
@@ -653,6 +706,21 @@ As built, Phase 5 wave 11 (protocol 3, the one Phase 5 bump; D-0102, D-0107, D-0
   and birthId, transfers by birthId); `gates` (one `ProbeGate` per barrier edge touching a region: `sinceStart`
   and the change of `world.gateTally` over the window). `WORLD_GATES` is the objectives' default GateReading.
 
+As built, Phase 5 wave 13 (protocol 3 refinements, no version, stride or band change; D-0124, D-0125;
+`src/worker/protocol.ts`, `snapshot.ts`):
+- **E_CUE3 additions** (`cue3Of`): CUE3_HANDLING_QUARTER (2 bits at shift 13, only with CUE3_HANDLING:
+  min(3, max(0, ⌈4 × progress / need⌉ − 1)), D-0112); CUE3_HOLD_CLOSING (1<<15, only with CUE3_HELD, while the
+  holding trap's trapTimer ≤ 1 s, `HOLD_CLOSING_SECONDS`: the first second of a committed hold); CUE3_GLOWER (1<<16,
+  Profile.glow present: native SIGNAL_GLOW or a recorded E02). The jacket band now reads `jacketCoverage` (0 at B ≤ 0;
+  unreachable for a living organism). Every value stays below 2^24 (exact in Float32); a v1.0 dish packs E_CUE3 0.
+- **EntityInspect** gains optional `trap` (traps.ts `trapView`: state, reserveC/N, target, heldSeconds, cooldownLeft),
+  `heldBy` (`heldView`: owner, heldSeconds, drained = the owner's intakeLastSecond), `handling`, `beingHandled`
+  (derived from each handler's valid preySlot / preyBirthId), `mode` {mode, light}, `jacket` (`jacketView`), `signal`
+  {sensed, onThreshold, offThreshold, dwellSeconds, glowing}, `secretion` {code, bits, refusalOf} and `rival` {amount,
+  exposure, totalExposure, growthFactor, damagePerSecond}; `diet.sugarSources.inLight` (A04) only when non-empty. A handler mid-attempt reports predation code
+  PRED_HANDLING_IN_PROGRESS. Every new key is absent on a v1.0 dish: tests/worker/inspect-p5-v1-golden.json (written by
+  the HEAD 3daebb2 code) deep-equals every payload of five v1.0 dishes.
+
 ## 8. Snapshots
 Published ≤ 10/s (adaptive under load). Contents: `renderList` as a packed `Float32Array`
 [entityIndex, speciesIdx, x, y, heading, scale/sizeFactor, stateFlags, cueBits] per living
@@ -729,6 +797,19 @@ run from 12 px per cell up and the selected gate's badge at every zoom, on a con
 in `badgesG` just above the device particles; redrawn on a geometry, selection or zoom-band change, never per tick.
 The device tile keeps its 13 frames (s05, s07 and s08_0–3 redrawn; every other atlas frame byte-identical; atlas
 exportHash 08fb56e6…, 1691 frames, 1024 × 2048).
+
+As built, Phase 5 wave 13 (D-0124, D-0125; `src/render/features.ts`, `layers.ts`, `renderer.ts`;
+`art/src/layers/modules.ts`): `FEATURE_LAYERS` (and the renderer's `FEATURE_LAYER_IDS`) append GLOW_CENTER,
+JACKET_RIM, MODE_HALF, HANDLING_ARC and TRAP_LOOP (`PHASE5_FEATURE_LAYERS` removed; no pixel moved, the atlas
+unchanged). Each mark is drawn only from its E_CUE3 bits, in priority order (MAX_UNSELECTED_MARKS 2; a selected
+organism shows all): trap_loop (CUE3_HELD; frame 0 closing with CUE3_HOLD_CLOSING, else 1 holding; reduced motion
+holding only, `trapLoopFrame`), handling_arc (frame = the recorded quarter), glow_center (CUE3_GLOWER or CUE3_MOD_E02;
+frame 1 while glowing, else 0), mode_half (frame 0 Photo, 1 Sugar, none at mode 0), jacket_rim (frame = band), then
+the v1.0 order unchanged. Not marks: F03's trap is its own overlay over the mask tile (`trapPoseFrame`: Open, Holding,
+Cooldown from the CUE3 trap state); B12, P08 and F04's resting poses follow the life state (`dormantPoseFrame`); A02 /
+P05 shells are body art. **The grit glyph** (deposit band 7) is procedural in layers.ts (`paintGrit`): 1–3 pale angular
+specks with a dark slate corner by band (gritPale #e9eef2, gritEdge #45525c; each speck has a ≥ 3:1 part on every
+substrate); a v1.0 band set paints the HEAD pixels. The share picture (`picture.ts`) does not draw grit yet (P5.8).
 
 ## 10. Art and audio pipelines
 
@@ -1154,6 +1235,19 @@ deterministically. A non-zero metabolicMode needs MIXOTROPHY; mode 0 (a tick-0 f
 integration IMPLEMENTED_NATIVE_ABILITIES also lists DETRITUS_FALLBACK, HANDLING, LOW_LIGHT_CURVE, MIXOTROPHY and
 RADIUS_CAPTURE (22 abilities).
 
+As built, Phase 5 wave 13 (D-0124, D-0125; `src/persistence/phase5State.ts`, `src/sim/sampleSlot.ts`): the trap rules,
+each refused with " Nothing was loaded.": "A trap acts without a reserve." (a target, timer, cooldown or reserve N
+while reserve C is 0); "A trap's hold time is invalid." (a timer without a target, or ≥ 8 s); "A trap's wait is
+invalid." (a cooldown above 30 s, or a cooldown while holding); "A trap holds an organism it cannot catch." (the held
+organism is not the trap's prey, P04); non-mutual pairs as before. Held sample rows carry the same rules ("The held
+sample cannot be loaded. <rule>") and the closure ("… (a held trap and its target do not refer to each other)."),
+replacing the old "held sample holds a trap" refusal; the "reserve not counted yet" refusal is dropped (the reserve is
+in the totals). A held organism outside its owner's cell is accepted (a transfer can round a position across a cell
+edge). Two states the simulation never writes at a tick boundary load and run consistently (any positive reserve; a
+holding pair with timer 0). The jacket rule is still D-0118's (silicate system required, E11 not); it tightens at the
+organism flip to refuse jacketMineral > 0 on a genome without E11 (D-0125). IMPLEMENTED_NATIVE_ABILITIES gains TRAP at
+the wave 13 integration (23: every NativeAbility is implemented), so a dish recording F03 loads.
+
 ## 12. Android (Capacitor)
 - `appId com.lucidwinds.pixelmeba`, `appName Pixelmeba`, `webDir dist`, `android.allowMixedContent
   false`, no cleartext, no network permission beyond what Capacitor needs (none for this app).
@@ -1296,3 +1390,19 @@ among 80 prey about 0.20 ms, a v1.0 predator dish (60 P01/P02 among 400 B01) abo
   `keyboard`, `share`, `full-journey`; run at 360×800, 800×360, 1440×900; axe‑core on each
   screen. No animation screenshot assertions.
 - Determinism CI job: run `sim-run` twice and compare hashes; run 1× vs 4× vs save/reload.
+
+As built, Phase 5 wave 13 (the relationship matrix for Phase 5; D-0124, D-0125; `tools/relationship-matrix.ts`,
+`tests/helpers/tables.ts`, `tests/fixtures/relationship-matrix.test.ts`, `relationship-matrix-p5.test.ts`): each row is
+one tiny world observed through the simulation's own stages, its expectation parsed from CONTENT_TABLES / SPEC by
+tables.ts (never from content JSON). `phase5Registry()` = the shipped lists plus the CT §1.1 phase-5 species, E02 and
+E11, M02, M06, M07, M08, M12 and the systems rivalry, signals and silicate (`allowUnimplemented`); the CLI takes
+`--registry shipped|phase5` (phase5 writes docs/reports/relationships-g5-preflip.md). Four new families: **handling**
+(P10 × its prey: capture on contact tick k and not before, a break at k − 1 resets, jacketed prey at c 0.5 / 0.125 →
+ticks 25 / 14), **radius** (P06 at 0.9 cells captures iff listed, never at 1.0001; other predators never at 0.9),
+**traps** (an armed F03 × each organism in its cell: held iff P04; not from the next cell; the 80-tick hold, 300-tick
+cooldown, recapture timeline) and **growth** (A02 / P05 bind exactly 0.10 silicate per new biomass and stop at 0; 32
+others unaffected; E11 builds from silicate, never grit). The existing families gain the Phase 5 rows (A04 modes, the
+A03 curve, P09 meal-first, F03 broth skip, V02 film ≥ 0.10, X02 hosts and drain, RIVAL targets and B13's trigger, E02 /
+E11 × 38 species, the five materials). Under the phase5 registry 2265 / 2265 rows pass; the shipped registry keeps
+exactly the v1.0 711 rows, pinned by `SHIPPED_V1` (rows digest, family counts, skipped list), re-recorded at the
+organism flip. Rows for v1.0 subjects that need a Phase 5 subject appear only when one is enabled.

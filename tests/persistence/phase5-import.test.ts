@@ -130,7 +130,10 @@ describe('a dish that records the Phase 5 systems loads its valid schema 5 state
     c.trapBirthId[slot.f03] = c.birthId[slot.p04]!;
     c.heldBySlot[slot.p04] = slot.f03;
     c.heldByBirthId[slot.p04] = c.birthId[slot.f03]!;
-    // The trap reserve stays 0: computeTotals does not count it until e3-traps (D-0108).
+    // Wave 13 (e3-traps, D-0124): a holding trap has its reserve (computeTotals counts it now); a hold without one
+    // is unreachable and refused ("A trap acts without a reserve.").
+    c.trapReserveC[slot.f03] = 0.2;
+    c.trapReserveN[slot.f03] = 0.02;
     c.trapTimer[slot.f03] = 1.5;
     const { world } = await loadSaveFile(await saved(w));
     expect(stateHash(world)).toBe(stateHash(w));
@@ -153,6 +156,8 @@ describe('a dish that records the Phase 5 systems loads its valid schema 5 state
 
   it('a trap cooling down without a target, and a shutter, load', async () => {
     const { w, slot } = dish();
+    // Wave 13 (e3-traps, D-0124): a cooling trap was built, so it has its reserve.
+    w.ents.cols.trapReserveC[slot.f03] = 0.2;
     w.ents.cols.trapCooldown[slot.f03] = 10;
     await expect(loadSaveFile(await saved(w))).resolves.toBeDefined();
   });
@@ -294,13 +299,16 @@ describe('the import refuses Phase 5 organism state the dish’s rules could not
     ['a negative trap hold time', ({ w, slot }) => (w.ents.cols.trapTimer[slot.f03] = -1), /^An organism's trap hold time is negative\./],
     ['a negative trap wait', ({ w, slot }) => (w.ents.cols.trapCooldown[slot.f03] = -1), /^An organism's trap wait is negative\./],
     ['a trap birthId without a slot', ({ w, slot }) => (w.ents.cols.trapBirthId[slot.f03] = 3), /^A trap names an organism it does not hold\./],
-    // D-0108: the conservation totals do not count a trap reserve until e3-traps, which replaces this rule.
-    ['a trap reserve (carbon)', ({ w, slot }) => (w.ents.cols.trapReserveC[slot.f03] = 0.4), /^A trap holds a food reserve that this version does not count yet\./],
-    ['a trap reserve (nutrient)', ({ w, slot }) => (w.ents.cols.trapReserveN[slot.f03] = 0.04), /^A trap holds a food reserve that this version does not count yet\./],
+    // Wave 13 (e3-traps, D-0124): the totals count the reserve, so the D-0108 "does not count yet" rule is gone; a
+    // reserve's nutrient without its carbon is unreachable (the arm moves both). tests/persistence/trap-import.test.ts
+    // holds the other new trap refusals and the accepted states.
+    ['a trap reserve (nutrient) without its carbon', ({ w, slot }) => (w.ents.cols.trapReserveN[slot.f03] = 0.04), /^A trap acts without a reserve\./],
     [
       'a trap holding itself (D-0108)',
       ({ w, slot }) => {
         const c = w.ents.cols;
+        c.trapReserveC[slot.f03] = 0.2; // wave 13: with its reserve, so the self-hold rule is what refuses it
+        c.trapTimer[slot.f03] = 0.1;
         c.trapSlot[slot.f03] = slot.f03;
         c.trapBirthId[slot.f03] = c.birthId[slot.f03]!;
         c.heldBySlot[slot.f03] = slot.f03;
@@ -321,6 +329,8 @@ describe('the import refuses Phase 5 organism state the dish’s rules could not
     [
       'a trap whose target does not point back',
       ({ w, slot }) => {
+        w.ents.cols.trapReserveC[slot.f03] = 0.2; // wave 13: a built trap, so the pair rule is what refuses it
+        w.ents.cols.trapTimer[slot.f03] = 0.1;
         w.ents.cols.trapSlot[slot.f03] = slot.p04;
         w.ents.cols.trapBirthId[slot.f03] = w.ents.cols.birthId[slot.p04]!;
       },
@@ -329,6 +339,8 @@ describe('the import refuses Phase 5 organism state the dish’s rules could not
     [
       'a trap naming another birth',
       ({ w, slot }) => {
+        w.ents.cols.trapReserveC[slot.f03] = 0.2; // wave 13: a built trap, so the pair rule is what refuses it
+        w.ents.cols.trapTimer[slot.f03] = 0.1;
         w.ents.cols.trapSlot[slot.f03] = slot.p04;
         w.ents.cols.trapBirthId[slot.f03] = 999;
       },
@@ -405,8 +417,10 @@ describe('the import refuses a held sample with a trap, a held organism or impos
   });
 
   for (const [name, which, edit, re] of [
-    ['a held trap', 'f03', { trapSlot: 2, trapBirthId: 5 }, /^The held sample holds a trap or a trapped organism\./],
-    ['a held trapped organism', 'p04', { heldBySlot: 4, heldByBirthId: 5 }, /^The held sample holds a trap or a trapped organism\./],
+    // Wave 13 (e3-traps, D-0124): a trap and its target travel together, so the D-0108 "holds a trap" refusal is
+    // the closure: a held pair whose other end the sample does not hold is refused (sampleSlot.ts HELD_REFS).
+    ['a held trap', 'f03', { trapReserveC: 0.2, trapTimer: 0.1, trapSlot: 2, trapBirthId: 5 }, /^The held sample cannot be loaded \(a sample row is linked to an organism the sample does not hold\)\./],
+    ['a held trapped organism', 'p04', { heldBySlot: 4, heldByBirthId: 5 }, /^The held sample cannot be loaded \(a sample row is linked to an organism the sample does not hold\)\./],
     ['a held organism glowing without the ability', 'spare', { glowState: 1 }, /^The held sample cannot be loaded\. An organism is glowing although it cannot glow\./],
     ['a held organism with an unknown feeding mode', 'a04', { metabolicMode: 9 }, /^The held sample cannot be loaded\. An organism has an unknown feeding mode\./],
   ] as const) {

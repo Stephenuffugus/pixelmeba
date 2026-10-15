@@ -186,3 +186,20 @@ this plan and the relevant slice of g5-briefs.md, not the whole spec.
   guards the move. The grit glyph is procedural (src/render).
 - **Phase 7 (P7.2, E14 dispersal):** CT §5.3's "fungal disperser" is Medium; `classOf` has no rule for it yet (D-0108).
 - **Art polish:** V02's glyph reads as a spiked capsid more than UX §6.3's "lace glyph" (D-0109).
+- **P5.8 polish (wave 15), the share picture's grit (D-0125):** src/render/picture.ts has no grit (deposit band 7)
+  branch. In its deposit loop read `grit = deposits.length >= 8 * CELL_COUNT ? deposits[7 * CELL_COUNT + i]! : 0`, add
+  it to the early `=== 0` skip, and paint layers.ts `paintGrit`'s specks scaled to px (gritPale #e9eef2, gritEdge
+  #45525c; 1/2/3 specks at bands ≥ 1/85/170) from a cosmetic key distinct from 13/17/19/23; one picture test: a v1.0
+  band set paints byte-identical pixels (docs/reports/reviews/g5-wave-13/org-ui-fix1.md item 4).
+- **Every wave that ends a trap hold (D-0125, traps.ts `releaseTickByWorld`):** the release-tick scratch is unsaved and
+  is correct only because every release happens inside `step()` before that tick's stage 8 (stages 5 and 7) and saves
+  happen only between ticks. Any new path that ends a hold outside `step()` or after stage 8 (a remove tool, a lineage
+  cull, an `applyNow` edit, a stage-9 death) must replace the scratch with saved state in the same change, with a
+  save → load → step round trip at that release (repro: docs/reports/reviews/g5-wave-13/saves-verify-e3-traps.md).
+- **Wave 13 leftovers (D-0125 integration, 2026-10-15).** (a) P5.8: tools/contrast-audit.ts gains grit rows (grit edge on
+  water 6.28 and gel 6.15, pale face on sediment 3.70) with the picture.ts grit branch. (b) P5.8 or the next inspector owner:
+  INHIBITOR_EXPOSURE is never shown when it is only the suitability reason (predates wave 13). (c) THE ORGANISM FLIP: write
+  the matrix to `--out docs/reports/relationships-g5.md` (relationships-g3.md's manifest line is stale); drop or note the
+  builders' now-redundant vi.mock appends of TRAP/E11 (jacket-saves, jacket-determinism, trap-hooks). (d) Optional import
+  tightening with (c): trapReserveC exactly 0.2 when positive, and a holding pair needs trapTimer > 0 (verifier NITs).
+  (e) G5 gate: fold the earlier owner items (D-0106, D-0111, D-0117 contradiction 2) into EXPANSION_RESPONSE §8.

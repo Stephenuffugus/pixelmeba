@@ -38,6 +38,16 @@ import {
   E_LIFE,
   ENT_STRIDE,
   ID_STRIDE,
+  CUE3_GLOWER,
+  CUE3_GLOWING,
+  CUE3_HANDLING,
+  CUE3_HANDLING_QUARTER_SHIFT,
+  CUE3_HELD,
+  CUE3_HOLD_CLOSING,
+  CUE3_JACKETED,
+  CUE3_JACKET_SHIFT,
+  CUE3_MOD_E02,
+  CUE3_MODE_SHIFT,
 } from '../../src/worker/protocol';
 import { buildInspector, packEntities } from '../../src/worker/snapshot';
 import { FEATURE_LAYER_IDS, featureFrameKey, featureFrameKeys, featureLayers, featureMarkScale, type AtlasFeatureLike, type FeatureLayerId, type LayerPick } from '../../src/render/features';
@@ -165,9 +175,11 @@ describe('P2.1 module visuals and inspector', () => {
       });
     }
     // Every frame of every layer, in all four headings: (1 notch + 4 bands + 3 seam states) and the
-    // Phase 3 layers (foot 1, shade 1, trail 1, granule 2, notches 2, matrix 4, link 1) × 4 headings.
+    // Phase 3 layers (foot 1, shade 1, trail 1, granule 2, notches 2, matrix 4, link 1) × 4 headings, and since
+    // wave 13 (org-ui, D-0109/D-0112: the Phase 5 marks joined the renderer's vocabulary) glow 2, jacket 4,
+    // mode 2, handling arc 4 and trap loop 2 × 4 headings: 80 + 56 = 136 (the atlas's feature-mark frames).
     expect(checked).toBe(4 * FEATURE_LAYERS.reduce((sum, l) => sum + l.frames.length, 0));
-    expect(checked).toBe(80);
+    expect(checked).toBe(136);
   });
 
   it('every mark the renderer can pick is an atlas frame, and each module draws its content visual layer', () => {
@@ -201,6 +213,25 @@ describe('P2.1 module visuals and inspector', () => {
         }
       }
     }
+    // Wave 13: the Phase 5 marks from every E_CUE3 state the worker packs (held/closing, handling quarter,
+    // glower/glowing/E02, mode, jacket band), alone and together, in both motion settings.
+    for (let held = 0; held < 3; held++)
+      for (let q = -1; q < 4; q++)
+        for (let glow = 0; glow < 4; glow++)
+          for (let mode = 0; mode < 3; mode++)
+            for (let jb = -1; jb < 4; jb++)
+              for (const reduced of [false, true]) {
+                const cue3 =
+                  (held >= 1 ? CUE3_HELD : 0) |
+                  (held === 2 ? CUE3_HOLD_CLOSING : 0) |
+                  (q >= 0 ? CUE3_HANDLING | (q << CUE3_HANDLING_QUARTER_SHIFT) : 0) |
+                  (glow & 1 ? CUE3_GLOWER : 0) |
+                  (glow & 2 ? CUE3_GLOWING | CUE3_MOD_E02 : 0) |
+                  (mode << CUE3_MODE_SHIFT) |
+                  (jb >= 0 ? CUE3_JACKETED | (jb << CUE3_JACKET_SHIFT) : 0);
+                const n = featureLayers(0, 0, true, picks, 0, { reduced, cue3 });
+                for (let m = 0; m < n; m++) seen.add(`${picks[m]!.layer}|${picks[m]!.frame}`);
+              }
     for (const lf of seen) {
       const [layer, frame] = lf.split('|') as [FeatureLayerId, string];
       for (let h = 0; h < 4; h++) expect(keys[layer]?.[Number(frame)]?.[h], lf).toBe(featureFrameKey(layer, Number(frame), h));

@@ -7,7 +7,7 @@
 import { FUNGAL_CAP, PHOTO_SUGAR_FRACTION } from '@sim/constants';
 import { R, reasonName } from '@sim/reasons';
 import type { EntityInspect, FamilyAnswer, FamilyMember } from '@worker/protocol';
-import { reasonText } from './reasons';
+import { reasonText, type ReasonContext } from './reasons';
 import { lifeStateWhile } from './modules';
 
 const FOOD_WORDS: Readonly<Record<string, string>> = {
@@ -56,9 +56,13 @@ function sugarSourcesLine(e: EntityInspect, speciesNames: readonly string[]): st
   if (!src || !e.profile.foods.includes('sugar')) return null;
   const parts = ['sugar placed in the dish'];
   const names = (ids: readonly number[]) => ids.map((j) => speciesNames[j]).filter((n): n is string => typeof n === 'string').map(plural);
-  const makers = names(src.makers);
+  // Wave 13: a mixotroph (A04) is a maker only in light, its Photo mode (sugarSources.inLight).
+  const inLight = src.inLight ?? [];
+  const makers = names(src.makers.filter((j) => !inLight.includes(j)));
+  const lightMakers = names(src.makers.filter((j) => inLight.includes(j)));
   const enzyme = names(src.enzyme.filter((j) => j !== e.speciesIdx));
   if (makers.length > 0) parts.push(`${listWords(makers)} (they release sugar as they make food)`);
+  if (lightMakers.length > 0) parts.push(`${listWords(lightMakers)} in light (they release sugar as they make food from light)`);
   if (enzyme.length > 0) parts.push(`${listWords(enzyme.map((n) => `${n}’`))} enzyme (it turns starch into sugar)`);
   return `Sugar here can come from ${listWords(parts)}.`;
 }
@@ -73,6 +77,11 @@ export function dietAnswer(e: EntityInspect, speciesNames: readonly string[]): S
   if (d.metabolism === 'photosynthesis') {
     const share = PHOTO_SUGAR_FRACTION === 0.5 ? 'half' : `${Math.round(PHOTO_SUGAR_FRACTION * 100)} %`;
     lines.push(`As it does, it releases ${share} of the carbon it takes in into the water as sugar that others nearby can eat.`);
+  }
+  if (d.metabolism === 'mixotroph') {
+    // Wave 13 (SPEC §7.10): one mode per tick; in its Photo mode it releases sugar as a photosynthesizer does.
+    const share = PHOTO_SUGAR_FRACTION === 0.5 ? 'half' : `${Math.round(PHOTO_SUGAR_FRACTION * 100)} %`;
+    lines.push(`It uses one mode at a time: in bright light it makes food from light and releases ${share} of the carbon it fixes as sugar; in low light it eats sugar instead.`);
   }
   const predator = d.prey.length > 0 || d.abilities.includes('PREDATION');
   if (predator) {
@@ -120,6 +129,9 @@ export function dietAnswer(e: EntityInspect, speciesNames: readonly string[]): S
  */
 export function leadConstraint(e: EntityInspect): { code: number; value: number } {
   if (e.E <= 0) return { code: R.ENERGY_ZERO, value: 0 };
+  // Wave 13: derived states the simulation never writes as a reason (D-0124): held in a trap, being caught.
+  if (e.heldBy) return { code: R.HELD_IN_TRAP, value: e.heldBy.heldSeconds };
+  if (e.beingHandled && e.beingHandled.length > 0) return { code: R.CAPTURED_HANDLING, value: e.beingHandled[0]!.progress };
   if (e.limitCode !== R.NONE) return { code: e.limitCode, value: e.limitValue };
   if (e.divisionBlockers.length > 0 && e.B >= 1.5 * e.B0) return { code: e.divisionBlockers[0]!, value: 0 };
   if (e.predation) return { code: e.predation.code, value: 0 };
@@ -133,10 +145,25 @@ const pct = (v: number) => `${Math.round(v * 100)} %`;
  * that makes its own food is never said to lack food: its share is food made (m6). With nothing limiting
  * it and split requirements still open, the summary says it is not ready to split yet (m7).
  */
-export function constraintWords(e: EntityInspect, code: number, value: number): { readonly text: string; readonly detail: string } {
+export function constraintWords(e: EntityInspect, code: number, value: number, speciesNames: readonly string[] = []): { readonly text: string; readonly detail: string } {
   if (makesOwnFood(e) && code === R.FOOD_ACCESS_LOW) return { text: 'It is making less food than it could here.', detail: `Food made: ${pct(value)} of its budget.` };
   if (code === R.NONE) return { text: e.divisionBlockers.length > 0 ? 'Doing fine right now. Not ready to split yet.' : reasonText(R.NONE, 'explore'), detail: '' };
-  return { text: reasonText(code, 'explore'), detail: reasonText(code, 'lab', { value }) };
+  return { text: reasonText(code, 'explore'), detail: reasonText(code, 'lab', phase5Context(e, code, value, speciesNames)) };
+}
+
+/**
+ * Wave 13: the measured values behind a Phase 5 code's Lab wording, each from the inspector field that states it
+ * (the held and handling lines read the trap's and the handler's columns; a code without its field falls back to
+ * the recorded value alone).
+ */
+function phase5Context(e: EntityInspect, code: number, value: number, names: readonly string[]): ReasonContext {
+  if (code === R.HELD_IN_TRAP && e.heldBy)
+    return { value: e.heldBy.heldSeconds, need: e.heldBy.holdSeconds, birthId: e.heldBy.ownerBirthId, drained: e.heldBy.drained, speciesName: names[e.heldBy.ownerSpeciesIdx] ?? 'a trap' };
+  const b = e.beingHandled?.[0];
+  if (code === R.CAPTURED_HANDLING && b) return { value: b.progress, need: b.need, birthId: b.predatorBirthId, speciesName: names[b.predatorSpeciesIdx] ?? 'a predator' };
+  if (code === R.PRED_HANDLING_IN_PROGRESS && e.handling) return { value: e.handling.progress, need: e.handling.need };
+  if (code === R.NEIGHBORS_DETECTED && e.signal) return { value: e.signal.sensed, threshold: e.signal.onThreshold };
+  return { value };
 }
 
 /** A requirement for splitting (DIV_* reason codes), not a limit on its life now. */
@@ -170,7 +197,8 @@ function blockerDetail(e: EntityInspect, code: number): string {
     case R.DIV_BLOCK_AGE:
       return `Age ${Math.floor(e.age)} s of ${Math.ceil(e.divisionNeeds.age)} s.`;
     case R.DIV_BLOCK_STATE:
-      return `Can't split while ${lifeStateWhile(e.lifeState)}.`;
+      // Wave 13 (T1, D-0124): a held organism cannot split; the words come from heldBy, its derived state.
+      return `Can't split while ${lifeStateWhile(e.lifeState, e.heldBy !== undefined)}.`;
     case R.DIV_BLOCK_CAPACITY:
       // A fungal segment meets the fungal limit first (FUNGAL_CAP; SPEC §7.2), not the 6,000 organism limit.
       return e.network ? `Fungal segment limit reached (${FUNGAL_CAP.toLocaleString('en-US')} across all fungi). This is a limit of the game, not the ecosystem.` : reasonText(code, 'lab');
@@ -183,15 +211,31 @@ function blockerDetail(e: EntityInspect, code: number): string {
  * "Why did it stop?" — every division blocker with its measured value, plus the strongest current
  * constraint when it is not already one of them. Several at once ⇒ "A few things are slowing it down."
  */
-export function stopAnswer(e: EntityInspect): StopAnswer {
+export function stopAnswer(e: EntityInspect, speciesNames: readonly string[] = []): StopAnswer {
   const items: StopItem[] = e.divisionBlockers.map((code) => ({ code, text: reasonText(code, 'explore'), detail: blockerDetail(e, code) }));
   if (e.limitCode !== R.NONE && !e.divisionBlockers.includes(e.limitCode)) {
-    const w = constraintWords(e, e.limitCode, e.limitValue);
+    const w = constraintWords(e, e.limitCode, e.limitValue, speciesNames);
     items.unshift({ code: e.limitCode, text: w.text, detail: w.detail });
+  }
+  // Wave 13: derived states (never recorded as a reason): caught in a trap, being caught by a handler.
+  if (e.beingHandled && e.beingHandled.length > 0 && !items.some((it) => it.code === R.CAPTURED_HANDLING)) {
+    const w = constraintWords(e, R.CAPTURED_HANDLING, e.beingHandled[0]!.progress, speciesNames);
+    items.unshift({ code: R.CAPTURED_HANDLING, text: w.text, detail: w.detail });
+  }
+  if (e.heldBy && !items.some((it) => it.code === R.HELD_IN_TRAP)) {
+    const w = constraintWords(e, R.HELD_IN_TRAP, e.heldBy.heldSeconds, speciesNames);
+    items.unshift({ code: R.HELD_IN_TRAP, text: w.text, detail: w.detail });
   }
   // m5: at energy 0 the starvation rule takes health every tick; it leads the list.
   if (e.E <= 0) items.unshift({ code: R.ENERGY_ZERO, text: reasonText(R.ENERGY_ZERO, 'explore'), detail: reasonText(R.ENERGY_ZERO, 'lab') });
-  if (e.predation && e.predation.code !== R.NONE) items.push({ code: e.predation.code, text: reasonText(e.predation.code, 'explore'), detail: reasonText(e.predation.code, 'lab') });
+  // The hunting state, once: a code the list already holds (a predator's limitCode is PRED_NO_PREY or, mid-attempt,
+  // PRED_HANDLING_IN_PROGRESS) is not repeated (item keys are codes). A handler's detail is measured from its
+  // handling field (wave 13 fix 1); the v1.0 hunting codes keep their record-free Lab wording.
+  const hunt = e.predation?.code ?? R.NONE;
+  if (hunt !== R.NONE && !items.some((it) => it.code === hunt)) {
+    const detail = hunt === R.PRED_HANDLING_IN_PROGRESS ? constraintWords(e, hunt, 0, speciesNames).detail : reasonText(hunt, 'lab');
+    items.push({ code: hunt, text: reasonText(hunt, 'explore'), detail });
+  }
   const splitOnly = items.length > 0 && items.every((it) => splitRequirement(it.code));
   let title: string;
   if (items.length === 0) title = e.proposalPending ? reasonText(R.DIV_PENDING_PROPOSAL, 'explore') : 'Nothing is holding it back right now. It is ready to split.';

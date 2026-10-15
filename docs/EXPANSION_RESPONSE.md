@@ -905,6 +905,16 @@ commit, counts and notes here: <owner: usability sessions>.
   40. **D‑0089** (visibility; "Owner review: no") Listen to the 16 narration phrases on a device (Settings → Sound → Narration): SpeechSynthesis voices vary.
   41. **D‑0086** (visibility; "Owner review: no") Snapshot bookmarks are limited per device (20 across all dishes), bookmarks per dish (50).
 
+  Phase 5 decisions marked "Owner review: yes" (added as they land; the g5 gate folds in the rest):
+  42. **D‑0125 (1)** NEIGHBORS_DETECTED's Explore line "It senses neighbors." (UX §5.2, canonical, as built) shows for
+      any sensed glow signal ≥ 0.30, also from an M06 dose or the organism's own emission with no neighbour present.
+      Proposed: "It senses glow signal." (the field's own name, as D‑0120 did for RIVAL); the Lab line "Signal {v}
+      (threshold 0.30)." is unchanged.
+  43. **D‑0125 (2)** The Lab wordings org-ui chose (UX §5.2 had no rows): HELD_IN_TRAP "Held by Traplace #12: 3.2 of
+      8 s; drained 0.030 C in the last second."; CAPTURED_HANDLING "Being caught by Needlejaw #7: 0.6 of 1.0 s of
+      contact (resets if contact breaks)."; PRED_HANDLING_IN_PROGRESS "Holding on: 0.6 of 1.0 s of contact (resets
+      if contact breaks)." (Explore: "Caught in a trap.", "Being caught.", "Holding on to its prey.").
+
 - **Owner tasks: the D9 §12 usability gates** (formative, not required for submission; protocol, counts and pass
   marks in PLAY_STORE_CHECKLIST §B9; record results in §7.1 "Usability gates"; a parent or guardian present for every
   child, no accounts, trackers or analytics):

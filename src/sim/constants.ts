@@ -226,3 +226,19 @@ export const HANDLING_JACKET_BASE_SECONDS = 1;
 export const HANDLING_JACKET_SECONDS_PER_COVERAGE = 3;
 /** Jacket coverage c = clamp(jacketMineral / (this × B), 0, 1) (SPEC §9 E11 "target 0.10 per current B"; D04). */
 export const JACKET_COVERAGE_FRACTION = 0.1;
+
+/** F03 Traplace's trap (Phase 5 wave 13, P5.5 E3-TRAPS; SPEC §7.17; CT §12.5; src/sim/traps.ts). The drain rate is F03.json's drainRate (content). */
+/** An Active F03 builds its trap only with E ≥ this (CT §12.5 "trap: E >= 50"; SPEC §7.17). */
+export const TRAP_ARM_MIN_ENERGY = 50;
+/** ... and B ≥ this × B0' (CT §12.5 "B >= 1.3 B0'"; SPEC §7.17). */
+export const TRAP_ARM_MIN_BODY_MULTIPLE = 1.3;
+/** Body carbon moved into the trap reserve (with proportional N) when the trap is built (CT §12.5 "0.20 C"). */
+export const TRAP_RESERVE_C = 0.2;
+/** Energy spent building the trap, ledgered as 'construction' (CT §12.5 "+ 8 E"; D-0124). */
+export const TRAP_ARM_ENERGY = 8;
+/** Seconds a P04 is held (CT §12.5 "hold 8 s"; SPEC §7.17). */
+export const TRAP_HOLD_SECONDS = 8;
+/** Seconds the trap waits after a release before it can catch again (CT §12.5 "cooldown 30 s"; SPEC §7.17). */
+export const TRAP_COOLDOWN_SECONDS = 30;
+/** A held target whose B falls below this × its B0' dies of the drain (SPEC §7.17 "target below 0.25 B0' dies normally"). */
+export const TRAP_TARGET_DEATH_FRACTION = 0.25;

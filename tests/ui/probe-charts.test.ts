@@ -133,7 +133,8 @@ describe('words', () => {
     // (the gate sheet's "Measured since this barrier was placed").
     expect(OBSERVE_TEXT.gateSince('Sugar 3.00')).toBe('Measured since each of these edges was placed: Sugar 3.00');
     expect(OBSERVE_TEXT.gateSince('x')).not.toMatch(/dish began/);
-    expect(gateAmountText([{ field: 'salt', amount: 0.001 }, { field: 'sGlow', amount: 0.5 }])).toBe('Salt < 0.01, Lantern signal 0.50');
+    // Re-pinned in wave 13 (org-ui, D-0120 carry-over): one name per field across screens, sGlow is "Glow signal".
+    expect(gateAmountText([{ field: 'salt', amount: 0.001 }, { field: 'sGlow', amount: 0.5 }])).toBe('Salt < 0.01, Glow signal 0.50');
   });
 
   it('no forbidden word, and never "migrated", "fled" or "chose"', () => {

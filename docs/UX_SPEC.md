@@ -163,6 +163,9 @@ field values, lineage links, capacity flags). Cell inspector and colony panel as
 | RESTING_FOOD_SCARCE | "Resting until conditions change." | "Resting because food stayed scarce {t}s; wakes after 10 s of food and E ≥ 5." |
 | RESTING_DRY | "Resting because it's too dry." | same with moisture |
 | NEIGHBORS_DETECTED | "It senses neighbors." | "Signal {v} (threshold 0.30)." |
+| HELD_IN_TRAP (Phase 5, wave 13) | "Caught in a trap." | "Held by {trap owner} #{n}: {t} of 8 s; drained {c} C in the last second." |
+| CAPTURED_HANDLING (Phase 5, wave 13) | "Being caught." | "Being caught by {predator} #{n}: {p} of {need} s of contact (resets if contact breaks)." |
+| PRED_HANDLING_IN_PROGRESS (Phase 5, wave 13) | "Holding on to its prey." | "Holding on: {p} of {need} s of contact (resets if contact breaks)." |
 | SECRETION_* | "Making enzyme." / "No starch nearby to work on." | activity, cost, substrate |
 | CAPACITY_REACHED | "The dish is full." | "Simulation capacity reached — this is a limit of the game, not the ecosystem." |
 | MIXED_CAUSES | "A few things are slowing it down." | list |
@@ -170,6 +173,14 @@ field values, lineage links, capacity flags). Cell inspector and colony panel as
 Inherited change: "This offspring inherited a different trait." → "Inherited {locus} {±Δ}
 ({ancestor} {a} → {b}); cost: {tradeoff}." Never "adapted", "immune", "superior".
 Death: "It died of {cause}." → "Primary: {cause}; also: {contributors}."
+As built, Phase 5 wave 13 (owner-visible copy note; D-0125, EXPANSION_RESPONSE §8 items 42-43): the three Phase 5 rows
+above are org-ui's wording (this table had no rows for them); the owner reviews them at the g5 gate. Without a measured
+value the Lab lines read "Holding on to its prey (resets if contact breaks)." / "Being caught (resets if contact
+breaks).", never "?". HELD_IN_TRAP is derived from the held organism's trap pair, never written to the reason column;
+its division blocker reads "Can't split while caught in a trap.". NEIGHBORS_DETECTED keeps the canonical "It senses
+neighbors." although it shows for any sensed glow signal ≥ 0.30 (also an M06 dose or the organism's own emission); the
+proposal "It senses glow signal." is an owner item. Field names are one per field across screens: "Rivalry chemical",
+"Glow signal", "Quencher" (`src/ui/strings/fields.ts`).
 
 ### 5.3 Shortcuts
 **What does it eat?** (diet + what is present) · **Why did it stop?** (blockers) · **Where is its
@@ -332,12 +343,12 @@ each with reduced motion on and off). Locomotion is never removed: it is real ve
 | granule pulse (E08), release marks (E09) | static bright granule; static release notches | `src/render/features.ts: featurePulseOn, featureLayers` |
 | trails (E07) | none | `src/render/features.ts: featureLayers` |
 | trails (P07) | none — not in v1.0 (Phase 5 species) | `content/manifest.json: enabledSpecies` |
-| handling arc | static ring with progress ticks — not in v1.0 (Phase 5 species) | `content/manifest.json: enabledSpecies` |
-| trap loop | not in v1.0 (Phase 5 species) | `content/manifest.json: enabledSpecies` |
-| glow halo | static bright center — not in v1.0 (Phase 5 species) | `content/manifest.json: enabledSpecies` |
+| handling arc | static ring with progress ticks: the recorded quarter (progress over need) as a still in both modes; it reads no clock (Phase 5, wave 13; P10 is not enabled before the organism flip) | `src/render/features.ts: featureLayers`; `src/worker/snapshot.ts: cue3Of, handlingQuarter` |
+| trap loop | the holding frame only; with motion on, the closing frame shows only in a committed hold's first second, from the recorded trap timer (Phase 5, wave 13; F03 is not enabled before the organism flip) | `src/render/features.ts: trapLoopFrame, featureLayers`; `src/worker/snapshot.ts: cue3Of, HOLD_CLOSING_SECONDS` |
+| glow halo | static bright center: the glow frame while glowing, the dim frame otherwise, no pulse in either mode (Phase 5, wave 13; B09 is not enabled before the organism flip) | `src/render/features.ts: featureLayers` |
 | particles | none (no resource particles are built in any mode) | `src/render/renderer.ts: spawnEffect` |
 | camera easing | instant (presets, Find and follow set the view at once) | P4.13: with motion on, player-initiated moves ease over 220 ms, ease-out cubic (zoom buttons and +/−, whole dish, Find / "go to", the inspector's reveal pan and its undo when a key closes the inspector, D-0099); wheel, pinch, drag and follow stay direct; a touch on the dish ends a move where it was going; in reduced motion every move is instant: `src/render/camera.ts: eased, easePose, CAMERA_EASE_MS, reducedMotion, undoReveal` |
-| unfolding (wake) | state swap: Preparing/Resting/Waking hold a still folded pose and a seam frame per state | `src/render/features.ts: bodyFrameIndex, featureLayers` |
+| unfolding (wake) | state swap: Preparing/Resting/Waking hold a still folded pose and a seam frame per state; the native resters' dormant poses and F03's trap pose are state stills too (Phase 5, wave 13) | `src/render/features.ts: bodyFrameIndex, featureLayers, dormantPoseFrame, trapPoseFrame` |
 | deposit/placement ring | a still ring at full radius for 1 s (no growth or fade) | `src/render/features.ts: placementEffect, effectLook, PLACEMENT_STATIC_MS` (with motion on since P4.13 it grows from 0 to the dose radius over `PLACEMENT_EXPAND_MS` 300 ms and has faded by `PLACEMENT_RING_MS` 700 ms); drawn only for an accepted placement in both modes: `src/ui/state.ts: reportCommand`, `src/ui/panels/LineageState.tsx: reportSpecimenPlacement` |
 | food‑object stain | held still at its first opacity, removed after 6 s (no fade) | `src/render/features.ts: stainAlphaAt` |
 | favorite glyphs | unchanged: static outlines in both modes | `src/render/renderer.ts: drawFavorites` |

@@ -220,6 +220,25 @@ export interface Profile {
   readonly glow: GlowRules | null;
   /** RIVAL secretion rules (native RIVALRY; rivalry.ts), or null. */
   readonly rivalry: RivalryRules | null;
+  /** E11 mineral jacket rules from the world's recorded E11 numbers (jacket.ts; Phase 5 wave 13), or null. */
+  readonly jacket: JacketRules | null;
+}
+
+/**
+ * E11 Mineral jacket (SPEC §9 E11, CT §7.1; Phase 5 wave 13, src/sim/jacket.ts), from the world's recorded
+ * module numbers. Coverage c is handling.ts jacketCoverage (one function everywhere).
+ */
+export interface JacketRules {
+  /** Target jacket mineral per unit of current body B (0.10; equal to JACKET_COVERAGE_FRACTION). */
+  readonly targetPerBody: number;
+  /** Most mineral bound per second per unit of B0' (0.005). */
+  readonly buildRate: number;
+  /** Energy per mineral bound (10), ledgered as 'construction'. */
+  readonly energyPerMineral: number;
+  /** Speed × (1 − speedPenalty × c) (0.20). */
+  readonly speedPenalty: number;
+  /** No building while the energy remaining this tick is below this (15; 15 itself builds). */
+  readonly minEnergy: number;
 }
 
 /** E04 Surface anchor (SPEC §9 E04, CT §12.6), from the world's recorded module numbers. */
@@ -385,6 +404,17 @@ function glowFrom(mod: ModuleRT): GlowRules {
   };
 }
 
+/** E11 Mineral jacket (SPEC §9 E11): the world's recorded E11 numbers. */
+function jacketFrom(mod: ModuleRT): JacketRules {
+  return {
+    targetPerBody: param(mod, 'targetPerBody'),
+    buildRate: param(mod, 'buildRate'),
+    energyPerMineral: param(mod, 'energyPerMineral'),
+    speedPenalty: param(mod, 'speedPenalty'),
+    minEnergy: param(mod, 'minEnergy'),
+  };
+}
+
 function dormancyFrom(mod: ModuleRT): DormancyRules {
   return {
     source: 'E03',
@@ -501,6 +531,7 @@ export function deriveProfile(sp: SpeciesRT, genome: Genome, modules: readonly M
   let shade: ShadeRules | null = null;
   let debrisFeeder = false;
   let moduleGlow: GlowRules | null = null; // E02 (never on a native SIGNAL_GLOW species)
+  let jacket: JacketRules | null = null; // E11 (Phase 5 wave 13)
 
   // Modules: surcharge is part of maintenance; upkeep and capacities are separate.
   let surchargeRaw = 0;
@@ -516,6 +547,7 @@ export function deriveProfile(sp: SpeciesRT, genome: Genome, modules: readonly M
     else if (mod.id === 'E06') shade = { lightHalf: param(mod, 'lightHalf'), ceilingFactor: param(mod, 'ceilingFactor') };
     else if (mod.id === 'E08') debrisFeeder = true;
     else if (mod.id === 'E02') moduleGlow = glowFrom(mod);
+    else if (mod.id === 'E11') jacket = jacketFrom(mod);
     else if (mod.id === 'E05') {
       energyCap += param(mod, 'capacityBonus');
       upkeep += param(mod, 'upkeepPerSecond');
@@ -563,5 +595,6 @@ export function deriveProfile(sp: SpeciesRT, genome: Genome, modules: readonly M
     debrisFeeder: debrisFeeder || sp.abilities.includes('DETRITUS_FALLBACK'),
     glow: sp.abilities.includes('SIGNAL_GLOW') ? NATIVE_GLOW : moduleGlow,
     rivalry: sp.abilities.includes('RIVALRY') ? NATIVE_RIVALRY : null,
+    jacket,
   };
 }

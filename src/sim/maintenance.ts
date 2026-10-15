@@ -16,6 +16,7 @@ import { LIFE_ACTIVE, LIFE_RESTING } from './entities';
 import { recordDeath } from './lineage';
 import { removeAllLinks } from './links';
 import { drainDeathDue, releaseHostPair } from './parasites';
+import { releaseTrapOnRemoval, trapDrainDeathDue, worldHasTraps } from './traps';
 import { infectionDue, lyse } from './viruses';
 import { onDeath } from './branches';
 import { profileOf } from './profiles';
@@ -34,6 +35,8 @@ export function stageMaintenance(world: World): void {
   const e = world.ents;
   const c = e.cols;
   const EL = world.ledger.energy;
+  // Phase 5 wave 13 (traps.ts): only a world recording a TRAP species reads the held column below.
+  const traps = worldHasTraps(world);
   for (let i = 0; i < e.highWater; i++) {
     if (c.alive[i] !== 1) continue;
     const sp = world.species[c.species[i]!]!;
@@ -99,6 +102,8 @@ export function stageMaintenance(world: World): void {
     } else if (H <= 0) killEntity(world, i, primaryDamageCause(world, i));
     else if (c.age[i]! >= sp.def.maxAge) killEntity(world, i, R.DEATH_AGE);
     else if (drainDeathDue(world, i)) killEntity(world, i, R.DEATH_PARASITE_DRAIN);
+    // A held target below 0.25 × B0' dies of the trap's drain (SPEC §7.17; traps.ts), after every other cause.
+    else if (traps && trapDrainDeathDue(world, i)) killEntity(world, i, R.DEATH_TRAP_DRAIN);
   }
 }
 
@@ -166,6 +171,7 @@ export function killEntity(world: World, i: number, cause: number): void {
   onDeath(world, i);
   const sp = c.species[i]!;
   world.history.pendingDeaths[sp] = (world.history.pendingDeaths[sp] ?? 0) + 1;
+  releaseTrapOnRemoval(world, i, false); // SPEC §6.8, §7.17: a held target goes free alive, the reserve to detritus (traps.ts)
   releaseHostPair(world, i); // SPEC §6.8, §7.4: an attached parasite is released alive (parasites.ts)
   severOnRemoval(world, i); // E12: its colony partners start their relink lockout (adhesion.ts)
   removeAllLinks(world, i); // SPEC §6.8: incident links leave both endpoints

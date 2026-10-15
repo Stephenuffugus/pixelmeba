@@ -11,6 +11,17 @@ export interface ReasonContext {
   readonly speciesName?: string;
   /** DORMANCY_LOCKOUT: a rest is due now and waits only for the lockout (see @sim/dormancy dormancyReason). */
   readonly restHeld?: boolean;
+  // Wave 13 (org-ui): the Phase 5 Lab lines' measured values (each from an EntityInspect field).
+  /** NEIGHBORS_DETECTED: the glow threshold (Profile.glow.onThreshold); `value` is the sensed signal. */
+  readonly threshold?: number;
+  /** PRED_HANDLING_IN_PROGRESS / CAPTURED_HANDLING / HELD_IN_TRAP: the seconds needed (handlingNeed, the hold); `value` the seconds so far. */
+  readonly need?: number;
+  /** CAPTURED_HANDLING / HELD_IN_TRAP: the other organism's birth id. */
+  readonly birthId?: number;
+  /** HELD_IN_TRAP: the carbon the trap owner drained in the last whole second. */
+  readonly drained?: number;
+  /** RIVAL_EXPOSURE: the exposure the rivalry chemical adds; `value` is the amount here. */
+  readonly exposure?: number;
 }
 
 const secs = (v?: number) => (v === undefined || !Number.isFinite(v) ? 'some' : String(Math.max(0, Math.round(v))));
@@ -23,6 +34,11 @@ export const secondsLeft = (v?: number): string => (v === undefined || !Number.i
 /** A drain rate in C/s with at most three decimals and no trailing zeros (0.02, 0.015). */
 const rate = (v?: number) => (v === undefined || !Number.isFinite(v) ? 'an unknown amount of' : String(Number(v.toFixed(3))));
 const pct = (v?: number) => (v === undefined || !Number.isFinite(v) ? 'an unknown share' : `${Math.round(v * 100)} %`);
+/** A measured value with fixed decimals; "?" when it was not measured. */
+const fixed = (digits: number) => (v?: number) => (v === undefined || !Number.isFinite(v) ? '?' : v.toFixed(digits));
+const one = fixed(1);
+const two = fixed(2);
+const three = fixed(3);
 
 const EXPLORE: Record<ReasonName, string> = {
   NONE: 'Doing fine right now.',
@@ -45,7 +61,8 @@ const EXPLORE: Record<ReasonName, string> = {
   SUIT_HABITAT: "It can't live on this ground.",
   SUIT_OXYGEN_HIGH: 'Too much oxygen for it here.',
   INHIBITOR_EXPOSURE: 'Something here is hurting it.',
-  RIVAL_EXPOSURE: 'A rival colony is hurting it.',
+  // Wave 13 (D-0120 carry-over): worded by its source, the field; an M08 deposit can raise it with no B13 in the dish.
+  RIVAL_EXPOSURE: 'Rivalry chemical here is hurting it.',
   ENERGY_ZERO: 'Out of energy — losing health.',
   ENERGY_LOW: 'Running low on energy.',
   HEALING: 'Recovering.',
@@ -148,6 +165,26 @@ function lab(name: ReasonName, ctx: ReasonContext): string {
       return `Getting ready to rest: ${secondsLeft(ctx.value)} s left.`;
     case 'WAKING':
       return `Waking up: ${secondsLeft(ctx.value)} s left.`;
+    // ---- Wave 13 (org-ui; UX §5.2 has no Lab rows for the trap and handling codes: proposed, owner review at the gate).
+    case 'MODE_PHOTO':
+      return `Making food from light (light ${two(ctx.value)}).`;
+    case 'MODE_SUGAR':
+      return `Eating sugar while the light is low (light ${two(ctx.value)}).`;
+    case 'NEIGHBORS_DETECTED':
+      // UX §5.2: "Signal {v} (threshold 0.30)."
+      return `Signal ${two(ctx.value)} (threshold ${two(ctx.threshold)}).`;
+    case 'RIVAL_EXPOSURE':
+      return `Rivalry chemical ${two(ctx.value)} here adds ${two(ctx.exposure)} to its exposure.`;
+    case 'PRED_HANDLING_IN_PROGRESS':
+      // Without the handler's measured progress (no handling field) it says so, never "? of ? s".
+      if (ctx.value === undefined || ctx.need === undefined) return 'Holding on to its prey (resets if contact breaks).';
+      return `Holding on: ${one(ctx.value)} of ${one(ctx.need)} s of contact (resets if contact breaks).`;
+    case 'CAPTURED_HANDLING':
+      if (ctx.value === undefined || ctx.need === undefined) return 'Being caught (resets if contact breaks).';
+      return `Being caught by ${ctx.speciesName ?? 'a predator'}${ctx.birthId !== undefined ? ` #${ctx.birthId}` : ''}: ${one(ctx.value)} of ${one(ctx.need)} s of contact (resets if contact breaks).`;
+    case 'HELD_IN_TRAP':
+      // The measured drain (the owner's intake over the last whole second), never the record's rate.
+      return `Held by ${ctx.speciesName ?? 'a trap'}${ctx.birthId !== undefined ? ` #${ctx.birthId}` : ''}: ${one(ctx.value)} of ${secs(ctx.need)} s; drained ${three(ctx.drained)} C in the last second.`;
     case 'DORMANCY_LOCKOUT': {
       // The measured value is the lockout seconds left (SPEC §7.6: 30 s after waking).
       const wait = ctx.value === undefined || !Number.isFinite(ctx.value) ? 'yet' : `for ${secondsLeft(ctx.value)} s`;

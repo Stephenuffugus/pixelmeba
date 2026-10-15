@@ -122,35 +122,21 @@ describe('the import refuses a dish naming rules this build does not implement (
     await refusedByHost(text, message);
   });
 
-  // The subject moved from P10's HANDLING (implemented at the wave 12 integration) to F03's TRAP (wave 13); it moves
-  // again when TRAP is implemented.
-  it('a dish recording F03 (TRAP, not implemented until wave 13) is refused naming the species and the ability', async () => {
-    expect(IMPLEMENTED_NATIVE_ABILITIES).not.toContain('TRAP');
-    const reg = registryWith({ enabledSpecies: [...REG.manifest.enabledSpecies, 'F03'].sort() }, { allowUnimplemented: true });
-    const text = await crafted(() => undefined, clearWater({}, reg));
-    const message = `This dish's F03 uses the native ability "TRAP", ${CANNOT}`;
-    expect(await refusal(text)).toMatchObject({ kind: 'content', message });
-    await refusedByHost(text, message);
-  });
-
   it('an unknown future native ability is named before the species schema runs', async () => {
     const text = await crafted((c) => {
       const b01 = c.species.find((s) => s.id === 'B01')!;
       b01.nativeAbilities = [...(b01.nativeAbilities ?? []), 'TELEPORT'];
     });
     expect(NativeAbility.options as readonly string[]).not.toContain('TELEPORT');
-    expect(await refusal(text)).toMatchObject({ kind: 'content', message: `This dish's B01 uses the native ability "TELEPORT", ${CANNOT}` });
+    const message = `This dish's B01 uses the native ability "TELEPORT", ${CANNOT}`;
+    expect(await refusal(text)).toMatchObject({ kind: 'content', message });
+    await refusedByHost(text, message);
   });
 
-  it('every unimplemented native ability of the schema is refused the same way', async () => {
-    const missing = NativeAbility.options.filter((a) => !IMPLEMENTED_NATIVE_ABILITIES.includes(a));
-    expect(missing.length).toBeGreaterThan(0);
-    for (const a of missing) {
-      const text = await crafted((c) => {
-        c.species.find((s) => s.id === 'B01')!.nativeAbilities = [a];
-      });
-      expect(await refusal(text), a).toMatchObject({ kind: 'content', message: `This dish's B01 uses the native ability "${a}", ${CANNOT}` });
-    }
+  // Since wave 13 (TRAP) every NativeAbility of the schema is implemented; the unknown-id case above keeps the refusal
+  // tested (it was the F03 / TRAP subject until then), and this pin catches a new schema ability added without its code.
+  it('every native ability of the schema is implemented', () => {
+    expect(NativeAbility.options.filter((a) => !IMPLEMENTED_NATIVE_ABILITIES.includes(a))).toEqual([]);
   });
 });
 
@@ -169,6 +155,12 @@ describe('the line is "implemented", not "enabled": these dishes still load (D-0
     const reg = registryWith({ enabledSystems: systems });
     const w = clearWater({}, reg);
     const { text } = await buildSaveFile(w, meta);
+    await expect(loadSaveFile(text)).resolves.toBeDefined();
+  });
+
+  it('a dish recording F03 (TRAP, implemented since wave 13, not enabled) loads', async () => {
+    const reg = registryWith({ enabledSpecies: [...REG.manifest.enabledSpecies, 'F03'].sort() });
+    const { text } = await buildSaveFile(clearWater({}, reg), meta);
     await expect(loadSaveFile(text)).resolves.toBeDefined();
   });
 

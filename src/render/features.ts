@@ -34,6 +34,21 @@ import {
   CUE_RESERVE_BAND_MASK,
   CUE_RESERVE_BAND_SHIFT,
   CUE_STRESSED,
+  CUE3_GLOWER,
+  CUE3_GLOWING,
+  CUE3_HANDLING,
+  CUE3_HANDLING_QUARTER_MASK,
+  CUE3_HANDLING_QUARTER_SHIFT,
+  CUE3_HELD,
+  CUE3_HOLD_CLOSING,
+  CUE3_JACKETED,
+  CUE3_JACKET_MASK,
+  CUE3_JACKET_SHIFT,
+  CUE3_MOD_E02,
+  CUE3_MODE_MASK,
+  CUE3_MODE_SHIFT,
+  CUE3_TRAP_MASK,
+  CUE3_TRAP_SHIFT,
 } from '@worker/protocol';
 import { STAIN_MS, stainAlpha } from './world3';
 
@@ -48,7 +63,14 @@ export type FeatureLayerId =
   | 'debris_granule'
   | 'protein_notches'
   | 'matrix_edge'
-  | 'adhesion_link';
+  | 'adhesion_link'
+  // Phase 5 marks (wave 13 org-ui, D-0109 / D-0112): native SIGNAL_GLOW or E02, E11, native MIXOTROPHY,
+  // and the HANDLING and TRAP effect marks keyed to recorded columns (E_CUE3).
+  | 'glow_center'
+  | 'jacket_rim'
+  | 'mode_half'
+  | 'handling_arc'
+  | 'trap_loop';
 /** Canonical order (the atlas manifest's `features` order). */
 export const FEATURE_LAYER_IDS: readonly FeatureLayerId[] = [
   'starch_notch',
@@ -61,6 +83,11 @@ export const FEATURE_LAYER_IDS: readonly FeatureLayerId[] = [
   'protein_notches',
   'matrix_edge',
   'adhesion_link',
+  'glow_center',
+  'jacket_rim',
+  'mode_half',
+  'handling_arc',
+  'trap_loop',
 ];
 
 /** Life states as saved in the lifeState column (see src/sim/entities.ts LIFE_*). */
@@ -85,6 +112,8 @@ export interface FeatureContext {
   readonly filmBand?: number | undefined;
   readonly reduced?: boolean | undefined;
   readonly pulseOn?: boolean | undefined;
+  /** Protocol 3 (wave 13): the organism's E_CUE3 word; 0 or absent → no Phase 5 mark (every v1.0 organism). */
+  readonly cue3?: number | undefined;
 }
 
 /**
@@ -118,7 +147,8 @@ export const CUE2_LAYER: Readonly<Record<number, FeatureLayerId>> = {
  * `cue2` (E_CUE2, protocol 2) and `ctx` are optional: without them only the Phase 2 marks can show.
  * Order is priority order (live state first, then stored energy and film, then plain carrier marks):
  * resting-cycle seam, anchor foot, link pixels, light trail, granule pulse, protein release, reserve
- * pocket, matrix edge, starch notch, shade patch, idle granule, idle notches, idle seam.
+ * pocket, matrix edge, starch notch, shade patch, idle granule, idle notches, idle seam. Phase 5 (wave 13,
+ * `ctx.cue3`) comes before all of them: trap loop (held), handling arc, glow center, mode half, jacket rim.
  */
 export function featureLayers(cue: number, life: number, selected: boolean, out: LayerPick[], cue2 = 0, ctx: FeatureContext = {}): number {
   let n = 0;
@@ -132,6 +162,17 @@ export function featureLayers(cue: number, life: number, selected: boolean, out:
   };
   const reduced = ctx.reduced === true;
   const pulseOn = reduced || ctx.pulseOn !== false;
+  // Phase 5 marks (wave 13, D-0124 priority): live state first (held, handling), then glow, then mode and
+  // jacket, then the v1.0 order below. Each is a still keyed to its E_CUE3 bits; none animates on its own.
+  const cue3 = ctx.cue3 ?? 0;
+  if (cue3 !== 0) {
+    if (cue3 & CUE3_HELD) push('trap_loop', trapLoopFrame(cue3, reduced));
+    if (cue3 & CUE3_HANDLING) push('handling_arc', (cue3 & CUE3_HANDLING_QUARTER_MASK) >> CUE3_HANDLING_QUARTER_SHIFT);
+    if (cue3 & (CUE3_GLOWER | CUE3_MOD_E02)) push('glow_center', cue3 & CUE3_GLOWING ? 1 : 0);
+    const mode = (cue3 & CUE3_MODE_MASK) >> CUE3_MODE_SHIFT;
+    if (mode === 1 || mode === 2) push('mode_half', mode - 1);
+    if (cue3 & CUE3_JACKETED) push('jacket_rim', (cue3 & CUE3_JACKET_MASK) >> CUE3_JACKET_SHIFT);
+  }
   // SPEC §9 E03: "small folded seam; folded pose only while resting". Every carrier shows the small
   // seam (frame 0); the resting cycle shows its state frames first because it is live information.
   const cycling = life >= LIFE_PREPARING && life <= LIFE_WAKING;
@@ -155,6 +196,33 @@ export function featureLayers(cue: number, life: number, selected: boolean, out:
   if (cue2 & CUE2_MOD_E09 && !releasing) push('protein_notches', 0);
   if (cue & CUE_MOD_E03 && !cycling) push('resting_seam', 0);
   return selected ? n : Math.min(n, MAX_UNSELECTED_MARKS);
+}
+
+/**
+ * The trap_loop frame on a held organism (D-0112, D-0124): 0 'closing' while the hold is in its first second
+ * (CUE3_HOLD_CLOSING, packed from the holding trap's recorded timer, so only a committed capture starts it),
+ * 1 'holding' after; reduced motion (UX §7.4) shows 'holding' only.
+ */
+export function trapLoopFrame(cue3: number, reduced: boolean): number {
+  return !reduced && (cue3 & CUE3_HOLD_CLOSING) !== 0 ? 0 : 1;
+}
+
+/**
+ * A trap owner's pose (F03, the sprite's state-indexed `trap` overlays Open, Holding, Cooldown; D-0109): the
+ * frame for the recorded trap state in E_CUE3 (1 armed → 0 Open, 2 holding → 1 Holding, 3 cooldown → 2
+ * Cooldown), or −1 with no trap (its ordinary mask tile only). A still in both motion modes.
+ */
+export function trapPoseFrame(cue3: number): number {
+  const state = (cue3 & CUE3_TRAP_MASK) >> CUE3_TRAP_SHIFT;
+  return state >= 1 && state <= 3 ? state - 1 : -1;
+}
+
+/**
+ * A native rester's still pose (B12, F04, P08; the sprite's `dormant` set Preparing, Resting, Waking, indexed
+ * by lifeState − 1; D-0109), or −1 while Active. A state swap, never a loop (UX §7.4 "unfolding (wake)").
+ */
+export function dormantPoseFrame(life: number): number {
+  return life >= LIFE_PREPARING && life <= LIFE_WAKING ? life - LIFE_PREPARING : -1;
 }
 
 /** One feature layer as the atlas manifest's `features` table lists it. */

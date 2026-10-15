@@ -23,12 +23,17 @@
  * refused this tick and no later action receives a refund. Unused construction reservations are
  * returned by construction.ts before births (they were only ever held, never deducted).
  *
+ * Phase 5 wave 13: an E11 carrier reserves energy (never body carbon) for the shared MINERAL pass
+ * (`requestMineral`; jacket.ts jacketPass, run right after the film construction pass), which binds silicate
+ * into the jacket with proportional headroom and returns the unused reservation the same way.
+ *
  * The table is an array in a fixed, validated order: never Map/Set/object-key iteration. Tests may
  * build their own tables with `buildActionTable`; the shipped `STAGE8_ACTIONS` is frozen and no test
  * registration can change it or any shipped world.
  */
 import { NativeAbility, type NativeAbilityId } from './content/schema';
 import type { ConstructionRequest } from './construction';
+import type { MineralRequest } from './jacket';
 import type { Ledger } from './ledger';
 import type { Profile } from './phenotype';
 import { producerApplies, producerRun } from './secretion';
@@ -36,6 +41,8 @@ import { biofilmApplies, biofilmRun } from './film';
 import { signalApplies, signalRun } from './signals';
 import { rivalryApplies, rivalryRun } from './rivalry';
 import { matrixApplies, matrixRun } from './matrixBuilder';
+import { jacketApplies, jacketRun } from './jacket';
+import { trapApplies, trapArmRun } from './traps';
 import { advanceIntakeClock } from './intakeClock';
 import { anchorStep } from './anchor';
 import { adhesionRelease } from './adhesion';
@@ -109,6 +116,10 @@ export function buildActionTable(actions: readonly Stage8Action[]): readonly Sta
  * whose profile has glow or rivalry rules runs them, and no v1.0 profile has either, so a v1.0 world's stage 8
  * is unchanged. The glow thresholds are not a table entry: they run from stageStructures right after the
  * dormancy step, before the link release (SPEC §3.2 stage 8 order; signals.ts).
+ *
+ * Phase 5 wave 13: native TRAP (7, F03 arming; traps.ts) and module E11 (11, the mineral jacket's request for
+ * the shared mineral pass; jacket.ts). Only an organism whose species has TRAP or whose genome carries a
+ * recorded E11 runs them, and no v1.0 organism has either, so a v1.0 world's stage 8 is unchanged.
  */
 const SHIPPED: readonly Stage8Action[] = [
   nativeAction('E_STARCH_SECRETION', producerApplies('starch', 'native'), producerRun('starch')),
@@ -117,10 +128,12 @@ const SHIPPED: readonly Stage8Action[] = [
   nativeAction('BIOFILM', biofilmApplies, biofilmRun),
   nativeAction('SIGNAL_GLOW', signalApplies('native'), signalRun),
   nativeAction('RIVALRY', rivalryApplies, rivalryRun),
+  nativeAction('TRAP', trapApplies, trapArmRun),
   moduleAction('E01', producerApplies('starch', 'E01'), producerRun('starch')),
   moduleAction('E02', signalApplies('E02'), signalRun),
   moduleAction('E09', producerApplies('protein', 'E09'), producerRun('protein')),
   moduleAction('E10', matrixApplies, matrixRun),
+  moduleAction('E11', jacketApplies, jacketRun),
 ];
 
 export const STAGE8_ACTIONS: readonly Stage8Action[] = buildActionTable(SHIPPED);
@@ -136,6 +149,8 @@ export class ActionContext {
   readonly world: World;
   /** Every construction request submitted this stage, in submission (ascending slot) order. */
   readonly requests: ConstructionRequest[] = [];
+  /** Every E11 mineral request submitted this stage, in submission (ascending slot) order (jacket.ts jacketPass). */
+  readonly mineralRequests: MineralRequest[] = [];
   i = -1;
   prof: Profile | null = null;
   /** Energy held for shared construction by this organism this tick (not yet deducted). */
@@ -191,6 +206,21 @@ export class ActionContext {
     this.reservedB += bodyC;
     this.reservedE += energyReserved;
     this.requests.push({ slot: this.i, cell, bodyC, energyReserved, energyPerC });
+  }
+
+  /**
+   * Reserve the full energy cost of binding `mineral` from the cell's free silicate for the shared mineral pass
+   * (jacket.ts jacketPass): the pass may accept less (proportional headroom), charges only accepted ×
+   * energyPerMineral and returns the rest. No body carbon is held (no carbon moves). The reservation counts
+   * against everything this organism tries later this tick.
+   */
+  requestMineral(cell: number, mineral: number, energyPerMineral: number): void {
+    if (!(mineral > 0) || !Number.isFinite(mineral)) throw new Error(`stage 8: invalid mineral amount ${mineral}`);
+    if (!(energyPerMineral >= 0) || !Number.isFinite(energyPerMineral)) throw new Error(`stage 8: invalid mineral energy rate ${energyPerMineral}`);
+    const energyReserved = energyPerMineral * mineral;
+    if (energyReserved > this.remainingEnergy()) throw new Error(`stage 8: mineral reserve ${energyReserved} E exceeds the ${this.remainingEnergy()} E left`);
+    this.reservedE += energyReserved;
+    this.mineralRequests.push({ slot: this.i, cell, mineral, energyReserved, energyPerMineral });
   }
 }
 

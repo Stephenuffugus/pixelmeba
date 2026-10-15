@@ -19,6 +19,7 @@ import {
   DEPOSIT_FILM_BAND,
   E_CUE,
   E_CUE2,
+  E_CUE3,
   E_FLAGS,
   E_GROWTH,
   E_HEADING,
@@ -54,6 +55,8 @@ import { speciesRgb } from './speciesColors';
 import {
   bodyAnimFor,
   bodyFrameIndex,
+  dormantPoseFrame,
+  trapPoseFrame,
   decayTileAlpha,
   FEED_START_PENDING,
   feedFrameClock,
@@ -158,6 +161,10 @@ interface FungusTex {
   readonly bud: Texture | undefined;
   /** F02's transfer pulse (empty for F01). */
   readonly pulse: readonly (Texture | undefined)[];
+  /** Phase 5 (wave 13): F03's trap overlays Open, Holding, Cooldown (empty without native TRAP). */
+  readonly trap: readonly (Texture | undefined)[];
+  /** Phase 5 (wave 13): F04's resting-spore tiles Preparing, Resting, Waking (empty without native DORMANCY). */
+  readonly dormant: readonly (Texture | undefined)[];
 }
 
 /** One animation's frame textures, resolved once from the atlas manifest (no per-frame string keys). */
@@ -181,6 +188,8 @@ interface SpeciesDraw {
   readonly move: AnimTex | null;
   readonly idle: AnimTex | null;
   readonly death: AnimTex | null;
+  /** Phase 5 (wave 13): a native rester's still poses Preparing, Resting, Waking (B12, P08), else null. */
+  readonly dormant: AnimTex | null;
 }
 
 const HEADING_CHARS = 'eswn';
@@ -535,6 +544,8 @@ export class DishRenderer {
                 tip: this.frames[`${asset}/tip/e/0`],
                 bud: this.frames[`${asset}/bud/e/0`],
                 pulse: frames(asset, 'pulse', 2),
+                trap: frames(asset, 'trap', 3),
+                dormant: frames(asset, 'dormant', 3),
               }
             : null,
         headings: meta.headings,
@@ -544,6 +555,7 @@ export class DishRenderer {
         move: anim(asset, 'move', meta.headings),
         idle: anim(asset, 'idle', meta.headings),
         death: anim(asset, 'death', meta.headings),
+        dormant: kind === 'body' ? anim(asset, 'dormant', meta.headings) : null,
       };
     });
   }
@@ -1147,6 +1159,8 @@ export class DishRenderer {
           const flags = ents[o + E_FLAGS]!;
           const cue = ents[o + E_CUE]!;
           const cue2 = ents[o + E_CUE2] ?? 0;
+          // Protocol 3 (wave 13): the Phase 5 marks and poses read only E_CUE3 (0 for every v1.0 organism).
+          const cue3 = ents[o + E_CUE3] ?? 0;
           // Preparing/Resting/Waking hold a still, folded pose (UX §7.2): no locomotion or feeding frames.
           const life = ents[o + E_LIFE]!;
           const dormant = life !== 0;
@@ -1183,6 +1197,10 @@ export class DishRenderer {
             hRow = headingRow(d.headings, ents[o + E_HEADING]!);
             tex = a.tex[hRow]![idx];
           }
+          // Wave 13 (D-0109): a native rester shows its own still pose per life state (Preparing, Resting,
+          // Waking): B12 and P08 their `dormant` body frames, F04's segment its lone resting spore tile.
+          const rest = dormantPoseFrame(life);
+          if (rest >= 0) tex = (fungal ? d.fungus?.dormant[rest] : d.dormant?.tex[hRow]?.[rest]) ?? tex;
           const p = this.pool[k]!;
           if (tex) p.texture = tex;
           p.x = px;
@@ -1211,12 +1229,16 @@ export class DishRenderer {
             if (fungal.bud && d.fungus.bud) overlay(this.featurePool, flist, nf++, d.fungus.bud, px, py, sc, born);
             const pt = fungal.pulse >= 0 ? d.fungus.pulse[fungal.pulse] : undefined;
             if (pt) overlay(this.featurePool, flist, nf++, pt, px, py, sc, born);
+            // Wave 13: F03's recorded trap state (Open, Holding, Cooldown) over its segment, like tip and bud.
+            const trapPose = trapPoseFrame(cue3);
+            const tt = trapPose >= 0 ? d.fungus.trap[trapPose] : undefined;
+            if (tt) overlay(this.featurePool, flist, nf++, tt, px, py, sc, born);
           } else {
             // Module feature layers: only marks the snapshot says are real for this organism.
             const cell = Math.floor(curY[k]!) * GRID_W + Math.floor(curX[k]!);
             const filmBand = cue2 & CUE2_MOD_E10 && cell >= 0 && cell < CELL_COUNT ? filmLevelBand(filmLevel(s.deposits, cell)) : 0;
             const pulseOn = featurePulseOn(now + phase, reduced);
-            const marks = featureLayers(cue, life, selected, this.picks, cue2, { filmBand, reduced, pulseOn });
+            const marks = featureLayers(cue, life, selected, this.picks, cue2, { filmBand, reduced, pulseOn, cue3 });
             for (let m = 0; m < marks; m++) {
               const pick = this.picks[m]!;
               const lt = this.layerTexture(pick.layer, pick.frame, hRow);

@@ -196,7 +196,8 @@ export function decodeSample(s: SavedSample): SampleSlot {
 // ---- Accounting ---------------------------------------------------------------------------------
 
 /**
- * Carbon, nutrient and mineral the sample holds: rows (B + mealC, N + mealN, shell + jacket), cells
+ * Carbon, nutrient and mineral the sample holds: rows (B + mealC + trap reserve, N + mealN + trap reserve,
+ * shell + jacket), cells
  * (each field by its material, viral units at 0.01 C) and food objects.
  */
 export function sampleTotals(s: SampleSlot | null): { c: number; n: number; m: number } {
@@ -205,8 +206,9 @@ export function sampleTotals(s: SampleSlot | null): { c: number; n: number; m: n
   let n = 0;
   let m = 0;
   for (const r of s.rows) {
-    c += r.cols.B + r.cols.mealC;
-    n += r.cols.N + r.cols.mealN;
+    // A held F03's trap reserve travels with it (Phase 5 wave 13; a +0 term for every other row).
+    c += r.cols.B + r.cols.mealC + r.cols.trapReserveC;
+    n += r.cols.N + r.cols.mealN + r.cols.trapReserveN;
     m += r.cols.boundMineral + r.cols.jacketMineral;
   }
   for (const cell of s.cells) {
@@ -272,6 +274,9 @@ const HELD_REFS: readonly (readonly [ColumnName, ColumnName, ColumnName | null])
   ['fLink3', 'fLinkB3', null],
   ['aLink0', 'aLinkB0', null],
   ['aLink1', 'aLinkB1', null],
+  // Phase 5 wave 13 (D-0124, SPEC §10.5 "trap + held prey"): a held trap and its held target travel together.
+  ['trapSlot', 'trapBirthId', 'heldBySlot'],
+  ['heldBySlot', 'heldByBirthId', 'trapSlot'],
 ];
 
 /**
@@ -306,7 +311,8 @@ function heldRowsProblem(held: SampleSlot, ctx: SampleCheckContext): string | nu
       const partner = held.rows.find((x) => x.slot === p);
       if (!partner || partner.cols.birthId !== r.cols[bc] || p === r.slot) return 'a sample row is linked to an organism the sample does not hold';
       if (back) {
-        if (partner.cols[back] !== r.slot) return 'a held host and parasite do not refer to each other';
+        if (partner.cols[back] !== r.slot)
+          return sc === 'trapSlot' || sc === 'heldBySlot' ? 'a held trap and its target do not refer to each other' : 'a held host and parasite do not refer to each other';
       } else {
         const birthCol = (c: string) => c.replace(/^fLink/, 'fLinkB').replace(/^aLink/, 'aLinkB') as ColumnName;
         const family = sc.startsWith('fLink') ? ['fLink0', 'fLink1', 'fLink2', 'fLink3'] : ['aLink0', 'aLink1'];

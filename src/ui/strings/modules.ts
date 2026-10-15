@@ -49,15 +49,22 @@ const FLAG_DETRITUS_INTAKE = 1 << 13;
  * usable share of its intake ceiling (FLAG.usableIntake, USABLE_INTAKE_FRACTION); a smaller intake is
  * named as traces, so the chip never says "Eating" beside "No usable food" and "Food access: 0 %".
  */
-export function actionLabel(e: Pick<EntityInspect, 'flags' | 'lifeState' | 'predation'> & Partial<Pick<EntityInspect, 'diet' | 'profile'>>): string {
+export function actionLabel(
+  e: Pick<EntityInspect, 'flags' | 'lifeState' | 'predation'> & Partial<Pick<EntityInspect, 'diet' | 'profile' | 'mode' | 'heldBy' | 'handling'>>,
+): string {
   // A life state other than Active (Preparing, Resting, Waking) is the organism's real state (P2.1).
   if (e.lifeState !== LIFE_ACTIVE) return lifeStateLabel(e.lifeState);
+  // Wave 13: derived states from the inspector's fields (a trap's hold; the handler's attempt).
+  if (e.heldBy) return 'Caught in a trap';
+  if (e.handling) return 'Holding on to its prey';
   if (e.flags & FLAG_FEEDING) {
     // E08: this tick's intake was local detritus, not a held meal (FLAG.detritusIntake, stage 6).
     if (e.flags & FLAG_DETRITUS_INTAKE) return e.flags & FLAG_USABLE_INTAKE ? 'Eating detritus' : 'Finding only traces of detritus';
     if (e.predation) return 'Digesting';
     // m6: an organism that makes its food from light is never said to be eating (its intake is fixed carbon).
     if (e.diet?.metabolism === 'photosynthesis' && e.profile?.foods.length === 0) return e.flags & FLAG_USABLE_INTAKE ? 'Making food' : 'Making only a little food';
+    // D-0123 MINOR 2 (wave 13): a mixotroph in its Photo mode makes food from light; never "Eating".
+    if (e.mode?.mode === 1) return e.flags & FLAG_USABLE_INTAKE ? 'Making food' : 'Making only a little food';
     return e.flags & FLAG_USABLE_INTAKE ? 'Eating' : 'Finding only traces of food';
   }
   if (e.flags & FLAG_HUNTING) return 'Hunting';
@@ -81,8 +88,9 @@ export function lifeStateLabel(state: number): string {
   }
 }
 
-/** "while …" wording for division blockers (UX §5.2 DIV_BLOCK_STATE "Can't split while {state}."). */
-export function lifeStateWhile(state: number): string {
+/** "while …" wording for division blockers (UX §5.2 DIV_BLOCK_STATE "Can't split while {state}."); `held`: a trap holds it (wave 13). */
+export function lifeStateWhile(state: number, held = false): string {
+  if (held) return 'caught in a trap';
   switch (state) {
     case LIFE_PREPARING:
       return 'getting ready to rest';
@@ -184,6 +192,25 @@ export function moduleText(m: ModuleInspect): ModuleText {
         does: `Two active carriers of the same kind that are not holding on to anything, both with at least ${num(p.minEnergy, 0)} energy, link after staying within ${num(p.linkDistance)} cells of each other for ${num(p.linkSeconds, 0)} s in a row. Each keeps at most ${num(p.maxLinks, 0)} links and a colony at most ${num(p.maxComponent, 0)} members; a link that would go over is refused at no cost. Linked members stop swimming. Links share no food or energy: each member still feeds, divides and is eaten on its own. A link breaks after ${num(p.severNoIntakeSeconds, 0)} s without usable food, below ${num(p.severEnergy, 0)} energy, on resting, division or death, or when pulled more than ${num(p.severDistance)} cells apart; then that member cannot link again for ${num(p.lockoutSeconds, 0)} s.`,
         costs: `${carry}, plus ${num(p.linkCost, 0)} energy once per link made and ${num(p.perLinkUpkeep)} energy/s for each link it holds.`,
         now: m.activeNow ? 'Linked to its colony right now.' : null,
+      };
+    case 'E02':
+      // Wave 13 (org-ui): the module card from the world's recorded E02 numbers (signals.ts, SPEC §7.8).
+      return {
+        id: m.id,
+        name: m.name,
+        does: `Releases glow signal at ${num(p.emitRate)} per second while it has more than ${num(p.minEnergy, 0)} energy, until the signal in its cell reaches ${num(p.localCap)}. It glows after sensing ${num(p.onThreshold)} or more signal for ${num(p.dwellSeconds, 0)} s in a row, and stops after ${num(p.dwellSeconds, 0)} s at ${num(p.offThreshold)} or less, or below ${num(p.glowOffEnergy, 0)} energy. Glowing makes no usable light.`,
+        costs: `${carry}, plus ${num(p.emitCost)} energy/s while releasing and ${num(p.glowCost)} energy/s while glowing.`,
+        now: m.activeNow ? 'Signalling or glowing right now.' : null,
+      };
+    case 'E11':
+      // Wave 13 (org-ui): the mineral jacket's card (jacket.ts, SPEC §9 E11); "active now" = its request was
+      // accepted in this tick's shared mineral pass (moduleView.ts, jacket.ts jacketBuiltNow).
+      return {
+        id: m.id,
+        name: m.name,
+        does: `Builds a mineral jacket from free silicate in its cell toward ${num(p.targetPerBody)} mineral per unit of body, at up to ${num(p.buildRate, 3)} × its starting body per second, while it has at least ${num(p.minEnergy, 0)} energy and is not held. Its speed is multiplied by (1 − ${num(p.speedPenalty)} × coverage), and a predator that must hold on needs ${num(p.handlingBaseSeconds, 0)} + ${num(p.handlingPerCoverage, 0)} × coverage seconds of contact instead of ${num(p.handlingBaseSeconds, 0)}. It changes nothing else. A daughter without it drops her share of the jacket as grit.`,
+        costs: `${carry}, plus ${num(p.energyPerMineral, 0)} energy for each mineral bound.`,
+        now: m.activeNow ? 'Building its jacket right now.' : null,
       };
     case 'E05':
       return {

@@ -90,15 +90,16 @@ describe('protocol 3 layout', () => {
   it('each CUE3 bit is set from its column and cleared when the column clears', () => {
     const w = clearWater({}, phase5Registry());
     const c = w.ents.cols;
-    // Glowing (B09 SIGNAL_GLOW, glowState 1).
+    // Glowing (B09 SIGNAL_GLOW, glowState 1). Re-pinned in wave 13 (org-ui, D-0124): an organism with glow rules
+    // (native SIGNAL_GLOW or E02) also carries CUE3_GLOWER, so glow_center can show its dim frame.
     const glow = place(w, 'B09', 40.5, 64.5);
-    expect(cue3(w, glow)).toBe(0);
+    expect(cue3(w, glow)).toBe(P.CUE3_GLOWER);
     c.glowState[glow] = 1;
-    expect(cue3(w, glow)).toBe(P.CUE3_GLOWING);
+    expect(cue3(w, glow)).toBe(P.CUE3_GLOWER | P.CUE3_GLOWING);
     c.glowState[glow] = 0;
-    expect(cue3(w, glow)).toBe(0);
+    expect(cue3(w, glow)).toBe(P.CUE3_GLOWER);
     // Module carriers.
-    expect(cue3(w, placeWith(w, 'B01', 42.5, 64.5, ['E02']))).toBe(P.CUE3_MOD_E02);
+    expect(cue3(w, placeWith(w, 'B01', 42.5, 64.5, ['E02']))).toBe(P.CUE3_MOD_E02 | P.CUE3_GLOWER);
     const jacket = placeWith(w, 'P01', 44.5, 64.5, ['E11']);
     expect(cue3(w, jacket)).toBe(P.CUE3_MOD_E11);
     // Shell: A02 with bound mineral.
@@ -141,7 +142,12 @@ describe('protocol 3 layout', () => {
     const prey = place(w, 'B01', 53.5, 64.5);
     c.heldBySlot[prey] = trap;
     c.heldByBirthId[prey] = c.birthId[trap]!;
+    // Re-pinned in wave 13 (org-ui, D-0124): within the hold's first second (the holder's trapTimer ≤ 1 s, here 0)
+    // the held organism also carries CUE3_HOLD_CLOSING (the trap_loop closing frame); after it, HELD alone.
+    expect(cue3(w, prey)).toBe(P.CUE3_HELD | P.CUE3_HOLD_CLOSING);
+    c.trapTimer[trap] = 2;
     expect(cue3(w, prey)).toBe(P.CUE3_HELD);
+    c.trapTimer[trap] = 0;
     c.heldByBirthId[prey] = c.birthId[trap]! + 999;
     expect(cue3(w, prey)).toBe(0);
     c.heldBySlot[prey] = -1;

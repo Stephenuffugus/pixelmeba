@@ -13,7 +13,8 @@
  *   structures).
  * - Whole ownership units: a host and its parasite; the whole fungal component (any link kind) and the
  *   whole adhesion component of any selected member; a predator and the prey it has claimed (a valid
- *   preySlot), in both directions. The closure over these is computed; when any member's centre lies
+ *   preySlot), in both directions; an F03 trap and its held target (Phase 5 wave 13, SPEC §10.5 "trap + held
+ *   prey"; D-0124): the hold, its timer and the reserve travel intact, and Discard releases nothing. The closure over these is computed; when any member's centre lies
  *   outside the footprint the whole selection is refused and every missing member is named (species,
  *   birthId, cell). The brush is never widened.
  * - Take (`sampleTake`): every held row keeps every column and its original slot; field amounts move by
@@ -24,7 +25,8 @@
  *   whole move and changes nothing. Then a move, never a copy: fields keep their offsets (added to the
  *   destination), objects keep id and contents, organisms keep relative positions and all state, take
  *   new slots lowest-free-first in ascending original-slot order, and every stored slot reference
- *   (hostSlot, parasiteSlot, preySlot, fLink0..3, aLink0..1) is remapped; birthIds are unchanged.
+ *   (hostSlot, parasiteSlot, preySlot, fLink0..3, aLink0..1, trapSlot, heldBySlot) is remapped; birthIds are
+ *   unchanged.
  * - Discard (`sampleDiscard`): exports exactly the held carbon, nutrient and mineral; each held organism
  *   is recorded as removed with REMOVED_SAMPLED (death event, lineage, branch counts).
  * - Cancel (`cancelSample`, host-level; D-0037): the exact inverse of Take (allocate-at-slot into the
@@ -51,6 +53,7 @@ import type { SavedGenome } from './serialize';
 import { entityCell, rebuildIndex } from './spatial';
 import { canOccupy } from './movement';
 import { severCrossedLinks } from './structureEdits';
+import { trapHolderOf, trapTargetOf } from './traps';
 import { markField, updateDerived } from './transport';
 import { ENTITY_COLUMNS, MOVE_NONE, type ColumnName } from './entities';
 import type { World } from './world';
@@ -130,6 +133,15 @@ function partnersOf(world: World, i: number, predatorsOf: Readonly<Record<number
   const prey = c.preySlot[i]!;
   if (prey >= 0 && world.ents.refValid(prey, c.preyBirthId[i]!)) out.push(prey);
   for (const q of predatorsOf[i] ?? []) out.push(q);
+  // Phase 5 wave 13 (SPEC §10.5 "trap + held prey"; D-0124): a trap and its held target, both directions.
+  if (c.trapSlot[i]! >= 0) {
+    const t = trapTargetOf(world, i);
+    if (t >= 0) out.push(t);
+  }
+  if (c.heldBySlot[i]! >= 0) {
+    const h = trapHolderOf(world, i);
+    if (h >= 0) out.push(h);
+  }
   return out;
 }
 
@@ -401,8 +413,15 @@ const REF_COLUMNS: readonly (readonly [ColumnName, ColumnName])[] = [
   ['preySlot', 'preyBirthId'],
   ...FUNGAL_SLOT_COLUMNS.map((s, k) => [s, FUNGAL_BIRTH_COLUMNS[k]!] as const),
   ...ADHESION_SLOT_COLUMNS.map((s, k) => [s, ADHESION_BIRTH_COLUMNS[k]!] as const),
+  // Phase 5 wave 13 (D-0108 carry-over, D-0124): a held trap pair moves as one unit; it is not a link.
+  ['trapSlot', 'trapBirthId'],
+  ['heldBySlot', 'heldByBirthId'],
 ];
-const LINK_REFS: readonly (readonly [ColumnName, ColumnName])[] = REF_COLUMNS.slice(3);
+/** The fungal and adhesion link references only (members keep their relative cells); never the trap pairs. */
+const LINK_REFS: readonly (readonly [ColumnName, ColumnName])[] = [
+  ...FUNGAL_SLOT_COLUMNS.map((s, k) => [s, FUNGAL_BIRTH_COLUMNS[k]!] as const),
+  ...ADHESION_SLOT_COLUMNS.map((s, k) => [s, ADHESION_BIRTH_COLUMNS[k]!] as const),
+];
 
 /** Why the held sample cannot go to offset (dx, dy), or null (every destination checked first). */
 export function transferProblem(world: World, dx: number, dy: number): string | null {

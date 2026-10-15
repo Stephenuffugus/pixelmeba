@@ -47,6 +47,7 @@ import { adhesionLinked } from './adhesion';
 import { brightEnough, lightScore } from './lightSeeker';
 import { withDebrisScore } from './debrisFeeder';
 import { hasMixotroph, MODE_PHOTO, updateMode } from './mixotrophy';
+import { jacketCoverage } from './handling';
 import { classOf, edgeCodeBetween, edgePermits } from './barriers';
 import { cornerPermits, edgeCodesOf, markRefusedEdges, segmentPermitted, shelterRefuses, type PassageClass } from './edgePassage';
 import type { World } from './world';
@@ -473,6 +474,12 @@ export function stageSenseAndMove(world: World): void {
       c.flags[i] = c.flags[i]! & ~(FLAG.moving | FLAG.hunting);
       continue;
     }
+    // T3 (Phase 5 wave 13; SPEC §3.2 row 4 "mandatory state overrides (dead/held/…)", §7.17): an organism held
+    // in an F03 trap cannot move and its decision timer does not advance; heldBySlot is -1 in every old world.
+    if (c.heldBySlot[i]! >= 0) {
+      c.flags[i] = c.flags[i]! & ~(FLAG.moving | FLAG.hunting);
+      continue;
+    }
     // An organism that cannot self-propel never keeps a moving or hunting cue (D-0055): a
     // daughter that lost E07 would otherwise keep the parent's FLAG.moving from division.
     if (!prof.selfPropelled) {
@@ -491,7 +498,12 @@ export function stageSenseAndMove(world: World): void {
       continue;
     }
 
-    const step = prof.speed * DT;
+    // E11 (Phase 5 wave 13; SPEC §9 E11): a jacketed carrier's displacement is × (1 − 0.20c), c from handling.ts
+    // jacketCoverage; every organism without a jacket keeps the old expression (no multiplication by 1).
+    const step =
+      prof.jacket !== null && c.jacketMineral[i]! > 0
+        ? prof.speed * DT * (1 - prof.jacket.speedPenalty * jacketCoverage(c.jacketMineral[i]!, c.B[i]!))
+        : prof.speed * DT;
     // The mover's transport class (CT §5.3), read once per organism and only when edges exist.
     const cls = edgesOn ? classOf(world, i) : null;
     // X01 parasites (parasites.ts): an attached one rides its host; a free one pursues a host in range.

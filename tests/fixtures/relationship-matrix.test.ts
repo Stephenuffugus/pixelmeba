@@ -15,20 +15,36 @@
  *
  * A failing row is a bug: it would be listed in KNOWN_BUGS with its bug id and asserted with it.fails,
  * never by weakening the expectation. There are none.
+ *
+ * Phase 5 wave 13 (relmatrix): the tool also runs the Phase 5 families and rows whenever a registry enables
+ * their subjects (tests/fixtures/relationship-matrix-p5.test.ts runs them under the Phase 5 test registry).
+ * Until the organism flip the shipped run must yield exactly the v1.0 rows: SHIPPED_V1 is the snapshot of
+ * the shipped run taken before that change (row count per family, the rows digest of every row's id,
+ * expectation, observation, verdict and source, and the skipped list). The organism flip changes the shipped
+ * manifest and therefore these rows by design: the lead re-records SHIPPED_V1 from the digest
+ * `npx tsx tools/relationship-matrix.ts` prints, after reading the regenerated report.
  */
 import { describe, expect, it } from 'vitest';
-import { counts, FAMILIES, runMatrix, type Family, type MatrixRow } from '../../tools/relationship-matrix';
+import { counts, FAMILIES, P5_FAMILIES, rowsDigest, runMatrix, V1_FAMILIES, type Family, type MatrixRow } from '../../tools/relationship-matrix';
 import {
   dietTable,
   enzymeRules,
   expandIds,
   filmDigesters,
+  gritDissolvePerSecond,
+  handlingRules,
   hostTable,
   identityTable,
   inhibitorTable,
   materialTable,
+  metabolismTable,
   moduleTable,
+  preyOnlyNotes,
   preyTable,
+  rivalRules,
+  silicatePerBiomass,
+  toleranceTable,
+  trapRules,
 } from '../helpers/tables';
 import { registry } from '../helpers/world';
 
@@ -89,6 +105,102 @@ describe('CT oracles parse the catalog (tests/helpers/tables.ts)', () => {
   });
 });
 
+describe('CT oracles parse the Phase 5 rows (tests/helpers/tables.ts; wave 13 relmatrix)', () => {
+  it('§3.1: A04 has two light-qualified routes; P09 eats detritus when no meal; no other entry has modes', () => {
+    const d = new Map(dietTable().map((r) => [r.id, r]));
+    expect(d.get('A04')!.modes).toEqual([
+      { food: 'photosynthesis', op: '≥', light: 0.35 },
+      { food: 'sugar', op: '≤', light: 0.25 },
+    ]);
+    expect(d.get('A04')!.photosynthesis).toBe(true);
+    expect(d.get('P09')).toMatchObject({ foods: ['detritus'], whenNoMeal: true, modes: [] });
+    expect(d.get('F03')!.foods).toEqual(['broth']);
+    expect(d.get('F04')!.foods).toEqual(['detritus', 'starch']);
+    expect(dietTable().filter((r) => r.modes.length > 0).map((r) => r.id)).toEqual(['A04']);
+  });
+
+  it('§3.2: P10 "P05 requires 4 s continuous contact; others 1 s", P06 within 1 cell, the A05 note, P05–P10 lists', () => {
+    const p = new Map(preyTable().map((r) => [r.id, r]));
+    expect(p.get('P10')!.contactSeconds).toEqual({ P01: 1, P02: 1, P05: 4, P07: 1 });
+    expect(Object.keys(p.get('P10')!.prey)).toEqual(['P01', 'P02', 'P05', 'P07']);
+    for (const id of ['P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09']) expect(p.get(id)!.contactSeconds, id).toEqual({});
+    expect(p.get('P06')).toMatchObject({ withinCells: 1 });
+    expect(Object.keys(p.get('P06')!.prey)).toEqual(['B01', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B09', 'B10', 'B11', 'B12']);
+    const b01to12 = ['B01', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B09', 'B10', 'B11', 'B12'];
+    expect(Object.keys(p.get('P05')!.prey)).toEqual(b01to12);
+    expect(Object.keys(p.get('P07')!.prey)).toEqual(b01to12);
+    expect(Object.keys(p.get('P09')!.prey)).toEqual(['A02', 'A03', 'A04', 'Y02']);
+    expect(preyOnlyNotes()).toEqual([{ prey: 'A05', predators: ['P08'] }]);
+    // The note agrees with the lists: only P08 lists A05.
+    expect(preyTable().filter((r) => r.prey.A05 !== undefined).map((r) => r.id)).toEqual(['P08']);
+  });
+
+  it('§3.3 X02, V02 and F03; §3.4 RIVAL', () => {
+    const h = new Map(hostTable().map((r) => [r.id, r]));
+    expect(h.get('X02')).toMatchObject({ kind: 'attaches', targets: ['F02', 'F04'], drainPerSecond: 0.015, minFilm: null });
+    expect(h.get('X02')!.raw).toMatch(/never resting daughters/);
+    expect(h.get('V02')).toMatchObject({ kind: 'infects', targets: ['B02'], minFilm: 0.1 });
+    expect(h.get('F03')).toMatchObject({ kind: 'traps', targets: ['P04'] });
+    const inh = new Map(inhibitorTable().map((r) => [r.field, r.targets]));
+    expect(inh.get('RIVAL (B13 secretion / M08)')).toEqual(['B01', 'B10', 'B11']);
+    expect(inh.get('Photosynthetic inhibitor')).toEqual(['A01', 'A02', 'A03', 'A04', 'A05']);
+    expect(expandIds('RIVAL (B13 secretion / M08)')).toEqual(['B13', 'M08']);
+  });
+
+  it('§1.2 metabolism (shell builders, the low-light curve), §2 tolerance groups, §1.1 Phase 5 ids', () => {
+    expect(metabolismTable().filter((m) => m.shell).map((m) => m.id)).toEqual(['A02', 'P05']);
+    expect(metabolismTable().filter((m) => m.lightSaturation !== null).map((m) => [m.id, m.lightSaturation])).toEqual([['A03', 0.3]]);
+    const t = new Map(toleranceTable().flatMap((g) => g.members.map((id) => [id, g] as const)));
+    expect(t.get('B10')).toMatchObject({ group: 'Brine', ph: [6, 8], salinity: [0.4, 0.8] });
+    expect(t.get('B11')).toMatchObject({ group: 'Sour', ph: [4.5, 6], salinity: [0, 0.2] });
+    expect(t.get('F03')).toMatchObject({ group: 'Yeast/fungi', ph: [4.5, 7] });
+    expect(identityTable().filter((r) => r.phase === 5).map((r) => r.id)).toEqual(['B09', 'B10', 'B11', 'B12', 'B13', 'F03', 'F04', 'A02', 'A03', 'A04', 'A05', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'X02', 'V02']);
+  });
+
+  it('§7.1 E02 and E11; §5.2 M02, M06, M07, M08, M12', () => {
+    const m = new Map(moduleTable().map((r) => [r.id, r]));
+    expect(m.get('E02')).toMatchObject({ eligible: ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B10', 'B11', 'B12', 'B13'], notNative: ['B09'], phase: 5 });
+    expect(m.get('E11')).toMatchObject({ eligible: ['P01', 'P02', 'P07'], notNative: [], phase: 5 });
+    const mats = new Map(materialTable().map((r) => [r.id, r]));
+    expect(materialTable().filter((r) => r.phase === 5).map((r) => r.id)).toEqual(['M02', 'M06', 'M07', 'M08', 'M12']);
+    expect(mats.get('M02')!.adds).toBe('dissolved; A02/P05 bind 0.10 per new biomass');
+    expect(mats.get('M06')!.adds).toBe('S_GLOW');
+    expect(mats.get('M07')!.adds).toBe('sensed signal / (1 + quencher)');
+    expect(mats.get('M08')!.adds).toBe('RIVAL (targets B01/B10/B11)');
+    expect(mats.get('M12')).toMatchObject({ adds: 'dissolves to M02 at 0.01 × remaining/s', dose: '0.1/0.5/1.0 solid mineral' });
+  });
+
+  it('§12.2, §12.3, §12.5 and §12.6 constants', () => {
+    expect(handlingRules()).toEqual({ jacketBase: 1, jacketPerCoverage: 3, radius: 1 });
+    expect(trapRules()).toEqual({ minEnergy: 50, minBodyMultiple: 1.3, reserveC: 0.2, armEnergy: 8, holdSeconds: 8, drainPerSecond: 0.03, cooldownSeconds: 30 });
+    expect(rivalRules()).toEqual({ rate: 0.02, energyPerSecond: 0.6, minEnergy: 50, radius: 2, localCap: 1 });
+    expect(silicatePerBiomass()).toBe(0.1);
+    expect(gritDissolvePerSecond()).toBe(0.01);
+  });
+});
+
+/**
+ * The shipped run before the organism flip (taken at 3daebb2 plus wave 13's stage 1 working tree, before the
+ * relmatrix change): 711 rows, every one passing. Re-recorded by the lead at the organism flip.
+ */
+const SHIPPED_V1 = {
+  rows: 711,
+  perFamily: { diets: 189, prey: 184, hosts: 36, inhibitors: 54, enzymes: 12, producers: 18, modules: 190, materials: 28 },
+  digest: '4060fbf34a5908fe3ee61a4b4b5fc696c24f98f740fe6a33ab9bd5e8296eab03',
+  skipped: [
+    'prey: P05 (predator not enabled)',
+    'prey: P06 (predator not enabled)',
+    'prey: P07 (predator not enabled)',
+    'prey: P08 (predator not enabled)',
+    'prey: P09 (predator not enabled)',
+    'prey: P10 (predator not enabled)',
+    'hosts: X02 (not enabled)',
+    'hosts: V02 (not enabled)',
+    'hosts: F03 (not enabled)',
+    'inhibitors: RIVAL (B13 secretion / M08) (no enabled material of that name)',
+  ],
+};
+
 describe('G3 relationship matrix (every enabled species, material and module)', () => {
   const reg = registry();
   const res = runMatrix(reg);
@@ -130,9 +242,18 @@ describe('G3 relationship matrix (every enabled species, material and module)', 
     expect(res.rows.length).toBe(FAMILIES.reduce((a, f) => a + of(f).length, 0));
   });
 
+  it('before the organism flip: exactly the v1.0 rows (count, ids, expectations and observations equal to the snapshot)', () => {
+    const c = counts(res.rows);
+    expect(res.rows.length).toBe(SHIPPED_V1.rows);
+    expect(Object.fromEntries(FAMILIES.filter((f) => c[f].rows > 0).map((f) => [f, c[f].rows]))).toEqual(SHIPPED_V1.perFamily);
+    expect(rowsDigest(res.rows)).toBe(SHIPPED_V1.digest);
+    expect(res.skipped).toEqual(SHIPPED_V1.skipped);
+    for (const f of P5_FAMILIES) expect(c[f].rows, f).toBe(0);
+  });
+
   it('every family has positive and negative rows (no family is vacuous)', () => {
     const c = counts(res.rows);
-    for (const f of FAMILIES) {
+    for (const f of V1_FAMILIES) {
       expect(c[f].positive, f).toBeGreaterThan(0);
       if (f !== 'materials') expect(c[f].rows - c[f].positive, f).toBeGreaterThan(0);
     }

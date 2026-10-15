@@ -131,6 +131,10 @@ export function computeTotals(world: World): MaterialTotals & { breakdown: Recor
   let mealC = 0;
   let mealN = 0;
   let mineral = 0;
+  // F03 trap reserves (SPEC §3.4; Phase 5 wave 13, traps.ts): 0 in every world without a built trap, so the
+  // +0 terms below leave every older sum bit-identical (D-0108 carry-over).
+  let trapC = 0;
+  let trapN = 0;
   for (let i = 0; i < e.highWater; i++) {
     if (cols.alive[i] !== 1) continue;
     bodyC += cols.B[i]!;
@@ -138,14 +142,18 @@ export function computeTotals(world: World): MaterialTotals & { breakdown: Recor
     mealC += cols.mealC[i]!;
     mealN += cols.mealN[i]!;
     mineral += cols.boundMineral[i]! + cols.jacketMineral[i]!;
+    trapC += cols.trapReserveC[i]!;
+    trapN += cols.trapReserveN[i]!;
   }
   breakdown.bodyC = bodyC;
   breakdown.bodyN = bodyN;
   breakdown.mealC = mealC;
   breakdown.mealN = mealN;
   breakdown.bodyMineral = mineral;
-  c += bodyC + mealC;
-  n += bodyN + mealN;
+  breakdown.trapC = trapC;
+  breakdown.trapN = trapN;
+  c += bodyC + mealC + trapC;
+  n += bodyN + mealN + trapN;
   m += mineral;
   // Schema 4 compartments (SPEC §3.4): finite food objects and the sample slot. Adding their zero
   // totals leaves every older sum bit-identical.

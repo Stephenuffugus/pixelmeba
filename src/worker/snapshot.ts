@@ -30,10 +30,22 @@ import type { World } from '@sim/world';
 import { edgeCodeArrays, edgeNeighbour, freeClassOfSpecies, type EdgeBarrier } from '@sim/barriers';
 import { RESIN_CAPACITY, RESIN_TARGETS, type Device } from '@sim/devices';
 import { localWarmthAt } from '@sim/climate';
+// Wave 13 (org-ui): the Phase 5 organism readers (pure; nothing here is read back by the simulation).
+import { handlingSpecies, jacketCoverage } from '@sim/handling';
+import { heldView, trapView } from '@sim/traps';
+import { jacketView } from '@sim/jacket';
+import { sensedSignal } from '@sim/signals';
+import { STAGE8_ACTIONS } from '@sim/actions';
+import { INHIBITOR_DAMAGE, TRAP_HOLD_SECONDS } from '@sim/constants';
+import { inhibitorExposure } from '@sim/suitability';
+import type { Profile } from '@sim/phenotype';
 import {
+  CUE3_GLOWER,
   CUE3_GLOWING,
   CUE3_HANDLING,
+  CUE3_HANDLING_QUARTER_SHIFT,
   CUE3_HELD,
+  CUE3_HOLD_CLOSING,
   CUE3_JACKET_SHIFT,
   CUE3_JACKETED,
   CUE3_MOD_E02,
@@ -48,6 +60,7 @@ import {
   type CellDeviceLine,
   type CellEdgeLine,
   type CellLightFactors,
+  type BeingHandledInspect,
   type GeometryDevice,
   type GeometryEdge,
   type GeometryEdges,
@@ -166,7 +179,7 @@ export function packEntities(world: World, ents: Float32Array | null, ids: Uint3
     // Protocol 2: every slot is written for every entity (pooled buffers), 0 when nothing applies.
     outE[o + E_CUE2] = cue2Of(world, i, mods, flags);
     outE[o + E_LINKMASK] = linkMaskOf(world, i, fl);
-    outE[o + E_CUE3] = cue3Of(world, i, mods, shell[c.species[i]!] === true);
+    outE[o + E_CUE3] = cue3Of(world, i, mods, shell[c.species[i]!] === true, prof.glow !== null);
     outI[k * ID_STRIDE] = c.birthId[i]!;
     outI[k * ID_STRIDE + 1] = c.entityId[i]!;
     speciesCounts[c.species[i]!]!++;
@@ -214,11 +227,13 @@ function cue2Of(world: World, i: number, mods: readonly string[], flags: number)
  * Phase 5 cue bits (protocol 3, CUE3_*; D-0119) of one living organism, read from authoritative entity
  * columns only (protocol.ts documents each rule). 0 for every organism of a world holding no Phase 5 state.
  */
-export function cue3Of(world: World, i: number, mods: readonly string[], shellSpecies: boolean): number {
+export function cue3Of(world: World, i: number, mods: readonly string[], shellSpecies: boolean, glower = false): number {
   const c = world.ents.cols;
   const e = world.ents;
   let cue3 = 0;
   if (c.glowState[i] === 1) cue3 |= CUE3_GLOWING;
+  // Wave 13: an organism with glow rules (Profile.glow: native SIGNAL_GLOW or a recorded E02).
+  if (glower) cue3 |= CUE3_GLOWER;
   if (mods.length > 0) {
     if (mods.includes('E02')) cue3 |= CUE3_MOD_E02;
     if (mods.includes('E11')) cue3 |= CUE3_MOD_E11;
@@ -226,10 +241,15 @@ export function cue3Of(world: World, i: number, mods: readonly string[], shellSp
   const mode = c.metabolicMode[i]!;
   if (mode === 1 || mode === 2) cue3 |= mode << CUE3_MODE_SHIFT;
   const held = c.heldBySlot[i]!;
-  if (held >= 0 && e.refValid(held, c.heldByBirthId[i]!)) cue3 |= CUE3_HELD;
-  if (c.handlingNeed[i]! > 0) {
+  if (held >= 0 && e.refValid(held, c.heldByBirthId[i]!)) {
+    cue3 |= CUE3_HELD;
+    // Wave 13: the trap_loop 'closing' frame for the first second of the hold (the holder's trapTimer).
+    if (c.trapTimer[held]! <= HOLD_CLOSING_SECONDS + 1e-9) cue3 |= CUE3_HOLD_CLOSING;
+  }
+  const need = c.handlingNeed[i]!;
+  if (need > 0) {
     const prey = c.preySlot[i]!;
-    if (prey >= 0 && e.refValid(prey, c.preyBirthId[i]!)) cue3 |= CUE3_HANDLING;
+    if (prey >= 0 && e.refValid(prey, c.preyBirthId[i]!)) cue3 |= CUE3_HANDLING | (handlingQuarter(c.handlingProgress[i]!, need) << CUE3_HANDLING_QUARTER_SHIFT);
   }
   const ts = c.trapSlot[i]!;
   const holding = ts >= 0 && e.refValid(ts, c.trapBirthId[i]!);
@@ -237,12 +257,22 @@ export function cue3Of(world: World, i: number, mods: readonly string[], shellSp
   if (trap !== 0) cue3 |= trap << CUE3_TRAP_SHIFT;
   const jacket = c.jacketMineral[i]!;
   if (jacket > 0) {
-    const B = c.B[i]!;
-    const cov = B > 0 ? Math.min(1, jacket / (0.1 * B)) : 1;
+    // Wave 13 (D-0124): the one coverage the simulation uses for speed and handling (0 at B ≤ 0, where the
+    // wave 11 inline expression gave 1: unreachable for a living organism).
+    const cov = jacketCoverage(jacket, c.B[i]!);
     cue3 |= CUE3_JACKETED | (Math.min(3, Math.max(0, Math.ceil(4 * cov) - 1)) << CUE3_JACKET_SHIFT);
   }
   if (shellSpecies && c.boundMineral[i]! > 0) cue3 |= CUE3_SHELL;
   return cue3;
+}
+
+/** How long a new hold shows the trap_loop 'closing' frame (D-0124: the first second after the committed capture). */
+export const HOLD_CLOSING_SECONDS = 1;
+
+/** The handling_arc frame (D-0112): min(3, max(0, ⌈4 × progress / need⌉ − 1)); 0 when need is not positive. */
+export function handlingQuarter(progress: number, need: number): number {
+  if (!(need > 0)) return 0;
+  return Math.min(3, Math.max(0, Math.ceil((4 * progress) / need) - 1));
 }
 
 const FUNGAL_LINK_COLUMNS = [
@@ -569,7 +599,8 @@ function inspectEntity(world: World, slot: number): EntityInspect {
     else if (c.attackCooldown[slot]! > 0) code = R.PRED_COOLDOWN;
     // A prey removed in this tick stays named until the next decision: it is no longer a target.
     const target = c.preySlot[slot]! >= 0 && world.ents.refValid(c.preySlot[slot]!, c.preyBirthId[slot]!);
-    if (code === R.PRED_NO_PREY && target) code = R.PRED_OUT_OF_CONTACT;
+    // Wave 13: a handler in an attempt holds on to its prey (handlingNeed > 0 only with HANDLING; 0 in every v1.0 world).
+    if (code === R.PRED_NO_PREY && target) code = c.handlingNeed[slot]! > 0 ? R.PRED_HANDLING_IN_PROGRESS : R.PRED_OUT_OF_CONTACT;
     predation = { code, targetBirthId: target ? c.preyBirthId[slot]! : 0, cooldown: c.attackCooldown[slot]! };
   }
   const foodHere = prof.foods.map((f) => ({ food: f, amount: world.fields[f]?.[cell] ?? 0 }));
@@ -663,7 +694,99 @@ function inspectEntity(world: World, slot: number): EntityInspect {
     ...(transfer ? { transfer } : {}),
     ...(world.fields.film !== undefined && worldHasSystem(world, 'film') ? { filmHere: world.fields.film[cell]! } : {}),
     ...parasiteAndInfection(world, slot),
+    ...phase5Lines(world, slot, prof, cell),
   };
+}
+
+/**
+ * Wave 13 (org-ui; D-0124): the Phase 5 organism lines, each read from the columns or the simulation's own
+ * readers and present only when it applies, so a v1.0 organism gains no key (tests/worker/inspect-p5.test.ts).
+ */
+export function phase5Lines(
+  world: World,
+  slot: number,
+  prof: Profile,
+  cell: number,
+): Pick<EntityInspect, 'trap' | 'heldBy' | 'handling' | 'beingHandled' | 'mode' | 'jacket' | 'signal' | 'secretion' | 'rival'> {
+  const c = world.ents.cols;
+  const e = world.ents;
+  const sp = world.species[c.species[slot]!]!;
+  const out: {
+    -readonly [K in 'trap' | 'heldBy' | 'handling' | 'beingHandled' | 'mode' | 'jacket' | 'signal' | 'secretion' | 'rival']?: EntityInspect[K];
+  } = {};
+  const trap = trapView(world, slot);
+  if (trap) out.trap = { ...trap, holdSeconds: TRAP_HOLD_SECONDS };
+  const held = heldView(world, slot);
+  if (held) out.heldBy = { ...held, holdSeconds: TRAP_HOLD_SECONDS };
+  const need = c.handlingNeed[slot]!;
+  if (need > 0) {
+    const prey = c.preySlot[slot]!;
+    if (prey >= 0 && e.refValid(prey, c.preyBirthId[slot]!)) {
+      out.handling = { preyBirthId: c.preyBirthId[slot]!, preySpeciesIdx: c.species[prey]!, progress: c.handlingProgress[slot]!, need };
+    }
+  }
+  // CAPTURED_HANDLING is derived here: every living handler whose VALID prey reference is this organism.
+  if (handlingSpecies(world) !== null) {
+    const by: BeingHandledInspect[] = [];
+    const myBirth = c.birthId[slot]!;
+    for (let j = 0; j < e.highWater; j++) {
+      if (j === slot || c.alive[j] !== 1 || !(c.handlingNeed[j]! > 0)) continue;
+      if (c.preySlot[j] !== slot || c.preyBirthId[j] !== myBirth || !e.refValid(slot, c.preyBirthId[j]!)) continue;
+      by.push({ predatorBirthId: c.birthId[j]!, predatorSpeciesIdx: c.species[j]!, progress: c.handlingProgress[j]!, need: c.handlingNeed[j]! });
+    }
+    if (by.length > 0) out.beingHandled = by;
+  }
+  if (sp.mixotroph) out.mode = { mode: c.metabolicMode[slot]!, light: world.derived.light[cell]! };
+  const jacket = jacketView(world, slot);
+  if (jacket) out.jacket = { mineral: jacket.mineral, target: jacket.target, coverage: jacket.coverage, speedFactor: jacket.speedFactor };
+  const glow = prof.glow;
+  if (glow !== null) {
+    out.signal = {
+      sensed: sensedSignal(world, cell),
+      onThreshold: glow.onThreshold,
+      offThreshold: glow.offThreshold,
+      dwellSeconds: glow.dwellSeconds,
+      glowing: c.glowState[slot] === 1,
+    };
+  }
+  if (glow !== null || prof.rivalry !== null) {
+    out.secretion = { code: c.secretionCode[slot]!, bits: c.secreting[slot]!, refusalOf: lastEmitterKind(world, slot, prof) };
+  }
+  if (sp.rivalTarget) {
+    const r = world.fields.rival;
+    const amount = r === undefined ? 0 : r[cell]!;
+    if (amount > 0) {
+      const rival = exposureBreakdown(world, cell).rival!;
+      const total = inhibitorExposure(world, sp, cell);
+      out.rival = { amount, exposure: rival.exposure, totalExposure: total, growthFactor: 1 / (1 + total), damagePerSecond: INHIBITOR_DAMAGE * total };
+    }
+  }
+  return out;
+}
+
+/** Which emitter kind each stage 8 action is (D-0120: the words name what the organism really emits). */
+const EMITTER_KIND: Readonly<Record<string, 'enzyme' | 'signal' | 'rival'>> = {
+  E_STARCH_SECRETION: 'enzyme',
+  E_OIL_SECRETION: 'enzyme',
+  E_PROTEIN_SECRETION: 'enzyme',
+  E01: 'enzyme',
+  E09: 'enzyme',
+  SIGNAL_GLOW: 'signal',
+  E02: 'signal',
+  RIVALRY: 'rival',
+};
+
+/**
+ * The kind of the last emitter action this organism runs in stage 8 (STAGE8_ACTIONS order): when nothing was
+ * released this tick, secretionCode holds that emitter's refusal (secretion.ts recordEmission / producerRun).
+ */
+function lastEmitterKind(world: World, slot: number, prof: Profile): 'enzyme' | 'signal' | 'rival' {
+  let kind: 'enzyme' | 'signal' | 'rival' = prof.glow !== null ? 'signal' : 'rival';
+  for (const a of STAGE8_ACTIONS) {
+    const k = EMITTER_KIND[a.key];
+    if (k !== undefined && a.applies(prof, world, slot)) kind = k;
+  }
+  return kind;
 }
 
 /** P3.4: an infection, an attached parasite, or the host a parasite rides (sim/viruses.ts, sim/parasites.ts). */
@@ -686,14 +809,18 @@ function founderLociOf(world: World, origin: ReturnType<typeof founderOriginOf>)
  * light (each releases PHOTO_SUGAR_FRACTION of the carbon it fixes as sugar, SPEC §6.5) and species
  * whose native enzyme turns starch into sugar. Species indices of this world, ascending.
  */
-function sugarSourcesOf(world: World): { makers: number[]; enzyme: number[] } {
+export function sugarSourcesOf(world: World): { makers: number[]; enzyme: number[]; inLight?: number[] } {
   const makers: number[] = [];
   const enzyme: number[] = [];
+  const inLight: number[] = [];
   world.species.forEach((s, i) => {
-    if (s.photosynthetic && !s.mixotroph) makers.push(i);
+    // Wave 13: a mixotroph (A04) in its Photo mode releases sugar as a photosynthesizer does (0.50 per C fixed;
+    // intake.ts route 2), so it is a maker, flagged `inLight` for the words.
+    if (s.photosynthetic) makers.push(i);
+    if (s.mixotroph) inLight.push(i);
     if (s.abilities.includes('E_STARCH_SECRETION')) enzyme.push(i);
   });
-  return { makers, enzyme };
+  return inLight.length > 0 ? { makers, enzyme, inLight } : { makers, enzyme };
 }
 
 function inspectCell(world: World, cell: number): CellInspect {
@@ -975,7 +1102,9 @@ function chemistryLines(world: World, cell: number): Pick<CellInspect, 'salinity
     oxygen: world.fields.oxygen?.[cell] ?? 0,
     lightBase: light.baseline,
     shade: light.shade,
-    ...(bd.lines.length > 0 ? { exposure: bd } : {}),
+    // D-0120 carry-over (wave 13): the rival line is kept in a dish that records rivalry but no inhibitor
+    // (it was dropped with the empty inhibitor lines); a v1.0 dish has no rival field, so it reads as before.
+    ...(bd.lines.length > 0 || bd.rival !== undefined ? { exposure: bd } : {}),
   };
 }
 

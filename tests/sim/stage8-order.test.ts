@@ -123,8 +123,10 @@ describe('P3.7 stage 8: the action table', () => {
   });
 
   // Re-pinned in Phase 5 wave 11 (e2-signals, D-0119): native SIGNAL_GLOW (5) and RIVALRY (6) and module E02 (2)
-  // joined the shipped table; the synthetic native that proves registration order is now TRAP (7).
-  it('the shipped table: native starch, oil, protein producers, biofilm, SIGNAL_GLOW, RIVALRY, then E01, E02, E09, E10 — frozen and untouched by test tables', () => {
+  // joined the shipped table. Re-pinned in wave 13 (e3-jacket): native TRAP (7, traps.ts) and module E11 (11,
+  // jacket.ts) joined it; the synthetic native that proves registration order is now CANOPY (12), a native
+  // ability with no stage 8 action (buildActionTable refuses a second TRAP).
+  it('the shipped table: native starch, oil, protein producers, biofilm, SIGNAL_GLOW, RIVALRY, TRAP, then E01, E02, E09, E10, E11 — frozen and untouched by test tables', () => {
     const shape = (t: readonly Stage8Action[]) => t.map((a) => `${a.tier}:${a.key}:${a.id}`);
     const before = shape(STAGE8_ACTIONS);
     expect(before).toEqual([
@@ -134,15 +136,18 @@ describe('P3.7 stage 8: the action table', () => {
       'native:BIOFILM:3',
       'native:SIGNAL_GLOW:5',
       'native:RIVALRY:6',
+      'native:TRAP:7',
       'module:E01:1',
       'module:E02:2',
       'module:E09:9',
       'module:E10:10',
+      'module:E11:11',
     ]);
     expect(Object.isFrozen(STAGE8_ACTIONS)).toBe(true);
     const log: LogRow[] = [];
-    const t = buildActionTable([testModule(log, 'E04'), ...STAGE8_ACTIONS, testNative(log, 'TRAP'), testMandatory(log, 'M', 0)]);
-    expect(shape(t)).toEqual(['mandatory:M:0', ...before.slice(0, 6), 'native:TRAP:7', 'module:E01:1', 'module:E02:2', 'module:E04:4', 'module:E09:9', 'module:E10:10']);
+    const t = buildActionTable([testModule(log, 'E04'), ...STAGE8_ACTIONS, testNative(log, 'CANOPY'), testMandatory(log, 'M', 0)]);
+    expect(shape(t)).toEqual(['mandatory:M:0', ...before.slice(0, 7), 'native:CANOPY:12', 'module:E01:1', 'module:E02:2', 'module:E04:4', 'module:E09:9', 'module:E10:10', 'module:E11:11']);
+    expect(() => buildActionTable([...STAGE8_ACTIONS, testNative(log, 'TRAP')])).toThrow(/duplicate action native TRAP/);
     expect(shape(STAGE8_ACTIONS)).toEqual(before);
     expect(() => buildActionTable([testModule(log, 'E04'), testModule(log, 'E04')])).toThrow(/duplicate/);
   });
@@ -200,9 +205,10 @@ describe('P3.7 stage 8: reservation order', () => {
       stageStructures(w, buildActionTable([...STAGE8_ACTIONS, ...extra(log)]));
       return { w, s, log };
     };
-    // A native test action (TRAP, ID 7; SIGNAL_GLOW ships since wave 11, D-0119) runs before the E01 module action and takes 0.04.
-    const a = run((log) => [testNative(log, 'TRAP', 35, 0.04)]);
-    expect(a.log.map((r) => [r.key, r.outcome])).toEqual([['TRAP', R.NONE]]);
+    // A native test action (CANOPY, ID 12; SIGNAL_GLOW ships since wave 11, D-0119, and TRAP since wave 13) runs
+    // before the E01 module action and takes 0.04.
+    const a = run((log) => [testNative(log, 'CANOPY', 35, 0.04)]);
+    expect(a.log.map((r) => [r.key, r.outcome])).toEqual([['CANOPY', R.NONE]]);
     expect(a.w.ents.cols.secretionCode[a.s]).toBe(R.SECRETION_ENERGY_LOW);
     expect(a.w.ledger.energy.secretion).toBe(0);
     // A module test action after E01 (E04; E02 ships since wave 11) is the one refused, with its own code ENERGY_LOW.

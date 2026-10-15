@@ -245,3 +245,55 @@ Stage 5 alone (after stage 4 to after stage 5), 20 warm-up ticks, then 300 ticks
 
 A world without HANDLING or RADIUS_CAPTURE runs the v1.0 claim loop (the tables are null): no new column read and no
 added float operation in stage 5.
+
+## Wave 13: traps, the mineral jacket, Phase 5 marks and the Phase 5 relationship matrix (2026-10-15)
+
+Indicative only: the builders' scratch probes on the shared 2-vCPU codespace, with load averages of about 3.6–10 from
+other agents, fence runs and Playwright, so noise dominates and p95 values are inflated. **The lead's quiet-machine run
+is still owed** and is recorded here when it runs (LEAD AFTER WAVE 13 item 4). Nothing is enabled; a world without F03
+or E11 reads no trap or jacket column in any stage, so v1.0 dishes take the old paths (the fence is unchanged).
+
+### Stages 5, 6 and 8 with traps (e3-traps, tmp/e3-traps/perf.test.ts)
+
+300 ticks, mean / p95 in ms, two runs each.
+
+| Dish | Stage 5 | Stage 6 | Stage 8 |
+|---|---|---|---|
+| Without F03 (40 P04, ~190 alive), run 1 | 0.37 / 2.12 | 0.43 / 2.36 | 0.42 / 2.21 |
+| Without F03, run 2 | 0.17 / 0.40 | 0.22 / 0.31 | 0.32 / 1.46 |
+| 40 F03 holding P04 (277 alive), run 1 | 0.31 / 1.24 | 0.48 / 2.29 | 0.39 / 1.24 |
+| 40 F03 holding P04, run 2 | 0.37 / 1.80 | 0.39 / 2.22 | 0.43 / 2.03 |
+
+No trap cost is measurable above the noise.
+
+### Stages 4 and 8 with E11 carriers (e3-jacket, tmp/e3-jacket/timing.ts)
+
+300 ticks after a 30-tick warm-up, 100 P01 on silicate 0.5 (load average 7–10 on 2 CPUs). The carriers reach their
+0.4 target at tick 200 of their life, so they request for about 170 of the 300 measured ticks.
+
+| Run | Stage 4 mean / p95 | Stage 8 mean / p95 |
+|---|---|---|
+| Plain P01, rep 0 | 1090 µs / 5754 µs | 255 µs / 1739 µs |
+| Plain P01, rep 1 | 728 µs / 3833 µs | 153 µs / 83 µs |
+| 100 E11 carriers, rep 0 | 941 µs / 4385 µs | 415 µs / 2359 µs |
+| 100 E11 carriers, rep 1 | 1115 µs / 5388 µs | 328 µs / 2273 µs |
+
+Stage 4's speed factor is one multiplication per carrier and is lost in the noise; stage 8 gains roughly 0.1–0.2 ms
+mean for 100 carriers building (the shared mineral pass), within the noise of this machine.
+
+### Snapshot pack with Phase 5 marks (org-ui)
+
+Not measured by the builder: org-ui's report gives no timing for the snapshot pack on 2,000 organisms with Phase 5
+marks. What it proves instead: the E_CUE3 additions are computed in the existing `cue3Of` pass (no stride or band
+change), and a v1.0 dish packs E_CUE3 0 for every organism. The pack timing is part of the lead's quiet-machine run.
+
+### The relationship matrix (relmatrix)
+
+| Run | Rows | Wall time |
+|---|---|---|
+| Shipped registry, CLI | 711 | 6.8–12.1 s |
+| Phase 5 registry, CLI | 2265 | 30.4–38.4 s |
+| Shipped registry, inside vitest (load ≈ 7) | 711 | 51 s |
+| Phase 5 registry, inside vitest (load ≈ 7) | 2265 | 179–184 s |
+
+The Phase 5 matrix test asserts a 300 s ceiling (a runaway check, not a budget).

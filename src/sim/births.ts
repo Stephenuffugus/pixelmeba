@@ -75,6 +75,7 @@ export function divisionBlocker(world: World, i: number): number {
   const c = world.ents.cols;
   const prof = profileOf(world, i);
   if (c.lifeState[i] !== 0) return R.DIV_BLOCK_STATE;
+  if (c.heldBySlot[i]! >= 0) return R.DIV_BLOCK_STATE; // T1 (Phase 5 wave 13; SPEC §6.9 "not held"): -1 in every old world
   if (c.infectedBy[i] !== 0) return R.DIV_BLOCK_INFECTED;
   if (c.B[i]! < DIVISION_BIOMASS_MULTIPLE * prof.b0) return R.DIV_BLOCK_BIOMASS;
   if (c.E[i]! < Math.max(DIVISION_MIN_ENERGY, prof.divisionCost)) return R.DIV_BLOCK_ENERGY;
@@ -89,6 +90,7 @@ export function allDivisionBlockers(world: World, i: number): number[] {
   const prof = profileOf(world, i);
   const out: number[] = [];
   if (c.lifeState[i] !== 0) out.push(R.DIV_BLOCK_STATE);
+  if (c.heldBySlot[i]! >= 0) out.push(R.DIV_BLOCK_STATE); // T1 (Phase 5 wave 13): held in an F03 trap
   if (c.infectedBy[i] !== 0) out.push(R.DIV_BLOCK_INFECTED);
   if (c.B[i]! < DIVISION_BIOMASS_MULTIPLE * prof.b0) out.push(R.DIV_BLOCK_BIOMASS);
   if (c.E[i]! < Math.max(DIVISION_MIN_ENERGY, prof.divisionCost)) out.push(R.DIV_BLOCK_ENERGY);
@@ -331,10 +333,21 @@ function commitDivision(
     // A04 newborn mode (D-0106): from her own cell's light (this tick's stage 2), Photo at ≥ 0.35, Sugar at
     // ≤ 0.25, else the parent's. A first mode is a state, not a switch: no 'modeSwitch' event.
     if (sp.mixotroph) c.metabolicMode[d] = nextMode(world.derived.light[entityCell(c.x[d]!, c.y[d]!)]!, parentMode);
-    const cap = profileOf(world, d).energyCap;
+    const dProf = profileOf(world, d);
+    const cap = dProf.energyCap;
     if (c.E[d]! > cap) {
       world.ledger.energy.dissipated += c.E[d]! - cap;
       c.E[d] = cap;
+    }
+    // E11 (Phase 5 wave 13; SPEC §9.19 "Jacket without E11 → grit"): a daughter whose inherited genome lacks E11
+    // drops her half of the jacket as grit in her own cell, here, after both daughters are placed (stage 9 reads
+    // no grit, so it is usable next tick); a daughter with E11 keeps her half, and none gains a jacket at birth.
+    // One read of an always-0 column per daughter in a world without jackets.
+    if (c.jacketMineral[d]! > 0 && dProf.jacket === null) {
+      const grit = world.fields.grit;
+      if (!grit) throw new Error('stage 9: jacket mineral present but the silicate system is not enabled');
+      grit[entityCell(c.x[d]!, c.y[d]!)]! += c.jacketMineral[d]!;
+      c.jacketMineral[d] = 0; // grit is not marked, as killEntity and consumePrey (conversion.ts scans every cell; D-0117)
     }
   }
   // SPEC §6.9 step 2, §7.6 (D-0106): the new daughter of a RESTING_DAUGHTER parent begins Resting with her
@@ -350,6 +363,11 @@ function commitDivision(
   onAdhesionDivision(world, i); // SPEC §9.19: colony links removed, both daughters start unlinked (adhesion.ts)
   onAnchorDivision(world, i); // SPEC §9.19: E04 attachment resets; the new daughter's slot starts cleared (anchor.ts)
   onParasiteDivision(world, i, slot, parentBirth); // the retained daughter keeps its host/parasite pair (SPEC §7.4; parasites.ts)
+  // T2 (Phase 5 wave 13; SPEC §9.19 "F03 trap stays with the retained parent"): its held organism now names the
+  // retained daughter's new birthId; reserve, timer, cooldown and target stay on this slot, and the new slot
+  // starts with no trap (allocate cleared it).
+  const trapT = c.trapSlot[i]!;
+  if (trapT >= 0 && world.ents.refValid(trapT, c.trapBirthId[i]!) && c.heldBySlot[trapT] === i && c.heldByBirthId[trapT] === parentBirth) c.heldByBirthId[trapT] = c.birthId[i]!;
   c.birthId[slot] = b1;
   const spIdx = c.species[i]!;
   const gen = parentInfo.generation + 1;

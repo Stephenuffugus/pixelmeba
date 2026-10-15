@@ -61,19 +61,18 @@ export type FeatureLayerId =
   | 'debris_granule'
   | 'protein_notches'
   | 'matrix_edge'
-  | 'adhesion_link';
+  | 'adhesion_link'
+  // The Phase 5 marks (P5.7), appended after the v1.0 layers in this order so the atlas does not move.
+  // Packed since waves 8a/8b; wave 13 (org-ui, D-0109, D-0112) moved them into the renderer's vocabulary
+  // (src/render/features.ts FEATURE_LAYER_IDS, pinned by tests/sim/module-visuals.test.ts).
+  | 'glow_center'
+  | 'jacket_rim'
+  | 'mode_half'
+  | 'handling_arc'
+  | 'trap_loop';
 
-/**
- * The Phase 5 marks (P5.7). They are packed into the atlas now, before the organism flip (D-0104), but
- * the renderer learns them only in wave 13 (org-ui): until then they are not in FeatureLayerId, so
- * FEATURE_LAYERS stays exactly the renderer's vocabulary (src/render/features.ts FEATURE_LAYER_IDS,
- * pinned by tests/sim/module-visuals.test.ts). Org-ui moves them into FeatureLayerId and
- * FEATURE_LAYERS (appended in this order, so the atlas does not move) and empties this type.
- */
-export type Phase5FeatureLayerId = 'glow_center' | 'jacket_rim' | 'mode_half' | 'handling_arc' | 'trap_loop';
-
-/** Every mark the atlas packs: the renderer's layers and the Phase 5 marks awaiting it. */
-export type AtlasFeatureLayerId = FeatureLayerId | Phase5FeatureLayerId;
+/** Every mark the atlas packs (since wave 13 the renderer's whole vocabulary; tools/art-build.ts imports this name). */
+export type AtlasFeatureLayerId = FeatureLayerId;
 
 export interface FeatureLayerDef<Id extends AtlasFeatureLayerId = FeatureLayerId> {
   readonly id: Id;
@@ -255,7 +254,7 @@ function glowFrame(glow: boolean): Px {
   return p;
 }
 
-const GLOW_CENTER: FeatureLayerDef<Phase5FeatureLayerId> = {
+const GLOW_CENTER: FeatureLayerDef = {
   id: 'glow_center',
   palette: ['', P.glowDim, P.lanternLime, P.glowHalo],
   frameNames: ['dim (not glowing)', 'glow (glowing: bright center and 2-px halo)'],
@@ -279,7 +278,7 @@ function jacketFrame(level: number): Px {
   return p;
 }
 
-const JACKET_RIM: FeatureLayerDef<Phase5FeatureLayerId> = {
+const JACKET_RIM: FeatureLayerDef = {
   id: 'jacket_rim',
   palette: ['', P.jacketRimDeep, P.jacketRim],
   frameNames: ['level 0 (coverage under a quarter)', 'level 1 (up to a half)', 'level 2 (up to three quarters)', 'level 3 (above three quarters)'],
@@ -310,7 +309,7 @@ function modeFrame(leading: boolean, edge: number, core: number): Px {
   return p;
 }
 
-const MODE_HALF: FeatureLayerDef<Phase5FeatureLayerId> = {
+const MODE_HALF: FeatureLayerDef = {
   id: 'mode_half',
   palette: ['', P.turnleafLight, P.turnleafPale, P.turnleafAmber, P.turnleafAmberLight],
   frameNames: ['photo (leading half bright)', 'sugar (trailing half amber)'],
@@ -348,7 +347,7 @@ function handlingFrame(k: number): Px {
   return p;
 }
 
-const HANDLING_ARC: FeatureLayerDef<Phase5FeatureLayerId> = {
+const HANDLING_ARC: FeatureLayerDef = {
   id: 'handling_arc',
   palette: ['', P.handlingArc, P.handlingTick],
   frameNames: ['handling up to a quarter done', 'handling up to a half done', 'handling up to three quarters done', 'handling above three quarters done'],
@@ -371,7 +370,7 @@ function loopFrame(rx: number, ry: number, open: boolean, tone: number): Px {
   return p;
 }
 
-const TRAP_LOOP: FeatureLayerDef<Phase5FeatureLayerId> = {
+const TRAP_LOOP: FeatureLayerDef = {
   id: 'trap_loop',
   palette: ['', P.trapLoopHeld, P.trapLoopLight],
   frameNames: ['closing (the loop forming round the held worm)', 'holding (the loop closed and tied)'],
@@ -390,10 +389,13 @@ export const FEATURE_LAYERS: readonly FeatureLayerDef[] = [
   PROTEIN_NOTCHES,
   MATRIX_EDGE,
   ADHESION_LINK,
+  // Phase 5 (wave 13 org-ui, D-0109 / D-0112): the order they were packed in, so no atlas frame moves.
+  GLOW_CENTER,
+  JACKET_RIM,
+  MODE_HALF,
+  HANDLING_ARC,
+  TRAP_LOOP,
 ];
 
-/** The Phase 5 marks, packed after the renderer's layers (see Phase5FeatureLayerId). */
-export const PHASE5_FEATURE_LAYERS: readonly FeatureLayerDef<Phase5FeatureLayerId>[] = [GLOW_CENTER, JACKET_RIM, MODE_HALF, HANDLING_ARC, TRAP_LOOP];
-
-/** Every mark tools/art-build.ts packs, in atlas order: the renderer's layers, then the Phase 5 marks. */
-export const ATLAS_FEATURE_LAYERS: readonly FeatureLayerDef<AtlasFeatureLayerId>[] = [...FEATURE_LAYERS, ...PHASE5_FEATURE_LAYERS];
+/** Every mark tools/art-build.ts packs, in atlas order: since wave 13 exactly the renderer's layers. */
+export const ATLAS_FEATURE_LAYERS: readonly FeatureLayerDef<AtlasFeatureLayerId>[] = FEATURE_LAYERS;

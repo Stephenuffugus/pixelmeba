@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import { PNG } from 'pngjs';
 import { describe, expect, it } from 'vitest';
 import { SPRITES } from '../../art/src/index';
-import { ATLAS_FEATURE_LAYERS, FEATURE_LAYERS, PHASE5_FEATURE_LAYERS, type AtlasFeatureLayerId, type FeatureLayerDef } from '../../art/src/layers/modules';
+import { ATLAS_FEATURE_LAYERS, FEATURE_LAYERS, type AtlasFeatureLayerId, type FeatureLayerDef } from '../../art/src/layers/modules';
 import { FEATURE_LAYER_IDS } from '../../src/render/features';
 import { P } from '../../art/src/palette';
 import { Px } from '../../art/src/px';
@@ -205,20 +205,22 @@ describe('Phase 5 feature marks map to recorded facts (ARCH §10.1, UX §6.2/§6
     return out;
   };
 
-  it('FEATURE_LAYERS stays the renderer vocabulary; the Phase 5 marks are packed after it until wave 13 (fix1)', () => {
+  it('FEATURE_LAYERS is the renderer vocabulary; the Phase 5 marks are appended to it, after the v1.0 layers (wave 13, D-0109/D-0112)', () => {
     // tests/sim/module-visuals.test.ts pins FEATURE_LAYERS to src/render FEATURE_LAYER_IDS (type and
-    // order); appending the Phase 5 marks to it broke npm run check (wave 8a verify, MAJOR).
+    // order). Re-pinned in wave 13 (org-ui, D-0109/D-0112): the five Phase 5 marks moved from the former
+    // PHASE5_FEATURE_LAYERS into FEATURE_LAYERS and FEATURE_LAYER_IDS, in their packing order.
     expect(FEATURE_LAYERS.map((l) => l.id)).toEqual([...FEATURE_LAYER_IDS]);
-    expect(PHASE5_FEATURE_LAYERS.map((l) => l.id).slice(0, 3)).toEqual(['glow_center', 'jacket_rim', 'mode_half']);
-    for (const l of PHASE5_FEATURE_LAYERS) expect(FEATURE_LAYER_IDS as readonly string[], l.id).not.toContain(l.id);
-    // The atlas packs both, the renderer's layers first, so the shipped marks keep their positions.
-    expect(ATLAS_FEATURE_LAYERS).toEqual([...FEATURE_LAYERS, ...PHASE5_FEATURE_LAYERS]);
+    expect(FEATURE_LAYERS.slice(10).map((l) => l.id)).toEqual(['glow_center', 'jacket_rim', 'mode_half', 'handling_arc', 'trap_loop']);
+    for (const id of ['glow_center', 'jacket_rim', 'mode_half']) expect(FEATURE_LAYER_IDS as readonly string[], id).toContain(id);
+    // The atlas packs exactly the renderer's layers, the v1.0 ten first, so the shipped marks keep their positions.
+    expect(ATLAS_FEATURE_LAYERS).toEqual(FEATURE_LAYERS);
     const manifest = JSON.parse(readFileSync(join(REPO_ROOT, 'public', 'atlas', 'manifest.json'), 'utf8')) as { features: Record<string, unknown> };
     expect(Object.keys(manifest.features)).toEqual(ATLAS_FEATURE_LAYERS.map((l) => l.id));
   });
 
   it('the three marks are packed with their validator frame counts and names', () => {
-    expect(ATLAS_FEATURE_LAYERS.slice(FEATURE_LAYERS.length, FEATURE_LAYERS.length + 3).map((l) => l.id)).toEqual(['glow_center', 'jacket_rim', 'mode_half']);
+    // Re-pinned in wave 13 (org-ui, D-0109): the marks follow the ten v1.0 layers inside FEATURE_LAYERS now.
+    expect(ATLAS_FEATURE_LAYERS.slice(10, 13).map((l) => l.id)).toEqual(['glow_center', 'jacket_rim', 'mode_half']);
     for (const id of ['glow_center', 'jacket_rim', 'mode_half']) {
       expect(layer(id).frames, id).toHaveLength(FEATURE_FRAMES[id]!.frames);
       expect(layer(id).frameNames, id).toHaveLength(FEATURE_FRAMES[id]!.frames);
