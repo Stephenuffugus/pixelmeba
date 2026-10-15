@@ -3,6 +3,14 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑15 ~06:10 UTC — WAVE 13 BUILT AND VERIFIED (wf_d51abc7b-b19: 10 agents, org-ui MAJOR fixed and re-verified,
+> nothing blocking). LEAD INTEGRATION IN THE TREE (uncommitted; backed up on wip/g5-wave-13): TRAP appended to
+> IMPLEMENTED_NATIVE_ABILITIES, validator case → tests/content/validator-unimplemented.test.ts, import-implemented F03 case → "loads",
+> trap journey un-skipped. Running: tmp/lead/check-w13.sh (art --check, content:validate, relmatrix, full npm run check; log
+> tmp/lead/check-w13.log + check-w13-full.log); a docs agent writing D-0125, ARCH/UX as-built, perf-g5 wave 13, EXPANSION §8.
+> START HERE.** If the session died: if `git status` is clean, restore from wip/g5-wave-13; finish LEAD AFTER WAVE 13 items 3–7
+> (journeys item 5 on a quiet machine, plus the two wave 12 desktop timeouts), commit, push; then THE ORGANISM FLIP.
+
 > **Update 2026‑10‑15 — WAVE 13 RUNNING (run `wf_d51abc7b-b19`, session c4bb6488, launched at `93470f2` from
 > docs/agent/g5-wave-13.run.workflow.js.txt). Backups → `wip/g5-wave-13` (pid tmp/lead/backup-13.pid). Wave 12's owed journeys
 > running in tmp/wt-w11 at ecf058b (tmp/lead/e2e-w12-iso.sh → tmp/lead/e2e-w12.log). `.devcontainer/devcontainer.json` now
