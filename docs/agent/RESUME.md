@@ -3,6 +3,17 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑15 16:20 UTC — WAVE 14 RUNNING (Workflow run wf_5c689362-ca9 from docs/agent/g5-wave-14.run.workflow.js.txt,
+> committed 1c9d8a2; stage 1 habitat-geometry 4271 + region-pins 4272, then stage 2 habitat-communities 4271 + new-dish-habitats
+> 4272; reports in docs/reports/reviews/g5-wave-14/) and the WAVE 15 TASK WRITER (run wf_0ed0eb60-3e8 → docs/agent/g5-wave-15.tasks.js.txt
+> + docs/reports/reviews/g5-wave-15/tasks-writer.md; DONE 16:50, committed; the lead review is drafted as the wave 15 calls D-entry in
+> tmp/lead/d-wave15-calls.md: accept 1-24 (23 amends g5-plan call 2: NOTEBOOK_VERSION stays 1), owner flags E205/E214/attach, and
+> a stage 2 contentHash note to add to both stage 2 prompts at pre-launch). Backups: tools/lead/backup-loop.sh → wip/g5-wave-14 every 30 min (pid in
+> tmp/lead/backup-14.pid). START HERE.** If the session died: `git status` and the reports show what each builder finished;
+> restore from wip/g5-wave-14 if the tree is clean but work is missing; re-run only unfinished tasks (a fresh run of the run
+> file with A.only narrowed); then LEAD AFTER WAVE 14 (in the task file), THE HABITAT ENABLE, the full e2e sweep owed (g5-plan),
+> wave 15 (fill its "<lead: …as built>" placeholders, build its run file), wave 16 (G5 gate, v1.1.0).
+
 > **Update 2026‑10‑15 16:13 UTC — THE ORGANISM FLIP COMMITTED `9aeeee6` (D-0126, D-0127; P5.3 and P5.5 ticked in the docs(worklog) commit after it),
 > pushed. Next: wave 14 pre-launch `tmp/lead/prelaunch-14.sh 9aeeee6` (fills the task file, appends D-0128, builds
 > docs/agent/g5-wave-14.run.workflow.js.txt with verify groups), commit, free ports 4271-4274/4390-4398, start the backup
