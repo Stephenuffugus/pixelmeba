@@ -260,6 +260,17 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
     if (s.minDivisionAge >= s.maxAge) err(file, 'minDivisionAge', 'must be below maxAge');
     const pairing = nativeAbilityPairingProblem(s);
     if (pairing !== null) err(file, 'nativeAbilities', pairing);
+    // D-0123 MINOR 6: the simulation keys the A04 mode on the metabolism (species.ts mixotroph), the import
+    // keys its mode refusal on the native ability, so the two must name the same species.
+    const mixoAbility = s.nativeAbilities.includes('MIXOTROPHY');
+    if ((s.metabolism === 'mixotroph') !== mixoAbility)
+      err(
+        file,
+        mixoAbility ? 'metabolism' : 'nativeAbilities',
+        mixoAbility
+          ? `lists MIXOTROPHY but its metabolism is "${s.metabolism}": a species with MIXOTROPHY must have metabolism "mixotroph"`
+          : 'has metabolism "mixotroph" without MIXOTROPHY: a mixotroph must also list the native ability MIXOTROPHY',
+      );
   }
   for (const id of modules.ids) {
     const m = modules.map[id]!;

@@ -8,8 +8,11 @@ import type { Manifest, NativeAbilityId } from './schema';
 
 export const IMPLEMENTED_NATIVE_ABILITIES: readonly NativeAbilityId[] = ['BIOFILM', 'BRANCHING', 'CANOPY', 'DETRITUS_FALLBACK', 'DORMANCY', 'E_OIL_SECRETION', 'E_PROTEIN_SECRETION', 'E_STARCH_SECRETION', 'HANDLING', 'HOST_DRAIN', 'LOW_LIGHT_CURVE', 'LYSIS', 'MIXOTROPHY', 'OXYGEN_SUPPRESSED', 'PREDATION', 'RADIUS_CAPTURE', 'RESTING_DAUGHTER', 'RIVALRY', 'SEDIMENT_WATER_CROSSING', 'SHELL', 'SIGNAL_GLOW', 'TRANSPORT_LINKS', 'TRAP'];
 
-/** Supplementary modules the simulation implements (checked the same way; P2.1). */
-export const IMPLEMENTED_MODULES: readonly string[] = ['E01', 'E03', 'E04', 'E05', 'E06', 'E07', 'E08', 'E09', 'E10', 'E12'];
+/**
+ * Supplementary modules the simulation implements (checked the same way; P2.1). E02 (Signal glow, wave 11)
+ * and E11 (Mineral jacket, wave 13) joined at the organism flip (D-0127); E13–E17 are Phase 7's.
+ */
+export const IMPLEMENTED_MODULES: readonly string[] = ['E01', 'E02', 'E03', 'E04', 'E05', 'E06', 'E07', 'E08', 'E09', 'E10', 'E11', 'E12'];
 
 /**
  * Phase 5 structures (S01–S12, CT §4) the simulation implements beyond the cell structures in
@@ -31,13 +34,14 @@ export const IMPLEMENTED_SYSTEMS: readonly SystemFlag[] = ['barriers', 'chemistr
  * The newest recorded rules this simulation implements (D-0121, the lead's ceilings). The import refuses
  * a dish whose recorded manifest names a newer version, or developmental changes, with "This dish needs a
  * newer version of Pixelmeba (…)"; the validator refuses a manifest that would ship one, so every new dish
- * reopens. moduleRegistryVersion moves to 3 at the organism flip; the Phase 7 flip moves the evolution
- * rules, the trait mapping and the registry together and sets developmental (g7-plan call 2).
+ * reopens. moduleRegistryVersion moved to 3 at the organism flip (D-0127, with the manifest); the Phase 7
+ * flip moves the evolution rules, the trait mapping and the registry together and sets developmental
+ * (g7-plan call 2).
  */
 export const IMPLEMENTED_RULES = {
   simulationVersion: 3,
   evolutionRulesVersion: 1,
-  moduleRegistryVersion: 2,
+  moduleRegistryVersion: 3,
   phenotypeMappingVersion: 1,
   developmental: false,
 } as const satisfies Pick<Manifest, 'simulationVersion' | 'evolutionRulesVersion' | 'moduleRegistryVersion' | 'phenotypeMappingVersion'> & { developmental: boolean };

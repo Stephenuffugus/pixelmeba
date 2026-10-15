@@ -25,12 +25,11 @@ import { run } from '../../src/sim/tick';
 import type { World, WorldContent } from '../../src/sim/world';
 import { registryWith } from '../helpers/registry';
 import { trajectoryDigest } from '../helpers/trajectory';
-import { aliveOf, clearWater, place, preFlipRegistry, rebaseLedger, registry } from '../helpers/world';
+import { aliveOf, clearWater, place, preFlipRegistry, preOrganismFlipRegistry, rebaseLedger, registry } from '../helpers/world';
 
 const S_IDS = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12'];
 const SHIPPED = registry().manifest;
 const SYSTEMS = [...SHIPPED.enabledSystems, 'barriers', 'climate', 'devices'].sort() as SystemFlag[];
-const REG = registryWith({ enabledSystems: SYSTEMS });
 const REG_A05 = registryWith({ enabledSystems: SYSTEMS, enabledSpecies: [...SHIPPED.enabledSpecies, 'A05'].sort() });
 const meta = { name: 'climate determinism', savedAt: '2026-10-13T00:00:00Z', recipeId: null };
 
@@ -163,7 +162,9 @@ describe('climate determinism', () => {
   }, 600_000);
 
   it('NEUTRAL: a dish that records climate but uses none of it keeps null arrays and evolves byte-identically to a v1.0 (pre-flip) dish', () => {
-    const a = realizeRecipe(REG, 'FIRST_DISH_V1');
+    // a: the systems-flip lists (climate recorded, nothing else of Phase 5; D-0127: the shipped manifest also records
+    // E02 now, whose draws would move FIRST_DISH's B01 lineages).
+    const a = realizeRecipe(preOrganismFlipRegistry(), 'FIRST_DISH_V1');
     const b = realizeRecipe(preFlipRegistry(), 'FIRST_DISH_V1');
     expect(a.content.manifest.enabledSystems).toContain('climate');
     expect(b.content.manifest.enabledSystems).not.toContain('climate');

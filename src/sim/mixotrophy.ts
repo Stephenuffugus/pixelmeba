@@ -12,8 +12,13 @@
  *    with mode 0;
  *  - hysteresis: Photo at light ≥ 0.35, Sugar at light ≤ 0.25, otherwise the saved mode is kept. The
  *    thresholds are inclusive and compared exactly on the stored light (no tolerance);
- *  - a switch (Photo ↔ Sugar, never from 0) emits one 'modeSwitch' (cause R.MODE_PHOTO / R.MODE_SUGAR,
- *    detail.light). Initialization and birth emit nothing: a first mode is a state, not a transition;
+ *  - a switch (Photo ↔ Sugar, never from 0) is reported by a 'modeSwitch' (cause R.MODE_PHOTO / R.MODE_SUGAR).
+ *    Switches are coalesced per tick, species and new mode (D-0126): the first switching organism emits the
+ *    event (its birthId, cell and detail.light) with detail.count 1, and every further switch of that species
+ *    to that mode in the same tick adds 1 to that event's detail.count (and to events.totals.modeSwitch, which
+ *    counts switches, not events). So a uniform light change across 600 A04 writes one event, not 600, and
+ *    cannot evict earlier unread events from the 500-event ring. Initialization and birth emit nothing: a
+ *    first mode is a state, not a transition;
  *  - a newborn (births.ts commitDivision) takes nextMode(its own cell's light, the parent's mode): Photo
  *    at ≥ 0.35, Sugar at ≤ 0.25, else the parent's (D-0106).
  *
@@ -64,8 +69,21 @@ export function hasMixotroph(world: Pick<World, 'species'>): boolean {
 }
 
 /**
+ * The coalescing scratch (D-0126): this tick's 'modeSwitch' detail per species × mode (index sp * 3 + mode).
+ * Never saved and never read across ticks (reset when world.tick moves): switches happen only inside step()'s
+ * stage 4 and saves happen only between ticks, so a reload, 4× and the uninterrupted run write the same ring.
+ */
+interface SwitchScratch {
+  tick: number;
+  detail: ({ light: number; count: number } | undefined)[];
+}
+// eslint-disable-next-line no-restricted-syntax -- lookup only, never iterated
+const switchScratch = new WeakMap<World, SwitchScratch>();
+
+/**
  * Stage 4 mode update of one living mixotroph in `cell` (movement.ts stageSenseAndMove). Reads the light
- * stage 2 of this tick computed; emits 'modeSwitch' only for a Photo ↔ Sugar change.
+ * stage 2 of this tick computed; reports a Photo ↔ Sugar change through one coalesced 'modeSwitch' per
+ * tick, species and new mode (D-0126).
  */
 export function updateMode(world: World, i: number, cell: number): void {
   const c = world.ents.cols;
@@ -75,13 +93,31 @@ export function updateMode(world: World, i: number, cell: number): void {
   if (mode === old) return;
   c.metabolicMode[i] = mode;
   if (old === MODE_NONE) return;
+  let scratch = switchScratch.get(world);
+  if (scratch === undefined) {
+    scratch = { tick: world.tick, detail: [] };
+    switchScratch.set(world, scratch);
+  } else if (scratch.tick !== world.tick) {
+    scratch.tick = world.tick;
+    scratch.detail.length = 0;
+  }
+  const species = c.species[i]!;
+  const key = species * 3 + mode;
+  const seen = scratch.detail[key];
+  if (seen !== undefined) {
+    seen.count += 1;
+    world.events.totals.modeSwitch = (world.events.totals.modeSwitch ?? 0) + 1;
+    return;
+  }
+  const detail = { light, count: 1 };
+  scratch.detail[key] = detail;
   emit(world.events, world.counters, {
     tick: world.tick,
     type: 'modeSwitch',
-    species: c.species[i]!,
+    species,
     birthId: c.birthId[i]!,
     cell,
     cause: mode === MODE_PHOTO ? R.MODE_PHOTO : R.MODE_SUGAR,
-    detail: { light },
+    detail,
   });
 }

@@ -13,14 +13,16 @@
  *
  * phase5Registry() is registryWith(P5_LISTS, { allowUnimplemented: true }) (defined in the tool, since
  * tests/helpers/registry.ts is read-only to this task): F03's TRAP joins IMPLEMENTED_NATIVE_ABILITIES at the
- * wave 13 integration and E02/E11 join IMPLEMENTED_MODULES at the organism flip (D-0104); nothing here is
- * enabled in the shipped build. After the flip the shipped run (relationship-matrix.test.ts) covers these rows.
+ * wave 13 integration and E02/E11 join IMPLEMENTED_MODULES at the organism flip (D-0104). Since the organism
+ * flip (D-0127) the shipped manifest enables exactly P5_LISTS, so this run is the shipped run (its digest is
+ * pinned below; docs/reports/relationships-g5.md); relationship-matrix.test.ts keeps the v1.0 rows under
+ * preFlipRegistry().
  *
  * A failing row is a bug: it would be listed in KNOWN_BUGS with its bug id and asserted with it.fails, never
  * by weakening the expectation. There are none.
  */
 import { describe, expect, it } from 'vitest';
-import { counts, FAMILIES, P5_FAMILIES, P5_LISTS, P5_SYSTEMS, phase5Registry, runMatrix, type Family, type MatrixRow } from '../../tools/relationship-matrix';
+import { counts, FAMILIES, P5_FAMILIES, P5_LISTS, P5_SYSTEMS, phase5Registry, rowsDigest, runMatrix, type Family, type MatrixRow } from '../../tools/relationship-matrix';
 import { identityTable, moduleTable, preyTable } from '../helpers/tables';
 import { registry } from '../helpers/world';
 
@@ -41,6 +43,12 @@ describe('the Phase 5 test registry (P5_LISTS)', () => {
     expect(P5_LISTS.enabledSystems).toEqual(union(shipped.enabledSystems, ['rivalry', 'signals', 'silicate']));
     expect(P5_SYSTEMS).toEqual(['rivalry', 'signals', 'silicate']);
     const reg = phase5Registry();
+    // Since the organism flip (D-0127) the shipped manifest enables exactly these lists, so this run is the
+    // shipped run (relationship-matrix.test.ts keeps the v1.0 rows under preFlipRegistry()).
+    expect(shipped.enabledSpecies).toEqual(P5_LISTS.enabledSpecies);
+    expect(shipped.enabledModules).toEqual(P5_LISTS.enabledModules);
+    expect(shipped.enabledMaterials).toEqual(P5_LISTS.enabledMaterials);
+    expect(shipped.enabledSystems).toEqual(P5_LISTS.enabledSystems);
     expect(reg.manifest.enabledSpecies).toEqual(P5_LISTS.enabledSpecies);
     expect(reg.manifest.enabledModules).toEqual(P5_LISTS.enabledModules);
     expect(reg.manifest.enabledMaterials).toEqual(P5_LISTS.enabledMaterials);
@@ -96,6 +104,10 @@ describe('Phase 5 relationship matrix (every Phase 5 species, module and materia
     expect({ prey: c.prey.rows, enzymes: c.enzymes.rows, producers: c.producers.rows }).toEqual({ prey: 771, enzymes: 12, producers: 18 });
     expect(res.rows.length).toBe(FAMILIES.reduce((a, f) => a + c[f].rows, 0));
     expect(res.skipped).toEqual(['hosts: F03 (trap; the traps family)']);
+    // The shipped run's snapshot at the organism flip (D-0127; `npx tsx tools/relationship-matrix.ts` printed
+    // 2265 rows, 2265 pass, rows digest 914a3bf6…, docs/reports/relationships-g5.md), equal to this registry's run.
+    expect(rowsDigest(res.rows)).toBe('914a3bf62fed49cfe3d8bf3ec4cce1588ccf613248d0fdf0c3219a31fc5da81d');
+    expect(res.rows.length).toBe(2265);
   });
 
   it('covers every Phase 5 predator × prey, handling, radius, trap, host, RIVAL, diet, growth, module and material row', () => {

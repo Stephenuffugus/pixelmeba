@@ -22,7 +22,7 @@ import { queueCommand } from '../../src/sim/commands';
 import { AVAIL_K, DT, O2_PER_CARBON_AEROBIC, PHOTO_O2_PER_CARBON } from '../../src/sim/constants';
 import { LIFE_ACTIVE } from '../../src/sim/entities';
 import type { SimEvent } from '../../src/sim/events';
-import { cellIndex, maskCells } from '../../src/sim/grid';
+import { cellIndex, cellX, maskCells } from '../../src/sim/grid';
 import { photosynthesizedThisTick, tookFromPool } from '../../src/sim/intake';
 import { initialMode, MODE_NONE, MODE_PHOTO, MODE_SUGAR, nextMode } from '../../src/sim/mixotrophy';
 import { divisionNeeds } from '../../src/sim/births';
@@ -161,6 +161,66 @@ describe('hysteresis and the modeSwitch event', () => {
     expect(modeSwitches(w)[1]).toMatchObject({ cause: R.MODE_PHOTO, detail: { light: 0.35 }, cell: entityCell(c.x[s]!, c.y[s]!) });
     run(w, 5);
     expect(modeSwitches(w)).toHaveLength(2);
+  });
+});
+
+describe("the 'modeSwitch' burst (D-0126: coalesced per tick, species and new mode)", () => {
+  it('600 A04 switching in one tick write one event (count 600) and evict nothing earlier from the ring', () => {
+    const w = dish(0.8);
+    const placed: number[] = [];
+    for (let y = 30; y < 100 && placed.length < 600; y += 2) for (let x = 30; x < 100 && placed.length < 600; x += 2) placed.push(place(w, 'A04', x + 0.5, y + 0.5));
+    step(w);
+    const inoculated = w.tick;
+    queueCommand(w, 'b', { kind: 'inoculate', speciesId: 'B01', x: 64.5, y: 64.5, radius: 1, count: 1 }, w.tick);
+    step(w);
+    // the previous tick's events (as a snapshot taken every few ticks would still need them)
+    const intro = w.events.ring.filter((e) => e.tick === inoculated);
+    expect(intro.some((e) => e.type === 'introduce')).toBe(true);
+    setLight(w, 0.2);
+    const t = w.tick;
+    step(w);
+    const c = w.ents.cols;
+    for (const s of placed) expect(c.metabolicMode[s]).toBe(MODE_SUGAR);
+    const sw = modeSwitches(w);
+    expect(sw).toHaveLength(1);
+    expect(sw[0]).toMatchObject({ tick: t, cause: R.MODE_SUGAR, species: speciesIndex(w, 'A04'), birthId: c.birthId[placed[0]!], detail: { light: 0.2, count: 600 } });
+    expect(w.events.totals.modeSwitch).toBe(600);
+    // the previous tick's events are still in the ring (600 events would have evicted them)
+    for (const e of intro) expect(w.events.ring.some((r) => r.id === e.id)).toBe(true);
+    // the next switch, a tick later, is a new event
+    setLight(w, 0.9);
+    step(w);
+    expect(modeSwitches(w)).toHaveLength(2);
+    expect(modeSwitches(w)[1]).toMatchObject({ tick: t + 1, cause: R.MODE_PHOTO, detail: { count: 600 } });
+    expect(w.events.totals.modeSwitch).toBe(1200);
+  });
+
+  it('switches to Photo and to Sugar in one tick are two events with their own counts', () => {
+    const w = dish(0.3);
+    const west: number[] = [];
+    const east: number[] = [];
+    for (let k = 0; k < 5; k++) west.push(place(w, 'A04', 40.5, 50.5 + 2 * k));
+    for (let k = 0; k < 3; k++) east.push(place(w, 'A04', 90.5, 50.5 + 2 * k));
+    const c = w.ents.cols;
+    for (const s of west) c.metabolicMode[s] = MODE_PHOTO;
+    for (const s of east) c.metabolicMode[s] = MODE_SUGAR;
+    step(w); // 0.30 is inside the band: both modes hold
+    expect(modeSwitches(w)).toEqual([]);
+    const westCells: number[] = [];
+    const eastCells: number[] = [];
+    for (const k of maskCells()) (cellX(k) < 64 ? westCells : eastCells).push(k);
+    setLight(w, 0.1, westCells);
+    setLight(w, 0.9, eastCells);
+    step(w);
+    const sw = modeSwitches(w);
+    expect(sw).toHaveLength(2);
+    const sugar = sw.find((e) => e.cause === R.MODE_SUGAR)!;
+    const photo = sw.find((e) => e.cause === R.MODE_PHOTO)!;
+    expect(sugar.detail).toMatchObject({ count: 5 });
+    expect(photo.detail).toMatchObject({ count: 3 });
+    expect(w.events.totals.modeSwitch).toBe(8);
+    for (const s of west) expect(c.metabolicMode[s]).toBe(MODE_SUGAR);
+    for (const s of east) expect(c.metabolicMode[s]).toBe(MODE_PHOTO);
   });
 });
 

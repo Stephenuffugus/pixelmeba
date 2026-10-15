@@ -24,7 +24,7 @@ import { step } from '../../src/sim/tick';
 import { markField } from '../../src/sim/transport';
 import type { World } from '../../src/sim/world';
 import { registryWith } from '../helpers/registry';
-import { aliveOf, place, rebaseLedger, registry } from '../helpers/world';
+import { aliveOf, place, preOrganismFlipPatch, preOrganismFlipRegistry, rebaseLedger } from '../helpers/world';
 
 const WAVE2_SPECIES = ['B02', 'B03', 'B05', 'F01', 'P02', 'P03', 'P04', 'V01', 'X01', 'Y01'];
 const WAVE2_SYSTEMS: SystemFlag[] = ['film', 'fungi', 'parasites', 'viruses'];
@@ -33,10 +33,14 @@ function union<T extends string>(a: readonly T[], b: readonly T[]): T[] {
   return [...a, ...b].filter((x, i, all) => all.indexOf(x) === i).sort();
 }
 
+/**
+ * The wave 2 dish on the lists shipped before the organism flip (D-0127): the layout below places one row per species
+ * and the subject is V01 / X01; the Phase 5 hosts (X02, V02, F03) are the relationship matrix's (relationship-matrix-p5).
+ */
 function wave2Registry(): ContentRegistry {
-  const m = registry().manifest;
+  const m = preOrganismFlipRegistry().manifest;
   return registryWith(
-    { enabledSpecies: union(m.enabledSpecies, WAVE2_SPECIES), enabledSystems: union(m.enabledSystems, WAVE2_SYSTEMS) },
+    { ...preOrganismFlipPatch(), enabledSpecies: union(m.enabledSpecies, WAVE2_SPECIES), enabledSystems: union(m.enabledSystems, WAVE2_SYSTEMS) },
     { allowUnimplemented: true },
   );
 }

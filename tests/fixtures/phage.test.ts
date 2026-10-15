@@ -31,7 +31,7 @@ import { inactiveFieldsNonZero, markField } from '../../src/sim/transport';
 import { KIND_INFECT, phageCellAccepts } from '../../src/sim/viruses';
 import type { World } from '../../src/sim/world';
 import { G2_LISTS, registryWith } from '../helpers/registry';
-import { aliveOf, clearWater, fillField, place, rebaseLedger, registry } from '../helpers/world';
+import { aliveOf, clearWater, fillField, place, preOrganismFlipRegistry, rebaseLedger, registry } from '../helpers/world';
 
 const meta = { name: 'phage', savedAt: '2026-10-01T00:00:00Z', recipeId: null };
 
@@ -267,7 +267,8 @@ describe('V01 conservation, closed lid', () => {
 // ---------------------------------------------------------------------------------- saves
 
 function infectedWorld(): World {
-  const w = clearWater();
+  // The dish these import tests were written for: V01 only, no V02 (the shipped one records V02 since D-0127).
+  const w = clearWater({}, preOrganismFlipRegistry());
   fillField(w, 'sugar', 0.2);
   for (let k = 0; k < 12; k++) place(w, 'B01', 50.5 + (k % 4), 60.5 + Math.floor(k / 4));
   applyNow(w, 'phage', { kind: 'inoculate', speciesId: 'V01', x: 52, y: 62, radius: 3, count: 20 });

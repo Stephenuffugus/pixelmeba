@@ -16,17 +16,22 @@ import { dietLine, isPhage, lifeBrushFor } from '../../src/ui/panels/LabTrayCont
 import { LIFE_COPY } from '../../src/ui/strings/lab';
 import { FakeClockHost } from '../helpers/host';
 import { G2_LISTS, registryWith } from '../helpers/registry';
-import { registry } from '../helpers/world';
+import { preOrganismFlipPatch, preOrganismFlipRegistry } from '../helpers/world';
 
 function sortedUnion<T extends string>(a: readonly T[], b: readonly T[]): T[] {
   return [...new Set([...a, ...b])].sort();
 }
 
-/** The shipped content plus every species the other wave 2 builders enable (abilities they implement now). */
+/**
+ * The content shipped before the organism flip plus every species the other wave 2 builders enable (abilities
+ * they implement now). Since the organism flip (D-0127) the shipped manifest enables the Phase 5 species, which
+ * would change every "kinds not in this dish" count below; these lines are the v1.0 dish's.
+ */
 function waveRegistry(): ContentRegistry {
-  const m = registry().manifest;
+  const m = preOrganismFlipRegistry().manifest;
   return registryWith(
     {
+      ...preOrganismFlipPatch(),
       enabledSpecies: sortedUnion(m.enabledSpecies, ['B02', 'F01', 'V01', 'X01']),
       enabledSystems: sortedUnion<SystemFlag>(m.enabledSystems, ['film', 'fungi', 'parasites', 'viruses']),
     },

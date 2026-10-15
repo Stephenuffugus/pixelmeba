@@ -297,3 +297,53 @@ change), and a v1.0 dish packs E_CUE3 0 for every organism. The pack timing is p
 | Phase 5 registry, inside vitest (load ≈ 7) | 2265 | 179–184 s |
 
 The Phase 5 matrix test asserts a 300 s ceiling (a runaway check, not a budget).
+
+## Organism flip (D-0127) (2026-10-15)
+
+Measured by the organism-flip builder on the shared 2-vCPU codespace while other agents' end-to-end runs were going
+(1-minute load 7–8 throughout, so wall times carry about 1.8× of CPU waiting; process CPU is given beside them).
+Probes `tmp/flip/perf-firstdish.ts` and `tmp/flip/perf-dense.ts` (`npx tsx`, not committed).
+
+### FIRST_DISH_V1 before and after (item 5: five more zero fields)
+
+A new dish under the shipped registry now allocates sGlow, quencher, rival, silicate and grit (31 → 36 fields), all zero
+in this recipe; stage 2 diffuses and decays the three activity fields every tick. Seed 104729, 6,000 ticks, runs
+interleaved pre, post, pre, post in one process (pre = HEAD ed0bf52's manifest lists, registry version 2):
+
+| Run | Alive at 6,000 | Tick mean / p50 / p95 / max (ms) | Stage 2 mean / p95 (ms) |
+|---|---|---|---|
+| pre-flip | 716 | 4.51 / 4.01 / 9.59 / 67.8 (warm-up) | 2.34 / 5.54 |
+| post-flip | 716 | 4.17 / 3.46 / 8.69 / 62.5 | 2.12 / 5.18 |
+| pre-flip again | 716 | 3.97 / 3.38 / 8.52 / 33.3 | 2.09 / 5.07 |
+| post-flip again | 716 | 4.43 / 4.03 / 9.01 / 30.2 | 2.24 / 5.16 |
+
+The difference is inside the run-to-run noise at this load. (`sim:run --perf` on the same seed before the edit: p50
+3.73 / 3.84 ms, p95 8.90 / 9.26 ms.)
+
+### A dense mixed Phase 5 scene (item 8)
+
+Shipped registry, closed lid: 1,980 organisms placed on their own ground (gel block, sediment band, a stone row):
+20 F03 each with a P04 in its cell (all 20 holding within a few ticks), 20 P10 each touching a hungry-range P01
+(up to 15 attempts open at once), 60 P06 on the stone row's edges, four B09 clusters of 50 in signal 0.5 (57 glowing at
+the peak), 20 each of P01, P02 and P07 carrying E11 in silicate 0.3 (207 jacketed at the end, daughters included),
+100 each of A02, A03 and A04, 40 A05 (canopy), B10, B11, B12, B13, F02, F04, X02, P05, P08, P09, a V02 dose on B02,
+and v1.0 fill (300 B01, 200 A01, 100 B04, 50 Y01); the light cycle on; 512 S01/S02 edges. 1,200 ticks; the snapshot
+parts DishHost sends (entities, deposits, links, objects, a sugar overlay, events, lineage marks, a P10 inspector)
+every 10 ticks outside the tick timing. FIRST_DISH_V1 under the pre-flip registry is the v1.0 reference.
+
+| Run | Alive start / end | Tick wall p50 / p95 / max (ms) | Process CPU p50 / p95 (ms) | Snapshot p50 / p95 (ms), size |
+|---|---|---|---|---|
+| v1.0 FIRST_DISH_V1 | 56 / 172 | 1.99 / 8.16 / 89.6 | 1.68 / 4.94 | 1.07 / 5.96, 204 KiB |
+| dense Phase 5 | 1,980 / 3,162 | 25.90 / 53.50 / 196.3 | 14.60 / 28.69 | 4.45 / 14.57, 412 KiB |
+| v1.0 FIRST_DISH_V1 again | 56 / 172 | 1.73 / 6.59 / 21.8 | 1.57 / 2.44 | 1.02 / 3.11, 204 KiB |
+| dense Phase 5 again | 1,980 / 3,162 | 23.26 / 45.93 / 83.5 | 13.14 / 16.83 | 3.86 / 7.56, 412 KiB |
+
+Per-stage wall time per tick in the dense scene: stage 4 (sense and move, with 512 edges and ~3,000 movers) 9.3–10.3 ms,
+stage 2 (fields, the cycle and canopy light) 5.8–6.5 ms, stage 6 3.4–4.1 ms, stage 8 2.8–3.3 ms, stage 5 1.4–1.5 ms,
+stage 7 1.0–1.4 ms, stage 9 0.8–0.9 ms. An earlier run of the same scene (P10 not yet hungry) gave wall p50 25.6–28.7,
+p95 52.2–55.3 ms.
+
+- At 1× (100 ms per tick) the dense scene uses about a quarter of the budget at p50 even with the CPU contention; at 4×
+  (25 ms) its process-CPU p50 (13–15 ms) fits and its p95 (17–29 ms) is near the budget, as the systems flip's
+  5,800-organism dish with the maximum stores was (D-0121). Nothing was reduced and no tick skipped; the next measure is
+  on a device (P5.8), where stage 4's per-mover edge checks are the first candidate.

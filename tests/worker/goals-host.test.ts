@@ -282,7 +282,8 @@ describe('goal records in files', () => {
       ['ended without a reason', [good({ state: 'ended' })]],
       ['running with an end', [good({ state: 'running', progress: { startTick: 0, holdSinceTick: null, state: 'running' } })]],
       ['bad id', [good({ id: 'goal-0' })]],
-      ['unknown species', [good({ predicate: { type: 'observeEvent', params: { event: 'birth', species: 'B10' } } })]],
+      // Every content species is recorded since the organism flip (D-0127): an id no dish records.
+      ['unknown species', [good({ predicate: { type: 'observeEvent', params: { event: 'birth', species: 'B99' } } })]],
       ['running after the dish’s time', [good({ state: 'running', startTick: 50, endTick: null, progress: { startTick: 50, holdSinceTick: null, state: 'running' } })]],
       ['too many', Array.from({ length: 21 }, (_, k) => good({ id: `goal-${k + 1}` }))],
     ];

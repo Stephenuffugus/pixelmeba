@@ -152,9 +152,9 @@ export function p5Lists(shipped: ContentRegistry['manifest'] = registry().manife
 export const P5_LISTS = Object.freeze(p5Lists());
 
 /**
- * The Phase 5 test registry (before the organism flip, D-0104): registryWith(P5_LISTS) with allowUnimplemented,
- * because TRAP (F03) joins IMPLEMENTED_NATIVE_ABILITIES at the wave 13 integration and E02/E11 join
- * IMPLEMENTED_MODULES at the organism flip (both appended by the lead). Cached by registryWith.
+ * The Phase 5 test registry: registryWith(P5_LISTS) with allowUnimplemented (written before the organism flip,
+ * D-0104, when TRAP and E02/E11 were not yet implemented). Since the organism flip (D-0127) its lists equal the
+ * shipped manifest's and every id is implemented. Cached by registryWith.
  */
 export function phase5Registry(): ContentRegistry {
   return registryWith(P5_LISTS, { allowUnimplemented: true });

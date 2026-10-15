@@ -3,6 +3,18 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑15 13:15 UTC — RESUMED 12:50 ("lets get started", ultracode, effort max). Tree == wip/g5-organism-flip
+> (nothing lost). Running: the full check (tmp/lead/check-flip2.sh → check-flip2.log / check-flip2-full.log; art, content,
+> relmatrix 2265/2265 already passed) and the flip journeys in the isolated worktree tmp/wt-w11 at 7335461
+> (tmp/lead/e2e-flip-iso.sh → e2e-flip.log; 60 runs incl. the NEW tests/e2e/fresh-dish-p5.spec.ts). Fresh-dish smoke done headless
+> (tmp/lead/flip-smoke-probe2.ts: a broth-fed Traplace arms at tick 117 and holds a dropped Siltworm at tick 201; a Needlejaw
+> handles and eats an Amoeba within 1 s). Prepared: tmp/lead/tick-orgflip.py <sha> '<journeys>' (P5.3/P5.5 ticks),
+> tmp/lead/fill-wave14.py <flip sha> (fills every wave 14 placeholder; dry-run ok), tmp/lead/d0128.md (wave 14's calls),
+> docs/agent/g5-wave-15-tasks.workflow.js.txt (wave 15 writer, to run during wave 14). START HERE.** If the session died: restore
+> from wip/g5-organism-flip if `git status` is clean; rerun whichever of the check / journeys has no EXIT line; then steps 4-5 of
+> the 11:25 banner (append the check + journey + smoke evidence and the saves-verifier rulings to D-0127, tick, commit, push), then
+> fill-wave14.py, append d0128.md to DECISIONS, build the wave 14 run file (its LEAD PRE-LAUNCH 3-5), commit, launch.
+
 > **Update 2026‑10‑15 11:25 UTC — OWNER REFRESH. ORGANISM FLIP BUILT AND SAVES-VERIFIED, NOT COMMITTED. The whole tree is backed
 > up on `wip/g5-organism-flip` (also wip/g5-wave-13). Saves verifier: no BLOCKER/MAJOR, 6/6 points OK
 > (docs/reports/reviews/g5-organism-flip/saves-verify.md; MINORs logged in g5-plan). The full check was running (typecheck + lint

@@ -57,12 +57,15 @@ describe('labels from the Garden payload', () => {
   it('M5: the Sprinter says where sugar here can come from (placed sugar, Sunbeads, Crumbsmiths’ enzyme)', () => {
     const a = dietAnswer(firstOf(world, 'B01'), names).lines;
     expect(a[0]).toBe('It eats sugar.');
-    // F02 (wave 3 f02-links) is enabled in the shipped manifest, so its enzyme is a recorded source too.
-    expect(a).toContain('Sugar here can come from sugar placed in the dish, Sunbeads (they release sugar as they make food) and Crumbsmiths’ and Cordweavers’ enzyme (it turns starch into sugar).');
+    // F02 (wave 3 f02-links) is enabled in the shipped manifest, so its enzyme is a recorded source too; since the
+    // organism flip (D-0127) so are the Phase 5 algae (A04 only in light; wave 13 org-ui's inLight list).
+    expect(a).toContain(
+      'Sugar here can come from sugar placed in the dish, Sunbeads, Glasswheels, Shadeleafs and Raftballs (they release sugar as they make food), Turnleafs in light (they release sugar as they make food from light) and Crumbsmiths’ and Cordweavers’ enzyme (it turns starch into sugar).',
+    );
     expect(a[a.length - 1]).toMatch(/took in/);
     // A Crumbsmith eats sugar too; its own enzyme is described by its own line, not repeated as a source.
     const crumb = dietAnswer(firstOf(world, 'B06'), names).lines.join(' ');
-    expect(crumb).toContain('Sugar here can come from sugar placed in the dish, Sunbeads (they release sugar as they make food) and Cordweavers’ enzyme');
+    expect(crumb).toContain('Sugar here can come from sugar placed in the dish, Sunbeads, Glasswheels, Shadeleafs and Raftballs (they release sugar as they make food), Turnleafs in light (they release sugar as they make food from light) and Cordweavers’ enzyme');
     // A Recycler eats debris, not sugar: no sugar line.
     expect(dietAnswer(firstOf(world, 'B04'), names).lines.join(' ')).not.toContain('Sugar here');
   });

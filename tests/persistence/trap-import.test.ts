@@ -122,6 +122,10 @@ const CASES: readonly (readonly [string, Who, Edit, string])[] = [
   ['a hold time of 8 s', 'f', { trapTimer: 8 }, "A trap's hold time is invalid."],
   ['a wait over 30 s', 'armed', { trapCooldown: 30.5 }, "A trap's wait is invalid."],
   ['a wait while holding', 'f', { trapCooldown: 5 }, "A trap's wait is invalid."],
+  // The organism flip (D-0127; g5-plan "Wave 13 leftovers" (d)): the reserve is built as exactly 0.20 C and
+  // a holding trap has counted at least one stage 8 step.
+  ['a reserve other than 0.20', 'armed', { trapReserveC: 0.15 }, "A trap's reserve is invalid."],
+  ['a holding trap with no hold time', 'f', { trapTimer: 0 }, "A trap's hold time is invalid."],
 ];
 
 describe('the import accepts the trap states the simulation writes (wave 13)', () => {

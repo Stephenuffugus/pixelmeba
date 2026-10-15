@@ -26,7 +26,7 @@ import { serializeWorld } from '../../src/sim/serialize';
 import { run, step } from '../../src/sim/tick';
 import type { World } from '../../src/sim/world';
 import { registryWith } from '../helpers/registry';
-import { aliveOf, clearWater, place, rebaseLedger, registry } from '../helpers/world';
+import { aliveOf, clearWater, place, preFlipRegistry, rebaseLedger, registry } from '../helpers/world';
 
 const SHIPPED = registry().manifest;
 const REG = registryWith(
@@ -159,7 +159,7 @@ describe('E2-SHELLS: grit dissolution (stage 3)', () => {
   // did). What is checked here is that such a world can never reach dissolveGrit's body: it has neither
   // field, deaths there carry no mineral, and the stage 3 call leaves every byte of state as it was.
   it('a world without the silicate system: no grit or silicate field, no mineral in any body through deaths, and dissolveGrit changes nothing', () => {
-    const w = clearWater({ backgroundOverrides: { sugar: 0.3 } });
+    const w = clearWater({ backgroundOverrides: { sugar: 0.3 } }, preFlipRegistry()); // a v1.0 dish (the shipped one has silicate since D-0127)
     expect(w.content.manifest.enabledSystems).not.toContain('silicate');
     for (const [k, id] of ['B01', 'B04', 'P01', 'B01', 'B04', 'B01', 'B04', 'P01', 'B01', 'B04'].entries()) place(w, id, 50.5 + k * 3, 64.5, { E: 60 });
     const c = w.ents.cols;

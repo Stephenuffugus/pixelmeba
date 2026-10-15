@@ -156,8 +156,8 @@ test('a Siltworm held by a Traplace: "Caught in a trap." and the trap line', asy
   }
 });
 
-// Until E11 is in IMPLEMENTED_MODULES (organism flip): the import refuses a dish recording it.
-test.skip('a jacketed Dartfin (E11): the jacket line and the module card\'s "active now"', async ({ page }) => {
+// Un-skipped at the organism flip (D-0127): E11 is in IMPLEMENTED_MODULES, so the import loads a dish recording it.
+test('a jacketed Dartfin (E11): the jacket line and the module card\'s "active now"', async ({ page }) => {
   test.setTimeout(SLOW);
   const file = await writeTrapJacketFixture();
   try {

@@ -43,7 +43,7 @@ import { step } from '../../src/sim/tick';
 import { FLAG } from '../../src/sim/entities';
 import { speciesIndex, type World } from '../../src/sim/world';
 import { trajectoryDigest } from '../helpers/trajectory';
-import { aliveOf, clearWater, fillField, place, registry, setField } from '../helpers/world';
+import { aliveOf, clearWater, fillField, place, preOrganismFlipRegistry, registry, setField } from '../helpers/world';
 
 const REG = registry();
 const pred = (type: ObjectivePredicate['type'], params: Record<string, unknown>, durationSeconds?: number): ObjectivePredicate =>
@@ -99,7 +99,7 @@ describe('predicate shapes', () => {
   });
 
   it('a world must have what the predicate names (its own recorded manifest)', () => {
-    const w = clearWater();
+    const w = clearWater({}, preOrganismFlipRegistry()); // no B10 (the shipped dish records it since the organism flip, D-0127)
     expect(objectiveSupportProblem(w, SPLIT)).toBeNull();
     expect(objectiveSupportProblem(w, STARCH)).toBeNull();
     expect(objectiveSupportProblem(w, pred('keepSpeciesAlive', { species: 'B10' }, 5))).toMatch(/no B10/);

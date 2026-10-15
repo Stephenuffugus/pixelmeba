@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { validateContent, type RawFile, type RawPacks } from '../../src/sim/content/registry';
 import { objectiveCatalog } from '../../src/sim/objectives';
 import { G2_LISTS, contentHashOf, patchedRawPacks, registryWith } from '../helpers/registry';
-import { registry } from '../helpers/world';
+import { PRE_FLIP_LISTS, registry } from '../helpers/world';
 
 function packsWith(extra: readonly Record<string, unknown>[], patch = {}): RawPacks {
   const raw = patchedRawPacks(patch);
@@ -34,13 +34,11 @@ const goal = (id: string, predicate: Record<string, unknown>, more: Record<strin
 });
 
 /**
- * The manifest before the systems flip (D-0121): the v1.0 systems and the cell structures only, so no gate
- * structure is enabled (and a buildPhase 4 manifest enables nothing of phase 5).
+ * The manifest before the systems flip (D-0121): a v1.0 dish's lists (tests/helpers/world.ts PRE_FLIP_LISTS: the v1.0
+ * systems and the cell structures only, no Phase 5 species since the organism flip moved the shipped lists, D-0127),
+ * so no gate structure is enabled and B10 is not (and a buildPhase 4 manifest enables nothing of phase 5).
  */
-const PRE_FLIP = {
-  enabledSystems: registry().manifest.enabledSystems.filter((s) => s !== 'barriers' && s !== 'climate' && s !== 'devices'),
-  enabledStructures: ['BEAD', 'STONE', 'WALL'],
-};
+const PRE_FLIP = { ...PRE_FLIP_LISTS };
 
 function errorsFor(id: string, packs: RawPacks): string[] {
   const res = validateContent(packs);
