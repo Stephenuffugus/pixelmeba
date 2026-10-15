@@ -1,0 +1,36 @@
+{
+  "id": "H04_LEAF_POOL",
+  "name": "Leaf Pool",
+  "baseSubstrate": "water",
+  "baseLight": 0.6,
+  "warmth": 0.5,
+  "baseFields": {"oxygen": 0.8, "co2": 0.5, "nutrient": 0.1, "sugar": 0.02},
+  "ops": [],
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "devices": [{"structure": "S07", "at": [45, 64]}, {"structure": "S07", "at": [80, 64]}],
+  "furnish": [{"structure": "S06", "area": {"kind": "disk", "center": [64, 64], "radius": 8}}],
+  "objects": [{"material": "M11", "at": [45, 64]}, {"material": "M11", "at": [80, 64]}],
+  "regions": [
+    {"id": "WEST_WAFER", "label": "West wafer", "shape": {"kind": "disk", "center": [45, 64], "radius": 8}, "anchor": [45, 64]},
+    {"id": "MESH", "label": "Mesh patch", "shape": {"kind": "disk", "center": [64, 64], "radius": 8}, "anchor": [64, 64]},
+    {"id": "EAST_WAFER", "label": "East wafer", "shape": {"kind": "disk", "center": [80, 64], "radius": 8}, "anchor": [80, 64]}
+  ],
+  "suggestedCommunity": {
+    "groups": [
+      {"species": "B06", "region": "WEST_WAFER", "count": 5, "radius": 10},
+      {"species": "B08", "region": "EAST_WAFER", "count": 5, "radius": 10},
+      {"species": "Y02", "region": "EAST_WAFER", "count": 5, "radius": 10},
+      {"species": "F02", "region": "MESH", "count": 5, "radius": 10},
+      {"species": "P01", "region": "MESH", "count": 5, "radius": 10}
+    ]
+  },
+  "guide": {
+    "summary": "A dimly lit pool with two leaf wafers in baskets and a patch of mesh between them.",
+    "biology": "Leaves that fall into still water feed it slowly for a long time, and surfaces near them give attached life somewhere to hold on.",
+    "rules": "All water; no stones. Light 0.6, warmth 0.5, oxygen 0.8, carbon dioxide 0.5, nutrient 0.10 and sugar 0.02 in every cell. A nutrient basket holding a leaf wafer at (45,64) and at (80,64): each wafer starts with 6 starch carbon, 4 protein carbon and 1 bound nutrient and lets them out into its own cell over about 500 seconds. An attachment mesh covers a circle of radius 8 at (64,64). Lid open; fixed light.",
+    "example": "Start it empty and watch what gathers at each wafer as it empties."
+  },
+  "phase": 5
+}

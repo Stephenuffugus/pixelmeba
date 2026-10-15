@@ -46,6 +46,15 @@ drying — Phase 5), **Content** (advanced: enabled systems shown read‑only fr
 Summary states exactly what is preloaded and the total initial ledger. Enter paused with the
 Life tray open (Lab) or Look active (Explore).
 
+As built, Phase 5 wave 14 (D-0128, D-0129; `src/ui/newDishStarts.ts`, `src/ui/views/NewDish.tsx`): the start list is the
+Garden, then every habitat the build offers (enabled and passing the offer rules; ordered by phase, then id; the v1.0
+three keep their ids, labels and notes; the demo offers only the Water Garden), then the curated dishes. A habitat with
+an offered Suggested Community shows a **Life** choice, Empty (the default) or Suggested Community, which returns to
+Empty whenever the start changes. A Phase 5 habitat's summary lists what it places ("Attachment mesh (197 cells)";
+devices, edges and objects as counts), its numbered regions, the environment, then the life line (Empty, or the
+community's groups with their region labels, and its patches as "It also adds: Starch."), each restating the worker's
+measured preview.
+
 ### 2.4 Dish screen — shared chrome
 Top strip: dish name · simulated time `mm:ss` (hours when needed) · Pause/Run · speed (1× 2× 4×,
 step while paused) · effective‑speed badge when behind · view toggle Explore/Lab · More (save,

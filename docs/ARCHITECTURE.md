@@ -115,6 +115,34 @@ As built, Phase 5 wave 8b (D-0111; `src/sim/content/structureRules.ts`, `schema.
 - **Tools.** A tool record may name `requiresSystem`, and `enabledToolIds` drops it when the build's manifest lacks
   that system.
 
+As built, Phase 5 wave 14 (P5.4 habitats as content; D-0128 its calls, D-0129 as built; `src/sim/content/schema.ts`,
+`habitatRules.ts`, `registry.ts`, `src/sim/recipes.ts`, `tools/content-validate.ts`; content/habitats/H04–H11). Nothing
+is enabled by the wave (D-0104 pattern):
+- **HabitatSchema** gains optional `furnish` (S05, S06, S11 or S12 over a disk, rect or perimeter area that lies wholly
+  inside the dish), `objects` (M10 or M11 at a cell; an external input recorded as `habitat:<habitatId>:<material>`,
+  created right after the ledger baseline), `regions` (at most 6: id, label ≤ 24, a disk or rect shape and an anchor on
+  an open cell inside the shape and the dish) and `suggestedCommunity` (groups {species, region, count 5, radius 10}
+  and optional field patches); **RecipeSchema** gains `community?: boolean`. Older records parse and re-serialize
+  byte-identically; geometry ops stay cell-painting only. Structure ids: habitat edges, habitat devices, habitat
+  furnish (area order, cells row-major), recipe edges, recipe devices (then the stores sort by cell or edge key).
+- **Offer rules** (`habitatRules.ts`, pure, shared by the validator, the worker and the New Dish): a habitat is offered
+  when its phase ≤ the manifest's buildPhase and every structure, system and material it uses is enabled
+  (`habitatOfferIssue` / `habitatOfferProblem` / `habitatOffered`); its Suggested Community when every community
+  species is enabled with the systems it needs (`communityOfferProblem` / `communityOffered`). The validator reports the
+  phase on the manifest, an offer issue on the habitat file (only when the structure and climate checks found nothing),
+  a recipe's `community: true` on a habitat without one, a shipped recipe whose community is not offered, and a founder
+  chain across an edge a link cannot cross (also refused at realization). `tools/content-validate.ts` realizes every
+  offered community once (`communityRealizationIssues`; one seed proves all, since the eligible counts do not depend on
+  it).
+- **Realization** (`recipes.ts`): `withHabitatOverride` drops the recipe's lid, lightMode, drying, baseLight, ops,
+  removeStones, edges and devices when the habitat changes (a habitat start is the habitat as CT §8 defines it; on its
+  own habitat a recipe keeps them). `placeCommunity` runs after the recipe's founders and before the scheduled commands:
+  the offer against the world's recorded manifest, the community patches through the shared `applyFieldPatch`, then each
+  group's five on its eligible cells (the radius-10 disk around the region anchor, row-major, in the dish and the
+  region, occupiable and unused) chosen by `detPermutation(n, seed, STREAMS.communityPlace, group index)`; too few cells
+  is a `CommunityError` (a RecipeError naming the record path). The community comes only from a Suggested Community
+  start, never from an Empty start (fix round, D-0129).
+
 ## 5. Data layout (performance‑critical)
 
 - **Fields**: one `Float64Array(16384)` per allocated field, plus a second buffer for transport.
@@ -721,6 +749,15 @@ As built, Phase 5 wave 13 (protocol 3 refinements, no version, stride or band ch
   PRED_HANDLING_IN_PROGRESS. Every new key is absent on a v1.0 dish: tests/worker/inspect-p5-v1-golden.json (written by
   the HEAD 3daebb2 code) deep-equals every payload of five v1.0 dishes.
 
+As built, Phase 5 wave 14 (additive; PROTOCOL_VERSION stays 3; D-0129; `src/worker/protocol.ts`, `host.ts`):
+`DishInfo.regions?` (`DishRegion` {id, label, number, anchor}) read from the world's recorded habitat, absent without
+regions; `RecipeOverrides.community?` (sent only as true and only with empty: true; build() refuses a habitat this
+build does not offer, a non-boolean, community without empty, and a community not offered on the start's habitat,
+each before anything is built); `NewDishPreview.habitat.uses?` (edges, devices and furnishings, objects, counted in the
+realized world at tick 0, each sorted by id) and `.regions?`; `NewDishPreview.community?` and `.communityGroups?`
+(speciesId, name, count, regionLabel, counted from the founders actually placed). The preview's grid now comes from the
+transformed recipe (equal to the old one for every v1.0 start, by test).
+
 ## 8. Snapshots
 Published ≤ 10/s (adaptive under load). Contents: `renderList` as a packed `Float32Array`
 [entityIndex, speciesIdx, x, y, heading, scale/sizeFactor, stateFlags, cueBits] per living
@@ -810,6 +847,16 @@ Cooldown from the CUE3 trap state); B12, P08 and F04's resting poses follow the 
 P05 shells are body art. **The grit glyph** (deposit band 7) is procedural in layers.ts (`paintGrit`): 1–3 pale angular
 specks with a dark slate corner by band (gritPale #e9eef2, gritEdge #45525c; each speck has a ≥ 3:1 part on every
 substrate); a v1.0 band set paints the HEAD pixels. The share picture (`picture.ts`) does not draw grit yet (P5.8).
+
+As built, Phase 5 wave 14 (region pins, P5.7; D-0128's layer ruling, D-0129; `src/render/regionPins.ts`, `renderer.ts`,
+`src/ui/panels/RegionLegend.tsx`): `regionPinsG` is created at construction and added between `effects` and
+`selectionG`, so pins draw over the gate badges and links and under the selection ring and every layer appended later
+(probes, previews, the gate tracer). `regionPinModel(regions, zoom)` is pure: a grayscale teardrop about 19 screen px
+tall with a 3 × 5 digit 1–6 (never the probes' letters A–F), never colour-coded, drawn by the PixiJS-free
+`drawRegionPinsInto` (the renderer's `regionPinsDrawn` reports the last count); the layer redraws only when the list
+changes or the zoom moves by more than a quarter, never per tick. DishScreen passes `dishInfo.regions` to
+`setRegionPins`; the Regions sheet shows the legend ("Habitat regions": "1 Fresh pool", …), which says the pins are part
+of the habitat, not probe regions.
 
 ## 10. Art and audio pipelines
 
@@ -1248,6 +1295,14 @@ holding pair with timer 0). The jacket rule is still D-0118's (silicate system r
 organism flip to refuse jacketMineral > 0 on a genome without E11 (D-0125). IMPLEMENTED_NATIVE_ABILITIES gains TRAP at
 the wave 13 integration (23: every NativeAbility is implemented), so a dish recording F03 loads.
 
+As built, Phase 5 wave 14 (D-0129; `src/sim/recipes.ts`, `src/persistence/recipeFile.ts`, `saveFile.ts`): a Suggested
+Community start records `provenance.overrides.community: true` (absent otherwise, so every older provenance is
+unchanged); its recipe file carries the 'community' override key (a non-boolean, or community without empty, is
+"damaged"; a community this build does not offer needs a compatible build). The world records its habitat record,
+regions and community included (content.habitat), so a save keeps its pins and its community whatever later content
+says; the import checks that record with HabitatSchema and the registry-free region rules (unique ids, anchors on open
+cells inside their shapes and the dish, community groups naming existing regions; fix round, D-0129).
+
 ## 12. Android (Capacitor)
 - `appId com.lucidwinds.pixelmeba`, `appName Pixelmeba`, `webDir dist`, `android.allowMixedContent
   false`, no cleartext, no network permission beyond what Capacitor needs (none for this app).
@@ -1406,3 +1461,13 @@ A03 curve, P09 meal-first, F03 broth skip, V02 film ≥ 0.10, X02 hosts and drai
 E11 × 38 species, the five materials). Under the phase5 registry 2265 / 2265 rows pass; the shipped registry keeps
 exactly the v1.0 711 rows, pinned by `SHIPPED_V1` (rows digest, family counts, skipped list), re-recorded at the
 organism flip. Rows for v1.0 subjects that need a Phase 5 subject appear only when one is enabled.
+
+As built, Phase 5 wave 14 (D-0129): `tests/fixtures/habitats-p5/realize-golden.json`, written by the HEAD code before any
+wave 14 edit (18 recipes, the 3 v1.0 New Dish starts and 4 variants: the tick-0 serialized digest and the stateHash
+after 300 ticks), and `habitats-p5-equivalence.test.ts` prove every older start realizes byte-identically;
+`tests/helpers/habitats.ts` (`habitatRegistry()` with H04–H11 enabled, `habitatStart`); `habitats-p5` (every worked
+coordinate), `-determinism` (one run = four chunks = save and reload = 4×), `-conservation` (H04 closed lid 10,000 ticks,
+H07 mineral), `-community`, `-community-determinism`, `-community-conservation` and `-fence-drafts` (the three
+FENCE_H06/H09/H10 recipe files for the habitat enable); content/habitats-p5, ui/new-dish-starts, worker/new-dish-habitats,
+worker/dishinfo-regions, render/region-pins, ui/region-legend; journeys habitats-p5.spec (cases 2–3 skip until the
+enable) and region-pins.spec.

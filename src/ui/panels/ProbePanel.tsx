@@ -25,6 +25,7 @@ import { WindowChoice } from './RelationshipMap';
 import { ShapeIcon, startProbeSession } from './ProbeSession';
 import { ProbeRegionCharts } from './ProbeCharts';
 import { labTray } from '../views/LabView';
+import { RegionLegend } from './RegionLegend';
 
 const REFRESH_MS = 1000;
 
@@ -55,6 +56,8 @@ export function ProbeSheet() {
             <IconClose />
           </button>
         </header>
+        {/* Wave 14 (D-0128): the habitat's numbered region pins in words; nothing for a dish without regions. */}
+        <RegionLegend />
         <p class="sub">{OBSERVE_TEXT.probesIntro}</p>
         <p class="sub" data-testid="probe-not-saved">
           {OBSERVE_TEXT.notSaved}

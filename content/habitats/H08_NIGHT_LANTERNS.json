@@ -1,0 +1,27 @@
+{
+  "id": "H08_NIGHT_LANTERNS",
+  "name": "Night Lanterns",
+  "baseSubstrate": "water",
+  "baseLight": 0.8,
+  "warmth": 0.5,
+  "baseFields": {"oxygen": 0.8, "co2": 0.5, "nutrient": 0.1, "sugar": 0.02},
+  "ops": [{"op": "disk", "center": [64, 64], "radius": 14, "fields": {"metabolite": 0.2, "nutrient": 0.1}}],
+  "lid": "closed",
+  "lightMode": "cycle",
+  "drying": false,
+  "regions": [{"id": "LANTERN_PATCH", "label": "Lantern patch", "shape": {"kind": "disk", "center": [64, 64], "radius": 14}, "anchor": [64, 64]}],
+  "suggestedCommunity": {
+    "groups": [
+      {"species": "B09", "region": "LANTERN_PATCH", "count": 5, "radius": 10},
+      {"species": "A01", "region": "LANTERN_PATCH", "count": 5, "radius": 10},
+      {"species": "B04", "region": "LANTERN_PATCH", "count": 5, "radius": 10}
+    ]
+  },
+  "guide": {
+    "summary": "Dark-and-light water under a closed lid, with a rich patch in the middle.",
+    "biology": "When light fades, life that does not depend on it keeps feeding on what others leave behind.",
+    "rules": "All water; no stones; no shade. Metabolite 0.20 and nutrient 0.10 in a circle of radius 14 at (64,64). Light 0.8, warmth 0.5, oxygen 0.8, carbon dioxide 0.5, nutrient 0.10 and sugar 0.02 everywhere else. Lid closed; light cycles between day and night.",
+    "example": "Watch the middle patch through a night and see what changes there."
+  },
+  "phase": 5
+}

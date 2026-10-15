@@ -704,6 +704,8 @@ export async function startCustom(
      * environmentOverrides), so an untouched group records nothing.
      */
     environment?: Pick<RecipeOverrides, 'lid' | 'lightMode' | 'drying'>;
+    /** P5.4 (wave 14, D-0128): the habitat's Suggested Community, sent only when the player chose it. */
+    community?: true;
   },
   onStarted?: (info: DishInfo) => void,
 ): Promise<ReplaceOutcome> {
@@ -719,6 +721,7 @@ export function customDishSource(opts: {
   empty: boolean;
   habitatId?: string;
   environment?: Pick<RecipeOverrides, 'lid' | 'lightMode' | 'drying'>;
+  community?: true;
 }): DishSource {
   const env = opts.environment ?? {};
   return {
@@ -733,6 +736,8 @@ export function customDishSource(opts: {
       ...(env.lid !== undefined ? { lid: env.lid } : {}),
       ...(env.lightMode !== undefined ? { lightMode: env.lightMode } : {}),
       ...(env.drying !== undefined ? { drying: env.drying } : {}),
+      // P5.4: only when chosen, so a request without it is exactly today's.
+      ...(opts.community === true ? { community: true } : {}),
     },
   };
 }

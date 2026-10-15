@@ -78,6 +78,13 @@ export interface RecipeOverrides {
   readonly lid?: 'open' | 'closed';
   readonly lightMode?: 'fixed' | 'cycle';
   readonly drying?: boolean;
+  /**
+   * Phase 5 P5.4 (wave 14, D-0128; CT §8.2 "Empty or Suggested Community"): true = also place the habitat's
+   * Suggested Community (five of each named species in its region, and its patches). Needs `empty: true`
+   * and a habitat whose community this build offers; build() refuses otherwise, before anything is built.
+   * recipeProvenance records it only when true. Absent = no community (every v1.0 start).
+   */
+  readonly community?: boolean;
 }
 
 export type DishSource =
@@ -716,6 +723,20 @@ export interface DishInfo {
    * S05 shelter cell exactly as canOccupy does.
    */
   readonly speciesFreeClass?: readonly ('small' | 'medium' | 'large' | 'fixed' | 'viral')[];
+  /**
+   * Phase 5 wave 14 (region pins, D-0128): the regions of the dish's OWN recorded habitat (world.content.habitat,
+   * never this build's registry), in record order: `number` is the 1-based position (1…6), `anchor` the anchor
+   * cell (x, y). Present only when that habitat records at least one region; absent otherwise (every v1.0 dish).
+   */
+  readonly regions?: readonly DishRegion[];
+}
+
+/** One habitat region as DishInfo.regions carries it (the pin and the legend). */
+export interface DishRegion {
+  readonly id: string;
+  readonly label: string;
+  readonly number: number;
+  readonly anchor: readonly [number, number];
 }
 
 export interface SnapshotMsg {
@@ -1763,6 +1784,15 @@ export interface NewDishPreview {
     readonly summary: string;
     readonly rules?: string;
     readonly grid?: { readonly substrate: Uint8Array; readonly structure: Uint8Array };
+    /**
+     * Phase 5 P5.4 (wave 14, D-0128): what the habitat places, one entry per placed structure kind and per
+     * object material, in habitat order (edges by kind, devices and furnishings by kind, objects by
+     * material), with the realized count (H04: S06 Attachment mesh 197, S07 Nutrient basket 2, M11 Leaf
+     * wafer 2). Absent when the habitat places nothing (every v1.0 start).
+     */
+    readonly uses?: readonly { readonly id: string; readonly name: string; readonly count: number }[];
+    /** Phase 5 P5.4: the habitat's regions in record order (`number` 1-based, as the pins show it). Absent when it records none. */
+    readonly regions?: readonly { readonly id: string; readonly label: string; readonly number: number }[];
   };
   readonly seed: number;
   readonly mutationPreset: string;
@@ -1798,6 +1828,16 @@ export interface NewDishPreview {
   readonly environment: { readonly lid: 'open' | 'closed'; readonly lightMode: 'fixed' | 'cycle'; readonly drying: boolean };
   /** Protocol 3: whether the realized preview world records the 'climate' system (light cycle, drying). */
   readonly climate: boolean;
+  /**
+   * Phase 5 P5.4 (wave 14, D-0128): true only when the realized dish includes its habitat's Suggested
+   * Community (RecipeOverrides.community); absent otherwise (every v1.0 start).
+   */
+  readonly community?: boolean;
+  /**
+   * Phase 5 P5.4: the Suggested Community's groups in record order, with the number actually placed and
+   * the region's label ("5 Sporeveil in Under the roof"). Present only with `community: true`.
+   */
+  readonly communityGroups?: readonly { readonly speciesId: string; readonly name: string; readonly count: number; readonly regionLabel: string }[];
 }
 
 /** P4.7: a goal offered for a Try my dish turn, with its predicate's duration (null: none). */

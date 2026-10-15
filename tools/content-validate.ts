@@ -10,7 +10,9 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { computeContentHash, validateContent, type ContentIssue } from '../src/sim/content/registry';
+import { computeContentHash, validateContent, type ContentIssue, type ContentRegistry, type RawFile } from '../src/sim/content/registry';
+import { communityOffered, habitatOffered } from '../src/sim/content/habitatRules';
+import { applyRecipeOverrides, CommunityError, realizeRecipe, RecipeError } from '../src/sim/recipes';
 import { CONTENT_DIR, REPO_ROOT, loadRawPacksFs } from './lib/content-fs';
 
 /** What the atlas check needs to know about one enabled species (from its content record). */
@@ -494,6 +496,42 @@ export function checkAtlas(
   return issues;
 }
 
+/**
+ * P5.4 (wave 14, D-0128): every Suggested Community the validated manifest offers (habitatOffered and
+ * communityOffered, enabled habitat or not) is realized as New Dish would start it: `recipeId` (FIRST_DISH_V1)
+ * with { empty: true, habitatId, community: true }, under the registry with that habitat enabled. A group
+ * with fewer valid cells than its count (or any other RecipeError) is reported on the habitat's file at
+ * 'suggestedCommunity.groups.<k>' (or the field CommunityError names). The eligible counts never depend
+ * on the seed (only the order the cells are taken in does), so one realization proves every seed.
+ * PROPOSED DECISION (wave 14): this runs here and in the tests, not in validateContent, which also runs at
+ * the worker's boot, where realizing eight worlds would cost time for nothing.
+ */
+export function communityRealizationIssues(
+  registry: ContentRegistry,
+  habitatFiles: readonly RawFile[],
+  recipeId = 'FIRST_DISH_V1',
+): ContentIssue[] {
+  const out: ContentIssue[] = [];
+  const m = registry.manifest;
+  for (const id of registry.habitatIds) {
+    const h = registry.habitats[id]!;
+    if (h.suggestedCommunity === undefined || !habitatOffered(h, m) || !communityOffered(h, m, registry.species)) continue;
+    const file = habitatFiles.find((f) => isObj(f.data) && f.data.id === id)?.file ?? `content/habitats/${id}.json`;
+    if (registry.recipes[recipeId] === undefined) {
+      out.push({ severity: 'error', file, path: 'suggestedCommunity', message: `cannot check: there is no recipe ${recipeId} to start it from` });
+      continue;
+    }
+    const reg: ContentRegistry = m.enabledHabitats.includes(id) ? registry : { ...registry, manifest: { ...m, enabledHabitats: [...m.enabledHabitats, id].sort() } };
+    try {
+      realizeRecipe(reg, recipeId, { worldId: `community-check:${id}`, transform: (r) => applyRecipeOverrides(r, { empty: true, habitatId: id, community: true }) });
+    } catch (e) {
+      if (!(e instanceof RecipeError)) throw e;
+      out.push({ severity: 'error', file, path: e instanceof CommunityError ? e.path : 'suggestedCommunity', message: e.message });
+    }
+  }
+  return out;
+}
+
 function argValue(name: string): string | null {
   const i = process.argv.indexOf(name);
   return i >= 0 ? (process.argv[i + 1] ?? null) : null;
@@ -516,6 +554,10 @@ async function main(): Promise<void> {
   let atlasFrames = 0;
   let marks: AtlasMarkRef[] = [];
   let tilesNeeded: AtlasTileRef[] = [];
+  // P5.4: every offered Suggested Community must realize (five of each in valid cells, never cropped).
+  const offersCommunity = (r: ContentRegistry, id: string) => habitatOffered(r.habitats[id]!, r.manifest) && communityOffered(r.habitats[id]!, r.manifest, r.species);
+  const communities = registry ? registry.habitatIds.filter((id) => offersCommunity(registry, id)).length : 0;
+  if (registry) issues.push(...communityRealizationIssues(registry, raw.habitats));
   if (registry) {
     if (!existsSync(atlasPath)) {
       issues.push({ severity: 'error', file: atlasFile, path: '', message: 'atlas manifest is missing (run npm run art:build)' });
@@ -564,7 +606,7 @@ async function main(): Promise<void> {
   console.log(
     `content ok · contentHash ${hash} · species ${r.speciesIds.length} (enabled ${r.manifest.enabledSpecies.length}) · ` +
       `materials ${r.materialIds.length} · modules ${r.moduleIds.length} · habitats ${r.habitatIds.length} · structures ${r.structureIds.length} · ` +
-      `recipes ${r.recipeIds.length} · experiments ${r.experimentIds.length} · variants ${r.variantIds.length} · ` +
+      `suggested communities ${communities} realized · recipes ${r.recipeIds.length} · experiments ${r.experimentIds.length} · variants ${r.variantIds.length} · ` +
       `atlas ${atlasFile} complete for ${r.manifest.enabledSpecies.length} enabled species and ${marks.length} enabled module and native marks (${marks.map((m) => m.layer).join(', ')}) and ${tilesNeeded.length} world tiles (${tilesNeeded.map((t) => t.tile).join(', ')}; ${atlasFrames} frames)`,
   );
 }

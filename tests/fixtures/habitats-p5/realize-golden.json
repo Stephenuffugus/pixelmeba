@@ -1,0 +1,131 @@
+{
+ "about": "Wave 14 habitat-geometry step 0 golden (D-0128).",
+ "how": "Written by the UNMODIFIED HEAD code (1c9d8a2) before wave 14's habitat geometry (step 0a), under the shipped registry (loadRegistryFs()). Entries: every recipe of registry.recipeIds with phase <= buildPhase (realizeRecipe(registry, id)); the three v1.0 New Dish starts, each realized as host.ts build() does: realizeRecipe(registry, 'FIRST_DISH_V1', { seed: 104729, worldId: 'golden', transform: (r) => applyRecipeOverrides(r, o) }) with o = { empty: true }, { empty: true, habitatId: 'GEL_COLONY' } and { empty: true, habitatId: 'SEDIMENT_EDGE' }; every What if? variant of registry.variantIds with phase <= buildPhase (await realizeVariant(registry, id)). Right after realization the world's content is replaced by a copy whose manifest.contentHash is '' (and, for a variant, whose provenance.variant.contentHash and initialStateHash are '': both record the contentHash, which the habitat files move). serialized = sha256 hex of canonicalJson(serializeWorld(world)) at tick 0; stateHash300 = stateHash(world) after run(world, 300). Recompute: tests/helpers/habitats.ts realizeGoldenEntries().",
+ "entries": [
+  {
+   "key": "recipe:BROKEN_CATALYST_V1",
+   "serialized": "2df46e4c840d32b48d51054356119228faf104556d65d81ff91aca8cac0cd177",
+   "stateHash300": "9ef7a81641ca71bc"
+  },
+  {
+   "key": "recipe:CLEANING_CREW_V1",
+   "serialized": "935974ae68bb3c2c1039fc2cae1ce1b9919c1608f51b8c5ccc299a57782ddf26",
+   "stateHash300": "a9ba9c22ec22a304"
+  },
+  {
+   "key": "recipe:FIRST_DISH_V1",
+   "serialized": "c4ed6f26e8d808d6d66f8126b1c8eb0d7f43d96167868980cfcdfefb27c4dba3",
+   "stateHash300": "2ba7cf51eeab0f4a"
+  },
+  {
+   "key": "recipe:FOOD_TRAIL_V1",
+   "serialized": "98f848d84b8063121d9f520ca2ac792bc4ea105d1a351575713175e6d90b9565",
+   "stateHash300": "2856d98e299b6342"
+  },
+  {
+   "key": "recipe:FUNGAL_SUPPLY_LINE_V1",
+   "serialized": "6aecb8f029f7e6fa60ad06be3780744075aed77aed12a64aaa60f964d34e822c",
+   "stateHash300": "0e8617a0a35b223c"
+  },
+  {
+   "key": "recipe:HIDDEN_NEIGHBORHOOD_V1",
+   "serialized": "2a63e43d52367c3e51d86358c19244de548b5672e594eb1d87d19149fe66834b",
+   "stateHash300": "390b5e9f82213cf6"
+  },
+  {
+   "key": "recipe:L301_TWO_LUNCHES",
+   "serialized": "cb51ca61785404ac6da43f66e16c53b334b97d356a303dc05c7f09680dd38cef",
+   "stateHash300": "fa72d69bdcb5f1b7"
+  },
+  {
+   "key": "recipe:L303_PUBLIC_KITCHEN",
+   "serialized": "08f0eeb6c40be193d8f093212dab3b2f4070c37f29f84bc05d7151dbfa8428a4",
+   "stateHash300": "e79bf7773659449c"
+  },
+  {
+   "key": "recipe:L304_EMPTY_AFTER_THE_FEAST",
+   "serialized": "4058174cb89e27b7892961de6b3e5b8b5f97891ff19b663f71bfa882c69dfa86",
+   "stateHash300": "16185295ba77defd"
+  },
+  {
+   "key": "recipe:L306_BORROWED_SHELTER",
+   "serialized": "a0d8703043228f6fb55c9496d6675833850a119c606b97dcf182d7b544564656",
+   "stateHash300": "72402d7a9a27b49a"
+  },
+  {
+   "key": "recipe:LIGHT_AND_LIFE_V1",
+   "serialized": "7fde7bc153475a1695485ef1ce044129c23522fa3d2913be59184f0fe87a58d6",
+   "stateHash300": "c734780ef9ab58ec"
+  },
+  {
+   "key": "recipe:OIL_NEIGHBORHOOD_V1",
+   "serialized": "f5fba9214a2a62bf4dab934adec6a0b15e3e7aa4f524b823f03ac3654c0353e3",
+   "stateHash300": "ea515f758a1ae967"
+  },
+  {
+   "key": "recipe:ONE_HOST_V1",
+   "serialized": "90113739c7e67cb9c86c305ca5f333693c0c7f64d3dcfe29adcb0ac7f1a2b80b",
+   "stateHash300": "a604a4270cfdcf16"
+  },
+  {
+   "key": "recipe:PREDATOR_BALANCE_V1",
+   "serialized": "bcd9eecfbb3639b062f3850938a0f6dda4dff31785617260d0b49007f314fcd5",
+   "stateHash300": "4557a99247864927"
+  },
+  {
+   "key": "recipe:PROTEIN_CHAIN_V1",
+   "serialized": "acc98a35f245f07e9bd1bc7715d2b13bdc1adc1579bffe047d7548385d00673f",
+   "stateHash300": "d4c4b80ad8a89e0b"
+  },
+  {
+   "key": "recipe:RESERVE_COMPARE_V1",
+   "serialized": "e10e0f27ae47ef73bd2c7c409be949c1a5399c8f52d80c33e00185cfa17c62b1",
+   "stateHash300": "35596335c270e1ea"
+  },
+  {
+   "key": "recipe:SHARED_LUNCH_V1",
+   "serialized": "27a8a3f646ddf075135735c26dc5d6c9f32d9778bba48c8c1fc27417ed9224d8",
+   "stateHash300": "d4fa53ab2f732a58"
+  },
+  {
+   "key": "recipe:STARCH_UNLOCK_V1",
+   "serialized": "b0837ddb938973fc2ed2432b674f96cd29baebcc2fbab39e85fdf4cde788a442",
+   "stateHash300": "4095f2396d05c239"
+  },
+  {
+   "key": "newDish:empty",
+   "serialized": "3f8a5c0d9b55905fd19a2458fefe6d3800c112b8a771dc6a712fbe2c96dfed29",
+   "stateHash300": "86e429ac93390b10"
+  },
+  {
+   "key": "newDish:empty:GEL_COLONY",
+   "serialized": "3f15764a19dbf4acefb566ed9898c5c7c432a8a8c4e36ff516bf4bd1e0280025",
+   "stateHash300": "779a41ee7ca4a5b6"
+  },
+  {
+   "key": "newDish:empty:SEDIMENT_EDGE",
+   "serialized": "41bb6b4ed0a9ddb7d60dae334b7e262594395da7034f6d3121a48d868e4b1ce7",
+   "stateHash300": "2c8dfe0dc8c6861e"
+  },
+  {
+   "key": "variant:R-G0",
+   "serialized": "4e2c5e44800189464cf196d650c049f87a201781a9d7ad1ab6433893fd703915",
+   "stateHash300": "2ba7cf51eeab0f4a"
+  },
+  {
+   "key": "variant:R-G1",
+   "serialized": "123ce5657ebc3f37c6db1a6c5facfb92b519d1d3d45d4a55a9204ac78a262af1",
+   "stateHash300": "8ff7571077a3d5a7"
+  },
+  {
+   "key": "variant:R-G2",
+   "serialized": "78c41d624644d19aedb365760170238f341282781e0faa709ab820d1246c2d4f",
+   "stateHash300": "cb31e7b14580408d"
+  },
+  {
+   "key": "variant:R-G3",
+   "serialized": "d256806c7d2b71aae5131b06f54af8a9b31b4e4879c2247fe21696437ce3e417",
+   "stateHash300": "33ca2e7e2f5da717"
+  }
+ ]
+}

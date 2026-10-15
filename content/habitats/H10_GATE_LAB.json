@@ -1,0 +1,35 @@
+{
+  "id": "H10_GATE_LAB",
+  "name": "Gate Lab",
+  "baseSubstrate": "water",
+  "baseLight": 0.8,
+  "warmth": 0.5,
+  "baseFields": {"oxygen": 0.8, "co2": 0.5, "nutrient": 0.1, "sugar": 0.02},
+  "ops": [
+    {"op": "rect", "x0": 64, "x1": 64, "y0": 0, "y1": 60, "substrate": "wall"},
+    {"op": "rect", "x0": 64, "x1": 64, "y0": 67, "y1": 127, "substrate": "wall"}
+  ],
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "edges": [{"structure": "S01", "dir": "R", "x0": 63, "y0": 61, "x1": 63, "y1": 66}],
+  "regions": [
+    {"id": "LEFT_SIDE", "label": "Left side", "shape": {"kind": "rect", "x0": 0, "x1": 63, "y0": 0, "y1": 127}, "anchor": [55, 64]},
+    {"id": "RIGHT_SIDE", "label": "Right side", "shape": {"kind": "rect", "x0": 65, "x1": 127, "y0": 0, "y1": 127}, "anchor": [72, 64]},
+    {"id": "MEMBRANES", "label": "Membranes", "shape": {"kind": "rect", "x0": 63, "x1": 64, "y0": 61, "y1": 66}, "anchor": [63, 63]}
+  ],
+  "suggestedCommunity": {
+    "groups": [
+      {"species": "B06", "region": "LEFT_SIDE", "count": 5, "radius": 10},
+      {"species": "B01", "region": "RIGHT_SIDE", "count": 5, "radius": 10}
+    ],
+    "patches": [{"center": [55, 64], "radius": 6, "substrate": "water", "add": {"starch": 0.5}, "label": "Starch"}]
+  },
+  "guide": {
+    "summary": "Water split in two by a wall, with six fine membranes as the only way through.",
+    "biology": "A fine membrane lets dissolved food and signals seep through slowly but stops every living thing.",
+    "rules": "All water. An impermeable wall along x 64, except at y 61 to 66, where six fine membrane edges join the two sides; no stones. A fine membrane passes dissolved amounts and activity at 25 % and blocks organisms, viruses and deposits. Light 0.8, warmth 0.5, oxygen 0.8, carbon dioxide 0.5, nutrient 0.10 and sugar 0.02 in every open cell. Lid open; fixed light.",
+    "example": "Feed one side and watch what reaches the other through the membranes."
+  },
+  "phase": 5
+}

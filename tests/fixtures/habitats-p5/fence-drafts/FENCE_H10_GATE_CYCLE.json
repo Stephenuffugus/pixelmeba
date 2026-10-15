@@ -1,0 +1,20 @@
+{
+  "id": "FENCE_H10_GATE_CYCLE",
+  "revision": 1,
+  "name": "Fence: Gate Lab with day and night",
+  "habitatId": "H10_GATE_LAB",
+  "seed": 104729,
+  "lightMode": "cycle",
+  "removeStones": false,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "community": true,
+  "fieldPatches": [],
+  "founders": [],
+  "scheduledCommands": [],
+  "labels": [],
+  "question": "Test-only fence dish draft (D-0128, wave 14): the Gate Lab's Suggested Community and its starch patch under a light cycle, so the fine membranes (edges) and climate run together.",
+  "expectedObservationsText": "Not shipped: a draft the lead adds to the fence at the habitat enable with tools/fence-update.ts --add-file (kind 'recipeFile').",
+  "phase": 5
+}

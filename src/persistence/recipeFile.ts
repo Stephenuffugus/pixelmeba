@@ -20,6 +20,7 @@
  */
 import type { ContentRegistry } from '@sim/content/registry';
 import type { HabitatDef, RecipeDef } from '@sim/content/schema';
+import { communityOffered } from '@sim/content/habitatRules';
 import { canonicalJson, sha256Hex } from '@sim/hash';
 import { isMutationPreset } from '@sim/mutation';
 import {
@@ -173,7 +174,8 @@ function onlySeed(r: RecipeDef, o: RecipeOverridesRecord): boolean {
     (o.founderMode ?? r.founderMode) === r.founderMode &&
     (o.lid ?? r.lid) === r.lid &&
     (o.lightMode ?? r.lightMode) === r.lightMode &&
-    (o.drying ?? r.drying) === r.drying
+    (o.drying ?? r.drying) === r.drying &&
+    o.community !== true
   );
 }
 
@@ -505,7 +507,7 @@ export function recipeFileProblem(raw: unknown, registry: ContentRegistry): Reci
     if (!isUint(s.seed, RECIPE_SEED_MAX)) return damaged('seed');
     const o = s.overrides;
     if (!isObj(o)) return damaged('overrides');
-    const okeys = ['drying', 'empty', 'founderMode', 'habitatId', 'lid', 'lightMode', 'mutationPreset', 'seed'];
+    const okeys = ['community', 'drying', 'empty', 'founderMode', 'habitatId', 'lid', 'lightMode', 'mutationPreset', 'seed'];
     if (Object.keys(o).some((k) => !okeys.includes(k))) return damaged('overrides');
     if (o.seed !== undefined && (!isUint(o.seed, RECIPE_SEED_MAX) || o.seed !== s.seed))
       return damaged('seed');
@@ -528,9 +530,18 @@ export function recipeFileProblem(raw: unknown, registry: ContentRegistry): Reci
         !own(registry.habitats, o.habitatId))
     )
       return compatible;
+    // P5.4 (wave 14): the Suggested Community, a boolean, only where this build offers the habitat's community.
+    if (o.community !== undefined && typeof o.community !== 'boolean') return damaged('overrides.community');
+    // build() never records a community on a start that is not empty.
+    if (o.community === true && o.empty !== true) return damaged('overrides.community');
     const recipe = own(registry.recipes, s.recipeId) ? registry.recipes[s.recipeId] : undefined;
     if (recipe === undefined || recipe.phase > m.buildPhase || recipe.revision !== s.revision)
       return compatible;
+    if (o.community === true) {
+      const habitatId = o.habitatId ?? recipe.habitatId;
+      const habitat = own(registry.habitats, habitatId) ? registry.habitats[habitatId] : undefined;
+      if (habitat === undefined || !communityOffered(habitat, m, registry.species)) return compatible;
+    }
     if (o.seed === undefined && s.seed !== recipe.seed) return damaged('seed');
     return null;
   }

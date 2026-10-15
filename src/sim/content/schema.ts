@@ -250,6 +250,90 @@ export const DevicePlacementSchema = z
   });
 export type DevicePlacement = z.infer<typeof DevicePlacementSchema>;
 
+/**
+ * Phase 5 (P5.4; CT §8.2, §14; D-0128): a named region of a habitat (UX "region pins"; the Suggested
+ * Community places its groups by region). The shape is clipped to the dish: a disk is the cells with
+ * (x − cx)² + (y − cy)² ≤ r² (grid.ts inDisk), a rect the inclusive cell bounds. The anchor is the cell a
+ * pin and a community group are centred on; the validator keeps it inside the shape, the dish and on an
+ * open cell of the habitat's grid. src/sim/content/habitatRules.ts regionCells / regionContains.
+ */
+export const HabitatRegionSchema = z
+  .object({
+    id: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
+    label: z.string().min(1).max(24),
+    shape: z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('disk'), center: cell, radius: nonneg }).strict(),
+      z.object({ kind: z.literal('rect'), x0: gridCoord, x1: gridCoord, y0: gridCoord, y1: gridCoord }).strict(),
+    ]),
+    anchor: z.tuple([gridCoord, gridCoord]),
+  })
+  .strict();
+export type HabitatRegionDef = z.infer<typeof HabitatRegionSchema>;
+
+/**
+ * Phase 5 (P5.4; CT §4, §8.2; D-0128): an area a habitat furnishes with one structure per cell (an
+ * attachment mesh, a shade roof ...). The cells are the area's in-dish cells row-major
+ * (src/sim/recipes.ts furnishCells); 'perimeter' is the disk's in-dish cells with a 4-neighbour outside
+ * the disk or outside the dish. Placed after the habitat's explicit devices (recipeStructures); the
+ * device store rules apply (one per cell, open cells only, the 256 cap shared with devices).
+ */
+export const FurnishAreaSchema = z
+  .object({
+    structure: z.enum(['S05', 'S06', 'S11', 'S12']),
+    area: z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('disk'), center: cell, radius: nonneg }).strict(),
+      z.object({ kind: z.literal('rect'), x0: gridCoord, x1: gridCoord, y0: gridCoord, y1: gridCoord }).strict(),
+      z.object({ kind: z.literal('perimeter'), center: cell, radius: nonneg }).strict(),
+    ]),
+  })
+  .strict();
+export type FurnishArea = z.infer<typeof FurnishAreaSchema>;
+
+/**
+ * Phase 5 (P5.4; CT §5.2, §8.2; D-0128): a food object a habitat starts with (a leaf wafer or a pollen
+ * grain at full pools), created at realization after the ledger baseline and recorded as an input
+ * ('habitat:<habitatId>:<material>'). An S07 device on the same cell is the basket holding it.
+ */
+export const HabitatObjectSchema = z
+  .object({
+    material: z.enum(['M10', 'M11']),
+    at: z.tuple([gridCoord, gridCoord]),
+  })
+  .strict();
+export type HabitatObject = z.infer<typeof HabitatObjectSchema>;
+
+export const FieldPatchSchema = z.object({
+  center: cell,
+  radius: nonneg,
+  substrate: HabitatKind.default('water'),
+  add: FieldValues.default({}),
+  set: FieldValues.default({}),
+  label: z.string().optional(),
+});
+export type FieldPatch = z.infer<typeof FieldPatchSchema>;
+
+/**
+ * Phase 5 (P5.4; CT §8.2 "five of each", "a radius-10 patch"; D-0128): one group of a habitat's
+ * Suggested Community, centred on its region's anchor. Realized by stage 2 (habitat-communities).
+ */
+export const CommunityGroupSchema = z
+  .object({
+    species: SpeciesIdSchema,
+    region: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
+    count: z.literal(5),
+    radius: z.literal(10),
+  })
+  .strict();
+export type CommunityGroup = z.infer<typeof CommunityGroupSchema>;
+
+export const SuggestedCommunitySchema = z
+  .object({
+    groups: z.array(CommunityGroupSchema).min(1),
+    patches: z.array(FieldPatchSchema).optional(),
+  })
+  .strict();
+export type SuggestedCommunity = z.infer<typeof SuggestedCommunitySchema>;
+
 export const HabitatSchema = z.object({
   id: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
   name: z.string().min(1),
@@ -265,6 +349,14 @@ export const HabitatSchema = z.object({
   edges: z.array(EdgePlacementSchema).optional(),
   /** Phase 5: furnishings and devices placed after all cell geometry (optional, no default). */
   devices: z.array(DevicePlacementSchema).optional(),
+  /** Phase 5 (P5.4): furnished areas, placed after `devices` (optional, no default: older records parse unchanged). */
+  furnish: z.array(FurnishAreaSchema).optional(),
+  /** Phase 5 (P5.4): food objects the habitat starts with (optional, no default). */
+  objects: z.array(HabitatObjectSchema).optional(),
+  /** Phase 5 (P5.4): named regions, at most 6 (CT §14; optional, no default). */
+  regions: z.array(HabitatRegionSchema).max(6).optional(),
+  /** Phase 5 (P5.4): the Suggested Community's shape (optional, no default; realized by stage 2). */
+  suggestedCommunity: SuggestedCommunitySchema.optional(),
   guide: GuideSchema,
   phase: PhaseSchema,
 });
@@ -272,16 +364,6 @@ export type HabitatDef = z.infer<typeof HabitatSchema>;
 
 export const MutationPreset = z.enum(['standard', 'accelerated', 'fixed']);
 export const FounderMode = z.enum(['identical', 'varied', 'diverse']);
-
-export const FieldPatchSchema = z.object({
-  center: cell,
-  radius: nonneg,
-  substrate: HabitatKind.default('water'),
-  add: FieldValues.default({}),
-  set: FieldValues.default({}),
-  label: z.string().optional(),
-});
-export type FieldPatch = z.infer<typeof FieldPatchSchema>;
 
 export const FounderSchema = z.object({
   species: SpeciesIdSchema,
@@ -361,6 +443,11 @@ export const RecipeSchema = z.object({
    */
   edges: z.array(EdgePlacementSchema).optional(),
   devices: z.array(DevicePlacementSchema).optional(),
+  /**
+   * Phase 5 (P5.4): realize the habitat's Suggested Community after the recipe's own founders (optional,
+   * no default). Stage 2 realizes it; until then realizeRecipe refuses it.
+   */
+  community: z.boolean().optional(),
   fieldPatches: z.array(FieldPatchSchema).default([]),
   founders: z.array(FounderSchema).default([]),
   scheduledCommands: z.array(ScheduledCommandSchema).default([]),

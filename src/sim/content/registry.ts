@@ -31,10 +31,11 @@ import {
   type VariantDef,
 } from './schema';
 import { IMPLEMENTED_MODULES, IMPLEMENTED_NATIVE_ABILITIES, IMPLEMENTED_RULES, IMPLEMENTED_STRUCTURES, IMPLEMENTED_SYSTEMS, RULES_VERSIONS } from './implemented';
-import { expectedStructureKind, rulesOfManifest, STRUCTURE_SYSTEM_NEEDS } from './structureRules';
+import { expectedStructureKind, rulesOfManifest, speciesSystemNeeds, STRUCTURE_SYSTEM_NEEDS } from './structureRules';
 import { MODULE_NATIVE_ABILITY, missingModuleParams, moduleSetProblem } from './moduleRules';
 import { MAX_WHAT_IF_CHOICES, variantPatchProblems } from '../variants';
-import { recipeShapeProblems, recipeTouchesStructures, structurePlacementProblems } from '../recipes';
+import { habitatShapeProblems, recipeShapeProblems, recipeTouchesStructures, structurePlacementProblems } from '../recipes';
+import { communityOfferProblem, habitatOfferIssue } from './habitatRules';
 import { experimentProblems } from '../experiments';
 import { objectivePredicateProblem } from '../objectives';
 import { PAINT_TARGETS, STRUCTURE_RECORD_IDS } from '../grid';
@@ -301,6 +302,8 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
     // Phase 5 (P5.2): the habitat's placed edges and devices on its own grid (geometry alone; what they
     // need from the manifest is checked below for shipped habitats).
     for (const p of structurePlacementProblems(h, null, null)) err(habitats.files[id]!, p.path, p.message);
+    // P5.4 (D-0128): regions, furnished areas, objects and the Suggested Community's shape.
+    for (const p of habitatShapeProblems(h, species.map)) err(habitats.files[id]!, p.path, p.message);
   }
   // Phase 5 (CT §4): every structure record has the kind the simulation gives its id.
   for (const id of structures.ids) {
@@ -327,7 +330,10 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
       }
     });
     // P3.9: the recipe's own ops and founder placement, cells, initial values and links.
-    for (const p of recipeShapeProblems(r, habitats.map[r.habitatId], species.map)) err(file, p.path, p.message);
+    for (const p of recipeShapeProblems(r, habitats.map[r.habitatId], species.map, structures.map)) err(file, p.path, p.message);
+    // P5.4: a recipe that asks for its habitat's Suggested Community needs a habitat that has one.
+    if (r.community === true && habitats.map[r.habitatId] !== undefined && habitats.map[r.habitatId]!.suggestedCommunity === undefined)
+      err(file, 'community', `habitat "${r.habitatId}" has no Suggested Community`);
     // Phase 5 (P5.2): the recipe's placed edges and devices (with its habitat's) on its final grid.
     const rh = habitats.map[r.habitatId];
     if (rh && recipeTouchesStructures(rh, r)) for (const p of structurePlacementProblems(rh, r, null)) err(file, p.path, p.message);
@@ -465,10 +471,21 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
       const h = habitats.map[id];
       if (h === undefined || h.phase > m.buildPhase) continue;
       const file = habitats.files[id]!;
+      const before = issues.length;
       for (const p of structurePlacementProblems(h, null, rules)) if (!issues.some((x) => x.file === file && x.path === p.path && x.message === p.message)) err(file, p.path, p.message);
+      // P5.4 (g5-briefs H4; D-0128): the one offer rule (habitatRules.ts), unless the checks above already
+      // reported what it would (no duplicate messages).
+      if (issues.length === before) {
+        const offer = habitatOfferIssue(h, m);
+        if (offer !== null) err(file, offer.path, offer.message);
+      }
+      const community = communityOfferProblem(h, m, species.map);
+      if (community !== null) err(file, 'suggestedCommunity', community);
     }
     m.enabledHabitats.forEach((id, i) => {
-      if (habitats.map[id] === undefined) err(mf, `enabledHabitats.${i}`, `unknown habitat "${id}"`);
+      const h = habitats.map[id];
+      if (h === undefined) err(mf, `enabledHabitats.${i}`, `unknown habitat "${id}"`);
+      else if (h.phase > m.buildPhase) err(mf, `enabledHabitats.${i}`, `"${id}" belongs to phase ${h.phase} (build phase ${m.buildPhase})`);
     });
     // Recipes shipped in this build must only use enabled content.
     for (const id of recipes.ids) {
@@ -476,6 +493,11 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
       if (r.phase > m.buildPhase) continue;
       const file = recipes.files[id]!;
       if (!m.enabledHabitats.includes(r.habitatId)) err(file, 'habitatId', `habitat "${r.habitatId}" is not enabled in this build`);
+      const rhc = habitats.map[r.habitatId];
+      if (r.community === true && rhc?.suggestedCommunity !== undefined) {
+        const problem = communityOfferProblem(rhc, m, species.map);
+        if (problem !== null) err(file, 'community', problem);
+      }
       // Phase 5: its placed structures (with its habitat's) and its own light cycle or drying need what
       // they use (a habitat's own are reported on the habitat; a geometry problem only once).
       const h = habitats.map[r.habitatId];
@@ -583,28 +605,8 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
  */
 export const MODULE_SYSTEM_NEEDS: Readonly<Record<string, SystemFlag>> = { E01: 'enzymes', E09: 'enzymes', E10: 'film', E02: 'signals', E11: 'silicate' };
 
-/**
- * The systems a species uses, each with what uses it (for the validator's message). Never film for
- * `digestsFilm`: B04 ships without the film system and simply finds no film (D-0038).
- */
-export function speciesSystemNeeds(s: Species): [SystemFlag, string][] {
-  const out: [SystemFlag, string][] = [];
-  const has = (a: Species['nativeAbilities'][number]) => s.nativeAbilities.includes(a);
-  if (has('BIOFILM')) out.push(['film', 'BIOFILM']);
-  if (has('BRANCHING')) out.push(['fungi', 'BRANCHING']);
-  if (has('TRANSPORT_LINKS')) out.push(['fungi', 'TRANSPORT_LINKS']);
-  if (has('HOST_DRAIN')) out.push(['parasites', 'HOST_DRAIN']);
-  if (has('LYSIS')) out.push(['viruses', 'LYSIS']);
-  else if (s.category === 'virus') out.push(['viruses', 'the virus category']);
-  for (const a of ['E_STARCH_SECRETION', 'E_OIL_SECRETION', 'E_PROTEIN_SECRETION'] as const) if (has(a)) out.push(['enzymes', a]);
-  if (s.foodPriority.includes('broth')) out.push(['enzymes', 'a broth diet']);
-  // Phase 5 (D-0043's carry-over). V02 needs no entry for its film gate: without the film system film is
-  // 0 everywhere and V02 simply never infects (its LYSIS already needs 'viruses').
-  if (has('SIGNAL_GLOW')) out.push(['signals', 'SIGNAL_GLOW']);
-  if (has('RIVALRY')) out.push(['rivalry', 'RIVALRY']);
-  if (has('SHELL')) out.push(['silicate', 'SHELL']);
-  return out;
-}
+/** Moved to structureRules.ts (wave 14: habitatRules.ts shares it without importing the registry); re-exported here unchanged. */
+export { speciesSystemNeeds };
 
 /**
  * A native ability that works only through another one the species must also list, or null (wave 10

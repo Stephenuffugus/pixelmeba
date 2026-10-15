@@ -1,8 +1,9 @@
 /**
  * Recipe realization (SPEC §13.1, CT §9). Builds a fresh, paused world at tick 0:
  * habitat geometry (the habitat's ops, then the recipe's own `ops`) → background overrides → ledger
- * baseline → field patches (logged inputs) → founders in distinct cells (logged inputs) → scheduled
- * commands.
+ * baseline → field patches (logged inputs) → founders in distinct cells (logged inputs) → the habitat's
+ * Suggested Community when the recipe asks for it (P5.4: its patches, then its groups; placeCommunity) →
+ * scheduled commands.
  *
  * Founder groups (P3.9; all options default to the Phase 2 behaviour, so every earlier recipe realizes
  * bit-identically): the eligible cells of a group's disk are taken row-major (inside the dish,
@@ -13,9 +14,12 @@
  * members with transport links (SPEC §7.7).
  */
 import type { ContentRegistry } from './content/registry';
-import type { DevicePlacement, EdgePlacement, GeometryOp, HabitatDef, RecipeDef, Species } from './content/schema';
+import type { DevicePlacement, EdgePlacement, FieldPatch, FurnishArea, GeometryOp, HabitatDef, RecipeDef, Species } from './content/schema';
+import { communityOfferProblem, furnishAreaCells, furnishAreaOutsideCell, regionContains } from './content/habitatRules';
 import { climateNeedProblem, placedStructureNeedProblem, PLACEABLE_PHASE5_IDS, type PlacedStructures, type StructureRulesView } from './content/structureRules';
-import { edgeStoreProblem, sortEdges, type EdgeBarrier } from './barriers';
+import { edgeCodeArrays, edgeCodeBetween, edgePermits, edgeStoreProblem, freeClassOfSpecies, sortEdges, type EdgeBarrier } from './barriers';
+import { pairPermitted } from './edgePassage';
+import { createObject, FOOD_OBJECT_CAP, FOOD_OBJECT_RULES, isFoodObjectKind, OBJECT_REFUSAL, type FoodObject } from './objects';
 import { deviceStoreProblem, sortDevices, type Device } from './devices';
 import { worldHasStructure, worldHasSystem } from './gates';
 import { FIELD_DEFS, FIELD_IDS, isFieldId, type FieldId } from './fields';
@@ -42,10 +46,25 @@ import { detPermutation, STREAMS } from './rng';
 import { introduceOrganism, queueCommand, type CommandPayload } from './commands';
 import { rebuildIndex } from './spatial';
 import { updateDerived } from './transport';
+import { isFieldVirus } from './viruses';
 import { createEmptyWorld, speciesIndex, type World, type WorldContent } from './world';
 import { INITIAL_ENERGY, TICKS_PER_SECOND } from './constants';
 
 export class RecipeError extends Error {}
+
+/**
+ * P5.4: a Suggested Community that cannot be placed, with the habitat field it concerns ('suggestedCommunity',
+ * 'suggestedCommunity.patches.<n>', 'suggestedCommunity.groups.<k>'), so tools/content-validate.ts can
+ * report it on the record. Still a RecipeError for every other caller.
+ */
+export class CommunityError extends RecipeError {
+  constructor(
+    message: string,
+    readonly path: string,
+  ) {
+    super(message);
+  }
+}
 
 export function worldContentFor(registry: ContentRegistry, habitat: HabitatDef, provenance: WorldContent['provenance']): WorldContent {
   const m = registry.manifest;
@@ -189,6 +208,11 @@ export interface RecipeOverridesRecord {
   readonly lid?: 'open' | 'closed';
   readonly lightMode?: 'fixed' | 'cycle';
   readonly drying?: boolean;
+  /**
+   * P5.4 (wave 14, D-0128; CT §8.2): the habitat's Suggested Community was placed (recorded only when
+   * true; the worker's build() accepts it only with `empty` and a habitat whose community it offers).
+   */
+  readonly community?: boolean;
 }
 
 /**
@@ -198,11 +222,18 @@ export interface RecipeOverridesRecord {
  * equal copy of `r`.
  */
 export function applyRecipeOverrides(r: RecipeDef, o: RecipeOverridesRecord): RecipeDef {
+  // P5.4 (CT §8.2, D02 "never silently"): the recipe's own community survives only on its own habitat
+  // (withHabitatOverride drops it on a habitat start) and only when the start is not Empty; otherwise a
+  // community comes only from the recorded choice (build() sends it only with `empty`).
+  const { community: own, ...base } = withHabitatOverride(r, o.habitatId);
+  const community = o.community === true ? true : o.empty === true ? undefined : own;
   return {
-    ...withHabitatOverride(r, o.habitatId),
+    ...base,
     ...(o.mutationPreset ? { mutationPreset: o.mutationPreset } : {}),
     ...(o.founderMode ? { founderMode: o.founderMode } : {}),
     ...(o.empty ? { founders: [], fieldPatches: [], scheduledCommands: [] } : {}),
+    // P5.4: after the empty start and the habitat override, so the life is the (new) habitat's community.
+    ...(community !== undefined ? { community } : {}),
     ...(o.lid !== undefined ? { lid: o.lid } : {}),
     ...(o.lightMode !== undefined ? { lightMode: o.lightMode } : {}),
     ...(o.drying !== undefined ? { drying: o.drying } : {}),
@@ -218,20 +249,29 @@ export function hasRecipeChanges(o: RecipeOverridesRecord): boolean {
     o.habitatId !== undefined ||
     o.lid !== undefined ||
     o.lightMode !== undefined ||
-    o.drying !== undefined
+    o.drying !== undefined ||
+    o.community === true
   );
 }
 
 /**
  * The recipe on habitat `habitatId` (a recorded override; P3.2). A different habitat is a habitat
  * start: the recipe's background overrides (FIRST_DISH_V1's sugar 0) belong to the recipe's own
- * habitat and are dropped, so the dish starts exactly as the preset defines it (CT §8.1). The
- * recipe's own habitat (or none) changes nothing. Every path that realizes a dish from its recorded
- * overrides applies this, so it rebuilds the same habitat.
+ * habitat and are dropped, so the dish starts exactly as the preset defines it (CT §8.1). Wave 14
+ * (P5.4; D-0128): so are the recipe's own environment and geometry (lid, lightMode, drying, baseLight,
+ * ops, stone removal, edges, devices) and its own Suggested Community choice (the old habitat's; a habitat
+ * start's community comes only from the recorded `community` override): a habitat start is the habitat
+ * exactly as CT §8 defines it (H06's closed lid and light cycle are not replaced by FIRST_DISH_V1's
+ * explicit open lid and fixed light).
+ * GEL_COLONY and SEDIMENT_EDGE record FIRST_DISH_V1's values, so their starts are unchanged. The New
+ * Dish Environment choices still apply on top (applyRecipeOverrides). The recipe's own habitat (or
+ * none) changes nothing. Every path that realizes a dish from its recorded overrides applies this, so
+ * it rebuilds the same habitat.
  */
 export function withHabitatOverride(r: RecipeDef, habitatId: string | undefined): RecipeDef {
   if (habitatId === undefined || habitatId === r.habitatId) return r;
-  return { ...r, habitatId, backgroundOverrides: {} };
+  const { lid: _lid, lightMode: _lightMode, drying: _drying, baseLight: _baseLight, edges: _edges, devices: _devices, community: _community, ...rest } = r;
+  return { ...rest, habitatId, backgroundOverrides: {}, ops: [], removeStones: false };
 }
 
 /** Provenance of a world realized from a recipe; `overrides` is absent in saves made before it was recorded. */
@@ -256,7 +296,8 @@ export function recipeOverridesOf(world: World): RecipeOverridesRecord | null | 
     (r.habitatId === undefined || typeof r.habitatId === 'string') &&
     (r.lid === undefined || r.lid === 'open' || r.lid === 'closed') &&
     (r.lightMode === undefined || r.lightMode === 'fixed' || r.lightMode === 'cycle') &&
-    (r.drying === undefined || typeof r.drying === 'boolean');
+    (r.drying === undefined || typeof r.drying === 'boolean') &&
+    (r.community === undefined || typeof r.community === 'boolean');
   return ok ? o : null;
 }
 
@@ -284,8 +325,22 @@ export interface RecipeShapeProblem {
  * grid (realization also applies the species' full occupancy rule); `initial` one entry per member;
  * `links: 'chain'` only for a TRANSPORT_LINKS species with listed four-neighbour cells.
  */
-export function recipeShapeProblems(recipe: RecipeDef, habitat: HabitatDef | undefined, species: Readonly<Record<string, Species>>): RecipeShapeProblem[] {
+export function recipeShapeProblems(
+  recipe: RecipeDef,
+  habitat: HabitatDef | undefined,
+  species: Readonly<Record<string, Species>>,
+  /** Structure records, for the name in a founder-chain message (absent: the structure id). */
+  structureNames?: Readonly<Record<string, { readonly name: string }>>,
+): RecipeShapeProblem[] {
   const out: RecipeShapeProblem[] = [];
+  // D-0116, D-0122: a chain's consecutive cells may not straddle a placed edge that blocks the species' class.
+  let chainEdges: { codes: ReturnType<typeof edgeCodeArrays>; edges: readonly EdgeBarrier[] } | null | undefined;
+  const chainEdgesOf = () => {
+    if (chainEdges !== undefined) return chainEdges;
+    const edges = habitat ? recipeStructures(habitat, recipe).edges : [];
+    chainEdges = edges.length === 0 ? null : { codes: edgeCodeArrays(edges), edges };
+    return chainEdges;
+  };
   recipe.ops.forEach((op, i) => {
     if (op.op === 'rect' && (op.x0 > op.x1 || op.y0 > op.y1)) out.push({ path: `ops.${i}`, message: 'rect must have x0 ≤ x1 and y0 ≤ y1' });
   });
@@ -322,6 +377,19 @@ export function recipeShapeProblems(recipe: RecipeDef, habitat: HabitatDef | und
           const [ax, ay] = f.cells[k - 1]!;
           const [bx, by] = f.cells[k]!;
           if (Math.abs(ax - bx) + Math.abs(ay - by) !== 1) out.push({ path: at(`cells.${k}`), message: `(${bx},${by}) is not a four-neighbour of (${ax},${ay}), so the chain cannot link them` });
+          else if (sp && inMask(ax, ay) && inMask(bx, by)) {
+            const ce = chainEdgesOf();
+            if (ce === null) continue;
+            const a = cellIndex(ax, ay);
+            const b = cellIndex(bx, by);
+            const code = edgeCodeBetween(ce.codes, a, b);
+            if (edgePermits(code, freeClassOfSpecies(sp))) continue;
+            const lower = Math.min(a, b);
+            const dir = ay === by ? 'R' : 'D';
+            const kind = ce.edges.find((e) => e.cell === lower && e.dir === dir)?.kind ?? '';
+            const name = structureNames?.[kind]?.name ?? kind;
+            out.push({ path: at(`cells.${k}`), message: `(${bx},${by}) and (${ax},${ay}) are on two sides of a ${name} edge, which a link cannot cross` });
+          }
         }
     }
   });
@@ -405,13 +473,27 @@ function devicesOf(list: readonly DevicePlacement[] | undefined, out: Device[], 
 }
 
 /**
+ * The cells a habitat's furnished area covers, row-major, in the dish (P5.4; habitatRules.ts
+ * furnishAreaCells): the realization, the validator and tests share it.
+ */
+export function furnishCells(area: FurnishArea['area']): number[] {
+  return furnishAreaCells(area);
+}
+
+function furnishOf(list: readonly FurnishArea[] | undefined, out: Device[], nextId: () => number): void {
+  for (const f of list ?? []) for (const cell of furnishAreaCells(f.area)) out.push({ id: nextId(), kind: f.structure, cell });
+}
+
+/**
  * The edge barriers and furnishings or devices a habitat and recipe place (Phase 5; CT §4): pure, no
- * world. Ids run from 1 in this order: the habitat's edges, the habitat's devices, the recipe's edges,
- * the recipe's devices (a rectangle's cells row-major); the stores are then sorted (sortEdges,
- * sortDevices). Not validated here: realizeRecipe and the registry run the store checks on the grid.
+ * world. Ids run from 1 in this order: the habitat's edges, the habitat's devices, the habitat's
+ * furnished areas (area order, each area's cells row-major; P5.4), the recipe's edges, the recipe's
+ * devices (a rectangle's cells row-major); the stores are then sorted (sortEdges, sortDevices). A
+ * habitat without furnished areas gets exactly the ids it had before them. Not validated here:
+ * realizeRecipe and the registry run the store checks on the grid.
  */
 export function recipeStructures(
-  habitat: Pick<HabitatDef, 'edges' | 'devices'>,
+  habitat: Pick<HabitatDef, 'edges' | 'devices' | 'furnish'>,
   recipe?: Pick<RecipeDef, 'edges' | 'devices'>,
 ): { edges: EdgeBarrier[]; devices: Device[] } {
   let id = 1;
@@ -420,6 +502,7 @@ export function recipeStructures(
   const devices: Device[] = [];
   edgesOf(habitat.edges, edges, nextId);
   devicesOf(habitat.devices, devices, nextId);
+  furnishOf(habitat.furnish, devices, nextId);
   edgesOf(recipe?.edges, edges, nextId);
   devicesOf(recipe?.devices, devices, nextId);
   return { edges: sortEdges(edges), devices: sortDevices(devices) };
@@ -472,7 +555,103 @@ function placementProblems(habitat: HabitatDef, recipe: RecipeDef | null, rules:
   const edgeProblem = placedStructureProblem({ edges: placed.edges, devices: [] }, grid, rules);
   if (edgeProblem !== null) out.push({ path: 'edges', message: edgeProblem });
   const deviceProblem = placedStructureProblem({ edges: [], devices: placed.devices }, grid, rules);
-  if (deviceProblem !== null) out.push({ path: 'devices', message: deviceProblem });
+  if (deviceProblem !== null) {
+    // P5.4: a problem that only the habitat's furnished areas bring is reported on 'furnish'.
+    let path = 'devices';
+    if ((habitat.furnish?.length ?? 0) > 0) {
+      const without = recipeStructures({ ...habitat, furnish: [] }, recipe ?? undefined);
+      if (placedStructureProblem({ edges: [], devices: without.devices }, grid, rules) === null) path = 'furnish';
+    }
+    out.push({ path, message: deviceProblem });
+  }
+  return out;
+}
+
+/**
+ * P5.4 registry-free checks of a habitat record's regions (D-0128): region ids unique, a rect's bounds in
+ * order, each anchor inside the dish, inside its region's shape and on a cell the habitat's own geometry
+ * leaves open (habitatGrid: no stone, wall or bead). The content validator (habitatShapeProblems) and the
+ * save import (src/persistence/saveFile.ts, on the dish's recorded habitat) share it. `grid` is the
+ * habitat's grid when the caller has built it.
+ */
+export function habitatRegionProblems(h: HabitatDef, grid?: Grid): RecipeShapeProblem[] {
+  const out: RecipeShapeProblem[] = [];
+  const regions = h.regions ?? [];
+  if (regions.length === 0) return out;
+  const g = grid ?? habitatGrid(h);
+  const ids: string[] = [];
+  regions.forEach((r, i) => {
+    if (ids.includes(r.id)) out.push({ path: `regions.${i}.id`, message: `region id "${r.id}" is used twice` });
+    ids.push(r.id);
+    if (r.shape.kind === 'rect' && (r.shape.x0 > r.shape.x1 || r.shape.y0 > r.shape.y1)) out.push({ path: `regions.${i}.shape`, message: 'rect must have x0 ≤ x1 and y0 ≤ y1' });
+    const [x, y] = r.anchor;
+    const where = `(${x},${y})`;
+    if (!inMask(x, y)) out.push({ path: `regions.${i}.anchor`, message: `${where} is outside the dish` });
+    else if (!regionContains(r, x, y)) out.push({ path: `regions.${i}.anchor`, message: `${where} is outside the region's shape` });
+    else if (g.structure[cellIndex(x, y)] !== ST_NONE) out.push({ path: `regions.${i}.anchor`, message: `${where} holds a structure` });
+  });
+  return out;
+}
+
+/** P5.4 (registry-free): Suggested Community group `i`'s region must be one of the habitat's regions, or null. */
+export function communityGroupRegionProblem(h: HabitatDef, i: number): RecipeShapeProblem | null {
+  const g = h.suggestedCommunity?.groups[i];
+  if (g === undefined || (h.regions ?? []).some((r) => r.id === g.region)) return null;
+  return { path: `suggestedCommunity.groups.${i}.region`, message: `unknown region "${g.region}"` };
+}
+
+/**
+ * The registry-free checks of a recorded habitat (habitatRegionProblems, then every community group's
+ * region): what the save import runs beyond HabitatSchema, so a forged save cannot load with duplicate
+ * region ids, a pin off the dish or a community naming a region the habitat lacks.
+ */
+export function habitatRecordProblems(h: HabitatDef): RecipeShapeProblem[] {
+  const out = habitatRegionProblems(h);
+  (h.suggestedCommunity?.groups ?? []).forEach((_, i) => {
+    const p = communityGroupRegionProblem(h, i);
+    if (p !== null) out.push(p);
+  });
+  return out;
+}
+
+/**
+ * P5.4 content checks of a habitat record's regions, furnished areas, objects and Suggested Community
+ * shape (the registry runs them on every habitat, shipped or not; D-0128). Its placed structures,
+ * furnishings included, are checked by structurePlacementProblems. Paths name the field
+ * ('regions.<i>.anchor', 'furnish.<i>.area', 'objects.<i>.at', 'suggestedCommunity.groups.<i>.region').
+ */
+export function habitatShapeProblems(h: HabitatDef, species: Readonly<Record<string, Species>>): RecipeShapeProblem[] {
+  const regions = h.regions ?? [];
+  const objects = h.objects ?? [];
+  const furnish = h.furnish ?? [];
+  const needGrid = regions.length + objects.length > 0;
+  const grid = needGrid ? habitatGrid(h) : null;
+  const out: RecipeShapeProblem[] = grid !== null ? habitatRegionProblems(h, grid) : [];
+  furnish.forEach((f, i) => {
+    if (f.area.kind === 'rect' && (f.area.x0 > f.area.x1 || f.area.y0 > f.area.y1)) out.push({ path: `furnish.${i}.area`, message: 'rect must have x0 ≤ x1 and y0 ≤ y1' });
+    const outside = furnishAreaOutsideCell(f.area);
+    if (outside !== null) out.push({ path: `furnish.${i}.area`, message: `(${outside[0]},${outside[1]}) is outside the dish: a furnished area lies wholly inside it` });
+    else if (furnishAreaCells(f.area).length === 0) out.push({ path: `furnish.${i}.area`, message: 'covers no cell' });
+  });
+  if (objects.length > FOOD_OBJECT_CAP) out.push({ path: 'objects', message: `${objects.length} food objects: a dish holds up to ${FOOD_OBJECT_CAP}` });
+  const taken: number[] = [];
+  objects.forEach((o, i) => {
+    const [x, y] = o.at;
+    const where = `(${x},${y})`;
+    const idx = cellIndex(x, y);
+    if (!inMask(x, y)) out.push({ path: `objects.${i}.at`, message: `${where} is outside the dish` });
+    else if (grid !== null && grid.structure[idx] !== ST_NONE) out.push({ path: `objects.${i}.at`, message: `${where} holds a structure` });
+    else if (taken.includes(idx)) out.push({ path: `objects.${i}.at`, message: `${where} already holds a food object` });
+    taken.push(idx);
+  });
+  const c = h.suggestedCommunity;
+  if (c !== undefined) {
+    c.groups.forEach((g, i) => {
+      const region = communityGroupRegionProblem(h, i);
+      if (region !== null) out.push(region);
+      if (species[g.species] === undefined) out.push({ path: `suggestedCommunity.groups.${i}.species`, message: `unknown species "${g.species}"` });
+    });
+  }
   return out;
 }
 
@@ -480,9 +659,122 @@ function placementProblems(habitat: HabitatDef, recipe: RecipeDef | null, rules:
  * Whether a recipe's own records bear on its placed structures: it places its own, or it repaints the
  * grid (ops, stone removal) under its habitat's. Otherwise its habitat's are checked on the habitat.
  */
-export function recipeTouchesStructures(habitat: Pick<HabitatDef, 'edges' | 'devices'>, recipe: Pick<RecipeDef, 'edges' | 'devices' | 'ops' | 'removeStones'>): boolean {
+export function recipeTouchesStructures(habitat: Pick<HabitatDef, 'edges' | 'devices' | 'furnish'>, recipe: Pick<RecipeDef, 'edges' | 'devices' | 'ops' | 'removeStones'>): boolean {
   if ((recipe.edges?.length ?? 0) > 0 || (recipe.devices?.length ?? 0) > 0) return true;
-  return (habitat.edges?.length ?? 0) + (habitat.devices?.length ?? 0) > 0 && (recipe.ops.length > 0 || recipe.removeStones);
+  return (habitat.edges?.length ?? 0) + (habitat.devices?.length ?? 0) + (habitat.furnish?.length ?? 0) > 0 && (recipe.ops.length > 0 || recipe.removeStones);
+}
+
+/**
+ * One habitat food object at full pools in `cell` (P5.4): the material must be an 'object' material the
+ * world records, in a world that records 'foodObjects'. Its whole inventory is an external input,
+ * 'habitat:<habitatId>:<material>' (the tool's 'tool:<material>' precedent).
+ */
+function placeHabitatObject(world: World, habitatId: string, recipeId: string, materialId: string, cell: number): void {
+  const mat = world.content.materials.find((m) => m.id === materialId);
+  if (!worldHasSystem(world, 'foodObjects')) throw new RecipeError(`recipe ${recipeId}: habitat ${habitatId} starts with ${materialId}, which needs the "foodObjects" system (not in these rules)`);
+  if (!mat || mat.kind !== 'object' || !isFoodObjectKind(mat.target)) throw new RecipeError(`recipe ${recipeId}: habitat ${habitatId} starts with ${materialId}, which these rules do not include`);
+  const rule = FOOD_OBJECT_RULES[mat.target];
+  const pools: FoodObject['pools'] = {};
+  let c = 0;
+  for (const p of rule.pools) {
+    pools[p.pool] = p.full;
+    c += p.full;
+  }
+  const made = createObject(world, { cell, kind: mat.target, pools, n: rule.n });
+  if (!made.ok) throw new RecipeError(`recipe ${recipeId}: habitat ${habitatId}'s ${materialId} at (${cell % 128},${Math.floor(cell / 128)}): ${OBJECT_REFUSAL[made.reason]}`);
+  recordInput(world, `habitat:${habitatId}:${materialId}`, c, rule.n);
+}
+
+/**
+ * One field patch: quantities per included cell, clipped to valid cells of the patch substrate (`add`
+ * adds; `set` replaces, its difference counted), logged as one input `source`. A recipe's patches and a
+ * Suggested Community's patches (P5.4) share it, so they cannot differ.
+ */
+function applyFieldPatch(world: World, patch: FieldPatch, source: string): void {
+  const pc = patchCells(world, patch.center, patch.radius, SUB_CODE[patch.substrate]);
+  let c = 0;
+  let nn = 0;
+  let mm = 0;
+  for (const i of pc) {
+    for (const key of Object.keys(patch.add).sort()) {
+      if (!isFieldId(key)) throw new RecipeError(`unknown field ${key}`);
+      const arr = world.fields[key];
+      if (!arr) throw new RecipeError(`field ${key} is not enabled in this world`);
+      const v = patch.add[key]!;
+      arr[i]! += v;
+      const def = FIELD_DEFS[key];
+      if (def.material === 'carbon') c += v * (def.carbonPerUnit ?? 1);
+      else if (def.material === 'nutrient') nn += v;
+      else if (def.material === 'mineral') mm += v;
+    }
+    if (Object.keys(patch.set).length > 0) {
+      // "set" replaces a value; the difference is logged as an input or export.
+      for (const key of Object.keys(patch.set).sort()) {
+        if (!isFieldId(key)) throw new RecipeError(`unknown field ${key}`);
+        const arr = world.fields[key]!;
+        const before = arr[i]!;
+        const v = patch.set[key]!;
+        arr[i] = v;
+        const def = FIELD_DEFS[key];
+        const d = (v - before) * (def.carbonPerUnit ?? 1);
+        if (def.material === 'carbon') c += d;
+        else if (def.material === 'nutrient') nn += d;
+        else if (def.material === 'mineral') mm += d;
+      }
+    }
+  }
+  recordInput(world, source, c, nn, mm);
+}
+
+/**
+ * A habitat's Suggested Community (P5.4; CT §8.2 "five of each named species in valid cells of a
+ * radius-10 patch near its region; previewed and recorded; never silently"; D-0128). Gated on the world's
+ * recorded manifest (communityOfferProblem: every species and system it needs). Then, in record order:
+ * each community patch exactly as a recipe field patch, logged 'community:<habitatId>:patch<n>[:label]';
+ * each group k: the eligible cells are its radius disk around its region's anchor, row-major, inside the
+ * dish and the region, occupiable by the species (canOccupy) and not used by a recipe founder or an
+ * earlier group; fewer than `count` is refused (never cropped or widened); otherwise the first `count`
+ * of detPermutation(eligible, seed, 'community.place', k), each introduced through introduceOrganism
+ * (input 'introduce:community:<habitatId>'; the founder mode applies as for recipe founders). The
+ * eligible count never depends on the seed, only the permutation does.
+ */
+function placeCommunity(world: World, habitat: HabitatDef, used: Uint8Array): void {
+  const c = habitat.suggestedCommunity!;
+  const offer = communityOfferProblem(habitat, world.content.manifest, Object.fromEntries(world.content.species.map((sp) => [sp.id, sp])));
+  if (offer !== null) throw new CommunityError(`habitat ${habitat.id}: ${offer}`, 'suggestedCommunity');
+  (c.patches ?? []).forEach((patch, n) => {
+    try {
+      applyFieldPatch(world, patch, `community:${habitat.id}:patch${n}${patch.label ? `:${patch.label}` : ''}`);
+    } catch (e) {
+      if (e instanceof RecipeError) throw new CommunityError(`habitat ${habitat.id}: its Suggested Community's patch ${n}: ${e.message}`, `suggestedCommunity.patches.${n}`);
+      throw e;
+    }
+  });
+  const source = `community:${habitat.id}`;
+  c.groups.forEach((g, k) => {
+    const region = (habitat.regions ?? []).find((r) => r.id === g.region);
+    const at = `suggestedCommunity.groups.${k}`;
+    if (region === undefined) throw new CommunityError(`habitat ${habitat.id}: its Suggested Community names an unknown region "${g.region}"`, at);
+    // A field virus is dosed as field units, never introduced as an organism (introduceOrganism throws a plain Error).
+    if (isFieldVirus(g.species)) throw new CommunityError(`habitat ${habitat.id}: its Suggested Community names ${g.species}, a virus (dosed as field units, never placed as organisms)`, `${at}.species`);
+    const spIdx = speciesIndex(world, g.species);
+    const sp = world.species[spIdx]!;
+    const [cx, cy] = region.anchor;
+    const eligible = diskCells(cx, cy, g.radius).filter((i) => {
+      const x = i % 128;
+      const y = Math.floor(i / 128);
+      return inMask(x, y) && regionContains(region, x, y) && canOccupy(world, sp, i) && used[i] === 0;
+    });
+    if (eligible.length < g.count)
+      throw new CommunityError(`habitat ${habitat.id}: its Suggested Community has only ${eligible.length} valid cells for ${g.count} ${sp.def.name} in ${region.label}`, at);
+    const perm = detPermutation(eligible.length, world.seed, STREAMS.communityPlace, k);
+    for (let m = 0; m < g.count; m++) {
+      const cell = eligible[perm[m]!]!;
+      used[cell] = 1;
+      const slot = introduceOrganism(world, spIdx, cell, source, { exactCenter: true, origin: 1 });
+      if (slot < 0) throw new CommunityError(`habitat ${habitat.id}: agent capacity exceeded`, at);
+    }
+  });
 }
 
 export function realizeRecipe(registry: ContentRegistry, recipeOrId: string | RecipeDef, opts: RealizeOptions = {}): World {
@@ -491,6 +783,8 @@ export function realizeRecipe(registry: ContentRegistry, recipeOrId: string | Re
   const recipe = opts.transform ? opts.transform(base) : base;
   const habitat = registry.habitats[recipe.habitatId];
   if (!habitat) throw new RecipeError(`unknown habitat ${recipe.habitatId}`);
+  // P5.4 (wave 14, D-0128): a Suggested Community needs one on the habitat (CT §8.2: never silently).
+  if (recipe.community === true && habitat.suggestedCommunity === undefined) throw new RecipeError(`recipe ${recipe.id}: habitat ${habitat.id} has no Suggested Community`);
   const content = worldContentFor(
     registry,
     habitat,
@@ -543,43 +837,11 @@ export function realizeRecipe(registry: ContentRegistry, recipeOrId: string | Re
     setFields(world, i, recipe.backgroundOverrides);
   }
   initializeLedger(world);
+  // P5.4: the habitat's food objects (CT §5.2, §8.2), each an external input (SPEC §13.1; D-0128).
+  for (const o of habitat.objects ?? []) placeHabitatObject(world, habitat.id, recipe.id, o.material, cellIndex(o.at[0], o.at[1]));
 
   // Field patches: quantities per included cell, clipped to valid cells of the patch substrate.
-  recipe.fieldPatches.forEach((patch, n) => {
-    const pc = patchCells(world, patch.center, patch.radius, SUB_CODE[patch.substrate]);
-    let c = 0;
-    let nn = 0;
-    let mm = 0;
-    for (const i of pc) {
-      for (const key of Object.keys(patch.add).sort()) {
-        if (!isFieldId(key)) throw new RecipeError(`unknown field ${key}`);
-        const arr = world.fields[key];
-        if (!arr) throw new RecipeError(`field ${key} is not enabled in this world`);
-        const v = patch.add[key]!;
-        arr[i]! += v;
-        const def = FIELD_DEFS[key];
-        if (def.material === 'carbon') c += v * (def.carbonPerUnit ?? 1);
-        else if (def.material === 'nutrient') nn += v;
-        else if (def.material === 'mineral') mm += v;
-      }
-      if (Object.keys(patch.set).length > 0) {
-        // "set" replaces a value; the difference is logged as an input or export.
-        for (const key of Object.keys(patch.set).sort()) {
-          if (!isFieldId(key)) throw new RecipeError(`unknown field ${key}`);
-          const arr = world.fields[key]!;
-          const before = arr[i]!;
-          const v = patch.set[key]!;
-          arr[i] = v;
-          const def = FIELD_DEFS[key];
-          const d = (v - before) * (def.carbonPerUnit ?? 1);
-          if (def.material === 'carbon') c += d;
-          else if (def.material === 'nutrient') nn += d;
-          else if (def.material === 'mineral') mm += d;
-        }
-      }
-    }
-    recordInput(world, `recipe:patch${n}${patch.label ? `:${patch.label}` : ''}`, c, nn, mm);
-  });
+  recipe.fieldPatches.forEach((patch, n) => applyFieldPatch(world, patch, `recipe:patch${n}${patch.label ? `:${patch.label}` : ''}`));
 
   // Founders: distinct cells, group by group (nearest-first, scattered, or listed).
   const used = new Uint8Array(128 * 128);
@@ -627,12 +889,21 @@ export function realizeRecipe(registry: ContentRegistry, recipeOrId: string | Re
     }
     if (dB !== 0 || dN !== 0) recordInput(world, `recipe:${recipe.id}:initial`, dB, dN);
     if (f.links === 'chain') {
+      // D-0116, D-0122: never link across a placed edge that blocks the species' class.
+      const cls = freeClassOfSpecies(world.content.species[spIdx]!);
       for (let k = 1; k < slots.length; k++) {
+        const a = cells[k - 1]!;
+        const b = cells[k]!;
+        if (Math.abs((a % 128) - (b % 128)) + Math.abs(Math.floor(a / 128) - Math.floor(b / 128)) === 1 && !pairPermitted(world, a, b, cls, cls))
+          throw new RecipeError(`recipe ${recipe.id}: founder group ${groupIndex} members ${k} and ${k + 1} are on two sides of an edge a link cannot cross`);
         if (!addFungalLink(world, slots[k - 1]!, slots[k]!, LINK_TRANSPORT))
           throw new RecipeError(`recipe ${recipe.id}: founder group ${groupIndex} members ${k} and ${k + 1} cannot be linked`);
       }
     }
   });
+
+  // P5.4: the habitat's Suggested Community, after the recipe's own founders (their cells stay theirs).
+  if (recipe.community === true) placeCommunity(world, habitat, used);
 
   for (const sc of recipe.scheduledCommands) {
     queueCommand(world, `schedule:${sc.label}`, sc.payload as unknown as CommandPayload, Math.round(sc.atSecond * TICKS_PER_SECOND));

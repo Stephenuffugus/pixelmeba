@@ -1,0 +1,34 @@
+{
+  "id": "H05_BRINE_MOSAIC",
+  "name": "Brine Mosaic",
+  "baseSubstrate": "gel",
+  "baseLight": 0.8,
+  "warmth": 0.5,
+  "baseFields": {"oxygen": 0.8, "co2": 0.5, "nutrient": 0.1, "sugar": 0.02},
+  "ops": [
+    {"op": "disk", "center": [40, 64], "radius": 18, "substrate": "water"},
+    {"op": "disk", "center": [88, 64], "radius": 18, "substrate": "water", "fields": {"salt": 0.6}},
+    {"op": "rect", "x0": 40, "x1": 88, "y0": 62, "y1": 65, "substrate": "water"}
+  ],
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "regions": [
+    {"id": "FRESH_POOL", "label": "Fresh pool", "shape": {"kind": "disk", "center": [40, 64], "radius": 18}, "anchor": [40, 64]},
+    {"id": "BRINE_POOL", "label": "Brine pool", "shape": {"kind": "disk", "center": [88, 64], "radius": 18}, "anchor": [88, 64]},
+    {"id": "CHANNEL", "label": "Channel", "shape": {"kind": "rect", "x0": 59, "x1": 69, "y0": 62, "y1": 65}, "anchor": [64, 63]}
+  ],
+  "suggestedCommunity": {
+    "groups": [
+      {"species": "B01", "region": "FRESH_POOL", "count": 5, "radius": 10},
+      {"species": "B10", "region": "BRINE_POOL", "count": 5, "radius": 10}
+    ]
+  },
+  "guide": {
+    "summary": "Two round pools in gel, one fresh and one salty, joined by a narrow channel.",
+    "biology": "Where fresh and salty water meet through a narrow passage, salt spreads slowly and each side keeps its own character for a long time.",
+    "rules": "Gel everywhere except two water circles of radius 18 at (40,64) and (88,64), joined by a water channel from x 40 to 88 and y 62 to 65. Salinity 0.6 in the right circle (including the channel cells inside it) and 0 elsewhere. Light 0.8, warmth 0.5, oxygen 0.8, carbon dioxide 0.5, nutrient 0.10 and sugar 0.02 in every cell. Lid open; fixed light.",
+    "example": "Watch how far the salt creeps along the channel toward the fresh pool."
+  },
+  "phase": 5
+}

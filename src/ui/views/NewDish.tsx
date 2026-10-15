@@ -14,7 +14,7 @@
  */
 import { DEMO_MODE } from '@platform/web'; // P4.11
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { Manifest, RecipeDef } from '@sim/content/schema';
+import type { HabitatDef, Manifest, RecipeDef, Species } from '@sim/content/schema';
 import type { DishInfo, NewDishPreview, Speed } from '@worker/protocol';
 import { DISH_TEX, paintDish } from '@render/layers';
 import { CELL_COUNT } from '@sim/constants';
@@ -35,16 +35,14 @@ import {
   type FounderModeId,
   type PresetId,
 } from '../strings/modes';
-import { plural } from '../strings/experiments';
+import { communityLine, countOf, GARDEN_START, LIFE_CHOICE, listText, NO_LIFE_YET, placesLine, regionsLine, suggestedNote } from '../strings/newDish';
+import { habitatStarts, lifeAfterStart, startOverrides, type HabitatStart, type LifeId, type StartId } from '../newDishStarts';
 import { effectiveEnvironment, environmentGroupVisible, environmentOverrides, environmentSummary, type DishEnvironment, type EnvironmentChoice } from '../environment';
 import { ENVIRONMENT_COPY } from '../strings/structures';
 import { LID_COPY } from '../strings/lab';
 
 const RECIPE_ID = 'FIRST_DISH_V1';
 const MAX_SEED = 4294967295;
-
-/** 'Start with' choices (UX §2.3): the Garden, an empty habitat preset (CT §8.1; P3.2), or a curated dish (P3.9). */
-type StartId = 'garden' | 'empty' | 'gel' | 'sediment' | `curated:${string}`;
 
 /** A curated dish as New Dish offers it (CT §9.3): the bundled recipe record's own values. */
 interface CuratedDish {
@@ -73,6 +71,34 @@ const BUILD_MANIFEST: Manifest | undefined = Object.values(
  */
 const ENVIRONMENT_OFFERED = environmentGroupVisible(BUILD_MANIFEST);
 
+function recordsById<T extends { readonly id: string }>(glob: Record<string, T>): Readonly<Record<string, T>> {
+  const out: Record<string, T> = {};
+  for (const path of Object.keys(glob).sort()) out[glob[path]!.id] = glob[path]!;
+  return out;
+}
+
+/** This build's species records (the Suggested Community's names and the systems its species need). */
+const SPECIES: Readonly<Record<string, Species>> = recordsById(
+  import.meta.glob<Species>('../../../content/species/*.json', { eager: true, import: 'default' }),
+);
+
+/**
+ * P5.4 (D-0128): the habitat starts this build offers (src/ui/newDishStarts.ts over the same habitat records
+ * the worker validates; `ops` is the schema default when a record leaves it out), in phase-then-id order.
+ */
+const HABITAT_STARTS: readonly HabitatStart[] = (() => {
+  if (!BUILD_MANIFEST) return [];
+  const glob = import.meta.glob<HabitatDef>('../../../content/habitats/*.json', { eager: true, import: 'default' });
+  const records = Object.keys(glob)
+    .sort()
+    .map((path) => ({ ...glob[path]!, ops: glob[path]!.ops ?? [] }));
+  return habitatStarts(records, BUILD_MANIFEST, SPECIES, DEMO_MODE);
+})();
+
+function habitatStartOf(start: StartId): HabitatStart | null {
+  return HABITAT_STARTS.find((h) => h.id === start) ?? null;
+}
+
 const CURATED: readonly CuratedDish[] = (() => {
   const manifest = BUILD_MANIFEST;
   const glob = import.meta.glob<RecipeDef>('../../../content/recipes/L*.json', { eager: true, import: 'default' });
@@ -95,30 +121,9 @@ function curatedOf(start: StartId): CuratedDish | null {
   return start.startsWith('curated:') ? (CURATED.find((c) => `curated:${c.id}` === start) ?? null) : null;
 }
 
-/** Starts with nothing living (an empty preset). */
-function isEmptyStart(start: StartId): boolean {
-  return start === 'empty' || start === 'gel' || start === 'sediment';
-}
-
-/** Habitat-only starts on another preset than the recipe's: the habitat the dish is built on. */
-const START_HABITAT: Readonly<Partial<Record<StartId, string>>> = {
-  gel: 'GEL_COLONY',
-  sediment: 'SEDIMENT_EDGE',
-};
-
 function randomSeed(): number {
   // UI only: picks the seed the dish will record. The simulation never reads this generator.
   return Math.floor(Math.random() * 900000) + 100000;
-}
-
-/** "1 Sprinter", "24 Sprinters" (the species' own name, pluralized as elsewhere in the app). */
-function countOf(n: number, name: string): string {
-  return `${n} ${n === 1 ? name : plural(name)}`;
-}
-
-function listText(items: readonly string[]): string {
-  if (items.length <= 1) return items.join('');
-  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
 /**
@@ -181,17 +186,66 @@ function CuratedLines({ dish, p }: { readonly dish: CuratedDish; readonly p: New
   );
 }
 
-/** Exactly what the preview world holds, in words (founders, patches, seeded abilities, initial ledger). */
-function Summary({ p, habitatStart, curated, env }: { readonly p: NewDishPreview; readonly habitatStart: boolean; readonly curated: CuratedDish | null; readonly env: DishEnvironment | null }) {
+/**
+ * Exactly what the preview world holds, in words (founders, patches, seeded abilities, initial ledger).
+ * `habitat` is the habitat start (null for the Garden and the curated dishes); a v1.0 preset other than the
+ * Water Garden ('gel', 'sediment') keeps today's single habitat line, a Phase 5 habitat start ('habitat:<id>')
+ * adds what it places, its regions and the Empty or Suggested Community line (P5.4; D-0128).
+ */
+function Summary({ p, habitat, curated, env }: { readonly p: NewDishPreview; readonly habitat: HabitatStart | null; readonly curated: CuratedDish | null; readonly env: DishEnvironment | null }) {
   const founders = p.founders.map((f) => countOf(f.count, f.name));
   const seeded = p.founders.filter((f) => f.withModule > 0);
   const eligible = p.founders.reduce((a, f) => a + f.eligible, 0);
   const withModule = p.founders.reduce((a, f) => a + f.withModule, 0);
+  const p5 = habitat !== null && habitat.id.startsWith('habitat:');
+  const presetLine = habitat !== null && habitat.id !== 'empty' && !p5;
+  // The founders lines describe organisms the recipe or the community placed (a Phase 5 habitat start is
+  // `empty` and may still hold its Suggested Community).
+  const hasLife = p5 ? p.founders.length > 0 : !p.empty;
+  const places = p5 ? placesLine(p.habitat.uses, habitat.furnished) : null;
+  const regions = p5 ? regionsLine(p.habitat.regions) : null;
+  const founderLines = (
+    <>
+      {p.founderMode === 'diverse' && hasLife ? (
+        <p data-testid="new-dish-diverse">
+          {withModule === 0
+            ? `None of the ${eligible} founders that could carry an extra ability starts with one on this seed.`
+            : `${withModule} of the ${eligible} founders that could carry an extra ability start with one (present at creation): ${seeded
+                .map(
+                  (f) =>
+                    `${countOf(f.withModule, f.name)} (${f.modules.map((m) => `${m.count} with ${m.name}`).join(', ')})`,
+                )
+                .join('; ')}.`}
+        </p>
+      ) : null}
+      {p.founderMode !== 'diverse' && hasLife && withModule > 0 ? (
+        // P3.9 (CT §9.3 "pre-seeded genomes labelled"): abilities the recipe gives some founders.
+        <p data-testid="new-dish-preseeded">
+          Pre-seeded genomes, present at creation (set by the dish, not evolved here):{' '}
+          {seeded
+            .map(
+              (f) =>
+                `${f.modules.map((m) => `${m.count} of the ${countOf(f.count, f.name)} start with ${m.name}`).join(', ')}${f.count > f.withModule ? `; ${f.count - f.withModule} start without` : ''}`,
+            )
+            .join('; ')}
+          .
+        </p>
+      ) : null}
+    </>
+  );
   return (
     <div data-testid="new-dish-summary">
       {curated ? <CuratedLines dish={curated} p={p} /> : null}
       <HabitatMap p={p} />
-      {habitatStart ? (
+      {p5 ? (
+        <>
+          <p data-testid="new-dish-habitat">
+            {p.habitat.name}: {p.habitat.summary} {p.habitat.rules ?? ''}
+          </p>
+          {places ? <p data-testid="new-dish-places">{places}</p> : null}
+          {regions ? <p data-testid="new-dish-regions">{regions}</p> : null}
+        </>
+      ) : presetLine ? (
         // A habitat start is the preset exactly as CT §8.1 defines it: its rules text says what every
         // cell holds (food included), and nothing else is added.
         <p data-testid="new-dish-habitat">
@@ -205,32 +259,16 @@ function Summary({ p, habitatStart, curated, env }: { readonly p: NewDishPreview
             : `${p.patches.length > 0 ? `${listText(p.patches)}; ` : ''}${founders.length > 0 ? `${listText(founders)}.` : 'no founders.'}`}
         </p>
       )}
-      {p.founderMode === 'diverse' && !p.empty ? (
-        <p data-testid="new-dish-diverse">
-          {withModule === 0
-            ? `None of the ${eligible} founders that could carry an extra ability starts with one on this seed.`
-            : `${withModule} of the ${eligible} founders that could carry an extra ability start with one (present at creation): ${seeded
-                .map(
-                  (f) =>
-                    `${countOf(f.withModule, f.name)} (${f.modules.map((m) => `${m.count} with ${m.name}`).join(', ')})`,
-                )
-                .join('; ')}.`}
-        </p>
-      ) : null}
-      {p.founderMode !== 'diverse' && !p.empty && withModule > 0 ? (
-        // P3.9 (CT §9.3 "pre-seeded genomes labelled"): abilities the recipe gives some founders.
-        <p data-testid="new-dish-preseeded">
-          Pre-seeded genomes, present at creation (set by the dish, not evolved here):{' '}
-          {seeded
-            .map(
-              (f) =>
-                `${f.modules.map((m) => `${m.count} of the ${countOf(f.count, f.name)} start with ${m.name}`).join(', ')}${f.count > f.withModule ? `; ${f.count - f.withModule} start without` : ''}`,
-            )
-            .join('; ')}
-          .
-        </p>
-      ) : null}
+      {p5 ? null : founderLines}
       {env ? <p data-testid="new-dish-environment-summary">{environmentSummary(env)}</p> : null}
+      {p5 ? (
+        <>
+          <p data-testid="new-dish-life">
+            {p.community === true && p.communityGroups ? communityLine(p.communityGroups, p.patches) : NO_LIFE_YET}
+          </p>
+          {founderLines}
+        </>
+      ) : null}
       <p data-testid="new-dish-ledger">{startLedgerText(p.ledger)}</p>
       <p>
         Seed {p.seed}. Nothing else appears on its own. It opens paused in the Lab, with the Life tray open.
@@ -361,11 +399,17 @@ export function NewDish() {
   const [problem, setProblem] = useState<string | null>(null);
   /** P5.1: the Environment group's picks (only keys the player touched). */
   const [envChoice, setEnvChoice] = useState<EnvironmentChoice>({});
+  /** P5.4: Empty or the Suggested Community (D-0128: Empty is the default and returns whenever the start changes). */
+  const [life, setLife] = useState<LifeId>('empty');
   const request = useRef(0);
 
   const curated = curatedOf(start);
   const recipeId = curated?.id ?? RECIPE_ID;
-  const empty = isEmptyStart(start);
+  const habitat = habitatStartOf(start);
+  const empty = habitat !== null;
+  const wantCommunity = habitat !== null && habitat.communityOffered && life === 'suggested';
+  /** What the start asks the worker for besides the preset and founder mode (absent keys = the recipe's own). */
+  const startKeys = habitat ? startOverrides(habitat, wantCommunity) : null;
 
   /** Choosing a curated dish takes its own seed and settings (the authored recipe); other starts keep the choices. */
   const chooseStart = (next: StartId) => {
@@ -377,6 +421,8 @@ export function NewDish() {
       // The default name follows the dish, unless the player typed their own.
       if (name === 'My dish' || CURATED.some((c) => c.name === name)) setName(dish.name);
     } else if (CURATED.some((c) => c.name === name)) setName('My dish');
+    // Life is never added unless the player picks it for this start.
+    setLife(lifeAfterStart(start, next, life));
     setStart(next);
   };
 
@@ -384,12 +430,12 @@ export function NewDish() {
   useEffect(() => {
     const id = ++request.current;
     const t = setTimeout(() => {
-      const habitatId = START_HABITAT[start];
       newDishPreview(curatedOf(start)?.id ?? RECIPE_ID, seed, {
         mutationPreset: preset,
         founderMode: founders,
-        empty: isEmptyStart(start),
-        ...(habitatId !== undefined ? { habitatId } : {}),
+        empty: startKeys !== null,
+        ...(startKeys?.habitatId !== undefined ? { habitatId: startKeys.habitatId } : {}),
+        ...(startKeys?.community === true ? { community: true } : {}),
       })
         .then((p) => {
           if (id !== request.current) return;
@@ -401,7 +447,7 @@ export function NewDish() {
         });
     }, 120);
     return () => clearTimeout(t);
-  }, [start, seed, preset, founders]);
+  }, [start, seed, preset, founders, wantCommunity]);
 
   const current =
     preview &&
@@ -410,6 +456,7 @@ export function NewDish() {
     preview.p.mutationPreset === preset &&
     preview.p.founderMode === founders &&
     preview.p.empty === empty &&
+    (preview.p.community === true) === wantCommunity &&
     preview.p.recipeId === recipeId
       ? preview.p
       : null;
@@ -455,7 +502,8 @@ export function NewDish() {
           mutationPreset: preset,
           founderMode: founders,
           empty,
-          ...(START_HABITAT[start] !== undefined ? { habitatId: START_HABITAT[start] } : {}),
+          ...(startKeys?.habitatId !== undefined ? { habitatId: startKeys.habitatId } : {}),
+          ...(startKeys?.community === true ? { community: true as const } : {}),
           // Only the keys changed from the defaults: an untouched group records nothing.
           ...(envDefaults ? { environment: environmentOverrides(envDefaults, envChoice) } : {}),
         },
@@ -502,35 +550,32 @@ export function NewDish() {
             value={start}
             onChange={chooseStart}
             choices={[
-              {
-                id: 'garden',
-                label: 'Little Living Garden',
-                note: 'Food patches and four kinds of life, ready to watch.',
-              },
-              {
-                id: 'empty',
-                label: 'Empty Water Garden',
-                note: 'The same water and stones, with nothing living and no food.',
-              },
-              // P4.11 DEMO_MODE (ARCH §14 "restricts New Dish species"): the Garden's habitat and species only.
-              ...(DEMO_MODE
-                ? []
-                : [
-                    {
-                      id: 'gel' as StartId,
-                      label: 'Empty Gel Colony',
-                      note: 'Gel with one water channel and a little sugar everywhere, with nothing living.',
-                    },
-                    {
-                      id: 'sediment' as StartId,
-                      label: 'Empty Sediment Edge',
-                      note: 'Water above, sediment with debris below and one stone, with nothing living.',
-                    },
-                    // P3.9: curated dishes (CT §9.3), each with its question.
-                    ...CURATED.map((c) => ({ id: `curated:${c.id}` as StartId, label: c.name, note: c.question })),
-                  ]),
+              { id: 'garden', label: GARDEN_START.label, note: GARDEN_START.note },
+              // P5.4: the habitat starts this build offers (P4.11 DEMO_MODE: the Garden's habitat only).
+              ...HABITAT_STARTS.map((h) => ({ id: h.id, label: h.label, note: h.note })),
+              // P3.9: curated dishes (CT §9.3), each with its question (not in the demo).
+              ...(DEMO_MODE ? [] : CURATED.map((c) => ({ id: `curated:${c.id}` as StartId, label: c.name, note: c.question }))),
             ]}
           />
+          {habitat?.communityOffered ? (
+            <>
+              <h3 class="panel-h">{LIFE_CHOICE.label}</h3>
+              <ChoiceGroup<LifeId>
+                label={LIFE_CHOICE.label}
+                testId="new-dish-community"
+                value={life}
+                onChange={setLife}
+                choices={[
+                  { id: 'empty', label: LIFE_CHOICE.empty, note: LIFE_CHOICE.emptyNote },
+                  {
+                    id: 'suggested',
+                    label: LIFE_CHOICE.suggested,
+                    note: suggestedNote(habitat.communitySpecies.map((id) => SPECIES[id]?.name ?? id)),
+                  },
+                ]}
+              />
+            </>
+          ) : null}
           <label class="field">
             Name
             <input
@@ -651,7 +696,7 @@ export function NewDish() {
             {worldModesLine(preset, founders, registry)}
           </p>
           {current ? (
-            <Summary p={current} habitatStart={START_HABITAT[start] !== undefined} curated={curated} env={env} />
+            <Summary p={current} habitat={habitat} curated={curated} env={env} />
           ) : (
             <p>Working out exactly what this dish starts with…</p>
           )}

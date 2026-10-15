@@ -1,0 +1,32 @@
+{
+  "id": "H09_DRYING_LACE",
+  "name": "Drying Lace",
+  "baseSubstrate": "gel",
+  "baseLight": 0.5,
+  "warmth": 0.5,
+  "baseFields": {"oxygen": 0.8, "co2": 0.5, "nutrient": 0.1, "sugar": 0.02},
+  "ops": [{"op": "rect", "x0": 24, "x1": 31, "y0": 0, "y1": 127, "substrate": "water"}],
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": true,
+  "devices": [{"structure": "S12", "at": [32, 64]}],
+  "furnish": [{"structure": "S11", "area": {"kind": "disk", "center": [88, 64], "radius": 8}}],
+  "regions": [
+    {"id": "CHANNEL", "label": "Water channel", "shape": {"kind": "rect", "x0": 24, "x1": 31, "y0": 0, "y1": 127}, "anchor": [28, 64]},
+    {"id": "ROOF", "label": "Under the roof", "shape": {"kind": "disk", "center": [88, 64], "radius": 8}, "anchor": [88, 64]},
+    {"id": "OPEN_GEL", "label": "Open gel", "shape": {"kind": "disk", "center": [60, 64], "radius": 10}, "anchor": [60, 64]}
+  ],
+  "suggestedCommunity": {
+    "groups": [
+      {"species": "F04", "region": "ROOF", "count": 5, "radius": 10},
+      {"species": "B12", "region": "OPEN_GEL", "count": 5, "radius": 10}
+    ]
+  },
+  "guide": {
+    "summary": "Drying gel with one water channel, a moisture wick on its bank and a shade roof on the far side.",
+    "biology": "As gel dries, life that can rest out the dry spell or hide under cover keeps going.",
+    "rules": "Gel everywhere except a water channel eight cells wide (x 24 to 31) from rim to rim; no stones. Moisture 1 in water and 0.8 in gel at the start; drying is on. A moisture wick at (32,64) on the channel's bank; a shade roof over a circle of radius 8 at (88,64). Light 0.5, warmth 0.5, oxygen 0.8, carbon dioxide 0.5, nutrient 0.10 and sugar 0.02 in every cell. Lid open; fixed light.",
+    "example": "Watch the moisture overlay: which parts of the gel stay damp longest?"
+  },
+  "phase": 5
+}

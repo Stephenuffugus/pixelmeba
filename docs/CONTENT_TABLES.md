@@ -393,6 +393,8 @@ Moisture: water 1.0; gel/sediment 0.8. Lid open. Fixed light.
 | H11 | Grazing Meadow | water; sediment disk r 16 at (64,64); mesh on passable perimeter cells; detritus 0.10 in disk; nutrient 0.15 everywhere; cycle on | fungal patches, P08, P09, P10 in separate regions |
 Suggested Community places five of each named species in valid cells of a radius‑10 patch near
 its region; previewed and recorded; never silently.
+As built (wave 14, D-0129): the exact regions (ids, labels, shapes, anchors), furnishings, objects and community groups per
+habitat are D-0129's table and the records content/habitats/H04–H11; no number in the table above changed.
 
 ---
 

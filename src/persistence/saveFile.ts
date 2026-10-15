@@ -21,6 +21,7 @@ import { variantRecordOf } from '@sim/variants';
 import { IMPLEMENTED_MODULES, IMPLEMENTED_NATIVE_ABILITIES, IMPLEMENTED_RULES, IMPLEMENTED_STRUCTURES, IMPLEMENTED_SYSTEMS, RULES_VERSIONS } from '@sim/content/implemented';
 import { MODULE_SYSTEM_NEEDS, nativeAbilityPairingProblem, speciesSystemNeeds } from '@sim/content/registry';
 import { isMutationPreset } from '@sim/mutation';
+import { habitatRecordProblems } from '@sim/recipes';
 import { historyProblem, journalProblem } from '@sim/history';
 import { generatedBranchName } from '@sim/branches';
 import type { Command } from '@sim/commands';
@@ -383,6 +384,10 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
   }
   for (const m of c.materials) if (!MaterialSchema.safeParse(m).success) fail('content', 'A material definition is invalid.');
   if (!HabitatSchema.safeParse(c.habitat).success) fail('content', 'The habitat definition is invalid.');
+  // P5.4 (wave 14): the validator's registry-free region rules too (unique region ids; each anchor inside its
+  // shape, the dish and on an open cell; each community group's region exists), so a forged habitat never
+  // draws a pin off the dish or two pins with one id.
+  if (habitatRecordProblems(c.habitat).length > 0) fail('content', 'The habitat definition is invalid.');
   const speciesIds = c.species.map((x) => x.id);
   if (speciesIds.join() !== man.data.enabledSpecies.join()) fail('content', 'Species list does not match the manifest.');
   const moduleIds = c.modules.map((m) => m.id);

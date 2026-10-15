@@ -347,3 +347,34 @@ p95 52.2–55.3 ms.
   (25 ms) its process-CPU p50 (13–15 ms) fits and its p95 (17–29 ms) is near the budget, as the systems flip's
   5,800-organism dish with the maximum stores was (D-0121). Nothing was reduced and no tick skipped; the next measure is
   on a device (P5.8), where stage 4's per-mover edge checks are the first candidate.
+
+## Wave 14: habitats H04–H11 (2026-10-15)
+
+Indicative: `tmp/lead/perf-w14.ts` (`npx tsx`, not committed) under the habitat test registry (`habitatRegistry()`:
+H04–H11 enabled), seed 104729, on the shared 2-vCPU codespace with no test run going (load 0.5 before, 0.7 after).
+
+**Realize time** (the New Dish preview realizes a dish per preview): median of 5 after one warm-up, in ms; Empty /
+Suggested Community, with the organisms alive at tick 0 of the Suggested start. FIRST_DISH_V1 for reference: 15.3.
+
+| Habitat | Empty | Suggested | Alive (Suggested) |
+|---|---|---|---|
+| H04 Leaf Pool | 17.1 | 27.4 | 25 |
+| H05 Brine Mosaic | 14.1 | 19.8 | 10 |
+| H06 Dusk Marsh | 17.2 | 13.0 | 20 |
+| H07 Glass Garden | 12.5 | 17.5 | 20 |
+| H08 Night Lanterns | 13.0 | 9.7 | 15 |
+| H09 Drying Lace | 10.6 | 15.8 | 10 |
+| H10 Gate Lab | 14.3 | 20.6 | 10 |
+| H11 Grazing Meadow | 6.9 | 10.6 | 20 |
+
+**Tick cost** over 600 ticks (`step()` wall time, ms), interleaved twice in one process (first round / second round):
+
+| Dish | Devices | Alive at 600 | p50 | p95 | mean |
+|---|---|---|---|---|---|
+| FIRST_DISH_V1 | 0 | 83 | 1.92 / 1.32 | 6.05 / 1.91 | 2.40 / 1.29 |
+| H04 Suggested | 199 | 23 | 1.19 / 0.81 | 1.96 / 1.41 | 1.38 / 0.94 |
+| H09 Suggested | 198 | 10 | 0.81 / 0.67 | 1.46 / 1.23 | 0.99 / 0.80 |
+| H11 Suggested | 88 | 15 | 0.78 / 0.68 | 2.21 / 1.17 | 1.12 / 0.77 |
+
+The furnishings cost little per tick at these counts; the Suggested dishes are cheaper than the First Dish because they
+hold fewer organisms. A New Dish preview stays under 30 ms. Nothing was reduced; P5.8 measures on a device.

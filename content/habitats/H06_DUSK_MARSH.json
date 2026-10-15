@@ -1,0 +1,41 @@
+{
+  "id": "H06_DUSK_MARSH",
+  "name": "Dusk Marsh",
+  "baseSubstrate": "water",
+  "baseLight": 0.8,
+  "warmth": 0.5,
+  "baseFields": {"oxygen": 0.8, "co2": 0.5, "nutrient": 0.1, "sugar": 0.02},
+  "ops": [
+    {
+      "op": "rect",
+      "x0": 0,
+      "x1": 127,
+      "y0": 60,
+      "y1": 127,
+      "substrate": "sediment",
+      "fields": {"oxygen": 0.15, "detritus": 0.2, "detritusN": 0.02, "nutrient": 0.1}
+    }
+  ],
+  "lid": "closed",
+  "lightMode": "cycle",
+  "drying": false,
+  "regions": [
+    {"id": "OPEN_WATER", "label": "Open water", "shape": {"kind": "rect", "x0": 0, "x1": 127, "y0": 0, "y1": 59}, "anchor": [64, 44]},
+    {"id": "MARSH_FLOOR", "label": "Marsh floor", "shape": {"kind": "rect", "x0": 0, "x1": 127, "y0": 60, "y1": 127}, "anchor": [64, 76]}
+  ],
+  "suggestedCommunity": {
+    "groups": [
+      {"species": "A03", "region": "OPEN_WATER", "count": 5, "radius": 10},
+      {"species": "B03", "region": "MARSH_FLOOR", "count": 5, "radius": 10},
+      {"species": "B04", "region": "MARSH_FLOOR", "count": 5, "radius": 10},
+      {"species": "P04", "region": "MARSH_FLOOR", "count": 5, "radius": 10}
+    ]
+  },
+  "guide": {
+    "summary": "Open water over a low-oxygen marsh floor, under a closed lid and a day and night cycle.",
+    "biology": "A marsh floor is full of dead material and short of oxygen, while the water above is bright by day and dark by night.",
+    "rules": "Water above y 60 and sediment from y 60 down; no stones. Over water: oxygen 0.8. Over sediment: oxygen 0.15 and 0.20 debris carbon with 0.020 bound nutrient. Everywhere: light 0.8, warmth 0.5, carbon dioxide 0.5, nutrient 0.10 and sugar 0.02. Lid closed; light cycles between day and night.",
+    "example": "Compare what the floor and the open water hold after a few days and nights."
+  },
+  "phase": 5
+}

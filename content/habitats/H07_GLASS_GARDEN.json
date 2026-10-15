@@ -1,0 +1,35 @@
+{
+  "id": "H07_GLASS_GARDEN",
+  "name": "Glass Garden",
+  "baseSubstrate": "water",
+  "baseLight": 0.8,
+  "warmth": 0.5,
+  "baseFields": {"oxygen": 0.8, "co2": 0.5, "nutrient": 0.1, "sugar": 0.02, "silicate": 0.3},
+  "ops": [],
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "furnish": [
+    {"structure": "S06", "area": {"kind": "rect", "x0": 40, "x1": 40, "y0": 35, "y1": 90}},
+    {"structure": "S06", "area": {"kind": "rect", "x0": 88, "x1": 88, "y0": 35, "y1": 90}}
+  ],
+  "regions": [
+    {"id": "WEST_BAY", "label": "West bay", "shape": {"kind": "rect", "x0": 41, "x1": 63, "y0": 35, "y1": 90}, "anchor": [52, 62]},
+    {"id": "EAST_BAY", "label": "East bay", "shape": {"kind": "rect", "x0": 64, "x1": 87, "y0": 35, "y1": 90}, "anchor": [76, 62]}
+  ],
+  "suggestedCommunity": {
+    "groups": [
+      {"species": "A02", "region": "WEST_BAY", "count": 5, "radius": 10},
+      {"species": "B05", "region": "WEST_BAY", "count": 5, "radius": 10},
+      {"species": "P05", "region": "EAST_BAY", "count": 5, "radius": 10},
+      {"species": "P09", "region": "EAST_BAY", "count": 5, "radius": 10}
+    ]
+  },
+  "guide": {
+    "summary": "Clear water rich in silicate, with two upright strips of mesh, one each side of the centre.",
+    "biology": "Dissolved silicate is the raw material some small life uses to build glassy shells.",
+    "rules": "All water; no stones. Silicate 0.30 in every cell. Light 0.8, warmth 0.5, oxygen 0.8, carbon dioxide 0.5, nutrient 0.10 and sugar 0.02 in every cell. Attachment mesh in two strips at x 40 and x 88 from y 35 to 90. Lid open; fixed light.",
+    "example": "Follow the silicate overlay as life in the dish draws it down."
+  },
+  "phase": 5
+}

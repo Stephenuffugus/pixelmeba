@@ -83,6 +83,7 @@ import type { EdgeKind } from '@sim/barriers';
 import type { DeviceKind } from '@sim/devices';
 import { deviceSprites, edgeDetail, edgeGlyphs, edgeSegment, EDGE_GLYPH_COLORS } from './structureLayer';
 import { BADGE_COLORS, BADGE_PX, badgeBox, badgeZoomBand, pipPointsBack, worldBadges, type PipState } from './gateBadges';
+import { drawRegionPinsInto, regionPinsNeedRedraw, type RegionPinInput } from './regionPins';
 import {
   deviceMovePreview,
   devicePreview,
@@ -300,6 +301,19 @@ export class DishRenderer {
   private selectedGateKey: number | null = null;
   /** Zoom the badges were last drawn at; NaN = nothing drawn. */
   private badgesZoom = Number.NaN;
+  /**
+   * Wave 14 (regionPins.ts; D-0128): numbered pins at the region anchors of the dish's own recorded habitat.
+   * Created here and added between effects and selectionG: above the links (UX §7.3 links → selection → HTML UI),
+   * below the selection ring and every layer appended later on first use (player probes draw over content pins;
+   * the brush and edge previews, the gate tracer). The gate badges (badgesG) sit below the film, organisms and links
+   * as built in wave 12, so the pins draw over them: accepted (D-0128).
+   */
+  private readonly regionPinsG = new Graphics();
+  private regionPins: readonly RegionPinInput[] = [];
+  /** Zoom the pins were last drawn at; NaN = nothing drawn. */
+  private regionPinsZoom = Number.NaN;
+  /** Pins the last redraw drew (regionPins.ts drawRegionPinsInto; the regionPinsDrawn getter). */
+  private regionPinsDrawnCount = 0;
 
   private cur: SnapshotMsg | null = null;
   private curAt = 0;
@@ -455,6 +469,7 @@ export class DishRenderer {
       this.statusParticles,
       this.linksG,
       this.effects,
+      this.regionPinsG,
       this.selectionG,
     );
     this.buildBandRings();
@@ -1085,6 +1100,8 @@ export class DishRenderer {
     if (!Number.isNaN(this.edgesZoom) && (Math.abs(cam.zoom / this.edgesZoom - 1) > 0.25 || edgeDetail(cam.zoom) !== edgeDetail(this.edgesZoom))) this.drawEdges();
     // Wave 12: badges keep their screen size and show runs only at the close band (a redraw on a band change or a big zoom move).
     if (!Number.isNaN(this.badgesZoom) && (Math.abs(cam.zoom / this.badgesZoom - 1) > 0.25 || badgeZoomBand(cam.zoom) !== badgeZoomBand(this.badgesZoom))) this.drawBadges();
+    // Wave 14: region pins keep their screen size (a redraw when the zoom moves by more than a quarter; never per tick).
+    if (regionPinsNeedRedraw(this.regionPinsZoom, cam.zoom)) this.drawRegionPins();
     this.drawGateTracer(s, now);
 
     const alpha = Math.min(1, (now - this.curAt) / this.interval);
@@ -1600,6 +1617,29 @@ export class DishRenderer {
   positionOf(entityId: number): [number, number] | null {
     const k = this.curIndex.get(entityId);
     return k === undefined ? null : [this.curX[k]!, this.curY[k]!];
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Region pins (wave 14; P5.7; D-0128; regionPins.ts): a numbered teardrop at each region anchor of the dish's
+  // own recorded habitat (DishInfo.regions), dark companion stroke under a light fill, the dark digit on its head.
+  // Static: drawn when the list changes or the zoom moves by more than a quarter, never per tick.
+
+  /** The dish's habitat regions to pin ([] clears them). Cosmetic only. */
+  setRegionPins(pins: readonly RegionPinInput[]): void {
+    const same = pins.length === this.regionPins.length && pins.every((p, k) => p.number === this.regionPins[k]!.number && p.anchor[0] === this.regionPins[k]!.anchor[0] && p.anchor[1] === this.regionPins[k]!.anchor[1]);
+    this.regionPins = pins.map((p) => ({ number: p.number, anchor: [p.anchor[0], p.anchor[1]] as const }));
+    if (!same && !this.destroyed) this.drawRegionPins();
+  }
+
+  /** How many region pins the last redraw drew (0 before any). */
+  get regionPinsDrawn(): number {
+    return this.regionPinsDrawnCount;
+  }
+
+  private drawRegionPins(): void {
+    const z = Math.max(1e-6, this.camera.zoom);
+    this.regionPinsDrawnCount = drawRegionPinsInto(this.regionPinsG, this.regionPins, z);
+    this.regionPinsZoom = this.regionPinsDrawnCount > 0 ? z : Number.NaN;
   }
 
   // -------------------------------------------------------------------------------------------

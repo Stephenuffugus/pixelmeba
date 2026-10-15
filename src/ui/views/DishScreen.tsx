@@ -147,6 +147,15 @@ export function DishScreen() {
     };
   }, []);
 
+  // Wave 14 (region pins, D-0128): the pins follow the dish's own recorded habitat regions in both views, whenever
+  // dishInfo changes (the dish opens, a new dish replaces it); cleared on unmount. Undo keeps the habitat record.
+  const regionKey = JSON.stringify(info?.regions ?? []);
+  useEffect(() => {
+    if (!ready) return;
+    getRenderer()?.setRegionPins(dishInfo.value?.regions ?? []);
+  }, [ready, info?.dishId, regionKey]);
+  useEffect(() => () => getRenderer()?.setRegionPins([]), []);
+
   // A sheet opened from the top strip (More and what it opens) takes the Lab tray's place, as Lab's
   // Inspect tap and the Tools tray's buttons do: on phones the tray would cover it. (P2.2: a new dish
   // opens with the Life tray open, so More must still reach the player.)

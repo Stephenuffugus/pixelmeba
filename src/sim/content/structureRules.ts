@@ -11,7 +11,7 @@
 import { EDGE_KINDS, type EdgeBarrier } from '../barriers';
 import { DEVICE_KINDS, type Device } from '../devices';
 import type { SystemFlag } from '../fields';
-import type { Manifest, StructureDef } from './schema';
+import type { Manifest, Species, StructureDef } from './schema';
 
 /** The cell structures the simulation implements (src/sim/grid.ts STRUCTURE_RECORD_IDS): kind 'cell'. */
 export const CELL_STRUCTURE_IDS: readonly string[] = ['BEAD', 'STONE', 'WALL'];
@@ -109,4 +109,27 @@ export function climateNeedProblem(settings: { readonly lightMode: 'fixed' | 'cy
   if (settings.lightMode === 'cycle') return 'Its light cycle needs the "climate" system (not in these rules).';
   if (settings.drying) return 'Its drying needs the "climate" system (not in these rules).';
   return null;
+}
+
+/**
+ * The systems a species uses, each with what uses it (for the validator's message). Never film for
+ * `digestsFilm`: B04 ships without the film system and simply finds no film (D-0038).
+ */
+export function speciesSystemNeeds(s: Species): [SystemFlag, string][] {
+  const out: [SystemFlag, string][] = [];
+  const has = (a: Species['nativeAbilities'][number]) => s.nativeAbilities.includes(a);
+  if (has('BIOFILM')) out.push(['film', 'BIOFILM']);
+  if (has('BRANCHING')) out.push(['fungi', 'BRANCHING']);
+  if (has('TRANSPORT_LINKS')) out.push(['fungi', 'TRANSPORT_LINKS']);
+  if (has('HOST_DRAIN')) out.push(['parasites', 'HOST_DRAIN']);
+  if (has('LYSIS')) out.push(['viruses', 'LYSIS']);
+  else if (s.category === 'virus') out.push(['viruses', 'the virus category']);
+  for (const a of ['E_STARCH_SECRETION', 'E_OIL_SECRETION', 'E_PROTEIN_SECRETION'] as const) if (has(a)) out.push(['enzymes', a]);
+  if (s.foodPriority.includes('broth')) out.push(['enzymes', 'a broth diet']);
+  // Phase 5 (D-0043's carry-over). V02 needs no entry for its film gate: without the film system film is
+  // 0 everywhere and V02 simply never infects (its LYSIS already needs 'viruses').
+  if (has('SIGNAL_GLOW')) out.push(['signals', 'SIGNAL_GLOW']);
+  if (has('RIVALRY')) out.push(['rivalry', 'RIVALRY']);
+  if (has('SHELL')) out.push(['silicate', 'SHELL']);
+  return out;
 }

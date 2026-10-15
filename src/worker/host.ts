@@ -34,6 +34,8 @@ import { creationFounders } from '@sim/founders';
 import { computeTotals } from '@sim/ledger';
 import { cancelSample, heldSummary, SAMPLE_HELD_REFUSAL, selectSample } from '@sim/sample';
 import type { NewDishPreview, RegistryInfo } from './protocol';
+import type { HabitatRegion } from '@sim/content/habitatRules';
+import { communityOffered, habitatOffered } from '@sim/content/habitatRules';
 import type { SlotModes } from './protocol';
 import { buildSaveFile, loadSaveFile, SaveFileError, saveMetaVariant } from '@persist/saveFile';
 import { saveMetaEvolution, saveMetaRegistry, type SaveFile, type SaveMetaEvolution, type SaveMetaRegistry } from '@persist/saveFile';
@@ -2174,6 +2176,18 @@ export class DishHost {
       // P3.2: only a habitat preset this build enables.
       if (o0?.habitatId !== undefined && (typeof o0.habitatId !== 'string' || !this.registry.manifest.enabledHabitats.includes(o0.habitatId) || !this.registry.habitats[o0.habitatId]))
         throw new Error(`There is no habitat "${String(o0.habitatId)}" in this version of Pixelmeba.`);
+      // P5.4 (wave 14, D-0128): a habitat this build cannot offer (its phase, structures, systems, materials).
+      // Defensive: the validator refuses a shipped habitat that fails the offer rule, so this never fires for one.
+      if (o0?.habitatId !== undefined && !habitatOffered(this.registry.habitats[o0.habitatId]!, this.registry.manifest))
+        throw new Error(`There is no habitat "${o0.habitatId}" in this version of Pixelmeba.`);
+      // P5.4: a Suggested Community only on an empty start whose habitat this build offers one for (CT §8.2).
+      if (o0?.community !== undefined && typeof o0.community !== 'boolean') throw new Error(`Unknown community setting "${String(o0.community)}".`);
+      if (o0?.community === true) {
+        if (o0.empty !== true) throw new Error('A Suggested Community starts from an empty habitat.');
+        const habitat = this.registry.habitats[o0.habitatId ?? this.registry.recipes[source.recipeId]?.habitatId ?? ''];
+        if (habitat !== undefined && !communityOffered(habitat, this.registry.manifest, this.registry.species))
+          throw new Error(`There is no Suggested Community for ${habitat.name} in this version of Pixelmeba.`);
+      }
       // Protocol 3 (P5.1 New Dish Environment; D-0111 carry-over): only known values, and a cycle or drying only
       // with this build's 'climate' system, refused here in the player's words before anything is built (so
       // realizeRecipe's RecipeError never reaches the player as a raw message).
@@ -2208,6 +2222,8 @@ export class DishHost {
       ...(o?.lid !== undefined ? { lid: o.lid } : {}),
       ...(o?.lightMode !== undefined ? { lightMode: o.lightMode } : {}),
       ...(o?.drying !== undefined ? { drying: o.drying } : {}),
+      // P5.4: recorded only when true (a request without it records exactly what it did before).
+      ...(o?.community === true ? { community: true } : {}),
     };
     return { recipeId: source.recipeId, recipeRevision: this.registry.recipes[source.recipeId]?.revision ?? null, createdFrom: 'recipe', overrides };
   }
@@ -2252,6 +2268,7 @@ export class DishHost {
     }
     return (
       o.empty !== true &&
+      o.community !== true &&
       (o.habitatId ?? recipe.habitatId) === recipe.habitatId &&
       (o.seed ?? recipe.seed) === recipe.seed &&
       (o.mutationPreset ?? recipe.mutationPreset) === recipe.mutationPreset &&
@@ -3335,6 +3352,13 @@ export class DishHost {
       // Protocol 3: the world's own systems (per-dish gating, D-0111) and each species' free transport class.
       systems: [...m.enabledSystems],
       speciesFreeClass: speciesFreeClasses(w),
+      // Wave 14 (region pins, D-0128): the regions of the world's OWN recorded habitat, never this build's registry
+      // (an old dish never gains pins from a later content edit); absent when it records none (every v1.0 dish).
+      ...(w.content.habitat.regions && w.content.habitat.regions.length > 0
+        ? {
+            regions: w.content.habitat.regions.map((r: HabitatRegion, k) => ({ id: r.id, label: r.label, number: k + 1, anchor: [r.anchor[0], r.anchor[1]] as const })),
+          }
+        : {}),
     };
   }
 
@@ -3374,8 +3398,15 @@ export class DishHost {
     for (const d of w.content.modules) names[d.id] = d.name;
     const total = computeTotals(w);
     const L = w.ledger;
+    // The recipe as realized, the New Dish choices applied (P5.4: the preview used the untransformed recipe
+    // until wave 14; for every v1.0 start the two give the same grid and patches).
+    const realized = applyRecipeOverrides(recipe, msg.overrides);
     // The grid realizeRecipe() paints: habitat, stone removal and the recipe's own ops (P3.9; Borrowed Shelter's gel disk).
-    const layout = recipeGrid(w.content.habitat, recipe);
+    const layout = recipeGrid(w.content.habitat, realized);
+    const uses = this.habitatUsesOf(w);
+    const regions = (w.content.habitat.regions ?? []).map((r, k) => ({ id: r.id, label: r.label, number: k + 1 }));
+    const community = realized.community === true;
+    const communityPatches = community ? (w.content.habitat.suggestedCommunity?.patches ?? []).map((p, k) => p.label ?? `Community patch ${k + 1}`) : [];
     return {
       recipeId: recipe.id,
       recipeName: recipe.name,
@@ -3385,6 +3416,9 @@ export class DishHost {
         rules: w.content.habitat.guide.rules,
         // P3.2: the layout the dish starts with (recipe stone removal and ops included), for the preview map.
         grid: { substrate: layout.substrate, structure: layout.structure },
+        // P5.4: what the habitat places and its regions (absent when none: every v1.0 start).
+        ...(uses.length > 0 ? { uses } : {}),
+        ...(regions.length > 0 ? { regions } : {}),
       },
       seed: w.seed,
       mutationPreset: w.settings.mutationPreset,
@@ -3400,7 +3434,7 @@ export class DishHost {
         withModule: r.withModule,
         modules: r.modules.map((x) => ({ id: x.id, name: names[x.id] ?? x.id, count: x.count })),
       })),
-      patches: msg.overrides.empty ? [] : recipe.fieldPatches.map((p, k) => p.label ?? `Patch ${k + 1}`),
+      patches: [...realized.fieldPatches.map((p, k) => p.label ?? `Patch ${k + 1}`), ...communityPatches],
       ledger: {
         habitat: { ...L.initial },
         added: { ...L.inputs },
@@ -3412,7 +3446,48 @@ export class DishHost {
       // Protocol 3: the start's environment (overrides, else the recipe's, else the habitat's) and whether it records climate.
       environment: { lid: w.settings.lid, lightMode: w.settings.lightMode, drying: w.settings.drying },
       climate: worldHasSystem(w, 'climate'),
+      // P5.4: the Suggested Community as placed (absent without one).
+      ...(community ? { community: true, communityGroups: this.communityGroupsOf(w) } : {}),
     };
+  }
+
+  /**
+   * P5.4 (wave 14): what a realized start's habitat places, for New Dish: edges by kind, then devices and
+   * furnishings by kind, then food objects by material, each group sorted by id, counted in the world at
+   * tick 0; names from the structure records and the world's materials.
+   */
+  private habitatUsesOf(w: World): { id: string; name: string; count: number }[] {
+    const tally = (ids: readonly string[]): [string, number][] => {
+      const counts: Record<string, number> = {};
+      for (const id of ids) counts[id] = (counts[id] ?? 0) + 1;
+      return Object.keys(counts)
+        .sort()
+        .map((id) => [id, counts[id]!]);
+    };
+    const structure = (id: string) => this.registry.structures[id]?.name ?? id;
+    const objectMaterial = (kind: string) => w.content.materials.find((m) => m.kind === 'object' && m.target === kind);
+    return [
+      ...tally(w.edges.map((e) => e.kind)).map(([id, count]) => ({ id, name: structure(id), count })),
+      ...tally(w.devices.map((d) => d.kind)).map(([id, count]) => ({ id, name: structure(id), count })),
+      ...tally(w.objects.map((o) => objectMaterial(o.kind)?.id ?? o.kind)).map(([id, count]) => ({ id, name: w.content.materials.find((m) => m.id === id)?.name ?? id, count })),
+    ];
+  }
+
+  /**
+   * P5.4: the Suggested Community's groups in record order with the number of each species actually placed
+   * (the start is empty, so every founder of a group's species is the community's; a species named by two
+   * groups is shared out in group order) and the region labels.
+   */
+  private communityGroupsOf(w: World): { speciesId: string; name: string; count: number; regionLabel: string }[] {
+    const h = w.content.habitat;
+    const placed: Record<string, number> = {};
+    for (const r of founderSummary(w)) placed[w.species[r.species]!.id] = r.count;
+    return (h.suggestedCommunity?.groups ?? []).map((g) => {
+      const count = Math.min(g.count, placed[g.species] ?? 0);
+      placed[g.species] = (placed[g.species] ?? 0) - count;
+      const sp = w.content.species.find((d) => d.id === g.species);
+      return { speciesId: g.species, name: sp?.name ?? g.species, count, regionLabel: h.regions?.find((r) => r.id === g.region)?.label ?? g.region };
+    });
   }
 
   /** Advance the active dish according to wall-clock time. Call frequently (≈ every 16 ms). */

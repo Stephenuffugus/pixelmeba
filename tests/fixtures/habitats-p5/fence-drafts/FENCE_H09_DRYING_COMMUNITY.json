@@ -1,0 +1,19 @@
+{
+  "id": "FENCE_H09_DRYING_COMMUNITY",
+  "revision": 1,
+  "name": "Fence: Drying Lace with its community",
+  "habitatId": "H09_DRYING_LACE",
+  "seed": 104729,
+  "removeStones": false,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "community": true,
+  "fieldPatches": [],
+  "founders": [],
+  "scheduledCommands": [],
+  "labels": [],
+  "question": "Test-only fence dish draft (D-0128, wave 14): the Drying Lace's Suggested Community (Sporeveil under the shade roof, Sleepers on open gel) with the habitat's drying, wick and roof.",
+  "expectedObservationsText": "Not shipped: a draft the lead adds to the fence at the habitat enable with tools/fence-update.ts --add-file (kind 'recipeFile').",
+  "phase": 5
+}

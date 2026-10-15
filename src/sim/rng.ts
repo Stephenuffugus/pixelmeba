@@ -23,6 +23,11 @@ export const STREAMS = {
   inoculate: 'inoculate',
   /** P3.9: a recipe founder group's 'scatter' placement (key: founder group index). */
   founderPlace: 'founder.place',
+  /**
+   * P5.4 (wave 14, D-0128): a habitat's Suggested Community placement (key: the community group index).
+   * Used ONLY by community placement (a recipe's own scatter keeps founderPlace); never keyed on a species index.
+   */
+  communityPlace: 'community.place',
 } as const;
 export type StreamId = (typeof STREAMS)[keyof typeof STREAMS];
 
