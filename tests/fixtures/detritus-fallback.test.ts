@@ -209,7 +209,7 @@ describe('P09 DETRITUS_FALLBACK (P5.5)', () => {
     const allowed: string[] = [];
     let k = 0;
     for (const id of REG_P.manifest.enabledSpecies) {
-      if (id === 'V01') continue; // a field virus
+      if (id === 'V01' || id === 'V02') continue; // field viruses (V02 enabled since the organism flip, D-0127)
       const slot = place(w, id, 30.5 + (k % 10) * 3, 40.5 + Math.floor(k / 10) * 3);
       if (preyAllowed(w, sp, slot)) allowed.push(id);
       k++;

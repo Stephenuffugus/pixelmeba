@@ -127,10 +127,11 @@ describe('P2.1 module accounting', () => {
   it('E01 cannot duplicate a native ability: Crumbsmith (native E_STARCH) is refused everywhere', () => {
     const w = clearWater({ mutationPreset: 'accelerated' });
     // Eligible lists for the Phase 2 roster under the shipped registry (D06: B01/B04 may gain E01; B06
-    // never; registry version 2 adds E04, E09, E10 and E12 where CT §7.1 allows them, D-0059).
-    expect(eligibleGains(w, { ancestor: 'B01', modules: [] })).toEqual(['E01', 'E03', 'E04', 'E05', 'E10', 'E12']);
-    expect(eligibleGains(w, { ancestor: 'B04', modules: [] })).toEqual(['E01', 'E03', 'E04', 'E05', 'E09', 'E10', 'E12']);
-    expect(eligibleGains(w, { ancestor: 'B06', modules: [] })).toEqual(['E03', 'E04', 'E05', 'E10', 'E12']);
+    // never; registry version 2 adds E04, E09, E10 and E12 where CT §7.1 allows them, D-0059; version 3 E02,
+    // the organism flip, D-0127).
+    expect(eligibleGains(w, { ancestor: 'B01', modules: [] })).toEqual(['E01', 'E02', 'E03', 'E04', 'E05', 'E10', 'E12']);
+    expect(eligibleGains(w, { ancestor: 'B04', modules: [] })).toEqual(['E01', 'E02', 'E03', 'E04', 'E05', 'E09', 'E10', 'E12']);
+    expect(eligibleGains(w, { ancestor: 'B06', modules: [] })).toEqual(['E02', 'E03', 'E04', 'E05', 'E10', 'E12']);
     expect(validateModuleSet(w, 'B06', ['E01'])).toMatch(/natively/);
     // An introduction with the duplicate is refused before anything is allocated or logged.
     const before = { count: w.ents.count, next: w.counters.nextBirthId, inputs: { ...w.ledger.inputs } };

@@ -29,11 +29,13 @@ import { run } from '../../src/sim/tick';
 import type { World } from '../../src/sim/world';
 import { DishHost } from '../../src/worker/host';
 import type { DishInfo, FromWorker } from '../../src/worker/protocol';
-import { clearWater, place, registry } from '../helpers/world';
+import { clearWater, place, preFlipRegistry, registry } from '../helpers/world';
 
 const SAVED_AT = '2026-09-28T00:00:00Z';
-/** The modules the shipped manifest enables (moduleRegistryVersion 2, D-0059). */
-const SHIPPED_MODULES = ['E01', 'E03', 'E04', 'E05', 'E06', 'E07', 'E08', 'E09', 'E10', 'E12'];
+/** The modules the shipped manifest enables (moduleRegistryVersion 3 since the organism flip, D-0127). */
+const SHIPPED_MODULES = ['E01', 'E02', 'E03', 'E04', 'E05', 'E06', 'E07', 'E08', 'E09', 'E10', 'E11', 'E12'];
+/** The modules a dish recorded before the organism flip enables (moduleRegistryVersion 2, D-0059). */
+const PRE_FLIP_MODULES = ['E01', 'E03', 'E04', 'E05', 'E06', 'E07', 'E08', 'E09', 'E10', 'E12'];
 
 /** The parts of a saved state these tests edit, as plain mutable JSON. */
 interface Editable {
@@ -79,21 +81,22 @@ describe('P2.2 fixture: registry imports', () => {
     const reg = registry();
     const { text } = await savedGarden();
     const file = JSON.parse(text) as SaveFile;
-    // Signal glow (CT §7.1): real content, Phase 5, not simulated in this build (E07 was the example until P3.7 implemented it).
-    const e07 = reg.modules.E02!;
+    // Partner bond (CT §7.1): real content, Phase 7, not simulated in this build (E07 was the example until P3.7
+    // implemented it, E02 until the organism flip, D-0127).
+    const e16 = reg.modules.E16!;
     const state = file.state as unknown as Editable;
-    state.content.modules = [...state.content.modules, e07].sort((a, b) => a.id.localeCompare(b.id));
+    state.content.modules = [...state.content.modules, e16].sort((a, b) => a.id.localeCompare(b.id));
     state.content.manifest.enabledModules = state.content.modules.map((m) => m.id);
-    // A Sprinter (B01, eligible for E02) carries it.
+    // A Sprinter (B01, eligible for E16) carries it.
     const a01 = state.genomes.findIndex((g) => g.ancestor === 'B01');
-    state.genomes[a01] = { ...state.genomes[a01]!, modules: ['E02'] };
+    state.genomes[a01] = { ...state.genomes[a01]!, modules: ['E16'] };
     const bad = await restamp(file);
 
     const err = await loadSaveFile(bad).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(SaveFileError);
     expect(err).toMatchObject({ kind: 'content' });
     expect((err as Error).message).toBe(
-      'This dish uses the extra ability "Signal glow" (E02), which this version of Pixelmeba cannot simulate. Nothing was loaded.',
+      'This dish uses the extra ability "Partner bond" (E16), which this version of Pixelmeba cannot simulate. Nothing was loaded.',
     );
 
     // Through the worker's import path: an error reply with that message, no dish, the open dish untouched.
@@ -108,7 +111,7 @@ describe('P2.2 fixture: registry imports', () => {
     host.handle({ type: 'importDish', requestId: 2, text: bad, newDishId: 'imported' });
     const r = await reply(out, 2);
     expect(r).toMatchObject({ type: 'error', paused: false, request: 'importDish' });
-    expect(r.type === 'error' ? r.message : '').toContain('"Signal glow" (E02)');
+    expect(r.type === 'error' ? r.message : '').toContain('"Partner bond" (E16)');
     expect(host.world('imported')).toBeNull();
     expect(stateHash(host.world('open')!)).toBe(before);
     expect(host.activeDishId).toBe('open');
@@ -171,12 +174,16 @@ describe('P2.2 fixture: registry imports', () => {
   it('a changed active registry never touches an existing save: registry, genomes and candidates as recorded; same future', async () => {
     const reg = registry();
     // A dish with evolved modules and open branch candidates: Accelerated Sprinters in sugar water
-    // (many births quickly, so module gains and candidates appear within a short run).
-    const world = clearWater({
-      mutationPreset: 'accelerated',
-      backgroundOverrides: { sugar: 0.5 },
-      seed: 101,
-    });
+    // (many births quickly, so module gains and candidates appear within a short run). Recorded before the
+    // organism flip (registry version 2, D-0059), so the build below (version 3) is newer than the dish.
+    const world = clearWater(
+      {
+        mutationPreset: 'accelerated',
+        backgroundOverrides: { sugar: 0.5 },
+        seed: 101,
+      },
+      preFlipRegistry(),
+    );
     for (let k = 0; k < 40; k++) place(world, 'B01', 40.5 + (k % 8) * 6, 40.5 + Math.floor(k / 8) * 10);
     run(world, 350);
     expect(serializeWorld(world).genomes.filter((g) => g.modules.length > 0).length).toBeGreaterThan(0);
@@ -232,7 +239,7 @@ describe('P2.2 fixture: registry imports', () => {
     // The dish describes its own registry (version 2, D-0059), not the build's.
     expect(info.registry).toMatchObject({
       moduleRegistryVersion: 2,
-      modules: SHIPPED_MODULES.map((id) => ({ id })),
+      modules: PRE_FLIP_MODULES.map((id) => ({ id })),
       partial: true,
     });
 
@@ -249,7 +256,7 @@ describe('P2.2 fixture: registry imports', () => {
     expect(reExported.meta.registry).toEqual({
       moduleRegistryVersion: 2,
       evolutionRulesVersion: 1,
-      enabledModules: SHIPPED_MODULES,
+      enabledModules: PRE_FLIP_MODULES,
     });
     expect(reExported.state.content.modules).toEqual(serializeWorld(loaded).content.modules);
   }, 120_000);
@@ -268,7 +275,7 @@ describe('P2.2 fixture: registry imports', () => {
       evolution: { mutationPreset: 'fixed', founderMode: 'identical' },
     });
     expect(file.meta.registry).toEqual({
-      moduleRegistryVersion: 2,
+      moduleRegistryVersion: 3,
       evolutionRulesVersion: 1,
       enabledModules: SHIPPED_MODULES,
     });

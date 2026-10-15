@@ -70,10 +70,10 @@ function components(pts: readonly [number, number][]): [number, number][][] {
 const living = (id: string): Px[] => (['move', 'feed', 'reproduction', 'stress'] as const).flatMap((a) => [...frames(id, a)]);
 
 describe('Phase 5 large sprites agree with their species records and the validator (P5.7 art-large)', () => {
-  it('registers exactly the six large sprites after stage 1\'s, by species id; none is enabled', () => {
+  it('registers exactly the six large sprites after stage 1\'s, by species id; all enabled since the organism flip (D-0127)', () => {
     expect(SPRITES.map((d) => d.speciesId).slice(32)).toEqual(P5_LARGE);
     for (const id of P5_LARGE) expect(P5_SPRITES[id], id).toBeDefined();
-    for (const id of P5_LARGE) expect(reg.manifest.enabledSpecies, id).not.toContain(id);
+    for (const id of P5_LARGE) expect(reg.manifest.enabledSpecies, id).toContain(id);
   });
 
   it.each(P5_LARGE)('%s: assetId, frameSize, headings and form match the record and P5_SPRITES; it loops `move`', (id) => {
@@ -370,14 +370,14 @@ describe('the committed atlas (npm run art:build)', () => {
 
   it('is complete for the six large records (with P08 dormant) and the effect marks, within the 1024×2048 cap', () => {
     const refs = P5_LARGE.map((id) => atlasSpeciesRef(reg.species[id]!));
-    // As if the organism flip had enabled P10 and F03: their effect marks (content:validate's effectMarks).
+    // P10 and F03's effect marks (content:validate's effectMarks); the shipped manifest needs exactly these since
+    // the organism flip (D-0127) enabled both.
     const marks = effectMarks({ manifest: { enabledSpecies: ['F03', 'P10', 'P08'] }, species: reg.species });
     expect(marks).toEqual([
       { moduleId: 'F03 TRAP', layer: 'trap_loop', kind: 'species' },
       { moduleId: 'P10 HANDLING', layer: 'handling_arc', kind: 'species' },
     ]);
-    // Nothing enabled today needs one, so content:validate's output is unchanged before the flip.
-    expect(effectMarks(reg)).toEqual([]);
+    expect(effectMarks(reg)).toEqual(marks);
     expect(checkAtlas(manifest, refs, { marks })).toEqual([]);
     expect([manifest.width, manifest.height]).toEqual([1024, ATLAS_MAX_H]);
     const noDormant = { ...manifest, frames: manifest.frames.filter((f) => f.key !== 'p08_waterbear/dormant/w/1') };

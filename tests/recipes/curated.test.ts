@@ -239,8 +239,9 @@ describe('curated dishes (CT §9.3)', () => {
         expect(row.withModule, `${id} ${sp}`).toBe(Object.values(mine).reduce((a, b) => a + b, 0));
         expect(row.modules, `${id} ${sp}`).toEqual(Object.keys(mine).sort().map((m) => ({ id: m, count: mine[m]! })));
       }
-      // Only legal Phase 3 gains (D-0059: B01 E01/E03/E04/E05/E10/E12; Y02 E01/E03/E04/E05/E09; B08 E03/E04/E05).
-      const legal: Record<string, readonly string[]> = { B01: ['E01', 'E03', 'E04', 'E05', 'E10', 'E12'], Y02: ['E01', 'E03', 'E04', 'E05', 'E09'], B08: ['E03', 'E04', 'E05'] };
+      // Only legal gains (D-0059: B01 E01/E03/E04/E05/E10/E12; Y02 E01/E03/E04/E05/E09; B08 E03/E04/E05; the organism
+      // flip, D-0127, adds E02 for B01 and B08).
+      const legal: Record<string, readonly string[]> = { B01: ['E01', 'E02', 'E03', 'E04', 'E05', 'E10', 'E12'], Y02: ['E01', 'E03', 'E04', 'E05', 'E09'], B08: ['E02', 'E03', 'E04', 'E05'] };
       for (const f of fs) for (const m of f.modules) expect(legal[f.species], `${id} ${f.species} ${m}`).toContain(m);
       // About 10 % of eligible founders (an independent chance each): some, never most.
       expect(seeded, id).toBeLessThan(fs.length / 2);

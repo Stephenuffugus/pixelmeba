@@ -18,7 +18,7 @@ import { SimClient, WorkerRequestError, type WorkerLike } from '../../src/worker
 import * as P from '../../src/worker/protocol';
 import { DEPOSIT_BANDS, packDeposits, packEntities } from '../../src/worker/snapshot';
 import { registryWith } from '../helpers/registry';
-import { clearWater, place, placeWith, registry } from '../helpers/world';
+import { clearWater, place, placeWith, preOrganismFlipRegistry, registry } from '../helpers/world';
 
 function phase5Registry() {
   const m = registry().manifest;
@@ -178,7 +178,7 @@ describe('protocol 3 layout', () => {
   });
 
   it('DEPOSIT_BANDS 8: the grit band is 0 without the grit field and > 0 with grit', () => {
-    const w = clearWater();
+    const w = clearWater({}, preOrganismFlipRegistry()); // no silicate system (shipped since the organism flip, D-0127)
     expect(w.fields.grit).toBeUndefined();
     const d0 = packDeposits(w, null);
     expect(d0.length).toBe(8 * CELL_COUNT);

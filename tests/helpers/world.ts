@@ -8,7 +8,7 @@ import { rebuildIndex } from '../../src/sim/spatial';
 import { speciesIndex, type World } from '../../src/sim/world';
 import { loadRegistryFs } from '../../tools/lib/content-fs';
 import { FIELD_DEFS, type FieldId, type SystemFlag } from '../../src/sim/fields';
-import { registryWith } from './registry';
+import { registryWith, type ManifestPatch } from './registry';
 import { markField, updateDerived } from '../../src/sim/transport';
 import { inMask, maskCells } from '../../src/sim/grid';
 import { sortEdges, type EdgeBarrier } from '../../src/sim/barriers';
@@ -25,17 +25,101 @@ export function registry(): ContentRegistry {
 export const FLIP_SYSTEMS: readonly SystemFlag[] = ['barriers', 'climate', 'devices'];
 
 /**
- * The registry of a dish recorded before the systems flip (D-0121), which is what a v1.0 dish records: the
- * shipped manifest without 'barriers', 'climate', 'devices' and S01–S12 (its other content, and therefore its
- * contentHash, equal to the pre-flip build's). For tests whose subject is a dish without the Phase 5 systems,
- * which used the shipped registry for that before the flip.
+ * The contentHash a v1.0 dish records: the manifest before the systems flip (9d22ec0's content/manifest.json,
+ * D-0121 "67075b0e… → 84c41636…"). Pinned, not recomputed: the content files keep changing after v1.0 (the
+ * organism flip's lists, wave 14's habitat files), and a v1.0 dish's recorded hash does not.
  */
+export const PRE_FLIP_CONTENT_HASH = '67075b0e4e53e3adaee23cf9d4c65f3045b007881b789351357311ed7f0e5311';
+
+/**
+ * The lists of a v1.0 dish (the pre-flip manifest, 9d22ec0; the same lists as
+ * tests/fixtures/saves-rc1/rc1-manifest.json, at buildPhase 5 / contentVersion 3), pinned explicitly so the
+ * organism flip (D-0127) and later content cannot move them.
+ */
+export const PRE_FLIP_LISTS = {
+  enabledSpecies: ['A01', 'B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'F01', 'F02', 'P01', 'P02', 'P03', 'P04', 'V01', 'X01', 'Y01', 'Y02'],
+  enabledModules: ['E01', 'E03', 'E04', 'E05', 'E06', 'E07', 'E08', 'E09', 'E10', 'E12'],
+  enabledSystems: ['chemistry', 'core', 'enzymes', 'film', 'foodObjects', 'fungi', 'parasites', 'viruses'] as SystemFlag[],
+  enabledMaterials: ['ACID', 'BASE', 'BUFFER', 'CO2', 'DEBRIS', 'GEL', 'INH_BACT', 'INH_FUNG', 'INH_PHOTO', 'M01', 'M03', 'M04', 'M05', 'M09', 'M10', 'M11', 'METABOLITE', 'NUTRIENT', 'OIL', 'OXYGEN', 'PROTEIN', 'SALT', 'SEDIMENT', 'SHADE', 'STARCH', 'SUGAR', 'WATER'],
+  enabledHabitats: ['GEL_COLONY', 'SEDIMENT_EDGE', 'WATER_GARDEN'],
+  enabledStructures: ['BEAD', 'STONE', 'WALL'],
+  moduleRegistryVersion: 2,
+  evolutionRulesVersion: 1,
+  phenotypeMappingVersion: 1,
+  developmentalEnabled: false,
+} as const;
+
+/**
+ * The registry of a dish recorded before the systems flip (D-0121), which is what a v1.0 dish records:
+ * PRE_FLIP_LISTS, validated against today's content files, with manifest.contentHash set to
+ * PRE_FLIP_CONTENT_HASH (a v1.0 dish records that hash; the protocol 2 golden of
+ * tests/worker/protocol3-v1-equivalence.test.ts was written under it). For tests whose subject is a dish
+ * without the Phase 5 systems, which used the shipped registry for that before the flips.
+ */
+let preFlipCache: ContentRegistry | null = null;
 export function preFlipRegistry(): ContentRegistry {
-  const m = registry().manifest;
-  return registryWith({
-    enabledSystems: m.enabledSystems.filter((s) => !FLIP_SYSTEMS.includes(s)),
-    enabledStructures: (m.enabledStructures ?? []).filter((s) => !/^S\d\d$/.test(s)),
+  if (preFlipCache !== null) return preFlipCache;
+  const reg = registryWith({
+    enabledSpecies: PRE_FLIP_LISTS.enabledSpecies,
+    enabledModules: PRE_FLIP_LISTS.enabledModules,
+    enabledSystems: PRE_FLIP_LISTS.enabledSystems,
+    enabledMaterials: PRE_FLIP_LISTS.enabledMaterials,
+    enabledHabitats: PRE_FLIP_LISTS.enabledHabitats,
+    enabledStructures: PRE_FLIP_LISTS.enabledStructures,
+    moduleRegistryVersion: PRE_FLIP_LISTS.moduleRegistryVersion,
+    evolutionRulesVersion: PRE_FLIP_LISTS.evolutionRulesVersion,
+    phenotypeMappingVersion: PRE_FLIP_LISTS.phenotypeMappingVersion,
+    developmentalEnabled: PRE_FLIP_LISTS.developmentalEnabled,
   });
+  preFlipCache = reg.manifest.contentHash === PRE_FLIP_CONTENT_HASH ? reg : { ...reg, manifest: { ...reg.manifest, contentHash: PRE_FLIP_CONTENT_HASH } };
+  return preFlipCache;
+}
+
+/**
+ * The lists of a dish recorded after the systems flip and before the organism flip (D-0121 as shipped at
+ * ed0bf52, contentHash 84c41636…): PRE_FLIP_LISTS plus barriers, climate, devices and S01–S12, registry version 2.
+ */
+export const PRE_ORGANISM_FLIP_LISTS = {
+  ...PRE_FLIP_LISTS,
+  enabledSystems: ['barriers', 'chemistry', 'climate', 'core', 'devices', 'enzymes', 'film', 'foodObjects', 'fungi', 'parasites', 'viruses'] as SystemFlag[],
+  enabledStructures: ['BEAD', 'S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12', 'STONE', 'WALL'],
+} as const;
+
+/** Ids preOrganismFlipRegistry adds to PRE_ORGANISM_FLIP_LISTS. */
+export interface PreOrganismFlipExtras {
+  readonly species?: readonly string[];
+  readonly modules?: readonly string[];
+  readonly systems?: readonly SystemFlag[];
+  readonly materials?: readonly string[];
+}
+
+/**
+ * The registry of a dish recorded before the organism flip (D-0127), optionally with `extra` ids added (each list
+ * sorted, deduplicated). For tests whose subject compares "the same dish with and without X" that were written
+ * against the shipped manifest before the flip (the NEUTRAL comparisons): since the flip the shipped manifest
+ * already records X, so both sides of such a comparison are built from these lists. With no extras its
+ * contentHash is the pre-flip build's (84c41636…).
+ */
+export function preOrganismFlipRegistry(extra: PreOrganismFlipExtras = {}, opts: { readonly allowUnimplemented?: boolean } = {}): ContentRegistry {
+  return registryWith(preOrganismFlipPatch(extra), opts);
+}
+
+/** The manifest patch preOrganismFlipRegistry validates (for tests that edit the raw packs: patchedRawPacks). */
+export function preOrganismFlipPatch(extra: PreOrganismFlipExtras = {}): ManifestPatch {
+  const add = <T extends string>(base: readonly T[], more: readonly T[] = []): T[] => [...new Set([...base, ...more])].sort();
+  const L = PRE_ORGANISM_FLIP_LISTS;
+  return {
+    enabledSpecies: add(L.enabledSpecies, extra.species),
+    enabledModules: add(L.enabledModules, extra.modules),
+    enabledSystems: add(L.enabledSystems, extra.systems),
+    enabledMaterials: add(L.enabledMaterials, extra.materials),
+    enabledHabitats: L.enabledHabitats,
+    enabledStructures: L.enabledStructures,
+    moduleRegistryVersion: L.moduleRegistryVersion,
+    evolutionRulesVersion: L.evolutionRulesVersion,
+    phenotypeMappingVersion: L.phenotypeMappingVersion,
+    developmentalEnabled: L.developmentalEnabled,
+  };
 }
 
 /**
@@ -221,14 +305,13 @@ export function pushDevices(world: World, devices: readonly Omit<Device, 'id'>[]
 }
 
 /**
- * The content registry of the wave 9 barrier tests: the shipped manifest plus the 'barriers', 'climate'
- * and 'devices' systems and S01–S12. Since the systems flip (D-0121) the shipped manifest holds them all
- * and the structures are implemented, so the lists equal the shipped ones (registryWith drops the
- * repeats) and no allowUnimplemented is needed. Kept explicit so the barrier tests say what they need.
+ * The content registry of the wave 9 barrier tests: the v1.0 lists plus the 'barriers', 'climate' and
+ * 'devices' systems and S01–S12, i.e. the shipped manifest between the systems flip (D-0121) and the organism
+ * flip (D-0127): preOrganismFlipRegistry(). Since the organism flip the shipped manifest also records every
+ * Phase 5 organism, E02 and E11; these tests keep the dish they were written for (no V02, no E02 draws).
  */
 export function barrierRegistry(): ContentRegistry {
-  const systems = [...registry().manifest.enabledSystems, 'barriers', 'climate', 'devices'].sort() as SystemFlag[];
-  return registryWith({ enabledSystems: systems, enabledStructures: ['BEAD', ...PHASE5_STRUCTURE_IDS, 'STONE', 'WALL'] });
+  return preOrganismFlipRegistry();
 }
 
 /** A clear-water dish (clearWater) that records the Phase 5 systems and S01–S12. */
@@ -245,10 +328,8 @@ export function barrierDish(overrides: Partial<RecipeDef> = {}): World {
  * (D-0121), so no allowUnimplemented is needed; registryWith drops the repeated systems.
  */
 export function resterRegistry(): ContentRegistry {
-  const shipped = registry().manifest;
-  const species = [...shipped.enabledSpecies, 'B12', 'F04', 'P08', 'V02', 'X02'].sort();
-  const systems = [...shipped.enabledSystems, 'barriers', 'climate', 'devices'].sort() as SystemFlag[];
-  return registryWith({ enabledSpecies: species, enabledSystems: systems, enabledStructures: ['BEAD', ...PHASE5_STRUCTURE_IDS, 'STONE', 'WALL'] });
+  // The pre-organism-flip lists (D-0127) plus the five resters: the dish these tests were written for.
+  return preOrganismFlipRegistry({ species: ['B12', 'F04', 'P08', 'V02', 'X02'] });
 }
 
 /** Paint substrate `sub` (grid.ts SUB_*) on the in-dish cells of the rectangle x0…x1 × y0…y1 (test setup); bumps geometryVersion. */

@@ -184,8 +184,13 @@ describe('P5.1 the Starting recipe file carries the environment choices', () => 
     expect(recipeFileProblem(withO({ lightMode: 'night' }), REG)).toEqual(damaged('overrides.lightMode'));
     expect(recipeFileProblem(withO({ drying: 'yes' }), REG)).toEqual(damaged('overrides.drying'));
     expect(recipeFileProblem(withO({ warmth: 0.9 }), REG)).toEqual(damaged('overrides'));
-    // A build without the climate system (the pre-flip manifest) refuses them.
-    const V1 = preFlipRegistry();
+    // A build without the climate system refuses them: the shipped lists without climate and its three devices (the
+    // file records registry version 3 since the organism flip, D-0127, so a version 2 build would refuse it by version).
+    const V1 = registryWith({
+      enabledSystems: REG.manifest.enabledSystems.filter((x) => x !== 'climate'),
+      enabledStructures: (REG.manifest.enabledStructures ?? []).filter((x) => !['S09', 'S10', 'S12'].includes(x)),
+    });
+    expect(V1.manifest.moduleRegistryVersion).toBe(REG.manifest.moduleRegistryVersion);
     expect(recipeFileProblem(withO({ lightMode: 'cycle' }), V1)).toEqual(damaged('overrides.lightMode'));
     expect(recipeFileProblem(withO({ drying: true }), V1)).toEqual(damaged('overrides.drying'));
     expect(recipeFileProblem(withO({ lightMode: 'fixed', drying: false }), V1)).toBeNull();

@@ -25,6 +25,8 @@ import { deserializeWorld, serializeWorld, stateHash } from '../../src/sim/seria
 import { entityCell } from '../../src/sim/spatial';
 import { speciesIndex, type World } from '../../src/sim/world';
 import { mutate, rawPacks, registry, runTwiceIdentical } from './helpers';
+import { patchedRawPacks } from '../helpers/registry';
+import { preOrganismFlipPatch } from '../helpers/world';
 
 const errorsOf = (raw: ReturnType<typeof rawPacks>) => validateContent(raw).issues.filter((i) => i.severity === 'error');
 
@@ -118,9 +120,10 @@ describe('experiment validation names the file and field', () => {
     has(errorsOf(mutate(raw, 'experiments', 'EXP_C.json', (d) => (d.change = { kind: 'omitScheduled', indexes: [2, 2] }))), 'experiments/EXP_C.json', 'change.indexes.1');
     has(errorsOf(mutate(raw, 'experiments', 'EXP_C.json', (d) => (d.change = { kind: 'omitScheduled', indexes: [] }))), 'experiments/EXP_C.json', 'change.indexes');
     // Species outside this build's manifest cannot be introduced by a shipped card (P05 is Phase 5, so
-    // no Phase 3 or 4 manifest enables it; Phase 3 preflight, W2-02 (c)).
+    // no Phase 3 or 4 manifest enables it; Phase 3 preflight, W2-02 (c)). Since the organism flip (D-0127) the
+    // shipped manifest enables every species, so the rule is checked on a manifest from before it.
     has(
-      errorsOf(mutate(raw, 'experiments', 'EXP_106.json', (d) => ((d.change as { commands: { speciesId: string }[] }).commands[0]!.speciesId = 'P05'))),
+      errorsOf(mutate(patchedRawPacks(preOrganismFlipPatch()), 'experiments', 'EXP_106.json', (d) => ((d.change as { commands: { speciesId: string }[] }).commands[0]!.speciesId = 'P05'))),
       'experiments/EXP_106.json',
       'change.commands.0.speciesId',
     );

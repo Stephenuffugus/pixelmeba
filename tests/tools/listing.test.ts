@@ -4,7 +4,7 @@
  * - No forbidden claim: "superior", "advanced", "perfect", "real biology", "scientifically accurate" (and the
  *   honest-label words "adapted", "immune").
  * - Nothing from a later update: no Phase 5–7 feature name (BUILD_DIRECTIVE Phases 5–7) and no organism the
- *   shipped manifest does not enable.
+ *   v1.0 manifest does not enable.
  * - The fictional-simulation note and the promise line are present; the counts claimed match the content.
  */
 import { readdirSync, readFileSync } from 'node:fs';
@@ -13,7 +13,12 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = join(__dirname, '..', '..');
 const listing = readFileSync(join(ROOT, 'store', 'listing.md'), 'utf8');
-const manifest = JSON.parse(readFileSync(join(ROOT, 'content', 'manifest.json'), 'utf8')) as { enabledSpecies: string[]; enabledHabitats: string[]; buildPhase: number };
+/**
+ * The listing describes the v1.0 store release (release/1.0, v1.0.0-rc1), so its counts and names are checked
+ * against the v1.0 manifest (tests/fixtures/saves-rc1/rc1-manifest.json), not the moving one: the organism flip
+ * (D-0127) enabled 38 species on main for v1.1, whose listing is written with that update (an owner item).
+ */
+const manifest = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'saves-rc1', 'rc1-manifest.json'), 'utf8')) as { enabledSpecies: string[]; enabledHabitats: string[]; buildPhase: number };
 
 function block(key: string): string {
   const m = new RegExp(`<!-- listing:${key} -->\\n\`\`\`text\\n([\\s\\S]*?)\\n\`\`\``).exec(listing);
@@ -80,7 +85,7 @@ describe('store listing', () => {
     const lower = listing.toLowerCase();
     for (const w of FORBIDDEN) expect(lower, w).not.toContain(w);
     for (const w of LATER) expect(all.toLowerCase(), w).not.toContain(w);
-    // No organism name the shipped manifest does not enable.
+    // No organism name the v1.0 manifest does not enable.
     for (const f of readdirSync(join(ROOT, 'content', 'species'))) {
       const sp = JSON.parse(readFileSync(join(ROOT, 'content', 'species', f), 'utf8')) as { id: string; name: string };
       if (!manifest.enabledSpecies.includes(sp.id)) expect(lower, sp.name).not.toMatch(new RegExp(`\\b${sp.name.toLowerCase()}\\b`));
@@ -89,7 +94,7 @@ describe('store listing', () => {
 
   it('every count it claims matches the shipped content', () => {
     expect(texts.full).toContain(`${manifest.enabledSpecies.length} kinds of fictional microscopic life`);
-    expect(manifest.enabledSpecies).toHaveLength(19);
+    expect(manifest.enabledSpecies).toHaveLength(19); // v1.0 (the shipped manifest has 38 since the organism flip, D-0127)
     expect(manifest.enabledHabitats).toHaveLength(3);
     expect(texts.full).toContain('Three habitats');
     // The curated dishes this build offers (CT §9.3: recipes L3xx at or below the build phase).

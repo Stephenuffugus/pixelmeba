@@ -46,7 +46,9 @@ export type EventType =
    * Mixotrophy (Phase 5 wave 12; SPEC §7.10, §12.3; src/sim/mixotrophy.ts): an A04 (MIXOTROPHY) changed its
    * saved metabolic mode in stage 4 (Photo -> Sugar or Sugar -> Photo; never at initialization or birth).
    * cause R.MODE_PHOTO or R.MODE_SUGAR (the new mode); species, birthId, cell; detail.light = the effective
-   * light it read. Event ring only: the snapshot's visual events leave it out.
+   * light it read. Coalesced per tick, species and new mode (D-0126): the event names the first organism to
+   * switch, detail.count the number of organisms of that species that switched to that mode in the tick;
+   * totals.modeSwitch counts switches. Event ring only: the snapshot's visual events leave it out.
    */
   | 'modeSwitch'
   /**

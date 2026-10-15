@@ -11,8 +11,8 @@
  * - a glowing B09 Lantern at (40, 50);   - an A04 Turnleaf in Photo mode at (88, 50);
  * - a P10 Needlejaw mid-attempt on a P01 Amoeba at (40, 80) (0.3 of 1.0 s of contact);
  * - a B01 Sprinter in rivalry chemical 0.4 (an M08-style deposit, no B13 in the dish) at (88, 80).
- * TRAP_JACKET fixture (for the skipped journeys: the import refuses it until TRAP is in IMPLEMENTED_NATIVE_ABILITIES
- * (the wave 13 integration) and E11 in IMPLEMENTED_MODULES (the organism flip)):
+ * TRAP_JACKET fixture (TRAP joined IMPLEMENTED_NATIVE_ABILITIES at the wave 13 integration and E11 joined
+ * IMPLEMENTED_MODULES at the organism flip, D-0127, so the import loads it and both journeys run):
  * - an F03 Traplace holding a P04 Siltworm on sediment around (40, 64), 3 s into the hold;
  * - an E11 P07 Dartfin with a jacket built from silicate at (88, 64).
  */
@@ -103,7 +103,7 @@ export async function writeOrganismFixture(): Promise<string> {
   return write(w, 'Organism fixture', 'organism-fixture');
 }
 
-/** The TRAP_JACKET fixture (refused by the import until TRAP and E11 are implemented); returns its path. */
+/** The TRAP_JACKET fixture (loads since the organism flip, D-0127: TRAP and E11 are implemented); returns its path. */
 export async function writeTrapJacketFixture(): Promise<string> {
   const reg = registryWith(
     {
@@ -111,7 +111,7 @@ export async function writeTrapJacketFixture(): Promise<string> {
       enabledModules: [...shipped.enabledModules, 'E11'].sort(),
       enabledSystems: [...shipped.enabledSystems, 'silicate'].sort() as SystemFlag[],
     },
-    { allowUnimplemented: true }, // TRAP (wave 13 integration), E11 (organism flip)
+    { allowUnimplemented: true }, // written before TRAP (wave 13) and E11 (organism flip, D-0127) were implemented; a superset since
   );
   const w = clearWater({ id: 'TEST_TRAP_JACKET_UI' }, reg);
   const [tx, ty] = TRAP_JACKET_CELLS.traplace;

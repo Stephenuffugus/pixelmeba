@@ -24,7 +24,7 @@ import { stateHash } from '../../src/sim/serialize';
 import { run, step } from '../../src/sim/tick';
 import type { World } from '../../src/sim/world';
 import { trajectoryDigest } from '../helpers/trajectory';
-import { aliveOf, clearWater, linkFungal, place, rebaseLedger, registry, resterRegistry, setField } from '../helpers/world';
+import { aliveOf, clearWater, linkFungal, place, preOrganismFlipRegistry, rebaseLedger, resterRegistry, setField } from '../helpers/world';
 
 const REG = resterRegistry();
 const meta = { name: 'resters determinism', savedAt: '2026-10-14T00:00:00Z', recipeId: null };
@@ -148,7 +148,7 @@ describe('resters dish: determinism and saves', () => {
 
 /** A shipped-registry dish of B01, B02, F01, F02, X01 and V01 (no rule of this task can apply). */
 function neutralDish(): World {
-  const w = clearWater({ habitatId: 'GEL_COLONY' }, registry());
+  const w = clearWater({ habitatId: 'GEL_COLONY' }, preOrganismFlipRegistry()); // a dish without B12, F04, P08, X02 and V02 (shipped since D-0127)
   for (let y = 30; y <= 90; y++) for (let x = 20; x <= 100; x++) setField(w, 'sugar', cellIndex(x, y), 0.3);
   for (let k = 0; k < 8; k++) place(w, 'B01', 60.5 + (k % 4) * 2, 50.5 + Math.floor(k / 4) * 6);
   for (let k = 0; k < 6; k++) {

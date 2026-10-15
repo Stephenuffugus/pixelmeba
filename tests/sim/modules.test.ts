@@ -14,11 +14,13 @@ import { activeLoci } from '../../src/sim/phenotype';
 import { realizeRecipe } from '../../src/sim/recipes';
 import { deserializeWorld, serializeWorld } from '../../src/sim/serialize';
 import type { World } from '../../src/sim/world';
-import { clearWater, registry } from '../helpers/world';
+import { clearWater, preFlipRegistry, registry } from '../helpers/world';
 import { G2_LISTS, registryWith } from '../helpers/registry';
 
-/** The modules the shipped manifest enables (moduleRegistryVersion 2, D-0059). */
-const SHIPPED_MODULES = ['E01', 'E03', 'E04', 'E05', 'E06', 'E07', 'E08', 'E09', 'E10', 'E12'];
+/** The modules the shipped manifest enables (moduleRegistryVersion 3, the organism flip D-0127: E02 and E11 joined). */
+const SHIPPED_MODULES = ['E01', 'E02', 'E03', 'E04', 'E05', 'E06', 'E07', 'E08', 'E09', 'E10', 'E11', 'E12'];
+/** The modules a dish recorded before the organism flip enables (moduleRegistryVersion 2, D-0059). */
+const PRE_FLIP_MODULES = ['E01', 'E03', 'E04', 'E05', 'E06', 'E07', 'E08', 'E09', 'E10', 'E12'];
 
 /** A clear-water dish under the Phase 2 content set (the subject of the P2.1 pins). */
 function g2Water(overrides: Parameters<typeof clearWater>[0] = {}): World {
@@ -51,11 +53,14 @@ function tally(w: World, ancestor: string, modules: string[], n: number): { gain
 }
 
 describe('P2.1 module registry', () => {
-  it('the Phase 2 manifest enables exactly E01, E03 and E05; the shipped one (registry version 2) the ten implemented modules', () => {
+  it('the Phase 2 manifest enables exactly E01, E03 and E05; the shipped one (registry version 3) the twelve implemented modules', () => {
     const reg = registry();
-    // P3.7 (D-0059): the Phase 3 module flip enabled E04, E06–E10 and E12 under moduleRegistryVersion 2.
+    // P3.7 (D-0059): the Phase 3 module flip enabled E04, E06–E10 and E12 under moduleRegistryVersion 2; the
+    // organism flip (D-0127) E02 and E11 under moduleRegistryVersion 3.
     expect(reg.manifest.enabledModules).toEqual(SHIPPED_MODULES);
-    expect(reg.manifest.moduleRegistryVersion).toBe(2);
+    expect(reg.manifest.moduleRegistryVersion).toBe(3);
+    expect(preFlipRegistry().manifest.enabledModules).toEqual(PRE_FLIP_MODULES);
+    expect(preFlipRegistry().manifest.moduleRegistryVersion).toBe(2);
     expect([...IMPLEMENTED_MODULES].sort()).toEqual(SHIPPED_MODULES);
     // The Phase 2 manifest is the g2 build's (tests/fixtures/saves/g2-manifest.json); the shipped one
     // moved to build phase 3 in the Phase 3 preflight (D-0036).
@@ -75,8 +80,8 @@ describe('P2.1 module registry', () => {
     for (const id of Object.keys(expected).sort()) expect(eligibleGains(w, { ancestor: id, modules: [] }), id).toEqual(expected[id]);
   });
 
-  it('eligibility by ancestor under the shipped registry (CT §7.1 with E04, E06–E10 and E12 enabled; D-0059)', () => {
-    const w = clearWater();
+  it('eligibility by ancestor under a registry recorded before the organism flip (CT §7.1 with E04, E06–E10 and E12 enabled; D-0059)', () => {
+    const w = clearWater({}, preFlipRegistry());
     const expected: Record<string, string[]> = {
       A01: ['E05', 'E06', 'E07'],
       B01: ['E01', 'E03', 'E04', 'E05', 'E10', 'E12'],
@@ -95,6 +100,52 @@ describe('P2.1 module registry', () => {
       P04: ['E05'],
       V01: [],
       X01: [],
+      Y01: ['E01', 'E03', 'E04', 'E05', 'E09', 'E10'],
+      Y02: ['E01', 'E03', 'E04', 'E05', 'E09'],
+    };
+    expect(w.species.map((sp) => sp.id).sort()).toEqual(Object.keys(expected).sort());
+    for (const id of Object.keys(expected).sort()) expect(eligibleGains(w, { ancestor: id, modules: [] }), id).toEqual(expected[id]);
+  });
+
+  it('eligibility by ancestor under the shipped registry (CT §7.1 with E02 and E11 enabled; the organism flip, D-0127)', () => {
+    const w = clearWater();
+    const expected: Record<string, string[]> = {
+      A01: ['E05', 'E06', 'E07'],
+      A02: ['E05', 'E06', 'E07'],
+      A03: ['E05', 'E07'],
+      A04: ['E05', 'E06'],
+      A05: ['E05', 'E06', 'E07'],
+      B01: ['E01', 'E02', 'E03', 'E04', 'E05', 'E10', 'E12'],
+      B02: ['E01', 'E02', 'E03', 'E05'],
+      B03: ['E02', 'E03', 'E04', 'E05'],
+      B04: ['E01', 'E02', 'E03', 'E04', 'E05', 'E09', 'E10', 'E12'],
+      B05: ['E01', 'E02', 'E03', 'E04', 'E05', 'E09'],
+      B06: ['E02', 'E03', 'E04', 'E05', 'E10', 'E12'],
+      B07: ['E02', 'E03', 'E04', 'E05'],
+      B08: ['E02', 'E03', 'E04', 'E05'],
+      B09: ['E03', 'E04', 'E05', 'E12'],
+      B10: ['E02', 'E03', 'E04', 'E05', 'E10', 'E12'],
+      B11: ['E02', 'E03', 'E04', 'E05', 'E10', 'E12'],
+      B12: ['E02', 'E04', 'E05'],
+      B13: ['E02', 'E03', 'E05'],
+      F01: ['E05', 'E09'],
+      F02: ['E05', 'E09', 'E10'],
+      F03: ['E05'],
+      F04: ['E05'],
+      P01: ['E05', 'E08', 'E11'],
+      P02: ['E05', 'E08', 'E11'],
+      P03: ['E05', 'E08'],
+      P04: ['E05'],
+      P05: ['E05', 'E08'],
+      P06: ['E05'],
+      P07: ['E05', 'E08', 'E11'],
+      P08: ['E05'],
+      P09: ['E05'],
+      P10: ['E05'],
+      V01: [],
+      V02: [],
+      X01: [],
+      X02: [],
       Y01: ['E01', 'E03', 'E04', 'E05', 'E09', 'E10'],
       Y02: ['E01', 'E03', 'E04', 'E05', 'E09'],
     };
@@ -152,17 +203,18 @@ describe('P2.1 module registry', () => {
     expect(f.loss).toEqual({});
   });
 
-  it('under the shipped registry a Sprinter gains each of its six legal modules uniformly (D-0059)', () => {
+  it('under the shipped registry a Sprinter gains each of its seven legal modules uniformly (D-0059; E02 since the organism flip, D-0127)', () => {
     const w = clearWater({ mutationPreset: 'accelerated' });
     const options = eligibleGains(w, { ancestor: 'B01', modules: [] });
-    expect(options).toEqual(['E01', 'E03', 'E04', 'E05', 'E10', 'E12']);
+    expect(options).toEqual(['E01', 'E02', 'E03', 'E04', 'E05', 'E10', 'E12']);
     const { gain } = tally(w, 'B01', [], 60000);
     const total = Object.values(gain).reduce((a, b) => a + b, 0);
     expect(total / 120000).toBeGreaterThan(0.004);
     expect(total / 120000).toBeLessThan(0.006);
     expect(Object.keys(gain).sort()).toEqual(options);
-    const sd = Math.sqrt(total * (1 / 6) * (5 / 6));
-    for (const id of options) expect(Math.abs(gain[id]! - total / 6), id).toBeLessThan(5 * sd);
+    const n = options.length;
+    const sd = Math.sqrt(total * (1 / n) * (1 - 1 / n));
+    for (const id of options) expect(Math.abs(gain[id]! - total / n), id).toBeLessThan(5 * sd);
   });
 
   it("eligibility is read from the world's recorded registry, never the build's current one", () => {
@@ -172,12 +224,14 @@ describe('P2.1 module registry', () => {
       modules: { ...reg.modules, E01: { ...reg.modules.E01!, eligibleAncestors: ['B04'] } },
     };
     const w = realizeRecipe(edited, { ...reg.recipes.FIRST_DISH_V1!, founders: [] }, { worldId: 'edited' });
-    expect(eligibleGains(w, { ancestor: 'B01', modules: [] })).toEqual(['E03', 'E04', 'E05', 'E10', 'E12']);
+    expect(eligibleGains(w, { ancestor: 'B01', modules: [] })).toEqual(['E02', 'E03', 'E04', 'E05', 'E10', 'E12']);
     const current = clearWater();
-    expect(eligibleGains(current, { ancestor: 'B01', modules: [] })).toEqual(['E01', 'E03', 'E04', 'E05', 'E10', 'E12']);
+    expect(eligibleGains(current, { ancestor: 'B01', modules: [] })).toEqual(['E01', 'E02', 'E03', 'E04', 'E05', 'E10', 'E12']);
     // Saved and reloaded, the dish keeps its own registry.
     const back = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(w))) as ReturnType<typeof serializeWorld>);
-    expect(eligibleGains(back, { ancestor: 'B01', modules: [] })).toEqual(['E03', 'E04', 'E05', 'E10', 'E12']);
+    expect(eligibleGains(back, { ancestor: 'B01', modules: [] })).toEqual(['E02', 'E03', 'E04', 'E05', 'E10', 'E12']);
+    // A dish recorded before the organism flip keeps its registry (version 2, no E02) after it (D-0127).
+    expect(eligibleGains(clearWater({}, preFlipRegistry()), { ancestor: 'B01', modules: [] })).toEqual(['E01', 'E03', 'E04', 'E05', 'E10', 'E12']);
     // A Phase 2 dish keeps the Phase 2 registry after the flip.
     expect(eligibleGains(g2Water(), { ancestor: 'B01', modules: [] })).toEqual(['E01', 'E03', 'E05']);
   });

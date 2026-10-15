@@ -48,7 +48,7 @@ import { deserializeWorld, serializeWorld, stateHash } from '../../src/sim/seria
 import { fungalSegmentCount } from '../../src/sim/fungi';
 import { fungalDegree } from '../../src/sim/links';
 import { trajectoryDigest } from '../helpers/trajectory';
-import { aliveOf } from '../helpers/world';
+import { aliveOf, preOrganismFlipPatch, preOrganismFlipRegistry } from '../helpers/world';
 import { speciesIndex, type World } from '../../src/sim/world';
 import { registryWith } from '../helpers/registry';
 import { fillField, place, rebaseLedger, registry, setField } from '../helpers/world';
@@ -381,7 +381,8 @@ describe('P3.3 film as detritus food (D-0038)', () => {
   });
 
   it('a world without the film system makes no film request and B04 never reads film', () => {
-    const shipped = registry();
+    // On the lists shipped before the organism flip (D-0127); the Phase 5 species and materials need more systems.
+    const shipped = preOrganismFlipRegistry();
     const systems = shipped.manifest.enabledSystems.filter(
       (s) => s !== 'film' && s !== 'fungi',
     ) as SystemFlag[];
@@ -389,7 +390,7 @@ describe('P3.3 film as detritus food (D-0038)', () => {
     // E10 builds film (MODULE_SYSTEM_NEEDS), so a dish without film cannot enable it (shipped since D-0059).
     const modules = shipped.manifest.enabledModules.filter((m) => m !== 'E10');
     const w = gel(
-      registryWith({ enabledSystems: systems, enabledSpecies: species, enabledModules: modules }, { allowUnimplemented: true, omit: NEEDS_FUNGI_OR_E10 }),
+      registryWith({ ...preOrganismFlipPatch(), enabledSystems: systems, enabledSpecies: species, enabledModules: modules }, { allowUnimplemented: true, omit: NEEDS_FUNGI_OR_E10 }),
     );
     expect(w.fields.film).toBeUndefined();
     fillField(w, 'sugar', 0);
@@ -400,9 +401,11 @@ describe('P3.3 film as detritus food (D-0038)', () => {
   });
 
   it('a B04 preference mutation draws identically with and without the film system (D-0038)', () => {
-    const shipped = registry();
+    // On the lists shipped before the organism flip (D-0127), as above.
+    const shipped = preOrganismFlipRegistry();
     const noFilm = registryWith(
       {
+        ...preOrganismFlipPatch(),
         enabledSystems: shipped.manifest.enabledSystems.filter((s) => s !== 'film' && s !== 'fungi'),
         enabledSpecies: shipped.manifest.enabledSpecies.filter((s) => s !== 'B02' && s !== 'F01' && s !== 'F02'),
         // E10 builds film (MODULE_SYSTEM_NEEDS), so it leaves with the film system (shipped since D-0059).

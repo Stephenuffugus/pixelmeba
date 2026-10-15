@@ -63,8 +63,8 @@ describe('Phase 5 small sprites agree with their species records and the validat
     const ids = SPRITES.map((d) => d.speciesId);
     expect(ids.slice(19, 19 + P5_IDS.length)).toEqual(P5_IDS);
     expect(Object.entries(P5_SPRITES).filter(([, spec]) => spec.size === 16).map(([id]) => id).sort()).toEqual(P5_IDS);
-    // Nothing here is enabled: the organism flip (D-0104) turns them on.
-    for (const id of P5_IDS) expect(reg.manifest.enabledSpecies, id).not.toContain(id);
+    // The organism flip (D-0104, D-0127) turned them all on.
+    for (const id of P5_IDS) expect(reg.manifest.enabledSpecies, id).toContain(id);
   });
 
   it.each(P5_IDS)('%s: assetId, frameSize, headings and form match the record; size, headings and loop match P5_SPRITES', (id) => {

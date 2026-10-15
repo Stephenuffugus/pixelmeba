@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { computeContentHash, validateContent, type RawPacks } from '../../src/sim/content/registry';
 import { loadRawPacksFs } from '../../tools/lib/content-fs';
+import { patchedRawPacks } from '../helpers/registry';
+import { preOrganismFlipPatch } from '../helpers/world';
 
 function clone(raw: RawPacks): RawPacks {
   return JSON.parse(JSON.stringify(raw)) as RawPacks;
@@ -52,6 +54,24 @@ describe('content validation (P0.2)', () => {
     expect(hit, errs.map((e) => `${e.file} ${e.path}: ${e.message}`).join('\n')).toHaveLength(1);
   });
 
+  it("ties metabolism 'mixotroph' to native MIXOTROPHY both ways, naming the species file (D-0123 MINOR 6; A04 has both)", () => {
+    expect(errorsOf(raw).filter((e) => e.message.includes('MIXOTROPHY'))).toEqual([]);
+    const noAbility = errorsOf(
+      mutate(raw, 'species', 'A04.json', (d) => {
+        d.nativeAbilities = (d.nativeAbilities as string[]).filter((a) => a !== 'MIXOTROPHY');
+      }),
+    );
+    const hit = noAbility.filter((e) => e.file === 'content/species/A04.json' && e.path === 'nativeAbilities' && e.message.includes('MIXOTROPHY'));
+    expect(hit, noAbility.map((e) => `${e.file} ${e.path}: ${e.message}`).join('\n')).toHaveLength(1);
+    const noMetabolism = errorsOf(
+      mutate(raw, 'species', 'A01.json', (d) => {
+        d.nativeAbilities = [...(d.nativeAbilities as string[]), 'MIXOTROPHY'].sort();
+      }),
+    );
+    const hit2 = noMetabolism.filter((e) => e.file === 'content/species/A01.json' && e.path === 'metabolism' && e.message.includes('MIXOTROPHY'));
+    expect(hit2, noMetabolism.map((e) => `${e.file} ${e.path}: ${e.message}`).join('\n')).toHaveLength(1);
+  });
+
   it('rejects unknown ids in references', () => {
     const errs = errorsOf(
       mutate(raw, 'species', 'P01.json', (d) => {
@@ -77,8 +97,10 @@ describe('content validation (P0.2)', () => {
   // at the wave 11 integration, D-0120) to F03's TRAP; since wave 13 every ability is implemented and that case
   // lives in validator-unimplemented.test.ts with the list mocked.
   it('refuses a shipped recipe that uses content outside the manifest', () => {
+    // The subject: a manifest that does not enable B10 (a dish recorded before the organism flip, D-0127; the shipped
+    // one enables every species since).
     const errs = errorsOf(
-      mutate(raw, 'recipes', 'FIRST_DISH_V1.json', (d) => {
+      mutate(patchedRawPacks(preOrganismFlipPatch()), 'recipes', 'FIRST_DISH_V1.json', (d) => {
         (d.founders as { species: string }[])[0]!.species = 'B10';
       }),
     );

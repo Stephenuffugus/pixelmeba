@@ -28,7 +28,7 @@ import { rebuildIndex } from '../../src/sim/spatial';
 import { step, type StepHooks } from '../../src/sim/tick';
 import type { World } from '../../src/sim/world';
 import { registryWith } from '../helpers/registry';
-import { clearWater, place, registry } from '../helpers/world';
+import { clearWater, place, placeWith, registry } from '../helpers/world';
 
 const shipped = registry().manifest;
 const REG_P = registryWith(
@@ -80,10 +80,10 @@ async function roundTrip(w: World, hook: StepHooks = {}): Promise<World> {
   return back;
 }
 
-function duel(preySp = 'P01', preyState: Partial<Record<'B' | 'N' | 'E' | 'H' | 'age', number>> = {}, predState: Partial<Record<'B' | 'N' | 'E' | 'H' | 'age', number>> = { E: 50 }) {
+function duel(preySp = 'P01', preyState: Partial<Record<'B' | 'N' | 'E' | 'H' | 'age', number>> = {}, predState: Partial<Record<'B' | 'N' | 'E' | 'H' | 'age', number>> = { E: 50 }, preyModules: readonly string[] = []) {
   const w = clearWater({}, REG_P);
   const p10 = place(w, 'P10', 64.5, 64.5, predState);
-  const prey = place(w, preySp, 64.8, 64.5, preyState);
+  const prey = preyModules.length > 0 ? placeWith(w, preySp, 64.8, 64.5, preyModules, preyState) : place(w, preySp, 64.8, 64.5, preyState);
   const c = w.ents.cols;
   return { w, p10, prey, hook: pinHook(c.birthId[p10]!, c.birthId[prey]!) };
 }
@@ -148,7 +148,8 @@ describe('handling through save and reload (D-0108 round trip)', () => {
   }, LONG);
 
   it('a jacketed need (c 0.5: 2.5 s), mid-attempt', async () => {
-    const { w, p10, prey, hook } = duel('P01', { B: 4 });
+    // The prey carries E11: since the organism flip the import refuses a jacket without it (D-0125, D-0127).
+    const { w, p10, prey, hook } = duel('P01', { B: 4 }, { E: 50 }, ['E11']);
     w.ents.cols.jacketMineral[prey] = 0.2;
     w.ledger.inputs.m += 0.2;
     steps(w, 12, hook);

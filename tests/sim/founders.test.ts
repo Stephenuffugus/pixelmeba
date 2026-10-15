@@ -196,11 +196,11 @@ describe('P2.2 founder modes', () => {
     expect(e03Dormancy).toBeGreaterThan(0);
   });
 
-  it('Diverse under the shipped registry: each species draws uniformly over its own legal gains (D-0059)', () => {
+  it('Diverse under the shipped registry: each species draws uniformly over its own legal gains (D-0059; E02 since the organism flip, D-0127)', () => {
     const w = clearWater({ founderMode: 'diverse', seed: 11 });
     const expected: Record<string, string[]> = {
-      B01: ['E01', 'E03', 'E04', 'E05', 'E10', 'E12'],
-      B04: ['E01', 'E03', 'E04', 'E05', 'E09', 'E10', 'E12'],
+      B01: ['E01', 'E02', 'E03', 'E04', 'E05', 'E10', 'E12'],
+      B04: ['E01', 'E02', 'E03', 'E04', 'E05', 'E09', 'E10', 'E12'],
     };
     for (const id of ['B01', 'B04']) {
       const options = eligibleGains(w, { ancestor: id, modules: [] });
