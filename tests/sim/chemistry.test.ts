@@ -310,6 +310,9 @@ describe('Lab materials: deposits, companions and the ledger (SPEC §2.3, §3.4;
       'INH_FUNG',
       'INH_PHOTO',
       'M01',
+      // Silicate and shell grit since the organism flip (D-0127): mineral inputs.
+      'M02',
+      'M12',
       'METABOLITE',
       'NUTRIENT',
       'OIL',
@@ -329,13 +332,15 @@ describe('Lab materials: deposits, companions and the ledger (SPEC §2.3, §3.4;
       const companion = def.companion ? added * m.companionNutrientPerCarbon : 0;
       const dC = def.material === 'carbon' ? added : 0;
       const dN = (def.material === 'nutrient' ? added : 0) + companion;
+      const dM = def.material === 'mineral' ? added : 0;
       expect(w.ledger.inputs.c - before.c, m.id).toBeCloseTo(dC, 12);
       expect(w.ledger.inputs.n - before.n, m.id).toBeCloseTo(dN, 12);
-      expect(w.ledger.inputs.m - before.m, m.id).toBe(0);
+      expect(w.ledger.inputs.m - before.m, m.id).toBeCloseTo(dM, 12);
       // Dish totals are sums over ~11,000 cells: equal to summation round-off.
       const after = computeTotals(w);
       expect(after.c - totals.c, m.id).toBeCloseTo(dC, 8);
       expect(after.n - totals.n, m.id).toBeCloseTo(dN, 8);
+      expect(after.m - totals.m, m.id).toBeCloseTo(dM, 8);
       expect(checkLedger(w).ok, m.id).toBe(true);
     }
     // Organic debris carries 0.10 N per C as detritusN; CO2 is carbon; oxygen is display-only.

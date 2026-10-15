@@ -39,7 +39,7 @@ import type { World } from '../../src/sim/world';
 import { loadSaveFile } from '../../src/persistence/saveFile';
 import { registryWith } from '../helpers/registry';
 import { RC1_SAVE_FILES, readRc1SaveText } from '../helpers/rc1-saves';
-import { clearWater, fillField, place, rebaseLedger, registry, setField } from '../helpers/world';
+import { clearWater, fillField, place, preOrganismFlipRegistry, rebaseLedger, registry, setField } from '../helpers/world';
 
 const shipped = registry().manifest;
 // TRAP is appended to IMPLEMENTED_NATIVE_ABILITIES by the lead at the wave 13 integration (e3-traps).
@@ -659,8 +659,9 @@ describe('conservation and neutrality', () => {
       rebaseLedger(w);
       return w;
     };
-    const a = build(registry());
-    const b = build(REG_T);
+    // Both sides from the pre-organism-flip lists (D-0127): the shipped manifest records the subject itself since the flip.
+    const a = build(preOrganismFlipRegistry());
+    const b = build(preOrganismFlipRegistry({ species: ['F03'] }));
     expect(b.species.some((s) => s.id === 'F03')).toBe(true);
     for (let chunk = 0; chunk < 4; chunk++) {
       run(a, 500);

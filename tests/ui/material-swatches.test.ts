@@ -9,6 +9,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { CHEMISTRY_MATERIALS, FOOD_MATERIALS, FOOD_OBJECTS, MATERIAL_COPY, OBJECT_COPY } from '../../src/ui/strings/lab';
 
 const ROOT = join(__dirname, '..', '..');
 const TRAY_KINDS = new Set(['field', 'activity', 'deposit', 'object']);
@@ -57,5 +58,23 @@ describe('material swatches', () => {
     }
     // M07 is M06's swatch with a dark bar across: the bar is the extra layer.
     expect(backgrounds('M07').join(' ')).toContain(backgrounds('M06').join(' '));
+  });
+
+  it('every tray material the shipped manifest enables is in a tray list with its own copy (the organism flip: M02, M06, M07, M08, M12)', () => {
+    const manifest = JSON.parse(readFileSync(join(ROOT, 'content', 'manifest.json'), 'utf8')) as { enabledMaterials: string[] };
+    const listed = new Set([...FOOD_MATERIALS, ...CHEMISTRY_MATERIALS, ...FOOD_OBJECTS]);
+    const unlisted: string[] = [];
+    const noCopy: string[] = [];
+    for (const m of materials) {
+      if (!manifest.enabledMaterials.includes(m.id)) continue;
+      if (!listed.has(m.id)) unlisted.push(m.id);
+      if (MATERIAL_COPY[m.id] === undefined && OBJECT_COPY[m.id] === undefined) noCopy.push(m.id);
+    }
+    expect(unlisted).toEqual([]);
+    expect(noCopy).toEqual([]);
+    for (const id of ['M02', 'M06', 'M07', 'M08', 'M12']) {
+      expect(CHEMISTRY_MATERIALS, id).toContain(id);
+      expect(FOOD_MATERIALS, id).not.toContain(id);
+    }
   });
 });

@@ -5,7 +5,7 @@ import { drawFrame, loadAtlas } from '../atlas';
 import { IconClose } from '../icons';
 import { dishInfo, setTool, sheet } from '../state';
 import { LIFE_COPY } from '../strings/lab';
-import { dietLine, isPhage, type DietSymbol } from './LabTrayContent';
+import { dietLine, isPhage, TILE_PREY_NAMES, type DietSymbol } from './LabTrayContent';
 
 function Thumb({ asset }: { asset: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -87,7 +87,8 @@ export function AddLifeSheet() {
         <div class="species-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(9.5rem, 1fr))' }}>
           {info.speciesIds.map((id, i) => {
             if (!offered(id)) return null;
-            const diet = dietLine(info, id);
+            // D-0127: a tile names at most seven prey (38 species make some lists too long for a phone tile).
+            const diet = dietLine(info, id, TILE_PREY_NAMES);
             const phage = isPhage(info, id);
             return (
               <button

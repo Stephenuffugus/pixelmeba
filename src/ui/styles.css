@@ -530,6 +530,19 @@ textarea {
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
+/* A phone at 150 % or 200 % text: each label sits above its value, so a long value (every light factor since the
+   systems flip, D-0121) wraps across the sheet's width instead of a narrow column (D-0127). */
+@media (max-width: 480px) {
+  html[data-text-scale='1.5'] .kv,
+  html[data-text-scale='2'] .kv {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0;
+  }
+  html[data-text-scale='1.5'] .kv dd,
+  html[data-text-scale='2'] .kv dd {
+    margin-bottom: 0.4rem;
+  }
+}
 .species-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));

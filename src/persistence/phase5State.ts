@@ -11,7 +11,7 @@
  * Nothing in the shipped content or the v1.0 corpus uses a light cycle, drying or any Phase 5 store (CT §8.1),
  * so these refusals reject nothing a real save holds.
  */
-import { CELL_COUNT, CHANNEL_ORGANISM_TICKS, TRAP_COOLDOWN_SECONDS, TRAP_HOLD_SECONDS } from '@sim/constants';
+import { CELL_COUNT, CHANNEL_ORGANISM_TICKS, TRAP_COOLDOWN_SECONDS, TRAP_HOLD_SECONDS, TRAP_RESERVE_C } from '@sim/constants';
 import { edgeStoreProblem } from '@sim/barriers';
 import { deviceStoreProblem } from '@sim/devices';
 import { emptyValueOf, FLAG, LIFE_ACTIVE, type ColumnName } from '@sim/entities';
@@ -68,7 +68,10 @@ function organismProblem(get: Row, ctx: Phase5CheckContext): string | null {
   const reserveC = get('trapReserveC');
   const holding = get('trapSlot') >= 0;
   if (reserveC === 0 && (holding || get('trapTimer') !== 0 || get('trapCooldown') !== 0 || get('trapReserveN') !== 0)) return 'A trap acts without a reserve.';
-  if ((get('trapTimer') !== 0 && !holding) || get('trapTimer') >= TRAP_HOLD_SECONDS) return "A trap's hold time is invalid.";
+  // The reserve is built once as exactly TRAP_RESERVE_C (traps.ts armTrap) and only ever zeroed; a holding
+  // trap has counted at least one stage 8 step (a capture in stage 5 sets 0, stage 8 adds DT before any save).
+  if (reserveC !== 0 && reserveC !== TRAP_RESERVE_C) return "A trap's reserve is invalid.";
+  if ((get('trapTimer') !== 0 && !holding) || get('trapTimer') >= TRAP_HOLD_SECONDS || (holding && !(get('trapTimer') > 0))) return "A trap's hold time is invalid.";
   if (get('trapCooldown') > TRAP_COOLDOWN_SECONDS || (get('trapCooldown') > 0 && holding)) return "A trap's wait is invalid.";
   const need = get('handlingNeed');
   if (need < 0) return "An organism's handling time is negative.";
@@ -82,14 +85,17 @@ function organismProblem(get: Row, ctx: Phase5CheckContext): string | null {
   if (progress !== 0 && !has('HANDLING')) return 'An organism is handling prey although it has no handling ability.';
   if (need === 0 && progress !== 0) return "An organism's handling has no attempt.";
   if (need > 0 && progress >= need) return "An organism's handling is already complete.";
-  // Shell and jacket mineral (wave 10 lead fixes). boundMineral is written only for a species with native
-  // SHELL (inoculation, stage 6 binding) and split between same-species daughters, so any other organism
-  // holding it is unreachable. jacketMineral has no writer yet (E11 is not implemented; division halves
-  // it), but E11 needs the silicate system and module loss at division may one day leave a jacket on a
-  // daughter without E11, so the rule is the system only: without it a death or capture could not put the
-  // mineral anywhere (maintenance.ts killEntity, contacts.ts).
+  // Shell and jacket mineral (wave 10 lead fixes; D-0125 amends D-0118 at the organism flip). boundMineral
+  // is written only for a species with native SHELL (inoculation, stage 6 binding) and split between
+  // same-species daughters, so any other organism holding it is unreachable. jacketMineral is written only by
+  // E11 (src/sim/jacket.ts, stage 8 action 11), which needs the silicate system; division halves it, and the
+  // SPEC §9.19 reconcile in the birth loop turns a daughter's jacket into grit when she does not carry E11, so
+  // at a tick boundary a jacket without E11 in the genome is unreachable. Without the system a death or
+  // capture could not put the mineral anywhere (maintenance.ts killEntity, contacts.ts); without E11 it would
+  // load with the 1 + 3c handling penalty and no speed penalty, which no rule could have produced.
   if (get('boundMineral') > 0 && !has('SHELL')) return 'An organism carries shell mineral although it cannot build a shell.';
   if (get('jacketMineral') > 0 && !ctx.systems.includes('silicate')) return "An organism carries jacket mineral although the dish's rules have no silicate.";
+  if (get('jacketMineral') > 0 && !genome.modules.includes('E11')) return 'An organism carries jacket mineral although it has no mineral jacket ability.';
   if ((get('flags') & FLAG.restNewborn) !== 0) {
     if (!has('RESTING_DAUGHTER')) return 'An organism is marked as a resting newborn although its kind has no resting daughters.';
     if (get('lifeState') === LIFE_ACTIVE) return 'An active organism is marked as a resting newborn.';

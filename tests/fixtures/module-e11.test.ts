@@ -38,7 +38,7 @@ import { run, step } from '../../src/sim/tick';
 import { inactiveFieldsNonZero } from '../../src/sim/transport';
 import type { World } from '../../src/sim/world';
 import { registryWith } from '../helpers/registry';
-import { aliveOf, clearWater, fillField, place, placeWith, rebaseLedger, registry, setField } from '../helpers/world';
+import { aliveOf, clearWater, fillField, place, placeWith, preOrganismFlipRegistry, rebaseLedger, registry, setField } from '../helpers/world';
 
 const shipped = registry().manifest;
 const REG_J = registryWith(
@@ -48,14 +48,6 @@ const REG_J = registryWith(
     enabledSpecies: [...shipped.enabledSpecies, 'F03', 'P07', 'P10'].sort(),
   },
   { allowUnimplemented: true }, // E11 (and F03's TRAP) join the implemented lists only at the integration / organism flip
-);
-/** E11 and silicate recorded, the species table of the shipped registry (the NEUTRAL dish). */
-const REG_N = registryWith(
-  {
-    enabledModules: [...shipped.enabledModules, 'E11'].sort(),
-    enabledSystems: [...shipped.enabledSystems, 'silicate'].sort() as SystemFlag[],
-  },
-  { allowUnimplemented: true },
 );
 
 /** P01's per-tick build ceiling, evaluated as jacket.ts does: buildRate × B0' × dt. */
@@ -602,7 +594,7 @@ describe('E11: closed-lid conservation', () => {
 
 describe('E11: NEUTRAL and content', () => {
   it('E11 and silicate recorded with no carrier: entity columns stay byte-identical (Object.is) to the shipped registry over 2,000 ticks', () => {
-    const make = (reg: typeof REG_N) => {
+    const make = (reg: typeof REG_J) => {
       const w = clearWater({ backgroundOverrides: { sugar: 0.3 } }, reg);
       let n = 0;
       for (const [sp, x, y, count] of [['B01', 54.5, 60.5, 25], ['B03', 74.5, 68.5, 20], ['P01', 64.5, 64.5, 4], ['P02', 60.5, 70.5, 4]] as const) {
@@ -610,8 +602,9 @@ describe('E11: NEUTRAL and content', () => {
       }
       return w;
     };
-    const a = make(registry());
-    const b = make(REG_N);
+    // Both sides from the pre-organism-flip lists (D-0127): the shipped manifest records the subject itself since the flip.
+    const a = make(preOrganismFlipRegistry());
+    const b = make(preOrganismFlipRegistry({ modules: ['E11'], systems: ['silicate'] }));
     expect(a.species.map((s) => s.id)).toEqual(b.species.map((s) => s.id));
     const cols = Object.keys(a.ents.cols) as (keyof typeof a.ents.cols)[];
     for (let chunk = 0; chunk < 20; chunk++) {

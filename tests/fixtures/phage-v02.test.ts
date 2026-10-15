@@ -29,7 +29,7 @@ import { infectHosts, isFieldVirus, V02_FILM_MIN, virusIdOfCode } from '../../sr
 import type { World } from '../../src/sim/world';
 import { registryWith } from '../helpers/registry';
 import { trajectoryDigest } from '../helpers/trajectory';
-import { aliveOf, clearWater, place, rebaseLedger, registry, resterRegistry, setField } from '../helpers/world';
+import { aliveOf, clearWater, place, preOrganismFlipRegistry, rebaseLedger, registry, resterRegistry, setField } from '../helpers/world';
 
 const REG = resterRegistry();
 const meta = { name: 'phage v02', savedAt: '2026-10-14T00:00:00Z', recipeId: null };
@@ -275,7 +275,7 @@ describe('conservation and saves', () => {
   });
 
   it('the import refuses an infection by code 2 in a dish without V02', async () => {
-    const w = clearWater({ habitatId: 'GEL_COLONY' }); // the shipped manifest: B02, V01, no V02
+    const w = clearWater({ habitatId: 'GEL_COLONY' }, preOrganismFlipRegistry()); // B02, V01, no V02 (the manifest before the organism flip, D-0127)
     expect(w.species.some((sp) => sp.id === 'V02')).toBe(false);
     const s = place(w, 'B02', GX + 0.5, GY + 0.5);
     w.ents.cols.infectedBy[s] = 2;

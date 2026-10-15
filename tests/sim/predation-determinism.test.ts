@@ -41,7 +41,7 @@ import { DishHost } from '../../src/worker/host';
 import type { Speed } from '../../src/worker/protocol';
 import { registryWith } from '../helpers/registry';
 import { trajectoryDigest } from '../helpers/trajectory';
-import { clearWater, place, rebaseLedger, registry } from '../helpers/world';
+import { clearWater, place, preOrganismFlipRegistry, rebaseLedger, registry } from '../helpers/world';
 
 const shipped = registry().manifest;
 const regWith = (extra: readonly string[]) =>
@@ -216,8 +216,9 @@ describe('NEUTRAL: shipped predators and prey keep their exact behavior under a 
   it(
     'byte-identical entity columns over 2,000 ticks (species by id)',
     () => {
-      const a = shippedDish(registry());
-      const b = shippedDish(REG_ALGAE);
+      // Both sides from the pre-organism-flip lists (D-0127): the shipped manifest records the subject itself since the flip.
+      const a = shippedDish(preOrganismFlipRegistry());
+      const b = shippedDish(preOrganismFlipRegistry({ species: ['A02', 'A03', 'A04', 'P05', 'P06', 'P07', 'P09', 'P10'], systems: ['silicate'] }));
       expect(a.fields.silicate).toBeUndefined();
       expect(b.fields.silicate).toBeDefined();
       const compare = () => {

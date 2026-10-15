@@ -20,7 +20,7 @@ import { run } from '../../src/sim/tick';
 import { markField } from '../../src/sim/transport';
 import type { World } from '../../src/sim/world';
 import { trajectoryDigest } from '../helpers/trajectory';
-import { aliveOf, barrierDish, clearWater, place, pushDevices, pushEdges, rebaseLedger, registry, verticalLine } from '../helpers/world';
+import { aliveOf, barrierDish, clearWater, place, preFlipRegistry, pushDevices, pushEdges, rebaseLedger, verticalLine } from '../helpers/world';
 
 const meta = { name: 'barrier transport determinism', savedAt: '2026-10-14T00:00:00Z', recipeId: null };
 
@@ -141,7 +141,7 @@ describe('barrier transport conservation (closed lid, no inputs)', () => {
 describe('NEUTRAL: no edges and no devices is the old code path', () => {
   it('the dish without structures under the Phase 5 registry is byte-identical to the shipped-registry run after 2,000 ticks and never allocates a gateTally record', () => {
     const a = barrierDish({ seed: 104729 });
-    const b = clearWater({ seed: 104729 }, registry());
+    const b = clearWater({ seed: 104729 }, preFlipRegistry()); // a v1.0 dish (no barriers): the shipped one records every Phase 5 organism since D-0127
     populate(a, false);
     populate(b, false);
     expect(a.edges).toEqual([]);

@@ -256,7 +256,15 @@ export function isPhage(info: DishInfo, speciesId: string): boolean {
  * named; a prey requirement is always stated ('free' → "only free-swimming", 'inSediment' → "only in
  * sediment"). Null when the dish sent no diet for the species.
  */
-export function dietLine(info: DishInfo, speciesId: string): DietLine | null {
+/** Prey an Add Life tile names before counting the rest (dietLine maxNames; the Life tray's details name every one). */
+export const TILE_PREY_NAMES = 7;
+
+/**
+ * The diet line (UX §4.3, W2-13). With `maxNames` (the Add Life tiles, D-0127) a hunter with more than maxNames + 1
+ * prey in the dish names at most maxNames of its unqualified prey and counts the rest, each count with its requirement
+ * ("… and 12 more kinds.", "(7 more kinds only free-swimming)"); the Life tray's details keep every name.
+ */
+export function dietLine(info: DishInfo, speciesId: string, maxNames?: number): DietLine | null {
   const d = dietOf(info, speciesId);
   if (!d) return null;
   const copy = LIFE_COPY.diet;
@@ -288,6 +296,19 @@ export function dietLine(info: DishInfo, speciesId: string): DietLine | null {
       else plain.push(n);
     }
     if (plain.length + free.length + sediment.length === 0) return { symbol: 'hunts', text: copy.noneHere('Hunts', absent) };
+    if (maxNames !== undefined && plain.length + free.length + sediment.length > maxNames + 1) {
+      const named = plain.slice(0, maxNames);
+      const rest = plain.length - named.length;
+      const count = (n: number): string => (named.length > 0 ? copy.more(n) : copy.kinds(n));
+      const counted = [
+        ...(free.length > 0 ? [`${count(free.length)} ${copy.free}`] : []),
+        ...(sediment.length > 0 ? [`${count(sediment.length)} ${copy.inSediment}`] : []),
+      ];
+      let short = named.length > 0 ? listAnd(rest > 0 ? [...named, copy.more(rest)] : named) : counted.join('; ');
+      if (named.length > 0 && counted.length > 0) short += ` (${counted.join('; ')})`;
+      if (absent > 0) short += `, and ${copy.absent(absent)}`;
+      return { symbol: 'hunts', text: `Hunts ${short}.` };
+    }
     const qualified = [
       ...(free.length > 0 ? [`${listAnd(free)} ${copy.free}`] : []),
       ...(sediment.length > 0 ? [`${listAnd(sediment)} ${copy.inSediment}`] : []),

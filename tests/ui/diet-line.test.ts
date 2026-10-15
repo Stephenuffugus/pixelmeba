@@ -12,21 +12,26 @@ import type { ContentRegistry } from '../../src/sim/content/registry';
 import type { SystemFlag } from '../../src/sim/fields';
 import { brushCellOutcome, lifeCellOutcome, ST_BEAD, ST_NONE, ST_OUTSIDE, ST_STONE, ST_WALL, SUB_GEL, SUB_SEDIMENT, SUB_WATER } from '../../src/sim/grid';
 import type { DishInfo, SpeciesDiet } from '../../src/worker/protocol';
-import { dietLine, isPhage, lifeBrushFor } from '../../src/ui/panels/LabTrayContent';
+import { dietLine, isPhage, lifeBrushFor, TILE_PREY_NAMES } from '../../src/ui/panels/LabTrayContent';
 import { LIFE_COPY } from '../../src/ui/strings/lab';
 import { FakeClockHost } from '../helpers/host';
 import { G2_LISTS, registryWith } from '../helpers/registry';
-import { registry } from '../helpers/world';
+import { preOrganismFlipPatch, preOrganismFlipRegistry, registry } from '../helpers/world';
 
 function sortedUnion<T extends string>(a: readonly T[], b: readonly T[]): T[] {
   return [...new Set([...a, ...b])].sort();
 }
 
-/** The shipped content plus every species the other wave 2 builders enable (abilities they implement now). */
+/**
+ * The content shipped before the organism flip plus every species the other wave 2 builders enable (abilities
+ * they implement now). Since the organism flip (D-0127) the shipped manifest enables the Phase 5 species, which
+ * would change every "kinds not in this dish" count below; these lines are the v1.0 dish's.
+ */
 function waveRegistry(): ContentRegistry {
-  const m = registry().manifest;
+  const m = preOrganismFlipRegistry().manifest;
   return registryWith(
     {
+      ...preOrganismFlipPatch(),
       enabledSpecies: sortedUnion(m.enabledSpecies, ['B02', 'F01', 'V01', 'X01']),
       enabledSystems: sortedUnion<SystemFlag>(m.enabledSystems, ['film', 'fungi', 'parasites', 'viruses']),
     },
@@ -120,6 +125,52 @@ describe('Diet lines from the dish’s own records (W2-13)', () => {
     const { speciesDiets: _omitted, ...withoutDiets } = base;
     expect(dietLine(withoutDiets, 'P02')).toBeNull();
     expect(dietLine(base, 'Z99')).toBeNull();
+  });
+
+  it('Add Life tiles (D-0127): with every species in the dish a hunter names at most seven prey and counts the rest, each count with its requirement', () => {
+    const info = infoOf(registry()); // the shipped registry: every species is in a new dish's records
+    const tile = (id: string): string => dietLine(info, id, TILE_PREY_NAMES)!.text;
+    expect(tile('P01')).toBe('Hunts Sprinter, Velvet, Dusk, Recycler, Crossfeeder, Crumbsmith, Oilwick and 12 more kinds.');
+    expect(tile('P02')).toBe('Hunts Sprinter, Dusk, Recycler, Crossfeeder, Sunbead, Shadeleaf and Turnleaf (7 more kinds only free-swimming).');
+    expect(tile('P04')).toBe('Hunts Sprinter, Velvet, Dusk, Recycler and Crossfeeder (8 more kinds only in sediment).');
+    expect(tile('P05')).toBe('Hunts Sprinter, Dusk, Recycler, Crossfeeder, Crumbsmith, Oilwick, Brothmaker and 4 more kinds.');
+    // Eight named prey or fewer read whole (an eighth name is shorter than "1 more kind"); so do every other diet.
+    for (const id of info.speciesIds.filter((x) => !['P01', 'P02', 'P04', 'P05', 'P06', 'P07'].includes(x)))
+      expect(tile(id), id).toBe(dietLine(info, id)!.text);
+    expect(tile('P08')).toBe('Hunts Sunbead, Glasswheel, Shadeleaf, Turnleaf, Raftball, Threadlace, Cordweaver and Sporeveil.');
+    // The Life tray's details keep every name and requirement.
+    expect(dietLine(info, 'P02')!.text).toBe(
+      'Hunts Sprinter, Dusk, Recycler, Crossfeeder, Sunbead, Shadeleaf and Turnleaf (Crumbsmith, Oilwick, Brothmaker, Lantern, Brinecoil, Sourbud and Sleeper only free-swimming).',
+    );
+    for (const id of info.speciesIds) expect(tile(id), id).not.toMatch(/\b(superior|advanced|perfect|adapted|immune)\b/i);
+  });
+
+  it('a compact tile line counts qualified prey when none is unqualified, and keeps the absent count', () => {
+    const base = infoOf(registry());
+    const i = base.speciesIds.indexOf('P02');
+    const patch = (prey: SpeciesDiet['prey']): DishInfo => {
+      const d = [...base.speciesDiets!];
+      d[i] = { ...d[i]!, prey };
+      return { ...base, speciesDiets: d };
+    };
+    const free = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B09'].map((id) => ({ id, requires: 'free' as const }));
+    expect(dietLine(patch(free), 'P02', TILE_PREY_NAMES)!.text).toBe('Hunts 9 kinds only free-swimming.');
+    const mixed: SpeciesDiet['prey'] = [
+      ...['B01', 'B02', 'B03'].map((id) => ({ id, requires: 'any' as const })),
+      ...['B04', 'B05', 'B06', 'B07', 'B08', 'B09', 'B10'].map((id) => ({ id, requires: 'inSediment' as const })),
+      { id: 'Z98', requires: 'any' },
+      { id: 'Z99', requires: 'free' },
+    ];
+    expect(dietLine(patch(mixed), 'P02', TILE_PREY_NAMES)!.text).toBe(
+      'Hunts Sprinter, Velvet and Dusk (7 more kinds only in sediment), and 2 kinds not in this dish.',
+    );
+    // Nine named prey with nine unqualified: seven names and "2 more kinds".
+    const nine = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B09'].map((id) => ({ id, requires: 'any' as const }));
+    expect(dietLine(patch(nine), 'P02', TILE_PREY_NAMES)!.text).toBe(
+      'Hunts Sprinter, Velvet, Dusk, Recycler, Crossfeeder, Crumbsmith, Oilwick and 2 more kinds.',
+    );
+    // Eight: every name.
+    expect(dietLine(patch(nine.slice(0, 8)), 'P02', TILE_PREY_NAMES)!.text).toBe(dietLine(patch(nine.slice(0, 8)), 'P02')!.text);
   });
 
   it('a Medium or Large free class gets shelterBlocked (an S05 porous shelter refuses it); other classes, or no class sent, do not', () => {

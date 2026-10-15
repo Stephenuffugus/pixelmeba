@@ -27,25 +27,11 @@ import { cellIndex, cellX, maskCells } from '../../src/sim/grid';
 import { WORLD_GATES } from '../../src/sim/objectives';
 import { stateHash } from '../../src/sim/serialize';
 import { step } from '../../src/sim/tick';
-import type { SystemFlag } from '../../src/sim/fields';
 import type { World } from '../../src/sim/world';
 import type { ContentRegistry } from '../../src/sim/content/registry';
 import { listedDecayingFields, PROBE_DECAYING_FIELDS, ProbeSet, type ProbeMask, type ProbeReading } from '../../src/worker/probes';
-import { registryWith } from '../helpers/registry';
 import { trajectoryDigest } from '../helpers/trajectory';
-import {
-  barrierRegistry,
-  clearWater,
-  PHASE5_STRUCTURE_IDS,
-  place,
-  preFlipRegistry,
-  pushDevices,
-  pushEdges,
-  registry,
-  resterRegistry,
-  setField,
-  verticalLine,
-} from '../helpers/world';
+import { barrierRegistry, clearWater, place, preFlipRegistry, preOrganismFlipRegistry, pushDevices, pushEdges, resterRegistry, setField, verticalLine } from '../helpers/world';
 
 const rect = (id: ProbeMask['id'], x0: number, y0: number, x1: number, y1: number): ProbeMask => ({ id, shape: 'rect', x0, y0, x1, y1 });
 const circle = (id: ProbeMask['id'], cx: number, cy: number, r: number): ProbeMask => ({ id, shape: 'circle', cx, cy, r });
@@ -67,8 +53,8 @@ function stepWith(w: World, ps: ProbeSet, ticks: number, each?: (w: World) => vo
  * systems as implemented at the Phase 5 systems flip, D-0104; signals and rivalry are e2-signals' this wave).
  */
 function wideRegistry(): ContentRegistry {
-  const systems = [...registry().manifest.enabledSystems, 'barriers', 'climate', 'devices', 'rivalry', 'signals', 'silicate'].sort() as SystemFlag[];
-  return registryWith({ enabledSystems: systems, enabledStructures: ['BEAD', ...PHASE5_STRUCTURE_IDS, 'STONE', 'WALL'] }, { allowUnimplemented: true });
+  // The pre-organism-flip lists (D-0127) with the three Phase 5 systems: no Phase 5 species (no V02).
+  return preOrganismFlipRegistry({ systems: ['rivalry', 'signals', 'silicate'] });
 }
 
 /** The membrane dish (see the header); `gate` replaces rows y0…y1 of the line with that edge kind. */
@@ -250,7 +236,7 @@ describe('boundary statuses', () => {
   });
 
   it('with the lid open the gases say why', () => {
-    const w = clearWater({ lid: 'open' });
+    const w = clearWater({ lid: 'open' }, preOrganismFlipRegistry()); // no silicate system (shipped since D-0127)
     const ps = new ProbeSet(w);
     ps.set([LEFT], w);
     stepWith(w, ps, 20);

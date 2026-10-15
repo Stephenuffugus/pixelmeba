@@ -5,8 +5,9 @@
  *
  * NOTHING is enabled (D-0104): REG enables A02, P05, M02, M12 and 'silicate' for tests only
  * (allowUnimplemented: SHELL is appended to the implemented list by the lead at integration).
- * REG_SI enables only the silicate system and its two materials (no new species), so species indices
- * match the shipped registry and entity columns compare byte for byte.
+ * The NEUTRAL dishes are built from the pre-organism-flip lists (tests/helpers/world.ts preOrganismFlipRegistry,
+ * D-0127): one with only the silicate system and its two materials added (no new species), so species indices
+ * match and entity columns compare byte for byte, and one with A02 and P05 too.
  */
 import { describe, expect, it } from 'vitest';
 import { buildSaveFile, loadSaveFile } from '../../src/persistence/saveFile';
@@ -21,7 +22,7 @@ import type { World } from '../../src/sim/world';
 import type { ContentRegistry } from '../../src/sim/content/registry';
 import { registryWith } from '../helpers/registry';
 import { trajectoryDigest } from '../helpers/trajectory';
-import { clearWater, rebaseLedger, registry } from '../helpers/world';
+import { clearWater, preOrganismFlipRegistry, rebaseLedger, registry } from '../helpers/world';
 
 const SHIPPED = registry().manifest;
 const SYSTEMS_SI = [...SHIPPED.enabledSystems, 'silicate'].sort() as SystemFlag[];
@@ -30,7 +31,6 @@ const REG = registryWith(
   { enabledSpecies: [...SHIPPED.enabledSpecies, 'A02', 'P05'].sort(), enabledSystems: SYSTEMS_SI, enabledMaterials: MATERIALS_SI },
   { allowUnimplemented: true },
 );
-const REG_SI = registryWith({ enabledSystems: SYSTEMS_SI, enabledMaterials: MATERIALS_SI });
 const meta = { name: 'shells determinism', savedAt: '2026-10-14T00:00:00Z', recipeId: null };
 
 /** The conservation dish (tests/fixtures/conservation-mineral.test.ts) with the lid open. */
@@ -92,8 +92,9 @@ describe('E2-SHELLS determinism', () => {
 
   it('NEUTRAL: the silicate system with no shell builder and no grit leaves columns and fields byte-identical', () => {
     const build = (reg: ContentRegistry) => realizeRecipe(reg, 'FIRST_DISH_V1', { worldId: 'neutral' });
-    const shipped = build(registry());
-    const si = build(REG_SI);
+    // Both sides from the pre-organism-flip lists (D-0127): the shipped manifest records the subject itself since the flip.
+    const shipped = build(preOrganismFlipRegistry());
+    const si = build(preOrganismFlipRegistry({ systems: ['silicate'], materials: ['M02', 'M12'] }));
     expect(shipped.fields.silicate).toBeUndefined();
     expect(si.fields.silicate).toBeDefined();
     run(shipped, 2000);
@@ -122,8 +123,9 @@ describe('E2-SHELLS determinism', () => {
   }, 300_000);
 
   it('NEUTRAL with A02 and P05 enabled but absent: the biology digest equals the shipped dish', () => {
-    const shipped = realizeRecipe(registry(), 'FIRST_DISH_V1', { worldId: 'neutral' });
-    const withShells = realizeRecipe(REG, 'FIRST_DISH_V1', { worldId: 'neutral' });
+    // Both sides from the pre-organism-flip lists (D-0127): the shipped manifest records the subject itself since the flip.
+    const shipped = realizeRecipe(preOrganismFlipRegistry(), 'FIRST_DISH_V1', { worldId: 'neutral' });
+    const withShells = realizeRecipe(preOrganismFlipRegistry({ species: ['A02', 'P05'], systems: ['silicate'], materials: ['M02', 'M12'] }), 'FIRST_DISH_V1', { worldId: 'neutral' });
     run(shipped, 1000);
     run(withShells, 1000);
     expect(trajectoryDigest(withShells, 'full')).toBe(trajectoryDigest(shipped, 'full'));

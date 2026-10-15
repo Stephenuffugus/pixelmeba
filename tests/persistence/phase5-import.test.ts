@@ -33,8 +33,10 @@ import { canonicalJson, sha256Hex, typedToBase64 } from '../../src/sim/hash';
 import type { SampleRow, SampleSlot } from '../../src/sim/sampleSlot';
 import { serializeWorld, stateHash, type WorldState } from '../../src/sim/serialize';
 import type { World, WorldContent } from '../../src/sim/world';
+import { DishHost } from '../../src/worker/host';
+import type { FromWorker } from '../../src/worker/protocol';
 import { registryWith } from '../helpers/registry';
-import { clearWater, place, placeWith, registry } from '../helpers/world';
+import { clearWater, place, placeWith, preFlipRegistry, registry } from '../helpers/world';
 
 const SHIPPED = registry().manifest;
 const SYSTEMS = [...SHIPPED.enabledSystems, 'barriers', 'climate', 'devices', 'signals'].sort() as SystemFlag[];
@@ -441,6 +443,40 @@ const SHELL_REG = registryWith({
   enabledMaterials: [...SHIPPED.enabledMaterials, 'M02', 'M12'].sort(),
 });
 
+/** P01 with E11 (the mineral jacket) enabled and the silicate system (shipped after the organism flip). */
+const JACKET_REG = registryWith({
+  enabledSpecies: [...SHIPPED.enabledSpecies, 'A02', 'P05'].sort(),
+  enabledModules: [...SHIPPED.enabledModules, 'E11'].sort(),
+  enabledSystems: [...SHIPPED.enabledSystems, 'silicate'].sort() as SystemFlag[],
+  enabledMaterials: [...SHIPPED.enabledMaterials, 'M02', 'M12'].sort(),
+});
+
+async function reply(out: FromWorker[], requestId: number): Promise<FromWorker> {
+  for (let k = 0; k < 400; k++) {
+    const m = out.find((x) => 'requestId' in x && x.requestId === requestId);
+    if (m) return m;
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  throw new Error(`no reply to request ${requestId}`);
+}
+
+/** Through the worker's import path: an error reply naming `message`, no new dish, the open dish untouched. */
+async function refusedByHost(text: string, message: string): Promise<void> {
+  const out: FromWorker[] = [];
+  const host = new DishHost(JACKET_REG, (m) => out.push(m), { now: () => 0 });
+  host.handle({ type: 'create', requestId: 1, dishId: 'open', source: { kind: 'recipe', recipeId: 'FIRST_DISH_V1' } });
+  const before = stateHash(host.world('open')!);
+  const tick = host.world('open')!.tick;
+  host.handle({ type: 'importDish', requestId: 2, text, newDishId: 'imported' });
+  const r = await reply(out, 2);
+  expect(r).toMatchObject({ type: 'error', request: 'importDish' });
+  expect(r.type === 'error' ? r.message : '').toContain(message);
+  expect(host.world('imported')).toBeNull();
+  expect(host.world('open')!.tick).toBe(tick);
+  expect(stateHash(host.world('open')!)).toBe(before);
+  expect(host.activeDishId).toBe('open');
+}
+
 async function expectContentRefused(text: string, sentence: RegExp): Promise<void> {
   const err = await parseSaveFile(text).then(
     () => null,
@@ -527,14 +563,33 @@ describe('the import refuses shell or jacket mineral the rules could not have le
     expect(stateHash(world)).toBe(stateHash(w));
   });
 
-  it('jacket mineral in a dish without the silicate system is refused; with the system it loads', async () => {
-    const shipped = clearWater({}, registry());
+  it('jacket mineral in a dish without the silicate system is refused (the system rule comes first)', async () => {
+    const shipped = clearWater({}, preFlipRegistry()); // a v1.0 dish: no silicate
     shipped.ents.cols.jacketMineral[place(shipped, 'B01', 60.5, 60.5)] = 0.25;
     await expectRefused(await saved(shipped), /^An organism carries jacket mineral although the dish's rules have no silicate\./);
-    const si = clearWater({}, SHELL_REG);
-    si.ents.cols.jacketMineral[place(si, 'B01', 60.5, 60.5)] = 0.25;
-    const { world } = await loadSaveFile(await saved(si));
-    expect(stateHash(world)).toBe(stateHash(si));
+  });
+
+  // D-0125 amends D-0118 (the organism flip, D-0127): only E11 writes jacketMineral, and the SPEC §9.19 reconcile
+  // turns a daughter's jacket into grit when she lacks E11, so a jacket without E11 is refused, through
+  // parseSaveFile and through the worker's import with the open dish untouched; the same jacket on a P01
+  // carrying E11 loads with an equal stateHash.
+  it('a plain P01 with jacket mineral is refused, the open dish untouched; a P01 carrying E11 with the same jacket loads', async () => {
+    const plain = clearWater({}, JACKET_REG);
+    const p = place(plain, 'P01', 60.5, 60.5);
+    plain.ents.cols.jacketMineral[p] = 0.1;
+    plain.ledger.inputs.m += 0.1; // the mineral is accounted for: only the jacket rule can refuse
+    const text = await saved(plain);
+    await expectRefused(text, /^An organism carries jacket mineral although it has no mineral jacket ability\./);
+    await refusedByHost(text, 'An organism carries jacket mineral although it has no mineral jacket ability.');
+
+    const carrier = clearWater({}, JACKET_REG);
+    const q = placeWith(carrier, 'P01', 60.5, 60.5, ['E11']);
+    expect(carrier.genomes.get(carrier.ents.cols.genome[q]!).modules).toContain('E11');
+    carrier.ents.cols.jacketMineral[q] = 0.1;
+    carrier.ledger.inputs.m += 0.1;
+    const { world } = await loadSaveFile(await saved(carrier));
+    expect(world.ents.cols.jacketMineral[q]).toBe(0.1);
+    expect(stateHash(world)).toBe(stateHash(carrier));
   });
 
   it('a held sample row carrying shell mineral without the ability is refused', async () => {

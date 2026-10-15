@@ -203,3 +203,18 @@ this plan and the relevant slice of g5-briefs.md, not the whole spec.
   builders' now-redundant vi.mock appends of TRAP/E11 (jacket-saves, jacket-determinism, trap-hooks). (d) Optional import
   tightening with (c): trapReserveC exactly 0.2 when positive, and a holding pair needs trapTimer > 0 (verifier NITs).
   (e) G5 gate: fold the earlier owner items (D-0106, D-0111, D-0117 contradiction 2) into EXPANSION_RESPONSE §8.
+- **Organism flip saves verifier (2026-10-15, docs/reports/reviews/g5-organism-flip/saves-verify.md; no BLOCKER/MAJOR).**
+  (a) Commit a registry-2 (pre-organism-flip) save fixture with its expected load and +1,000 hashes (tmp/verify-flip/p2.ts
+  MODE=make in a HEAD copy) — a saves-sacred guard; wave 14 or the G5 gate. (b) A test comparing the saved event ring across
+  reload and 1× vs 4× (tmp/verify-flip/p5.ts MODE=reload). (c) NIT: preFlipRegistry() should throw, not overwrite, if the
+  computed v1.0 contentHash ever differs from PRE_FLIP_CONTENT_HASH.
+  **Lead rulings (D-0127):** (a) not needed: no released build wrote a registry-2 save with the systems flip's lists (the
+  v1.0 release's registry-2 saves are the rc1 corpus, replayed by rc1-replay); a v1.1 corpus is recorded at the G5 gate,
+  as rc1 was at the Phase 5 preflight. (b) **p5.8a (wave 16), determinism-p5**: the event ring joins the reload and
+  1× vs 4× equality. (c) declined: preFlipRegistry() keeps setting PRE_FLIP_CONTENT_HASH by design (a v1.0 dish records
+  that hash whatever the content files hash to; wave 14's habitat files move the recomputed value); the fence and the
+  rc1 replay catch drift in the lists or rules.
+- **Full e2e sweep owed before the G5 gate (lead, 2026-10-15).** The flip's journeys beyond its checklist found a pin
+  stale since the systems flip (chemistry-habitats' Lab light line, D-0121) and two phone layout faults (D-0127): wave
+  journeys cover only touched features, so run every spec on desktop and phone-portrait once after THE HABITAT ENABLE
+  (or at the latest in wave 16 before the gate run) and re-pin by cause.

@@ -214,8 +214,13 @@
       "recipe": "L303_PUBLIC_KITCHEN",
       "ticks": 1200,
       "g2Digest": null,
-      "currentDigest": "acd60b6d2fb0790a",
-      "changedBy": []
+      "currentDigest": "4acbc084dbf004c2",
+      "changedBy": [
+        {
+          "decision": "D-0127",
+          "field": "currentDigest"
+        }
+      ]
     },
     {
       "id": "L304_EMPTY_AFTER_THE_FEAST",
@@ -223,8 +228,13 @@
       "recipe": "L304_EMPTY_AFTER_THE_FEAST",
       "ticks": 1200,
       "g2Digest": null,
-      "currentDigest": "5d57285882e64af0",
-      "changedBy": []
+      "currentDigest": "1f3573a7477f933b",
+      "changedBy": [
+        {
+          "decision": "D-0127",
+          "field": "currentDigest"
+        }
+      ]
     },
     {
       "id": "L306_BORROWED_SHELTER",

@@ -18,11 +18,12 @@
  *
  * Phase 5 wave 13 (relmatrix): the tool also runs the Phase 5 families and rows whenever a registry enables
  * their subjects (tests/fixtures/relationship-matrix-p5.test.ts runs them under the Phase 5 test registry).
- * Until the organism flip the shipped run must yield exactly the v1.0 rows: SHIPPED_V1 is the snapshot of
- * the shipped run taken before that change (row count per family, the rows digest of every row's id,
- * expectation, observation, verdict and source, and the skipped list). The organism flip changes the shipped
- * manifest and therefore these rows by design: the lead re-records SHIPPED_V1 from the digest
- * `npx tsx tools/relationship-matrix.ts` prints, after reading the regenerated report.
+ * SHIPPED_V1 is the snapshot of the v1.0 rows (row count per family, the rows digest of every row's id,
+ * expectation, observation, verdict and source, and the skipped list), taken from the shipped run before the
+ * organism flip. Since the flip (D-0127) the shipped manifest enables every Phase 5 species, module, material
+ * and system, so its run is the Phase 5 run (tests/fixtures/relationship-matrix-p5.test.ts pins the shipped
+ * lists equal to P5_LISTS and the shipped digest); this file runs the v1.0 rows under preFlipRegistry() (a
+ * v1.0 dish's registry), which reproduces SHIPPED_V1 exactly, so no Phase 5 change can move a v1.0 row.
  */
 import { describe, expect, it } from 'vitest';
 import { counts, FAMILIES, P5_FAMILIES, rowsDigest, runMatrix, V1_FAMILIES, type Family, type MatrixRow } from '../../tools/relationship-matrix';
@@ -46,7 +47,7 @@ import {
   toleranceTable,
   trapRules,
 } from '../helpers/tables';
-import { registry } from '../helpers/world';
+import { preFlipRegistry } from '../helpers/world';
 
 /** Row id → bug id for rows that disagree with the catalog because of a reported bug (none). */
 const KNOWN_BUGS: Readonly<Record<string, string>> = {};
@@ -181,7 +182,9 @@ describe('CT oracles parse the Phase 5 rows (tests/helpers/tables.ts; wave 13 re
 
 /**
  * The shipped run before the organism flip (taken at 3daebb2 plus wave 13's stage 1 working tree, before the
- * relmatrix change): 711 rows, every one passing. Re-recorded by the lead at the organism flip.
+ * relmatrix change): 711 rows, every one passing. At the organism flip (D-0127) the run under preFlipRegistry()
+ * reproduced it exactly (711 rows, digest 4060fbf3…), so it stays the v1.0 snapshot; the shipped run's own
+ * snapshot (2265 rows, 914a3bf6…) is pinned in relationship-matrix-p5.test.ts.
  */
 const SHIPPED_V1 = {
   rows: 711,
@@ -201,8 +204,8 @@ const SHIPPED_V1 = {
   ],
 };
 
-describe('G3 relationship matrix (every enabled species, material and module)', () => {
-  const reg = registry();
+describe('G3 relationship matrix (every species, material and module a v1.0 dish enables)', () => {
+  const reg = preFlipRegistry();
   const res = runMatrix(reg);
   const of = (f: Family): MatrixRow[] => res.rows.filter((r) => r.family === f);
   const ids = (f: Family): Set<string> => new Set(of(f).map((r) => r.row));
@@ -242,7 +245,7 @@ describe('G3 relationship matrix (every enabled species, material and module)', 
     expect(res.rows.length).toBe(FAMILIES.reduce((a, f) => a + of(f).length, 0));
   });
 
-  it('before the organism flip: exactly the v1.0 rows (count, ids, expectations and observations equal to the snapshot)', () => {
+  it('a v1.0 dish: exactly the v1.0 rows (count, ids, expectations and observations equal to the snapshot)', () => {
     const c = counts(res.rows);
     expect(res.rows.length).toBe(SHIPPED_V1.rows);
     expect(Object.fromEntries(FAMILIES.filter((f) => c[f].rows > 0).map((f) => [f, c[f].rows]))).toEqual(SHIPPED_V1.perFamily);

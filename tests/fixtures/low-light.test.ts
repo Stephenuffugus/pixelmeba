@@ -28,7 +28,7 @@ import { run, step } from '../../src/sim/tick';
 import { updateDerived } from '../../src/sim/transport';
 import type { World } from '../../src/sim/world';
 import { registryWith } from '../helpers/registry';
-import { clearWater, fillField, place, placeWith, registry, setField } from '../helpers/world';
+import { clearWater, fillField, place, placeWith, preOrganismFlipRegistry, registry, setField } from '../helpers/world';
 
 const SHIPPED = registry().manifest;
 const REG = registryWith({ enabledSpecies: [...SHIPPED.enabledSpecies, 'A03', 'A04', 'A05'].sort() }, { allowUnimplemented: true });
@@ -208,8 +208,9 @@ describe('NEUTRAL: shipped species keep their exact behavior in a dish that reco
   it(
     'byte-identical entity columns and fields over 2,000 ticks (species by id)',
     () => {
-      const a = shippedDish(registry());
-      const b = shippedDish(REG);
+      // Both sides from the pre-organism-flip lists (D-0127): the shipped manifest records the subject itself since the flip.
+      const a = shippedDish(preOrganismFlipRegistry());
+      const b = shippedDish(preOrganismFlipRegistry({ species: ['A03', 'A04', 'A05'] }));
       expect(a.species.map((s) => s.id)).not.toContain('A03');
       expect(b.species.map((s) => s.id)).toEqual(expect.arrayContaining(['A03', 'A04', 'A05']));
       const compare = () => {

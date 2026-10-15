@@ -14,10 +14,11 @@ const NEW_TILES: Readonly<Record<string, RegExp>> = {
   B03: /^Eats sugar without oxygen\.$/,
   B05: /^Eats metabolite\.$/,
   Y01: /^Eats sugar without oxygen\.$/,
-  // Since wave 3 the Oilwick, Brothmaker and Creambud are in every dish's records, so they are named too.
-  P02: /^Hunts .*Sprinter.*\(Crumbsmith, Oilwick and Brothmaker only free-swimming\), and \d+ kinds? not in this dish\.$/,
-  P03: /^Hunts Sunbead, Bubble and Creambud, and \d+ kinds? not in this dish\.$/,
-  P04: /^Hunts .*Crossfeeder \(Crumbsmith, Oilwick and Brothmaker only in sediment\), and \d+ kinds? not in this dish\.$/,
+  // Since the organism flip (D-0127) every species is in a new dish's records, so no prey is "not in this dish", and
+  // a tile names at most seven prey, counting the rest with their requirement (the Life tray's details name them all).
+  P02: /^Hunts .*Sprinter.* \(\d+ more kinds only free-swimming\)\.$/,
+  P03: /^Hunts Sunbead, .*Bubble and Creambud\.$/,
+  P04: /^Hunts .*Crossfeeder \(\d+ more kinds only in sediment\)\.$/,
   V01: /^Infects Sprinter\.$/,
 };
 
@@ -67,7 +68,7 @@ test('Add Life shows the wave 2 organisms with diet lines; the Siltworm preview 
   await page.getByRole('button', { name: 'Whole dish' }).click();
   await page.getByTestId('lab-cat-life').click();
   await page.getByTestId('lab-item-life:P04').click();
-  await expect(page.getByTestId('lab-diet')).toContainText('Crumbsmith, Oilwick and Brothmaker only in sediment');
+  await expect(page.getByTestId('lab-diet')).toContainText(/\(Crumbsmith, Oilwick, Brothmaker, .* only in sediment\)\.$/);
   await page.getByTestId('lab-use').click();
   const [wx, wy] = await at(page, 90, 64); // open water in the Garden
   await page.mouse.move(wx, wy);

@@ -32,7 +32,7 @@ import type { EntityInspect } from '../../src/worker/protocol';
 import { buildInspector, phase5Lines, sugarSourcesOf } from '../../src/worker/snapshot';
 import { RC1_SAVE_FILES, readRc1SaveText, resumeRc1 } from '../helpers/rc1-saves';
 import { registryWith } from '../helpers/registry';
-import { clearWater, fillField, place, placeWith, registry, setField } from '../helpers/world';
+import { clearWater, fillField, place, placeWith, preOrganismFlipRegistry, registry, setField } from '../helpers/world';
 const shipped = registry().manifest;
 // Wave 13: TRAP (F03) is appended at the integration, E11 at the organism flip (allowUnimplemented until then).
 const REG_O = registryWith(
@@ -241,12 +241,13 @@ describe('Phase 5 emitters, RIVAL targets and the cell rival line', () => {
     expect(e.rival!.damagePerSecond).toBeCloseTo(0.8, 12);
     expect(inspect(w, p01).rival).toBeUndefined();
     const withLines = buildInspector(w, { kind: 'cell', cell }).cell!;
-    expect(withLines.exposure!.rival).toEqual({ amount: 0.4, exposure: 0.1, targets: ['B01'] });
+    // The recorded targets: B10 and B11 are recorded too since the organism flip (D-0127).
+    expect(withLines.exposure!.rival).toEqual({ amount: 0.4, exposure: 0.1, targets: ['B01', 'B10', 'B11'] });
     // No inhibitor line (the inhibitor fields removed by hand): the rival line is kept (it used to be dropped).
     const fields = w.fields as Record<string, Float64Array | undefined>;
     for (const id of ['inhBact', 'inhFung', 'inhPhoto']) fields[id] = undefined;
     const bare = buildInspector(w, { kind: 'cell', cell }).cell!;
-    expect(bare.exposure).toEqual({ filmHalves: false, lines: [], rival: { amount: 0.4, exposure: 0.1, targets: ['B01'] } });
+    expect(bare.exposure).toEqual({ filmHalves: false, lines: [], rival: { amount: 0.4, exposure: 0.1, targets: ['B01', 'B10', 'B11'] } });
     // No rival here either: no exposure key at all.
     expect(buildInspector(w, { kind: 'cell', cell: cellIndex(90, 64) }).cell!.exposure).toBeUndefined();
   });
@@ -264,7 +265,7 @@ describe('Phase 5 emitters, RIVAL targets and the cell rival line', () => {
 
 describe('a v1.0 dish inspects as before', () => {
   it('FIRST_DISH_V1: no organism gains a Phase 5 key; sugar sources carry no inLight; predation codes are the v1.0 ones; phase5Lines is empty', () => {
-    const reg = registry();
+    const reg = preOrganismFlipRegistry(); // the shipped lists before the organism flip (D-0127)
     const w = realizeRecipe(reg, 'FIRST_DISH_V1', { seed: 104729 });
     for (let t = 0; t < 400; t++) step(w);
     const c = w.ents.cols;
@@ -317,8 +318,9 @@ describe('a v1.0 dish inspects exactly as the HEAD code did (golden)', () => {
   }
   it('FIRST_DISH_V1 and a predator dish (P01 hunting codes)', { timeout: 240_000 }, () => {
     expect(Object.keys(golden)).toHaveLength(5);
-    check('FIRST_DISH_V1', realizeRecipe(registry(), 'FIRST_DISH_V1', { seed: 104729 }));
-    const pb = realizeRecipe(registry(), 'PREDATOR_BALANCE_V1', { seed: 104729 });
+    // The golden was written under the shipped manifest before the organism flip (D-0127): preOrganismFlipRegistry().
+    check('FIRST_DISH_V1', realizeRecipe(preOrganismFlipRegistry(), 'FIRST_DISH_V1', { seed: 104729 }));
+    const pb = realizeRecipe(preOrganismFlipRegistry(), 'PREDATOR_BALANCE_V1', { seed: 104729 });
     for (let k = 0; k < 5; k++) place(pb, 'P01', 48.5 + k, 70.5);
     check('PREDATOR_BALANCE_V1+5xP01', pb);
     expect(golden['PREDATOR_BALANCE_V1+5xP01']!.ents.filter((e) => (e as { entity: EntityInspect }).entity.predation !== null).length).toBe(5);

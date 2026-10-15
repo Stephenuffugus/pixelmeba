@@ -52,6 +52,13 @@ export const CHEMISTRY_MATERIALS: readonly string[] = [
   'M04',
   'M05',
   'M09',
+  // Phase 5 (CT §5.2; the organism flip, D-0127): silicate and shell grit (minerals, not food), the two
+  // signal chemicals and the rivalry extract. None is food, so the Food tray gains none of them.
+  'M02',
+  'M12',
+  'M06',
+  'M07',
+  'M08',
 ];
 
 /**
@@ -299,6 +306,47 @@ export const MATERIAL_COPY: Readonly<Record<string, MaterialCopy>> = {
     watch: 'Broth eaters such as Brothmakers and Creambuds feeding on it; the patch spreading out and thinning.',
     unit: 'C',
   },
+  // Phase 5 (CT §5.2; the content records' rules lines).
+  M02: {
+    habitats: SPREADS,
+    changes:
+      'Adds free silicate mineral to each covered open cell, logged as a mineral input. Glasswheels and Shellgliders bind 0.10 silicate for every unit of new body; consumers with the Mineral jacket module build their jackets from it.',
+    unchanged: 'It is not food and adds no carbon or nutrient. Nothing refills it.',
+    watch: 'Glasswheels and Shellgliders growing where it is, and slowing where it runs short.',
+    unit: 'mineral',
+  },
+  M12: {
+    habitats: STAYS_PUT,
+    changes:
+      'Adds a solid shell grit deposit to each covered open cell, logged as a mineral input. Each second 0.01 times the remaining grit dissolves into free silicate.',
+    unchanged: 'It is not food and adds no carbon or nutrient. It never spreads by itself.',
+    watch: 'A slow silicate supply around it: shelled cells nearby keep growing after a single silicate dose would have run out.',
+    unit: 'mineral',
+  },
+  M06: {
+    habitats: SPREADS,
+    changes:
+      'Adds glow signal to each covered open cell; it loses 1 % of its amount each second. Lanterns, and cells with the Signal glow module, start glowing after sensing 0.30 or more for 5 seconds.',
+    unchanged: 'No food, carbon or nutrient. Glowing is only for show and adds no light.',
+    watch: 'Lanterns lighting up before they are crowded, then going dark 5 seconds after the signal falls to 0.15 or less.',
+    unit: 'activity',
+  },
+  M07: {
+    habitats: SPREADS,
+    changes:
+      'Adds quencher to each covered open cell; it loses 1 % of its amount each second. Cells there sense signal / (1 + quencher), so quencher 1.0 halves what Lanterns sense.',
+    unchanged: 'It removes no signal and adds no food, carbon or nutrient.',
+    watch: 'Glowing Lanterns going dark where it is while the rest of the colony keeps glowing.',
+    unit: 'activity',
+  },
+  M08: {
+    habitats: 'Open water, gel or sediment, and porous beads. It spreads at half the rate of sugar.',
+    changes:
+      'Adds rivalry chemical to each covered open cell; it loses 2 % of its amount each second. Only Sprinters, Brinecoils and Sourbuds there gain 0.25 × the local amount as inhibitor exposure (halved once where there is biofilm): growth × 1 / (1 + exposure), and 8 × exposure health lost each second.',
+    unchanged: 'Every other organism is unaffected. No food, carbon or nutrient. It is the same chemical Ramparts release.',
+    watch: 'Sprinters, Brinecoils and Sourbuds slowing near it while the organisms they compete with carry on.',
+    unit: 'activity',
+  },
   M03: enzymeCopy('starch', 'sugar'),
   M04: enzymeCopy('oil', 'metabolite'),
   M05: enzymeCopy('protein', 'broth'),
@@ -353,6 +401,9 @@ export const LIFE_COPY = {
     inSediment: 'only in sediment',
     absent: (n: number) => `${n} kind${n === 1 ? '' : 's'} not in this dish`,
     noneHere: (verb: string, n: number) => `${verb} ${n} kind${n === 1 ? '' : 's'}, none of them in this dish.`,
+    /** Add Life tiles (D-0127): prey past the named ones are counted, each count with its requirement. */
+    more: (n: number) => `${n} more kind${n === 1 ? '' : 's'}`,
+    kinds: (n: number) => `${n} kind${n === 1 ? '' : 's'}`,
   },
   /** Phage doses (SPEC §10.2, W2-14): the count is viral units added to every covered cell. */
   phageCountLabel: 'Units per cell',

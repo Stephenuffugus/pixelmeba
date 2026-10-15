@@ -33,7 +33,7 @@ import { run } from '../../src/sim/tick';
 import { markField } from '../../src/sim/transport';
 import { speciesIndex, type World } from '../../src/sim/world';
 import { registryWith } from '../helpers/registry';
-import { clearWater, paintRect, place, placeWith, registry, setField } from '../helpers/world';
+import { clearWater, paintRect, place, placeWith, preOrganismFlipRegistry, registry, setField } from '../helpers/world';
 
 const shipped = registry().manifest;
 const REG = registryWith(
@@ -238,7 +238,7 @@ describe('RIVAL exposure (SPEC §4.3; CT §3.4)', () => {
     expect(br.rival).toEqual({ amount: 0.4, exposure: RIVAL_EXPOSURE_FACTOR * 0.4 * 0.5, targets: ['B01', 'B10', 'B11'] });
     expect(br.lines.map((l) => l.category)).toEqual(['bacterial', 'fungal', 'photosynthetic']);
     expect(exposureBreakdown(w, cellIndex(10, 64)).rival).toBeUndefined();
-    const plain = clearWater();
+    const plain = clearWater({}, preOrganismFlipRegistry()); // no rivalry system (shipped since the organism flip, D-0127)
     expect(plain.fields.rival).toBeUndefined();
     expect(exposureBreakdown(plain, cell).rival).toBeUndefined();
     expect(Object.keys(exposureBreakdown(plain, cell))).toEqual(['filmHalves', 'lines']);

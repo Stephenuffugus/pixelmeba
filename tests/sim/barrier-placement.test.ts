@@ -15,7 +15,6 @@ import { attachmentMask, cellSurfaces, SURF_MESH } from '../../src/sim/attachmen
 import type { EdgeBarrier } from '../../src/sim/barriers';
 import { applyNow } from '../../src/sim/commands';
 import type { RecipeDef } from '../../src/sim/content/schema';
-import type { SystemFlag } from '../../src/sim/fields';
 import { cellIndex, maskCells, ST_STONE, SUB_GEL, SUB_SEDIMENT, SUB_WATER } from '../../src/sim/grid';
 import { fungalNeighbors } from '../../src/sim/links';
 import { canOccupy, traceFraction } from '../../src/sim/movement';
@@ -24,17 +23,7 @@ import { entityCell, rebuildIndex } from '../../src/sim/spatial';
 import { run, step } from '../../src/sim/tick';
 import { markField, updateDerived } from '../../src/sim/transport';
 import { speciesIndex, type World } from '../../src/sim/world';
-import { registryWith } from '../helpers/registry';
-import {
-  aliveOf,
-  barrierDish,
-  barrierRegistry,
-  clearWater,
-  place,
-  pushDevices,
-  pushEdges,
-  verticalLine,
-} from '../helpers/world';
+import { aliveOf, barrierDish, barrierRegistry, clearWater, place, preOrganismFlipRegistry, pushDevices, pushEdges, verticalLine } from '../helpers/world';
 
 type Edge = Omit<EdgeBarrier, 'id'>;
 const Y = 64;
@@ -192,16 +181,8 @@ describe('S05 porous shelter occupancy (movement.ts canOccupy, crossing.ts enter
   });
 
   it('a species that lives attached is Fixed and admitted: P06 and B02 on a stone-edge cell holding a shelter; P01 is still refused (D-0115)', () => {
-    // P06 (RADIUS_CAPTURE) is implemented by a later Phase 5 wave: allowUnimplemented, as barrierRegistry does.
-    const base = barrierRegistry().manifest;
-    const reg = registryWith(
-      {
-        enabledSystems: [...base.enabledSystems] as SystemFlag[],
-        enabledStructures: [...(base.enabledStructures ?? [])],
-        enabledSpecies: [...base.enabledSpecies, 'P06'].sort(),
-      },
-      { allowUnimplemented: true },
-    );
+    // barrierRegistry()'s lists (the shipped ones before the organism flip, D-0127) plus P06.
+    const reg = preOrganismFlipRegistry({ species: ['P06'] });
     const w = clearWater({}, reg);
     w.grid.structure[cellIndex(65, Y)] = ST_STONE; // (64, Y) becomes a stone-edge water cell
     w.grid.geometryVersion++;

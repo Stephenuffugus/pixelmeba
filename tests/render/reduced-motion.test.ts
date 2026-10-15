@@ -259,8 +259,8 @@ describe('UX §7.4 table: every "As built" cell names a real file and symbol', (
         for (const sym of symbols!.split(',').map((x) => x.trim())) expect(text, `${file}: ${sym}`).toContain(sym);
       }
     }
-    // Phase 5 effects really are absent from the v1.0 manifest.
-    const manifest = JSON.parse(read('content', 'manifest.json')) as { enabledSpecies: string[] };
+    // Phase 5 effects really are absent from the v1.0 manifest (the rc1 one: main enables them since the organism flip, D-0127).
+    const manifest = JSON.parse(read('tests', 'fixtures', 'saves-rc1', 'rc1-manifest.json')) as { enabledSpecies: string[] };
     expect(manifest.enabledSpecies.length).toBeGreaterThan(0);
     expect(manifest.enabledSpecies).not.toContain('P07');
   });

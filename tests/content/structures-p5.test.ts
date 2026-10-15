@@ -16,7 +16,7 @@ import { EDGE_KINDS } from '../../src/sim/barriers';
 import { DEVICE_KINDS, FURNISHING_KINDS, MACHINE_KINDS, RESIN_TARGETS } from '../../src/sim/devices';
 import type { SystemFlag } from '../../src/sim/fields';
 import { contentHashOf, patchedRawPacks, registryWith, type ManifestPatch } from '../helpers/registry';
-import { registry } from '../helpers/world';
+import { PRE_FLIP_LISTS, registry } from '../helpers/world';
 
 const DRY = 'Drying never concentrates chemicals: amounts are kept per cell, so a drying cell holds exactly what it held.';
 const IDS = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12'];
@@ -53,10 +53,17 @@ const NUMBERS: Record<string, string[]> = {
 
 const ALL_ON: SystemFlag[] = [...new Set([...registry().manifest.enabledSystems, 'barriers', 'climate', 'devices'])].sort() as SystemFlag[];
 const WITH_ALL: ManifestPatch = { enabledSystems: ALL_ON, enabledStructures: ['BEAD', ...IDS, 'STONE', 'WALL'] };
-/** The shipped systems without the three the systems flip added (a v1.0 dish's systems). */
-const V1_SYSTEMS: SystemFlag[] = registry().manifest.enabledSystems.filter((s) => s !== 'barriers' && s !== 'climate' && s !== 'devices');
-/** A manifest as before the systems flip: the v1.0 systems and the cell structures only. */
-const PRE_FLIP: ManifestPatch = { enabledSystems: V1_SYSTEMS, enabledStructures: ['BEAD', 'STONE', 'WALL'] };
+/** A v1.0 dish's systems (tests/helpers/world.ts PRE_FLIP_LISTS; the shipped list has gained the flips' since). */
+const V1_SYSTEMS: SystemFlag[] = [...PRE_FLIP_LISTS.enabledSystems];
+/** A manifest as before the systems flip: a v1.0 dish's lists (the v1.0 systems and the cell structures only). */
+const PRE_FLIP: ManifestPatch = {
+  enabledSpecies: PRE_FLIP_LISTS.enabledSpecies,
+  enabledModules: PRE_FLIP_LISTS.enabledModules,
+  enabledSystems: V1_SYSTEMS,
+  enabledMaterials: PRE_FLIP_LISTS.enabledMaterials,
+  enabledStructures: ['BEAD', 'STONE', 'WALL'],
+  moduleRegistryVersion: PRE_FLIP_LISTS.moduleRegistryVersion,
+};
 
 const errorsOf = (raw: RawPacks, allowUnimplemented = false) =>
   validateContent(raw, { allowUnimplemented })
@@ -114,10 +121,10 @@ describe('P5.2 structure records S01–S12 (CT §4)', () => {
     expect(text).not.toMatch(/superior|advanced|perfect|adapted|immune/i);
   });
 
-  it('since the systems flip (D-0121) the shipped manifest enables all twelve with barriers, climate and devices (and no other Phase 5 system), and validates', () => {
+  it('since the systems flip (D-0121) the shipped manifest enables all twelve with barriers, climate and devices (signals, rivalry and silicate since the organism flip, D-0127; never equipment or developmental), and validates', () => {
     expect(reg.manifest.enabledStructures).toEqual(['BEAD', ...IDS, 'STONE', 'WALL']);
-    for (const s of ['barriers', 'climate', 'devices'] as const) expect(reg.manifest.enabledSystems).toContain(s);
-    for (const s of ['signals', 'rivalry', 'silicate', 'equipment', 'developmental'] as const) expect(reg.manifest.enabledSystems).not.toContain(s);
+    for (const s of ['barriers', 'climate', 'devices', 'signals', 'rivalry', 'silicate'] as const) expect(reg.manifest.enabledSystems).toContain(s);
+    for (const s of ['equipment', 'developmental'] as const) expect(reg.manifest.enabledSystems).not.toContain(s);
     expect(reg.manifest.enabledSystems).toEqual(ALL_ON);
     expect(errorsOf(patchedRawPacks({}))).toEqual([]);
     // The pre-flip manifest (v1.0 systems, cell structures only) still validates.
@@ -125,11 +132,12 @@ describe('P5.2 structure records S01–S12 (CT §4)', () => {
   });
 
   it('enabling one needs its systems (no allowUnimplemented since the flip); the error names both sides', () => {
-    expect(errorsOf(patchedRawPacks({ enabledSystems: V1_SYSTEMS, enabledStructures: ['BEAD', 'S01', 'STONE', 'WALL'] }))).toEqual([
+    // On a v1.0 dish's lists (PRE_FLIP): the shipped species need signals, rivalry and silicate since the organism flip (D-0127).
+    expect(errorsOf(patchedRawPacks({ ...PRE_FLIP, enabledSystems: V1_SYSTEMS, enabledStructures: ['BEAD', 'S01', 'STONE', 'WALL'] }))).toEqual([
       'content/manifest.json → enabledStructures.1: enabled structure "S01" (Fine membrane) needs the "barriers" system (not in enabledSystems)',
     ]);
     const withDevices = [...V1_SYSTEMS, 'devices'].sort() as SystemFlag[];
-    expect(errorsOf(patchedRawPacks({ enabledSystems: withDevices, enabledStructures: ['BEAD', 'S09', 'STONE', 'WALL'] }))).toEqual([
+    expect(errorsOf(patchedRawPacks({ ...PRE_FLIP, enabledSystems: withDevices, enabledStructures: ['BEAD', 'S09', 'STONE', 'WALL'] }))).toEqual([
       'content/manifest.json → enabledStructures.1: enabled structure "S09" (Heater) needs the "climate" system (not in enabledSystems)',
     ]);
     for (const id of IDS) {

@@ -22,9 +22,11 @@ import type { FromWorker, ToWorker } from '../../src/worker/protocol';
 import type * as UiState from '../../src/ui/state';
 import { loadRawPacksFs } from '../../tools/lib/content-fs';
 import { G2_LISTS, patchedRawPacks, registryWith } from '../helpers/registry';
-import { registry } from '../helpers/world';
+import { PRE_FLIP_LISTS, preOrganismFlipPatch, registry } from '../helpers/world';
 
 const raw = loadRawPacksFs();
+/** The packs as a dish recorded before the organism flip has them (D-0127): no Phase 5 species, E02, E11 or M02–M12. */
+const PRE_ORG_RAW = patchedRawPacks(preOrganismFlipPatch());
 
 function clone(r: RawPacks): RawPacks {
   return JSON.parse(JSON.stringify(r)) as RawPacks;
@@ -85,7 +87,8 @@ describe('P3.8 every enabled record has Field Guide text (validator)', () => {
   }
 
   it('a record that is not enabled is not held to it (a Phase 5 species with blank text still validates)', () => {
-    expect(errors(edit(raw, 'species', 'B09', (d) => (guideOf(d).summary = ' ')))).toEqual([]);
+    // A dish recorded before the organism flip (D-0127) does not enable B09.
+    expect(errors(edit(PRE_ORG_RAW, 'species', 'B09', (d) => (guideOf(d).summary = ' ')))).toEqual([]);
     // A tool of a later phase than the build is not enabled either (one phase past the shipped buildPhase).
     const later = (raw.manifest.data as { buildPhase: number }).buildPhase + 1;
     expect(errors(edit(raw, 'tools', 'SAMPLE', (d) => ((d.phase = later), (d.watchFor = ' '))))).toEqual([]);
@@ -101,15 +104,15 @@ describe('P3.8 "No additional modeled reaction." (UX §5.7)', () => {
     expect(errors(raw)).toEqual([]);
     for (const id of ['SUGAR', 'NUTRIENT', 'DEBRIS', 'SALT']) expect(registry().materials[id]!.guide.rules, id).toContain(NO_REACTION_SENTENCE);
     expect(registry().materials.NUTRIENT!.guide.rules).toContain('Nutrient alone is not food: it adds no carbon or energy.');
-    expect(errors(edit(raw, 'materials', 'M06', (d) => (guideOf(d).rules = 'Lantern signal.')))).toEqual([]);
+    expect(errors(edit(PRE_ORG_RAW, 'materials', 'M06', (d) => (guideOf(d).rules = 'Lantern signal.')))).toEqual([]); // M06 off before the organism flip
   });
 });
 
 describe('P3.8 summary and example never name a species that is not enabled', () => {
   it('failing case: naming a later-phase species (plural too) in a summary or an example is an error', () => {
     // A phase 4 build, where Lanterns, Brinecoils and Needlejaws (phase 5) are later-phase: from buildPhase 5 on no species
-    // is later than the build (D-0105), so the rule is pinned on the build it means.
-    const b4 = patchedRawPacks({ buildPhase: 4 });
+    // is later than the build (D-0105), so the rule is pinned on the build it means (with the v1.0 lists, D-0127).
+    const b4 = patchedRawPacks({ ...PRE_FLIP_LISTS, buildPhase: 4 });
     const s = errors(edit(b4, 'species', 'B01', (d) => (guideOf(d).summary = 'A quick swimmer that races Lanterns to sugar.')));
     expect(s).toContainEqual(expect.objectContaining({ file: 'content/species/B01.json', path: 'guide.summary' }));
     const e = errors(edit(b4, 'materials', 'SUGAR', (d) => (guideOf(d).example = 'Put sugar beside a Brinecoil.')));
@@ -119,7 +122,8 @@ describe('P3.8 summary and example never name a species that is not enabled', ()
   });
   it('passing cases: enabled names are fine; in rules text it is only a warning', () => {
     expect(errors(edit(raw, 'species', 'B01', (d) => (guideOf(d).summary = 'Races Recyclers and Crumbsmiths to sugar.')))).toEqual([]);
-    const r = edit(raw, 'species', 'B01', (d) => (guideOf(d).rules = `${guideOf(d).rules} Lanterns ignore it.`));
+    // Lanterns are not enabled in a dish recorded before the organism flip (D-0127).
+    const r = edit(PRE_ORG_RAW, 'species', 'B01', (d) => (guideOf(d).rules = `${guideOf(d).rules} Lanterns ignore it.`));
     expect(errors(r)).toEqual([]);
     expect(warnings(r)).toContainEqual(expect.objectContaining({ file: 'content/species/B01.json', path: 'guide.rules', severity: 'warning' }));
     // A test manifest that leaves a shipped species out only warns (the build could still show it).
@@ -224,7 +228,8 @@ describe('P3.8 the guide’s predators, prey and hosts equal CT §3.2–§3.3 (e
 
   it('prey of every enabled hunter', () => {
     const hunters = CT_PREY.filter(([id]) => enabled.includes(id));
-    expect(hunters.map(([id]) => id)).toEqual(['P01', 'P02', 'P03', 'P04']);
+    // All ten hunters since the organism flip (D-0127; P01–P04 before).
+    expect(hunters.map(([id]) => id)).toEqual(['P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10']);
     for (const [id, cell] of hunters) {
       const want = parsePrey(cell).filter((p) => enabled.includes(p.id));
       expect(preyOf(reg.species, id, enabled), id).toEqual(want);
@@ -241,8 +246,9 @@ describe('P3.8 the guide’s predators, prey and hosts equal CT §3.2–§3.3 (e
   });
 
   it('hosts and parasites (CT §3.3: "attaches to …" and "infects …"; traps are not hosts)', () => {
-    const agents = CT_HOSTS.filter(([id]) => enabled.includes(id));
-    expect(agents.map(([id]) => id).sort()).toEqual(['V01', 'X01']);
+    // Traps are not hosts (F03 "traps P04 only"); since the organism flip (D-0127) X02 and V02 are enabled too.
+    const agents = CT_HOSTS.filter(([id, rule]) => enabled.includes(id) && /^(?:attaches to|infects)\s/.test(rule));
+    expect(agents.map(([id]) => id).sort()).toEqual(['V01', 'V02', 'X01', 'X02']);
     for (const [id, rule] of agents) {
       const m = /^(?:attaches to|infects)\s+(?:active\s+)?([^;,]*)/.exec(rule);
       expect(m, rule).not.toBeNull();
@@ -262,7 +268,7 @@ describe('P3.8 the guide’s predators, prey and hosts equal CT §3.2–§3.3 (e
     const { guideModel } = await import('../../src/ui/views/FieldGuideData');
     const model = guideModel(reg);
     const b06 = model.species.find((s) => s.id === 'B06')!;
-    expect(b06.predators.map((p) => p.text)).toEqual(['Amoeba', 'Ciliate (only free-swimming)', 'Siltworm (only in sediment)']);
+    expect(b06.predators.map((p) => p.text)).toEqual(['Amoeba', 'Ciliate (only free-swimming)', 'Siltworm (only in sediment)', 'Shellglider', 'Bellstalk', 'Dartfin']);
     const a01 = model.species.find((s) => s.id === 'A01')!;
     expect(a01.parasites.map((p) => p.text)).toEqual(['Hitcher']);
     expect(model.species.find((s) => s.id === 'V01')!.hosts.map((h) => h.text)).toEqual(['Sprinter']);

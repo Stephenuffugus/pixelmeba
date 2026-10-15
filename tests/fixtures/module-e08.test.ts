@@ -235,7 +235,7 @@ describe('P3.7 E08 Debris feeder', () => {
     const others: number[] = [];
     let k = 0;
     for (const id of REG.manifest.enabledSpecies) {
-      if (id === 'V01') continue; // a field virus, never an organism
+      if (id === 'V01' || id === 'V02') continue; // field viruses, never organisms (V02 enabled since the organism flip, D-0127)
       const slot = put(w, id, 30.5 + (k % 10) * 3, 40.5 + Math.floor(k / 10) * 3);
       others.push(slot);
       k++;

@@ -95,10 +95,10 @@ describe('P2.2 New Dish preview and dish descriptions', () => {
       expect(p.ledger.habitat.c + p.ledger.added.c).toBeCloseTo(t.c, 9);
       expect(p.patches).toEqual(overrides.empty ? [] : ['Sugar patch', 'Starch patch', 'Debris patch']);
       expect(p.registry).toMatchObject({
-        moduleRegistryVersion: 2,
+        moduleRegistryVersion: 3,
         catalogSize: 17,
         partial: true,
-        modules: ['E01', 'E03', 'E04', 'E05', 'E06', 'E07', 'E08', 'E09', 'E10', 'E12'].map((id) => ({ id })),
+        modules: ['E01', 'E02', 'E03', 'E04', 'E05', 'E06', 'E07', 'E08', 'E09', 'E10', 'E11', 'E12'].map((id) => ({ id })),
       });
     }
     // A Diverse preview names the seeded modules it will place (present at creation).
@@ -152,9 +152,10 @@ describe('P2.2 New Dish preview and dish descriptions', () => {
     expect(ready?.type === 'ready' ? ready.info.registry : null).toMatchObject({
       partial: true,
       catalogSize: 17,
-      // Registry version 2 (D-0059): every enabled module, named from content.
+      // Registry version 3 (the organism flip, D-0127; version 2 since D-0059): every enabled module, named from content.
       modules: [
         { id: 'E01', name: 'Starch release' },
+        { id: 'E02', name: 'Signal glow' },
         { id: 'E03', name: 'Resting stage' },
         { id: 'E04', name: 'Surface anchor' },
         { id: 'E05', name: 'Reserve chamber' },
@@ -163,6 +164,7 @@ describe('P2.2 New Dish preview and dish descriptions', () => {
         { id: 'E08', name: 'Debris feeder' },
         { id: 'E09', name: 'Protein release' },
         { id: 'E10', name: 'Matrix builder' },
+        { id: 'E11', name: 'Mineral jacket' },
         { id: 'E12', name: 'Colony adhesion' },
       ],
     });

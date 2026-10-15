@@ -137,7 +137,8 @@ test('Empty Sediment Edge: salt, acidifier and buffer change the cell readings a
   await expect(insp.getByTestId('cell-salinity')).toHaveText('0.50');
   await expect(insp.getByTestId('cell-ph')).toHaveText('7.00');
   await expect(insp.getByTestId('cell-oxygen')).toHaveText('0.80');
-  await expect(insp.getByTestId('cell-light')).toHaveText('0.80 (habitat 0.80 × shade 1.00)');
+  // D-0121: a dish recording climate shows every light factor in the Lab (SPEC §4.4).
+  await expect(insp.getByTestId('cell-light')).toHaveText('0.80 = baseline 0.80 × shade 1.00 × roof 1.00 × canopy 1.00');
   await expect(insp.getByTestId('cell-exposure')).toHaveText('None here.');
   await expectNoSeriousA11yViolations(page);
   await closeInspector(page);
