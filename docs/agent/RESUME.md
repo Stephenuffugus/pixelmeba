@@ -3,6 +3,15 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑15 — WAVE 13 RUNNING (run `wf_d51abc7b-b19`, session c4bb6488, launched at `93470f2` from
+> docs/agent/g5-wave-13.run.workflow.js.txt). Backups → `wip/g5-wave-13` (pid tmp/lead/backup-13.pid). Wave 12's owed journeys
+> running in tmp/wt-w11 at ecf058b (tmp/lead/e2e-w12-iso.sh → tmp/lead/e2e-w12.log). `.devcontainer/devcontainer.json` now
+> installs Claude Code natively on create/rebuild — still do NOT rebuild (it wipes ~/.claude, ~/android-sdk, ~/.gradle). START HERE.**
+> - If the session died mid-13: if `git status` is clean, restore from `wip/g5-wave-13`; read docs/reports/reviews/g5-wave-13/ and the
+>   journal ~/.claude/projects/-workspaces-pixelmeba/c4bb6488-478b-4e54-94a9-415b7249b743/subagents/workflows/wf_d51abc7b-b19/journal.jsonl;
+>   rerun only unfinished tasks.
+> - After 13: LEAD AFTER WAVE 13 → THE ORGANISM FLIP (item 2b first, 3b, moduleRegistryVersion 3 + IMPLEMENTED_RULES together) → wave 14.
+
 > **Update 2026‑10‑14 23:25 UTC — WAVE 12 COMMITTED `ecf058b` (pushed; D‑0123): npm run check green (299 files, 3,269
 > tests, 5,044 s; typecheck and lint 0), content:validate 84c41636… unchanged, atlas 1691 frames 08fb56e6, contrast audit
 > 0 unexplained. WORKLOG notes on P5.3/P5.5/P5.7 (nothing ticked before the organism flip). The owner refreshed the
