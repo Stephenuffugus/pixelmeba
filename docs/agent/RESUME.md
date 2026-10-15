@@ -10,6 +10,9 @@
 > - If the session died mid-13: if `git status` is clean, restore from `wip/g5-wave-13`; read docs/reports/reviews/g5-wave-13/ and the
 >   journal ~/.claude/projects/-workspaces-pixelmeba/c4bb6488-478b-4e54-94a9-415b7249b743/subagents/workflows/wf_d51abc7b-b19/journal.jsonl;
 >   rerun only unfinished tasks.
+> - Wave 12 journeys done (6,738 s, under wave 13 load): 54 passed, 2 failed on desktop, both timeouts with the target re-rendering
+>   mid-click (a11y-screens.spec.ts:773 compare-speed-max; inspector.spec.ts:95 organism listbox option). Re-run those two on a quiet
+>   machine (after wave 13) before calling them flakes or bugs.
 > - After 13: LEAD AFTER WAVE 13 → THE ORGANISM FLIP (item 2b first, 3b, moduleRegistryVersion 3 + IMPLEMENTED_RULES together) → wave 14.
 
 > **Update 2026‑10‑14 23:25 UTC — WAVE 12 COMMITTED `ecf058b` (pushed; D‑0123): npm run check green (299 files, 3,269
