@@ -20,8 +20,15 @@ import { registry } from '../helpers/world';
 const IDS = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12'];
 const ALL_ON = [...new Set([...registry().manifest.enabledSystems, 'barriers', 'climate', 'devices'])].sort() as SystemFlag[];
 const WITH_ALL: ManifestPatch = { enabledSystems: ALL_ON, enabledStructures: ['BEAD', ...IDS, 'STONE', 'WALL'] };
-/** The manifest before the systems flip: the v1.0 systems and the cell structures only. */
-const PRE_FLIP: ManifestPatch = { enabledSystems: ALL_ON.filter((s) => s !== 'barriers' && s !== 'climate' && s !== 'devices'), enabledStructures: ['BEAD', 'STONE', 'WALL'] };
+/**
+ * The manifest before the systems flip: the v1.0 systems, the cell structures only and the v1.0 habitats (the
+ * Phase 5 habitats need the flip's systems and structures; the shipped list has them since D-0130).
+ */
+const PRE_FLIP: ManifestPatch = {
+  enabledSystems: ALL_ON.filter((s) => s !== 'barriers' && s !== 'climate' && s !== 'devices'),
+  enabledStructures: ['BEAD', 'STONE', 'WALL'],
+  enabledHabitats: ['GEL_COLONY', 'SEDIMENT_EDGE', 'WATER_GARDEN'],
+};
 const reg = (): ContentRegistry => registryWith(WITH_ALL, { allowUnimplemented: true });
 
 const EDGES: EdgePlacement[] = [

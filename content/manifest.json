@@ -4,7 +4,7 @@
   "moduleRegistryVersion": 3,
   "phenotypeMappingVersion": 1,
   "contentVersion": 3,
-  "contentHash": "4a0340516c7cd46645872d4a87b741ec8f9b4f62609b54b8bcba66d6b3b24ff4",
+  "contentHash": "0c5a10e0be8ab4169759abef4113247e6beb9211ce8919cd6733ce97b98551a1",
   "buildPhase": 5,
   "enabledSpecies": [
     "A01",
@@ -112,6 +112,14 @@
   ],
   "enabledHabitats": [
     "GEL_COLONY",
+    "H04_LEAF_POOL",
+    "H05_BRINE_MOSAIC",
+    "H06_DUSK_MARSH",
+    "H07_GLASS_GARDEN",
+    "H08_NIGHT_LANTERNS",
+    "H09_DRYING_LACE",
+    "H10_GATE_LAB",
+    "H11_GRAZING_MEADOW",
     "SEDIMENT_EDGE",
     "WATER_GARDEN"
   ],

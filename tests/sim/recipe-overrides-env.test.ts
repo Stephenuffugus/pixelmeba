@@ -184,11 +184,14 @@ describe('P5.1 the Starting recipe file carries the environment choices', () => 
     expect(recipeFileProblem(withO({ lightMode: 'night' }), REG)).toEqual(damaged('overrides.lightMode'));
     expect(recipeFileProblem(withO({ drying: 'yes' }), REG)).toEqual(damaged('overrides.drying'));
     expect(recipeFileProblem(withO({ warmth: 0.9 }), REG)).toEqual(damaged('overrides'));
-    // A build without the climate system refuses them: the shipped lists without climate and its three devices (the
-    // file records registry version 3 since the organism flip, D-0127, so a version 2 build would refuse it by version).
+    // A build without the climate system refuses them: the shipped lists without climate, its three devices and the
+    // four habitats that need them (H06, H08 and H11 cycle the light, H09 dries and places S12; THE HABITAT ENABLE,
+    // D-0130). The file records registry version 3 since the organism flip, D-0127, so a version 2 build would refuse
+    // it by version.
     const V1 = registryWith({
       enabledSystems: REG.manifest.enabledSystems.filter((x) => x !== 'climate'),
       enabledStructures: (REG.manifest.enabledStructures ?? []).filter((x) => !['S09', 'S10', 'S12'].includes(x)),
+      enabledHabitats: REG.manifest.enabledHabitats.filter((x) => !['H06_DUSK_MARSH', 'H08_NIGHT_LANTERNS', 'H09_DRYING_LACE', 'H11_GRAZING_MEADOW'].includes(x)),
     });
     expect(V1.manifest.moduleRegistryVersion).toBe(REG.manifest.moduleRegistryVersion);
     expect(recipeFileProblem(withO({ lightMode: 'cycle' }), V1)).toEqual(damaged('overrides.lightMode'));

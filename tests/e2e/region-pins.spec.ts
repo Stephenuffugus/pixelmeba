@@ -4,23 +4,33 @@
  * imported through Saved dishes. Explore and Lab open with no page error (the renderer draws the pins from
  * DishInfo.regions); Lab → Observe → Regions → Show readings opens the Regions sheet, whose legend lists "1 Fresh
  * pool" and "2 Channel" with 16 px text. The Garden (a v1.0 dish) shows no legend. No screenshot assertions; axe and
- * no sideways overflow.
+ * no sideways overflow. THE HABITAT ENABLE (D-0130) adds the two D-0104-style checks: a new Brine Mosaic dish made
+ * in New Dish numbers its three regions, and an rc1 save file (tests/fixtures/saves-rc1, written by v1.0.0-rc1)
+ * imports with no legend.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { REPO_ROOT } from '../../tools/lib/content-fs';
 import { writeRegionPinsFixture } from './regionPinsFixture';
-import { expectNoHorizontalOverflow, expectNoSeriousA11yViolations, seedSettings, startGarden } from './helpers';
+import { expectNoHorizontalOverflow, expectNoSeriousA11yViolations, expectReachable, seedSettings, startGarden } from './helpers';
 
 const FIXTURE = join(REPO_ROOT, 'tmp', 'e2e-region-pins', `two-regions-${process.pid}.pixelmeba`);
+const RC1 = join(REPO_ROOT, 'tmp', 'e2e-region-pins', `rc1-fungal-supply-line-${process.pid}.pixelmeba`);
+const manifest = JSON.parse(readFileSync(join(REPO_ROOT, 'content', 'manifest.json'), 'utf8')) as { enabledHabitats: string[] };
 
 test.beforeAll(async () => {
   test.setTimeout(120_000);
   await writeRegionPinsFixture(FIXTURE);
+  mkdirSync(join(REPO_ROOT, 'tmp', 'e2e-region-pins'), { recursive: true });
+  writeFileSync(RC1, gunzipSync(readFileSync(join(REPO_ROOT, 'tests', 'fixtures', 'saves-rc1', 'fungal-supply-line-t900.pixelmeba.gz'))));
 });
 
-test.afterAll(() => rmSync(FIXTURE, { force: true }));
+test.afterAll(() => {
+  rmSync(FIXTURE, { force: true });
+  rmSync(RC1, { force: true });
+});
 
 /** Explore → Lab → Observe → Regions → Show readings: the Regions sheet. */
 async function openRegionsSheet(page: Page) {
@@ -84,6 +94,47 @@ test('the Garden (a v1.0 dish) shows no region legend', async ({ page }) => {
   const sheet = await openRegionsSheet(page);
   await expect(sheet.getByTestId('probe-none')).toBeVisible();
   await expect(sheet.getByTestId('region-legend')).toHaveCount(0);
+  await expectNoSeriousA11yViolations(page);
+  await expectNoHorizontalOverflow(page);
+  expect(errors).toEqual([]);
+});
+
+test('an rc1 save file (v1.0.0-rc1) imports with no region legend (D-0130)', async ({ page }) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await seedSettings(page, { showPrompts: false });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Saved dishes' }).click();
+  await page.locator('input[aria-label="Import a dish file"]').setInputFiles(RC1);
+  await expect(page.getByTestId('dish-screen')).toBeVisible();
+  const sheet = await openRegionsSheet(page);
+  await expect(sheet.getByTestId('probe-none')).toBeVisible();
+  await expect(sheet.getByTestId('region-legend')).toHaveCount(0);
+  await expectNoSeriousA11yViolations(page);
+  await expectNoHorizontalOverflow(page);
+  expect(errors).toEqual([]);
+});
+
+test('a new Brine Mosaic dish numbers its three regions on the dish and in the legend (D-0130)', async ({ page }) => {
+  test.skip(!manifest.enabledHabitats.includes('H05_BRINE_MOSAIC'), 'until THE HABITAT ENABLE (H05_BRINE_MOSAIC not in the build manifest)');
+  test.setTimeout(240_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await seedSettings(page, { showPrompts: false });
+  await page.goto('/');
+  await page.getByTestId('home-new').click();
+  await expect(page.getByRole('heading', { name: 'New dish', level: 1 })).toBeVisible();
+  const option = page.getByTestId('new-dish-start-with-habitat:H05_BRINE_MOSAIC');
+  await expectReachable(option);
+  await option.click();
+  await expect(option).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('new-dish-regions')).toHaveText('Regions: 1 Fresh pool, 2 Brine pool, 3 Channel.');
+  await page.getByTestId('new-dish-start').click();
+  await expect(page.getByTestId('dish-screen')).toBeVisible();
+  await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
+  const sheet = await openRegionsSheet(page);
+  await expect(sheet.getByTestId('region-legend-list').getByRole('listitem')).toHaveText(['1 Fresh pool', '2 Brine pool', '3 Channel']);
   await expectNoSeriousA11yViolations(page);
   await expectNoHorizontalOverflow(page);
   expect(errors).toEqual([]);

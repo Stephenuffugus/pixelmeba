@@ -1471,3 +1471,12 @@ H07 mineral), `-community`, `-community-determinism`, `-community-conservation` 
 FENCE_H06/H09/H10 recipe files for the habitat enable); content/habitats-p5, ui/new-dish-starts, worker/new-dish-habitats,
 worker/dishinfo-regions, render/region-pins, ui/region-legend; journeys habitats-p5.spec (cases 2–3 skip until the
 enable) and region-pins.spec.
+
+As built, THE HABITAT ENABLE (D-0130): the three drafts moved to `tests/fixtures/fence-recipes/` as fence entries of
+kind 'recipeFile' (FENCE_H10_GATE_CYCLE, FENCE_H09_DRYING_COMMUNITY, FENCE_H06_DUSK_COMMUNITY, 1200 ticks; added with
+`tools/fence-update.ts --add-file`), so `-fence-drafts` is gone: `trajectory-fence-current` digests them at 1× and
+`trajectory-fence-files` at the 4× analogue with a save → load and checks each habitat, community, structure and setting.
+A new world records the eleven shipped habitats in its manifest, so `habitats-p5-equivalence` compares the golden with
+the list it recorded written into each world (`realizeGoldenEntries(reg, { recordedHabitats })`) and also runs the
+worlds as shipped (stateHash300 unchanged). `habitatRegistry()` now equals the shipped registry; tests that model an
+older build state the v1.0 habitat list.
