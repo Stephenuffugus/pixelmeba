@@ -3,6 +3,39 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑18 19:30 UTC — THE HABITAT ENABLE COMMITTED 47f8399 (D-0130; P5.4 ticked; journeys 58/58 after the new
+> journey's helper fix). D-0131 (wave 15 scope) in DECISIONS; the wave 15 task + run files carry 47f8399. START HERE:**
+> 1. Wave 15: Workflow scriptPath = a .js copy of docs/agent/g5-wave-15.run.workflow.js.txt in the scratchpad (A.only = the four
+>    tasks, verifyGroups set); backups → wip/g5-wave-15 (tools/lead/backup-loop.sh, pid in tmp/lead/backup-15.pid). If the
+>    workflow died, resume it with its runId (resumeFromRunId) rather than relaunching.
+> 2. During wave 15: the full e2e sweep owed (desktop + phone-portrait) niced in tmp/wt-w11 checked out at 47f8399; re-pin by cause.
+> 3. Then LEAD AFTER WAVE 15 (the task file's checklist), the wave 16 task writer, wave 16 (the G5 gate, v1.1.0).
+
+> **Update 2026‑10‑18 18:25 UTC — ENABLE CHECK DONE (3,643/3,645; the 2 failures were older-build models, re-pinned by cause:
+> tests/sim/lab-commands.test.ts + tests/sim/recipe-overrides-env.test.ts); verifier PASS, its MINOR-1/2 + NIT-1 applied
+> (tmp/lead/enable-verifier-fixes.py); those 4 files 84/84; tsc + eslint clean. Tree backed up: wip/g5-habitat-enable e3a3490.
+> D-0130 draft final except <FINAL>/<JOURNEYS> (tmp/lead/d0130.md); D-0131 ready (tmp/lead/d0131.md). START HERE:**
+> 1. If `git status` is clean (work missing): `git checkout wip/g5-habitat-enable -- . && git reset -q`.
+> 2. Journeys: tmp/lead/e2e-enable.sh (→ tmp/lead/e2e-enable.log EXIT line; 58 tests). Rerun if it did not finish.
+> 3. Append tmp/lead/d0130.md (fill <JOURNEYS>) to DECISIONS; final `npm run check` (tmp/lead/check-enable.sh → EXIT line);
+>    fill <FINAL>, rerun the 3 DECISIONS-reading tests (content/silhouettes, sim/review-regressions, tools/fence-update);
+>    commit 1 = the enable (not WORKLOG, not wave 15 files). Then commit 2: D-0131, WORKLOG (tick P5.4 with the SHA; P5.7 note),
+>    sed ENABLE_SHA in docs/agent/g5-wave-15.tasks.js.txt + .run.workflow.js.txt, RESUME; push; launch wave 15.
+
+> **Update 2026‑10‑18 16:40 UTC — THE HABITAT ENABLE BUILT, NOT COMMITTED (tree backed up on wip/g5-habitat-enable; D-0130 to
+> write). Done in the tree: enabledHabitats 11 (contentHash 4a034051… → 0c5a10e0…); the fence passed unchanged except
+> habitats-p5-equivalence, whose `serialized` moved ONLY by the recorded habitat list (proved: realizeGoldenEntries(reg,
+> { recordedHabitats }) reproduces all 25 entries; stateHash300 unchanged as shipped); three fence entries --add-file
+> (FENCE_H10_GATE_CYCLE 58376f6e…, FENCE_H09_DRYING_COMMUNITY 76ec7a6c…, FENCE_H06_DUSK_COMMUNITY 593ab3a0…; trajectory-fence 55/55);
+> six test files re-pinned (older-build models state the v1.0 habitats). Wave 15 task file filled (token ENABLE_SHA → the enable
+> commit) and its run file built (docs/agent/g5-wave-15.run.workflow.js.txt, verifyGroups set). Running: tmp/lead/check-enable.sh
+> (→ tmp/lead/check-enable.log EXIT line) and a saves verifier (→ docs/reports/reviews/g5-habitat-enable/saves-verify.md). START HERE:**
+> 1. If `git status` is clean (work missing): `git checkout wip/g5-habitat-enable -- . && git reset -q`, then rerun tmp/lead/check-enable.sh.
+> 2. Enable journeys (desktop + phone-portrait): habitats-p5, region-pins, new-dish, field-guide, a11y-screens, chemistry-habitats,
+>    cordweaver, film-fungi; then D-0130 + D-0131 (docs/agent/g5-wave-15-calls-draft.md) into DECISIONS, ARCH 16 (fence-drafts gone),
+>    WORKLOG (tick P5.4; P5.7 note: not ticked, wave 15), commit, sed ENABLE_SHA in the wave 15 task + run files, commit, push.
+> 3. Launch wave 15 (Workflow scriptPath = a .js copy of the run file in the scratchpad); backups → wip/g5-wave-15.
+
 > **Update 2026‑10‑15 21:15 UTC — CODESPACE CLOSES ABOUT 23:00. WAVE 14 COMMITTED 68b591c (D-0129; check 332 files / 3,644
 > tests) + WORKLOG notes, pushed; tree also on wip/g5-wave-14 (2d7be56). Running at the close: the wave 14 journeys
 > (tmp/lead/e2e-w14.sh → tmp/lead/e2e-w14.log, started 20:56, ~90 min). START HERE after the restart:**
