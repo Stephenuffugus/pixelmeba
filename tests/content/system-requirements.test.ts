@@ -33,6 +33,8 @@ function issuesWith(patch: ManifestPatch): readonly ContentIssue[] {
     // The cell structures only: since the systems flip (D-0121) the shipped manifest also enables S01–S12,
     // which need systems these lists do not have (and phase 5).
     enabledStructures: ['BEAD', 'STONE', 'WALL'],
+    // The g2 habitats: since THE HABITAT ENABLE (D-0130) the shipped list also holds the phase 5 habitats.
+    enabledHabitats: G2_LISTS.enabledHabitats,
     buildPhase: 3,
   };
   return validateContent(patchedRawPacks({ ...base, ...patch }), { allowUnimplemented: true }).issues.filter(

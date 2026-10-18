@@ -262,6 +262,33 @@
       "g2Digest": null,
       "currentDigest": "56e40d203f44e18f",
       "changedBy": []
+    },
+    {
+      "id": "FENCE_H10_GATE_CYCLE",
+      "kind": "recipeFile",
+      "file": "tests/fixtures/fence-recipes/FENCE_H10_GATE_CYCLE.json",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "58376f6ebe021e3d",
+      "changedBy": []
+    },
+    {
+      "id": "FENCE_H09_DRYING_COMMUNITY",
+      "kind": "recipeFile",
+      "file": "tests/fixtures/fence-recipes/FENCE_H09_DRYING_COMMUNITY.json",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "76ec7a6cd72ebe1f",
+      "changedBy": []
+    },
+    {
+      "id": "FENCE_H06_DUSK_COMMUNITY",
+      "kind": "recipeFile",
+      "file": "tests/fixtures/fence-recipes/FENCE_H06_DUSK_COMMUNITY.json",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "593ab3a0df1affb2",
+      "changedBy": []
     }
   ]
 }

@@ -214,6 +214,13 @@ this plan and the relevant slice of g5-briefs.md, not the whole spec.
   1× vs 4× equality. (c) declined: preFlipRegistry() keeps setting PRE_FLIP_CONTENT_HASH by design (a v1.0 dish records
   that hash whatever the content files hash to; wave 14's habitat files move the recomputed value); the fence and the
   rc1 replay catch drift in the lists or rules.
+- **THE HABITAT ENABLE's saves verifier (D-0130; docs/reports/reviews/g5-habitat-enable/saves-verify.md), for the G5 gate.**
+  (a) NIT-4: stateHash includes the contentHash and the recipe-file import compares the start's stateHash, so ANY content
+  change refuses older recipe files; when contentVersion did not move, the refusal ("needs a compatible build (simulation 3,
+  rules 1, content 3)") names this build's own numbers. No released build is affected (v1.0 files carry content 2). p5.8b:
+  every shipped content change after v1.1 bumps contentVersion, or the refusal says the file was made with a different set
+  of content. (b) NIT-2: the demo's Field Guide lists the eleven habitats though the demo offers only the Water Garden
+  (P4.11 filters only the Species tab): an owner line in EXPANSION_RESPONSE §8.
 - **Full e2e sweep owed before the G5 gate (lead, 2026-10-15).** The flip's journeys beyond its checklist found a pin
   stale since the systems flip (chemistry-habitats' Lab light line, D-0121) and two phone layout faults (D-0127): wave
   journeys cover only touched features, so run every spec on desktop and phone-portrait once after THE HABITAT ENABLE

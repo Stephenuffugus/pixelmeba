@@ -27,19 +27,29 @@ export interface RealizeGoldenEntry {
 export const REALIZE_GOLDEN_HOW =
   "Written by the UNMODIFIED HEAD code (1c9d8a2) before wave 14's habitat geometry (step 0a), under the shipped registry (loadRegistryFs()). Entries: every recipe of registry.recipeIds with phase <= buildPhase (realizeRecipe(registry, id)); the three v1.0 New Dish starts, each realized as host.ts build() does: realizeRecipe(registry, 'FIRST_DISH_V1', { seed: 104729, worldId: 'golden', transform: (r) => applyRecipeOverrides(r, o) }) with o = { empty: true }, { empty: true, habitatId: 'GEL_COLONY' } and { empty: true, habitatId: 'SEDIMENT_EDGE' }; every What if? variant of registry.variantIds with phase <= buildPhase (await realizeVariant(registry, id)). Right after realization the world's content is replaced by a copy whose manifest.contentHash is '' (and, for a variant, whose provenance.variant.contentHash and initialStateHash are '': both record the contentHash, which the habitat files move). serialized = sha256 hex of canonicalJson(serializeWorld(world)) at tick 0; stateHash300 = stateHash(world) after run(world, 300). Recompute: tests/helpers/habitats.ts realizeGoldenEntries().";
 
+/** Options for realizeGoldenEntries. */
+export interface RealizeGoldenOptions {
+  /**
+   * The habitat list written into each realized world's recorded manifest (with the content hash blanked)
+   * before it is hashed and run. The golden was written while the shipped list was the v1.0 three; since THE
+   * HABITAT ENABLE (D-0130) the shipped list is eleven, which every new world records. Omitted: as realized.
+   */
+  readonly recordedHabitats?: readonly string[];
+}
+
 /** The world with every record of the content hash blanked (the only thing new content files may move). */
-function blankContentHash(world: World): void {
+function blankContentHash(world: World, recordedHabitats?: readonly string[]): void {
   const prov = world.content.provenance as unknown as Record<string, unknown>;
   const variant = prov.variant as Record<string, unknown> | undefined;
   (world as { content: World['content'] }).content = {
     ...world.content,
-    manifest: { ...world.content.manifest, contentHash: '' },
+    manifest: { ...world.content.manifest, contentHash: '', ...(recordedHabitats ? { enabledHabitats: [...recordedHabitats] } : {}) },
     provenance: (variant ? { ...prov, variant: { ...variant, contentHash: '', initialStateHash: '' } } : prov) as unknown as World['content']['provenance'],
   };
 }
 
-function entry(key: string, world: World): RealizeGoldenEntry {
-  blankContentHash(world);
+function entry(key: string, world: World, opts: RealizeGoldenOptions): RealizeGoldenEntry {
+  blankContentHash(world, opts.recordedHabitats);
   const serialized = createHash('sha256').update(canonicalJson(serializeWorld(world))).digest('hex');
   run(world, 300);
   return { key, serialized, stateHash300: stateHash(world) };
@@ -51,19 +61,19 @@ export const V1_NEW_DISH_STARTS: readonly { readonly key: string; readonly overr
   { key: 'newDish:empty:SEDIMENT_EDGE', overrides: { empty: true, habitatId: 'SEDIMENT_EDGE' } },
 ];
 
-export async function realizeGoldenEntries(reg: ContentRegistry): Promise<RealizeGoldenEntry[]> {
+export async function realizeGoldenEntries(reg: ContentRegistry, opts: RealizeGoldenOptions = {}): Promise<RealizeGoldenEntry[]> {
   const out: RealizeGoldenEntry[] = [];
   const phase = reg.manifest.buildPhase;
   for (const id of reg.recipeIds) {
     if (reg.recipes[id]!.phase > phase) continue;
-    out.push(entry(`recipe:${id}`, realizeRecipe(reg, id)));
+    out.push(entry(`recipe:${id}`, realizeRecipe(reg, id), opts));
   }
   for (const s of V1_NEW_DISH_STARTS) {
-    out.push(entry(s.key, realizeRecipe(reg, 'FIRST_DISH_V1', { seed: 104729, worldId: 'golden', transform: (r) => applyRecipeOverrides(r, s.overrides) })));
+    out.push(entry(s.key, realizeRecipe(reg, 'FIRST_DISH_V1', { seed: 104729, worldId: 'golden', transform: (r) => applyRecipeOverrides(r, s.overrides) }), opts));
   }
   for (const id of reg.variantIds) {
     if (reg.variants[id]!.phase > phase) continue;
-    out.push(entry(`variant:${id}`, await realizeVariant(reg, id)));
+    out.push(entry(`variant:${id}`, await realizeVariant(reg, id), opts));
   }
   return out;
 }
@@ -84,7 +94,11 @@ export const HABITAT_IDS = [
 export type HabitatId = (typeof HABITAT_IDS)[number];
 
 let cachedHabitatRegistry: ContentRegistry | null = null;
-/** The shipped registry with the eight habitats enabled (every structure, system and material they use is shipped). */
+/**
+ * The shipped registry with the eight habitats enabled (every structure, system and material they use is shipped).
+ * Since THE HABITAT ENABLE (D-0130) the shipped list already holds them and registryWith drops the repeats, so this
+ * IS the shipped registry (tests/content/habitats-p5.test.ts asserts the manifests are equal).
+ */
 export function habitatRegistry(): ContentRegistry {
   cachedHabitatRegistry ??= registryWith({ enabledHabitats: [...loadRegistryFs().manifest.enabledHabitats, ...HABITAT_IDS].sort() });
   return cachedHabitatRegistry;

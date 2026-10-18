@@ -26,7 +26,9 @@ const records: HabitatDef[] = Object.keys(reg.habitats)
   .sort()
   .map((id) => reg.habitats[id]!);
 const species = reg.species;
-const enabledAll: Manifest = { ...shipped, enabledHabitats: [...shipped.enabledHabitats, ...HABITAT_IDS].sort() };
+const enabledAll: Manifest = { ...shipped, enabledHabitats: [...new Set([...shipped.enabledHabitats, ...HABITAT_IDS])].sort() };
+/** A build before THE HABITAT ENABLE (D-0130): the three v1.0 habitats only. */
+const v1Manifest: Manifest = { ...shipped, enabledHabitats: ['GEL_COLONY', 'SEDIMENT_EDGE', 'WATER_GARDEN'] };
 
 /** The v1.0 start list exactly as NewDish.tsx hard-coded it before P5.4 (ids, labels, notes, order). */
 const V1_STARTS = [
@@ -52,8 +54,10 @@ const ids = (xs: readonly HabitatStart[]) => xs.map((s) => s.habitatId);
 const startOf = (xs: readonly HabitatStart[], habitatId: string) => xs.find((s) => s.habitatId === habitatId)!;
 
 describe('the start list follows the build manifest', () => {
-  it('the shipped manifest offers exactly the three v1.0 starts, as before', () => {
-    const list = habitatStarts(records, shipped, species, false);
+  it('the v1.0 habitat list offers exactly the three v1.0 starts, as before; the shipped manifest adds the eight after them (D-0130)', () => {
+    expect(ids(habitatStarts(records, shipped, species, false))).toEqual(['WATER_GARDEN', 'GEL_COLONY', 'SEDIMENT_EDGE', ...HABITAT_IDS]);
+    expect(habitatStarts(records, shipped, species, false).slice(0, 3).map(pick)).toEqual(V1_STARTS);
+    const list = habitatStarts(records, v1Manifest, species, false);
     expect(list.map(pick)).toEqual(V1_STARTS);
     expect(list.every((s) => !s.communityOffered && s.communitySpecies.length === 0)).toBe(true);
     expect(list.some((s) => s.id.startsWith('habitat:'))).toBe(false);

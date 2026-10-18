@@ -16,6 +16,7 @@ import { EDGE_KINDS } from '../../src/sim/barriers';
 import { DEVICE_KINDS, FURNISHING_KINDS, MACHINE_KINDS, RESIN_TARGETS } from '../../src/sim/devices';
 import type { SystemFlag } from '../../src/sim/fields';
 import { contentHashOf, patchedRawPacks, registryWith, type ManifestPatch } from '../helpers/registry';
+import { HABITAT_IDS } from '../helpers/habitats';
 import { PRE_FLIP_LISTS, registry } from '../helpers/world';
 
 const DRY = 'Drying never concentrates chemicals: amounts are kept per cell, so a drying cell holds exactly what it held.';
@@ -62,6 +63,7 @@ const PRE_FLIP: ManifestPatch = {
   enabledSystems: V1_SYSTEMS,
   enabledMaterials: PRE_FLIP_LISTS.enabledMaterials,
   enabledStructures: ['BEAD', 'STONE', 'WALL'],
+  enabledHabitats: PRE_FLIP_LISTS.enabledHabitats,
   moduleRegistryVersion: PRE_FLIP_LISTS.moduleRegistryVersion,
 };
 
@@ -140,9 +142,10 @@ describe('P5.2 structure records S01–S12 (CT §4)', () => {
     expect(errorsOf(patchedRawPacks({ ...PRE_FLIP, enabledSystems: withDevices, enabledStructures: ['BEAD', 'S09', 'STONE', 'WALL'] }))).toEqual([
       'content/manifest.json → enabledStructures.1: enabled structure "S09" (Heater) needs the "climate" system (not in enabledSystems)',
     ]);
+    // One structure cannot furnish the Phase 5 habitats (enabled since D-0130): the v1.0 habitats only.
     for (const id of IDS) {
       const list = ['BEAD', id, 'STONE', 'WALL'];
-      expect(errorsOf(patchedRawPacks({ enabledSystems: ALL_ON, enabledStructures: list })), id).toEqual([]);
+      expect(errorsOf(patchedRawPacks({ enabledSystems: ALL_ON, enabledStructures: list, enabledHabitats: PRE_FLIP_LISTS.enabledHabitats })), id).toEqual([]);
     }
     expect(errorsOf(patchedRawPacks(WITH_ALL))).toEqual([]);
     expect(() => registryWith(WITH_ALL)).not.toThrow();
@@ -187,8 +190,10 @@ describe('the wetting brush appears only where the dish has climate (PROPOSED DE
     expect(entry).toMatchObject({ kind: 'tool', name: 'Wetting brush' });
     const preFlip = guideModel(registryWith(PRE_FLIP));
     expect(preFlip.equipment.map((e) => e.id)).not.toContain('WET_BRUSH');
-    // The shipped guide also lists S01–S12 (enabled structures); apart from those and the brush, the same entries.
-    expect(shipped.equipment.map((e) => e.id).filter((id) => id !== 'WET_BRUSH' && !IDS.includes(id))).toEqual(preFlip.equipment.map((e) => e.id));
+    // The shipped guide also lists S01–S12 (enabled structures) and the eight Phase 5 habitats (D-0130); apart
+    // from those and the brush, the same entries.
+    const later = new Set<string>([...IDS, ...HABITAT_IDS]);
+    expect(shipped.equipment.map((e) => e.id).filter((id) => id !== 'WET_BRUSH' && !later.has(id))).toEqual(preFlip.equipment.map((e) => e.id));
     for (const id of IDS) expect(shipped.equipment.map((e) => e.id), id).toContain(id);
   });
 

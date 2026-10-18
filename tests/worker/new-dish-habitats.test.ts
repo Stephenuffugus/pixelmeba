@@ -20,6 +20,7 @@ import type { World } from '../../src/sim/world';
 import { DishHost } from '../../src/worker/host';
 import type { DishInfo, FromWorker, NewDishPreview, RecipeOverrides } from '../../src/worker/protocol';
 import { habitatRegistry, habitatStart } from '../helpers/habitats';
+import { registryWith } from '../helpers/registry';
 import { registry } from '../helpers/world';
 
 const RECIPE = 'FIRST_DISH_V1';
@@ -92,10 +93,12 @@ describe('build() refuses a community it cannot honour, before anything is built
     expect(q.world).toBeNull();
   });
 
-  it('under the shipped registry the new habitats are not offered at all', () => {
-    const h = hostOn(registry());
+  it('a build without the habitat enable (the v1.0 habitat list) does not offer the new habitats at all; the shipped one does (D-0130)', () => {
+    const v1 = registryWith({ enabledHabitats: ['GEL_COLONY', 'SEDIMENT_EDGE', 'WATER_GARDEN'] });
+    const h = hostOn(v1);
     const r = h.create({ empty: true, habitatId: 'H10_GATE_LAB', community: true });
     expect(r.error).toBe('There is no habitat "H10_GATE_LAB" in this version of Pixelmeba.');
+    expect(hostOn(registry()).create({ empty: true, habitatId: 'H10_GATE_LAB', community: true }).error).toBeNull();
   });
 });
 

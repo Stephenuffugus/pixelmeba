@@ -893,16 +893,19 @@ describe('Lab content comes from the world (P2.7)', () => {
       manifest: { ...r.manifest, data: { ...(r.manifest.data as object), ...patch } },
     });
     const stone = base.structures.find((f) => f.file.endsWith('STONE.json'))!.data as Record<string, unknown>;
-    expect(errors((r) => withManifest(r, { enabledStructures: ['BEAD', 'LAVA', 'STONE', 'WALL'] }))).toEqual([
+    // A build listing only the v1.0 structures lists the v1.0 habitats: since THE HABITAT ENABLE (D-0130) the shipped
+    // habitats place S01, S06 and S11, and need the climate system.
+    const v1Habitats = ['GEL_COLONY', 'SEDIMENT_EDGE', 'WATER_GARDEN'];
+    expect(errors((r) => withManifest(r, { enabledStructures: ['BEAD', 'LAVA', 'STONE', 'WALL'], enabledHabitats: v1Habitats }))).toEqual([
       'content/manifest.json → enabledStructures.1: unknown structure "LAVA"',
     ]);
-    expect(errors((r) => withManifest(r, { enabledStructures: ['STONE', 'BEAD'] }))).toEqual([
+    expect(errors((r) => withManifest(r, { enabledStructures: ['STONE', 'BEAD'], enabledHabitats: v1Habitats }))).toEqual([
       'content/manifest.json → enabledStructures: must be sorted ascending',
     ]);
     // Enabling a Phase 5 structure needs its system (structureRules.ts). S01 is implemented since the systems
     // flip (D-0121); the "not implemented" refusal is tests/content/structures-implemented-check.test.ts.
     const v1Systems = (base.manifest.data as { enabledSystems: string[] }).enabledSystems.filter((x) => x !== 'barriers' && x !== 'climate' && x !== 'devices');
-    expect(errors((r) => withManifest(r, { enabledSystems: v1Systems, enabledStructures: ['BEAD', 'S01', 'STONE', 'WALL'] }))).toEqual([
+    expect(errors((r) => withManifest(r, { enabledSystems: v1Systems, enabledStructures: ['BEAD', 'S01', 'STONE', 'WALL'], enabledHabitats: v1Habitats }))).toEqual([
       'content/manifest.json → enabledStructures.1: enabled structure "S01" (Fine membrane) needs the "barriers" system (not in enabledSystems)',
     ]);
     // A phase later than the build: buildPhase + 1 read from the manifest (it moves with each phase; D-0105).

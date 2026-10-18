@@ -1,8 +1,8 @@
 /**
  * The eight Phase 5 habitat records and the validator's habitat checks (P5.4; CT §8.2, §4, §5.2, §14;
  * g5-briefs H1, H4; D-0106, D-0116, D-0122, D-0128).
- * - The records validate with the eight enabled (habitatRegistry()) and the shipped registry still validates
- *   with them present but not enabled.
+ * - The records validate with the eight enabled; since THE HABITAT ENABLE (D-0130) the shipped manifest
+ *   enables them, so habitatRegistry() is the shipped registry.
  * - Each validator rule, through patched raw packs (patchedRawPacks + validateContent, issues filtered by file
  *   and path): a phase 5 habitat enabled at build phase 4; the one offer rule (habitatRules.ts) for a
  *   structure, a system and a material the manifest lacks; regions (seven, a repeated id, an anchor outside
@@ -25,7 +25,9 @@ import { HABITAT_IDS, habitatRegistry } from '../helpers/habitats';
 import { registry } from '../helpers/world';
 
 const shipped = registry().manifest;
-const ENABLED: ManifestPatch = { enabledHabitats: [...shipped.enabledHabitats, ...HABITAT_IDS].sort() };
+const ENABLED: ManifestPatch = { enabledHabitats: [...new Set([...shipped.enabledHabitats, ...HABITAT_IDS])].sort() };
+/** The v1.0 habitats: the shipped list before THE HABITAT ENABLE (D-0130). */
+const V1_HABITATS = ['GEL_COLONY', 'SEDIMENT_EDGE', 'WATER_GARDEN'];
 
 type Raw = Record<string, unknown>;
 function validate(patch: ManifestPatch, edit?: (raw: RawPacks) => void): ContentIssue[] {
@@ -40,11 +42,13 @@ const errorsOn = (issues: readonly ContentIssue[], fileEnd: string, path?: strin
 const without = <T,>(list: readonly T[], x: T): T[] => list.filter((y) => y !== x);
 
 describe('the eight records', () => {
-  it('validate with the eight enabled, and the shipped registry (eight present, not enabled) still validates', () => {
+  it('validate with the eight enabled, and the shipped manifest enables them (THE HABITAT ENABLE, D-0130)', () => {
     const reg = habitatRegistry();
     for (const id of HABITAT_IDS) expect(reg.habitats[id]?.phase, id).toBe(5);
-    expect(shipped.enabledHabitats).toEqual(['GEL_COLONY', 'SEDIMENT_EDGE', 'WATER_GARDEN']);
-    expect(Object.keys(registry().habitats).sort()).toEqual([...HABITAT_IDS, ...shipped.enabledHabitats].sort());
+    expect(shipped.enabledHabitats).toEqual([...V1_HABITATS, ...HABITAT_IDS].sort());
+    expect(Object.keys(registry().habitats).sort()).toEqual([...shipped.enabledHabitats]);
+    // So the habitat fixtures' test registry is the shipped one (their determinism and save cases run as shipped).
+    expect(reg.manifest).toEqual(registry().manifest);
     expect(validate(ENABLED)).toEqual([]);
   });
 
@@ -89,8 +93,8 @@ describe('the eight records', () => {
 
 describe('validator: shipped habitats (g5-briefs H4)', () => {
   it('a phase 5 habitat enabled at build phase 4 is an error on the manifest', () => {
-    const issues = validate({ buildPhase: 4, enabledHabitats: [...shipped.enabledHabitats, 'H04_LEAF_POOL'].sort() });
-    const i = [...shipped.enabledHabitats, 'H04_LEAF_POOL'].sort().indexOf('H04_LEAF_POOL');
+    const issues = validate({ buildPhase: 4, enabledHabitats: [...V1_HABITATS, 'H04_LEAF_POOL'].sort() });
+    const i = [...V1_HABITATS, 'H04_LEAF_POOL'].sort().indexOf('H04_LEAF_POOL');
     expect(errorsOn(issues, 'manifest.json', `enabledHabitats.${i}`)).toEqual(['"H04_LEAF_POOL" belongs to phase 5 (build phase 4)']);
   });
 
@@ -125,6 +129,25 @@ describe('validator: shipped habitats (g5-briefs H4)', () => {
 
 describe('validator: every habitat record (shipped or not)', () => {
   const edit = (id: string, f: (h: Raw) => void) => (raw: RawPacks) => f(habitatData(raw, id));
+
+  it('a record present but not enabled is still checked: a build listing only the v1.0 habitats (D-0130)', () => {
+    // Since THE HABITAT ENABLE the shipped manifest enables H04, so the cases below no longer reach a disabled record.
+    const v1 = { enabledHabitats: V1_HABITATS };
+    expect(validate(v1)).toEqual([]);
+    const repeated = validate(v1, edit('H04_LEAF_POOL', (h) => {
+      (h.regions as Raw[])[1]!.id = 'WEST_WAFER';
+    }));
+    expect(errorsOn(repeated, 'H04_LEAF_POOL.json', 'regions.1.id')).toEqual(['region id "WEST_WAFER" is used twice']);
+    const anchor = validate(v1, edit('H04_LEAF_POOL', (h) => {
+      (h.regions as Raw[])[0]!.anchor = [64, 64];
+    }));
+    expect(errorsOn(anchor, 'H04_LEAF_POOL.json', 'regions.0.anchor')).toEqual(["(64,64) is outside the region's shape"]);
+    const stone = validate(v1, edit('H04_LEAF_POOL', (h) => {
+      h.ops = [{ op: 'disk', center: [30, 64], radius: 3, substrate: 'stone' }];
+      (h.objects as Raw[]).push({ material: 'M11', at: [30, 64] });
+    }));
+    expect(errorsOn(stone, 'H04_LEAF_POOL.json', 'objects.2.at')).toEqual(['(30,64) holds a structure']);
+  });
 
   it('seven regions', () => {
     const issues = validate({}, edit('H04_LEAF_POOL', (h) => {
