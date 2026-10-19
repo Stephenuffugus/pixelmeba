@@ -3,6 +3,17 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑19 03:03 UTC — STOPPED FOR THE CODESPACE CLOSE; NOTHING LOST. main pushed (docs only since the enable 47f8399).
+> Wave 15 run wf_5b321cad-dcf stopped at an agent boundary: round-1 fixers FINISHED for cards-curated (02:05) and measures-overrides (02:33); the prompts-succession fixer
+> (started 02:05) was STOPPED mid-work: its edits so far are in the tree and the backup, and on resume it reruns
+> (its prompt says the work is in the tree; do not start over); then the re-verifier.
+> Its whole tree = origin wip/g5-wave-15 (the final backup, taken right after this note; the backup loop is stopped). Previews were on ports 4310 (main) and
+> 4311 (wave 15 snapshot); they stop with the codespace. START HERE: the steps of the 02:05 banner below (restore the tree, resume
+> the run with resumeFromRunId in the same session, or the hand-written continuation in a new one), then LEAD AFTER WAVE 15 with
+> these lead items: habitats-p5-equivalence compares only the golden's own keys; a D-entry for E209 revision 2 (GATE_MEAL_V1
+> background sugar 0, gate runSeconds ≥ 180 + gateTransfer.S01.sugar > 0 + gateCrossings.S01 = 0; measures-overrides-fix1.md);
+> the release call on E205/E206 (never completable as shipped: revise the recipes or hold the cards back, never a rule change).**
+
 > **Update 2026‑10‑19 02:05 UTC — CODESPACE CLOSES ABOUT 03:50. main = the enable 47f8399 + docs, pushed. WAVE 15 IS IN ITS FIX
 > ROUND AND NOT INTEGRATED: run wf_5b321cad-dcf (4 builders and 4 verifiers done; round-1 fixers for measures-overrides and
 > cards-curated running since 01:17; the prompts-succession fixer queued; then one re-verifier). Its uncommitted work is backed
