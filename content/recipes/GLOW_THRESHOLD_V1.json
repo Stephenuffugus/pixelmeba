@@ -1,0 +1,47 @@
+{
+  "id": "GLOW_THRESHOLD_V1",
+  "revision": 1,
+  "name": "Glow threshold",
+  "habitatId": "WATER_GARDEN",
+  "seed": 205,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "baseLight": 0.05,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {
+      "center": [
+        64,
+        64
+      ],
+      "radius": 6,
+      "substrate": "water",
+      "add": {
+        "sugar": 1,
+        "nutrient": 0.2
+      },
+      "label": "Sugar and nutrient patch"
+    }
+  ],
+  "founders": [
+    {
+      "species": "B09",
+      "count": 30,
+      "center": [
+        64,
+        64
+      ],
+      "radius": 4,
+      "placement": "nearest",
+      "label": "Lanterns"
+    }
+  ],
+  "labels": [],
+  "question": "When do crowded Lanterns start to glow?",
+  "expectedObservationsText": "Thirty Lanterns crowd a sugar patch in dim light (0.05). Each Lantern releases a little signal into its cell; a Lantern that senses enough signal for long enough starts to glow, and stops when the signal it senses stays low or its energy runs short. The inspector shows a Lantern's sensed signal, its glow thresholds and whether it is glowing. Glow makes no light.",
+  "phase": 5
+}

@@ -12,13 +12,17 @@
  *   an S04 channel     the classes its directed transfer carries (gateTracer.ts tracerCrosses from the
  *                      upstream side: the dissolved and viral pools and Small) → 'oneWay'; the rest
  *                      'blocked' (D-0106: closed to ordinary spreading and movement).
- * Pips read by SHAPE: filled = pass, half-filled = partial, hollow = blocked, a chevron = one way.
+ * Pips read by SHAPE: filled = pass, half-filled = partial, hollow = blocked, a chevron = one way, a dashed ring =
+ * not applicable (P5.8: the world badge of an OPEN S03 draws its Fixed pip so, worldPipsFor — an open shutter's
+ * "passes every class" does not apply to Fixed things, which never move: the gate table says "Stays put" and the
+ * tracer never crosses Fixed; the badge has no words to say so). badgeFor itself, which the gate sheet's pips
+ * read beside those words, is unchanged.
  *
  * World layer: one badge per straight run of same-code edges (runsOf) at the 'close' zoom preset only, plus one
  * beside the selected gate (its gate sheet open) at every zoom. Static: nothing animates, so reduced motion
  * changes nothing. Redrawn on a geometry change, a selection change or a zoom band change, never per tick.
  */
-import { EDGE_CHANNEL, EDGE_NONE, edgeFactor, edgeKey, edgePermits, type TransportClass } from '@sim/barriers';
+import { EDGE_CHANNEL, EDGE_NONE, EDGE_SHUTTER_OPEN, edgeFactor, edgeKey, edgePermits, type TransportClass } from '@sim/barriers';
 import { GRID_W } from '@sim/constants';
 import { EDGE_FLOW_BACK, type GeometryEdges } from '@worker/protocol';
 import { ZOOM_CLOSE, ZOOM_NEIGHBORHOOD } from './camera';
@@ -26,7 +30,11 @@ import { tracerCrosses } from './gateTracer';
 import { DISH_COLORS } from './layers';
 import { EDGE_CODE_MASK } from './structureLayer';
 
-export type PipState = 'pass' | 'partial' | 'blocked' | 'oneWay';
+/**
+ * 'notApplicable' (P5.8, D-0123 notes): the class has no crossing to show here, drawn as a dashed ring (never
+ * filled, never hollow-blocked). Only the world badge's Fixed pip of an OPEN S03 uses it (worldPipsFor).
+ */
+export type PipState = 'pass' | 'partial' | 'blocked' | 'oneWay' | 'notApplicable';
 
 /** The CT §5.3 classes in badge (and gate table) order. */
 export const BADGE_CLASSES: readonly TransportClass[] = ['dissolved', 'activity', 'viral', 'small', 'medium', 'large', 'fixed'];
@@ -53,6 +61,17 @@ export function badgeFor(code: number): readonly BadgePip[] {
     }
     return { cls, state: edgePermits(base, cls) ? 'pass' : 'blocked' };
   });
+}
+
+/**
+ * The pips the WORLD badge draws (P5.8): badgeFor, except an OPEN S03's Fixed pip, which is 'notApplicable'
+ * (edgePermits says an open shutter passes every class, but a Fixed organism never moves, so there is no crossing
+ * for the pip to show; D-0123 note "the open S03's Fixed pip reads 'pass'").
+ */
+export function worldPipsFor(code: number): readonly BadgePip[] {
+  const pips = badgeFor(code);
+  if ((code & EDGE_CODE_MASK) !== EDGE_SHUTTER_OPEN) return pips;
+  return pips.map((p) => (p.cls === 'fixed' ? { cls: p.cls, state: 'notApplicable' as const } : p));
 }
 
 /** One barrier edge as GeometryMsg lists it, with its code (EDGE_FLOW_BACK included). */
@@ -148,14 +167,14 @@ export function worldBadges(edges: GeometryEdges | null | undefined, zoom: numbe
   if (badgeZoomBand(zoom) === 'close') {
     for (const r of runsOf(list)) {
       if (sel && r.dir === sel.dir && r.cells.includes(sel.cell)) continue;
-      out.push({ at: r.mid, dir: r.dir, code: r.code, pips: badgeFor(r.code), selected: false });
+      out.push({ at: r.mid, dir: r.dir, code: r.code, pips: worldPipsFor(r.code), selected: false });
     }
   }
   if (sel) {
     const cx = sel.cell % GRID_W;
     const cy = Math.floor(sel.cell / GRID_W);
     const at: [number, number] = sel.dir === 'R' ? [cx + 1, cy + 0.5] : [cx + 0.5, cy + 1];
-    out.push({ at, dir: sel.dir, code: sel.code, pips: badgeFor(sel.code), selected: true });
+    out.push({ at, dir: sel.dir, code: sel.code, pips: worldPipsFor(sel.code), selected: true });
   }
   return out;
 }

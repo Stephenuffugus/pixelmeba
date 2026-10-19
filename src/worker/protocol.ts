@@ -8,7 +8,7 @@ import type { FieldId } from '@sim/fields';
 import type { CompareSpeed, ComparisonState } from './comparison';
 import type { LineageAnswer } from '@sim/lineage';
 import type { VariantErrorCode, VariantPreview, VariantRecord } from '@sim/variants';
-import type { ExperimentCardView, JournalStamp, PlayerStep } from '@sim/experiments';
+import type { ExperimentCardView, JournalStamp, PlayerStep, TestOverrideView } from '@sim/experiments';
 import type { SaveMetaVariant } from '@persist/saveFile';
 import type { DishJournalEntry, RegionalTraitSeries } from '@sim/history';
 import type { FounderOrigin } from '@sim/founders';
@@ -18,7 +18,8 @@ import type { SampleMode } from '@sim/sampleSlot';
 import type { FavoritePattern, NotebookRecord } from '@persist/notebook';
 import type { GoalRecord, GoalState } from '@persist/notebookGoals';
 import type { TurnRecord } from '@persist/notebookTurns';
-import type { ChallengeInput, ChallengeRecord } from '@persist/notebookChallenges';
+import type { ChallengeInput, ChallengeRecord, ChallengeToolGroup } from '@persist/notebookChallenges';
+import type { SuccessionEntry } from '@persist/notebookSuccession';
 import type { GalleryEntry } from '@persist/notebookGallery';
 import type { StorageInfo } from './storage';
 import type { MapWindow, RelationshipMapData } from './relationshipMap';
@@ -423,6 +424,8 @@ export interface SlotModes {
   readonly founderMode: string;
   /** True: "Core prototype — quantitative evolution"; absent when the slot did not record its registry. */
   readonly partial?: boolean;
+  /** P5.6 (SPEC §13.1, D02 §22): the saved world records a test-only override (its save meta's testOverrides copy); absent otherwise. */
+  readonly testOnly?: true;
 }
 
 /** Per-entity record stride in SnapshotMsg.ents (Float32). 14 since protocol 2 (E_CUE2, E_LINKMASK); 15 since protocol 3 (E_CUE3). */
@@ -729,6 +732,12 @@ export interface DishInfo {
    * cell (x, y). Present only when that habitat records at least one region; absent otherwise (every v1.0 dish).
    */
   readonly regions?: readonly DishRegion[];
+  /**
+   * P5.6 (SPEC §13.1 "test-only overrides disclosed"): one entry per overridden field, read from the WORLD's own
+   * recorded provenance (testOnlyOverrides) and species copies; `normal` is this build's record value (or the
+   * copy's own value when the build lacks the species). Absent when the world records no override.
+   */
+  readonly testOverrides?: readonly TestOverrideView[];
 }
 
 /** One habitat region as DishInfo.regions carries it (the pin and the legend). */
@@ -876,7 +885,25 @@ export interface GoalOffer {
   readonly summary: string;
   readonly completedText: string;
   readonly endedText: string | null;
+  /**
+   * P5.6 (CT §10.6 "Recover a neighborhood"): present only on a challenge starting point (the 'goalCatalog'
+   * answer to recipeId CHALLENGE_TEMPLATES_REQUEST): its predicate (the region is the challenge's choice) and
+   * the template's budget, tools and turn length, which the challenge editor fills in.
+   */
+  readonly challengeTemplate?: {
+    readonly commandBudget: number;
+    readonly allowedTools: readonly ChallengeToolGroup[];
+    readonly horizonSeconds: 60 | 180 | 600;
+    readonly predicate: { readonly type: string; readonly params: Readonly<Record<string, unknown>>; readonly durationSeconds?: number };
+  };
 }
+
+/**
+ * P5.6: the 'goalCatalog' request's recipeId that asks, for an open dish (targetDishId), for its challenge
+ * starting points instead of its goals (src/worker/goals.ts challengeTemplates). A dish request's recipeId was
+ * ignored before, so every earlier caller (recipeId null) is answered exactly as before.
+ */
+export const CHALLENGE_TEMPLATES_REQUEST = '#challengeTemplates';
 
 /** P4.1: what changed in a notebook without being asked (stage 2 extends the union). */
 export type NotebookChange =
@@ -889,7 +916,11 @@ export type NotebookChange =
   /** P4.2: a story card was recorded or joined by later evidence (`notify` false), or chosen for the one notification (`notify` true). */
   | { readonly kind: 'story'; readonly id: string; readonly notify: boolean }
   /** P4.2: Undo or a rollback removed story cards recorded in the undone time (`removed` cards). */
-  | { readonly kind: 'storiesRestored'; readonly removed: number };
+  | { readonly kind: 'storiesRestored'; readonly removed: number }
+  /** P5.6: a succession minute entry was written (unsolicited; read in the Notebook, never a notice, toast or sound). */
+  | { readonly kind: 'succession'; readonly entry: SuccessionEntry }
+  /** P5.6: Undo or a rollback removed the succession entry of a minute after the restored tick (one change per entry). */
+  | { readonly kind: 'successionRestored'; readonly id: string };
 
 /** What the lineage view asks the worker to mark: a locus to band, and/or a branch to highlight. */
 export interface LineageView {

@@ -284,11 +284,12 @@ describe('a malformed notebook is dropped with a message; the world loads unchan
       const bad = { ...file, notebook: await damage(file.notebook, w) };
       const loaded = await loadSaveFile(JSON.stringify(bad));
       expect(loaded.notebookDropped).toBe(NOTEBOOK_DROPPED_TEXT);
+      // Re-pinned by cause (P5.6 part 3, D-0131): the succession kind joined the notebook, so the message names it.
       expect(loaded.notebookDropped).toBe(
-        "This dish's notebook (favorites, story cards, goals, bookmarks, gallery, challenges and its Try my dish turn) could not be read, so it was left out. The dish itself loaded.",
+        "This dish's notebook (favorites, story cards, goals, bookmarks, gallery, challenges, succession and its Try my dish turn) could not be read, so it was left out. The dish itself loaded.",
       );
       // It names what a dropped record loses: one word per notebook kind (favorites … turns).
-      for (const word of ['favorites', 'story cards', 'goals', 'bookmarks', 'gallery', 'challenges', 'Try my dish turn']) expect(NOTEBOOK_DROPPED_TEXT).toContain(word);
+      for (const word of ['favorites', 'story cards', 'goals', 'bookmarks', 'gallery', 'challenges', 'succession', 'Try my dish turn']) expect(NOTEBOOK_DROPPED_TEXT).toContain(word);
       expect(loaded.notebook).toEqual(emptyNotebook(w.worldId));
       expect(loaded.file.notebook).toBeUndefined();
       expect(stateHash(loaded.world)).toBe(stateHash((await loadSaveFile(plain.text)).world));

@@ -46,8 +46,23 @@ describe('experiment cards (SPEC §13.2; CT §10)', () => {
       ['EXP_202', 202, 'OIL_NEIGHBORHOOD_V1', false, 'none', 180],
       ['EXP_203', 203, 'PROTEIN_CHAIN_V1', true, 'omitFounders', 180],
       ['EXP_204', 204, 'BROKEN_CATALYST_V1', true, 'commands', 120],
+      // P5.6 (CT §10.3; D-0131; re-pinned in wave 15): the Phase 5 cards E205–E211 ship (phase 5 ≤ buildPhase 5).
+      ['EXP_205', 205, 'GLOW_THRESHOLD_V1', false, 'none', 120],
+      ['EXP_206', 206, 'QUIET_NEIGHBORS_V1', true, 'commands', 150],
+      ['EXP_207', 207, 'BRINE_CROSSING_V1', false, 'none', 180],
+      ['EXP_208', 208, 'GLASS_BUDGET_V1', true, 'commands', 180],
+      ['EXP_209', 209, 'GATE_MEAL_V1', false, 'none', 180],
+      ['EXP_210', 210, 'SLEEPING_SHORTAGE_V1', false, 'none', 180],
+      ['EXP_211', 211, 'SHELTERED_LACE_V1', false, 'none', 600],
       // P3.9 (CT §10.3 E212): 10 s.
       ['EXP_212', 212, 'FUNGAL_SUPPLY_LINE_V1', false, 'none', 10],
+      // Re-pinned in wave 15 stage 2 (cards-curated): the Phase 5 cards E213–E218 ship (phase 5 ≤ buildPhase 5).
+      ['EXP_213', 213, 'TEMPORARY_TRAP_V1', false, 'none', 12],
+      ['EXP_214', 214, 'SHELL_HANDLING_V1', false, 'none', 10],
+      ['EXP_215', 215, 'FUNGAL_HITCHHIKER_V1', true, 'omitFounders', 120],
+      ['EXP_216', 216, 'DIFFERENT_HOST_V1', false, 'none', 180],
+      ['EXP_217', 217, 'RIVAL_NO_WINNER_V1', true, 'omitFounders', 180],
+      ['EXP_218', 218, 'NIGHT_SHIFT_V1', false, 'none', 240],
       ['EXP_A', 104729, 'STARCH_UNLOCK_V1', true, 'omitPatch', 180],
       ['EXP_B', 104729, 'FIRST_DISH_V1', true, 'commands', 300],
       ['EXP_C', 104729, 'RESERVE_COMPARE_V1', true, 'omitScheduled', 600],

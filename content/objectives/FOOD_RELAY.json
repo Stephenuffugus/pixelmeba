@@ -1,0 +1,20 @@
+{
+  "id": "FOOD_RELAY",
+  "title": "Food relay",
+  "predicate": {
+    "type": "observeEvent",
+    "params": {
+      "all": [
+        { "event": "conversion", "enzyme": "starch" },
+        { "event": "consumption", "pool": "sugar" },
+        { "event": "death" },
+        { "event": "consumption", "pool": "detritus" }
+      ]
+    }
+  },
+  "summary": "See each step of the relay recorded in this attempt: starch converted to sugar, sugar eaten, a death that leaves debris, and debris eaten. Each step counts only from its own record; no step is credited to a maker.",
+  "completedText": "Every step of the food relay was recorded in this attempt by {time}.",
+  "offerOn": ["SHARED_LUNCH_V1"],
+  "offerOnHabitats": ["H04_LEAF_POOL"],
+  "phase": 5
+}

@@ -1,0 +1,30 @@
+{
+  "id": "SHELL_HANDLING_V1",
+  "revision": 2,
+  "name": "Shell handling",
+  "habitatId": "WATER_GARDEN",
+  "seed": 214,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "baseLight": 0.8,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [],
+  "founders": [
+    {"species": "P10", "count": 1, "center": [64, 64], "radius": 0, "cells": [[64, 64]], "label": "Needlejaw"}
+  ],
+  "scheduledCommands": [
+    {"atSecond": 0, "kind": "inoculate", "payload": {"kind": "inoculate", "speciesId": "P05", "x": 64.5, "y": 64.5, "radius": 0, "count": 1}, "label": "One Shellglider added in the Needlejaw's cell at 0 s"}
+  ],
+  "testOnlyOverrides": [
+    {"description": "Needlejaw and Shellglider cannot move in this fixture, so their contact is continuous. Test only.", "target": "species:P10", "values": {"speed": 0}},
+    {"description": "Needlejaw and Shellglider cannot move in this fixture, so their contact is continuous. Test only.", "target": "species:P05", "values": {"speed": 0}}
+  ],
+  "labels": ["Test-only override: Needlejaw and Shellglider speed 0"],
+  "question": "How long does a Needlejaw need to take a Shellglider?",
+  "expectedObservationsText": "One Needlejaw in clear water with no food. At 0 s the dish adds one Shellglider in the Needlejaw's own cell (founders never share a cell, so it is added as an ordinary inoculation), within contact reach. A test-only override sets both species' speed to 0, so neither can move: this is an experiment fixture, never an ordinary dish. A Needlejaw needs 4 s of unbroken contact to take a Shellglider; contact that breaks starts the count again.",
+  "phase": 5
+}

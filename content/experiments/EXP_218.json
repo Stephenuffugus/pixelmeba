@@ -1,0 +1,32 @@
+{
+  "id": "EXP_218",
+  "seed": 218,
+  "title": "Night shift",
+  "question": "What does a Turnleaf do when the light goes?",
+  "recipeId": "NIGHT_SHIFT_V1",
+  "intervention": "Watch the patch through one day and night. Tap a Turnleaf at noon and again at night: the inspector shows whether it is using light or sugar.",
+  "predictedTradeoff": "Switching lets a Turnleaf feed through the night on sugar, but the sugar it drinks is sugar the patch no longer holds; Sunbeads stop making food in the dark.",
+  "measurements": [
+    "events.modeSwitch.A04",
+    "intakePhoto.A04",
+    "intakeSugar.A04",
+    "intake.A01",
+    "alive.A04",
+    "alive.A01"
+  ],
+  "stoppingSeconds": 240,
+  "confounds": "Mode changes are counted as records, not Turnleafs: one record stands for every Turnleaf that changed to the same mode in the same tick. Turnleafs and Sunbeads also shade and crowd each other. This is one run.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "events.modeSwitch.A04", "arm": "A", "op": "gte", "value": 1, "label": "Turnleafs changed mode"},
+        {"measure": "intakePhoto.A04", "arm": "A", "op": "gt", "value": 0, "label": "Turnleafs made food from light"},
+        {"measure": "intakeSugar.A04", "arm": "A", "op": "gt", "value": 0, "label": "Turnleafs drank sugar"}
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {"journalStamp": "Watched Turnleafs through a day and a night", "playerSteps": []},
+  "phase": 5
+}

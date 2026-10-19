@@ -1,0 +1,14 @@
+{
+  "id": "RECOVER_A_NEIGHBORHOOD",
+  "title": "Recover a neighborhood",
+  "predicate": { "type": "biomassThreshold", "params": { "measure": "activeCount", "threshold": 20, "fromBelow": 5 } },
+  "summary": "Bring a chosen region from fewer than 5 active organisms to at least 20, using at most three tool actions.",
+  "completedText": "The region reached 20 active organisms in this attempt at {time}.",
+  "offerOn": [],
+  "challengeTemplate": {
+    "commandBudget": 3,
+    "allowedTools": ["addLife", "feed", "habitat", "sample", "cleanWater", "lid", "evolution"],
+    "horizonSeconds": 180
+  },
+  "phase": 5
+}

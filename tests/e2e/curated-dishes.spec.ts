@@ -3,7 +3,8 @@
  * and, for Borrowed Shelter, its pre-seeded genomes ("present at creation"); picking it takes the
  * recipe's own seed and settings (the authored dish), Randomize makes it the player's own version;
  * Create opens it paused in the Lab. Also: no serious axe violations, 48 px targets, 16 px text and
- * 200 % text.
+ * 200 % text. P5.6 (wave 15 cards-curated): Under the Canopy and The Jacket Garden join the list from their
+ * records; The Jacket Garden's six jacketed Dartfins read "present at creation" in New Dish and the Evolution sheet.
  */
 import { expect, test, type Page } from '@playwright/test';
 import { expectNoHorizontalOverflow, expectNoSeriousA11yViolations, expectReachable, seedSettings } from './helpers';
@@ -103,4 +104,69 @@ test('New Dish → Public Kitchen (Diverse) at 200 % text: question and abilitie
   await page.getByTestId('new-dish-start').click();
   await expect(page.getByTestId('dish-screen')).toHaveAttribute('data-view', 'lab');
   await expect(page.getByTestId('sim-time')).toContainText('0:00 · 40 alive');
+});
+
+/** More → Evolution: the sheet's "what the founders carried" line (UX §3.3; strings/modes.ts creationFoundersText). */
+async function openEvolutionSheet(page: Page): Promise<void> {
+  await page.getByTestId('more').click();
+  await expectReachable(page.getByTestId('more-evolution'));
+  await page.getByTestId('more-evolution').click();
+  await expect(page.getByTestId('evolution-sheet')).toBeVisible();
+}
+
+test('New Dish → The Jacket Garden (P5.6): question, six jacketed Dartfins present at creation, and the Evolution sheet says so', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openNewDish(page);
+  const choice = page.getByTestId('new-dish-start-with-curated:L305_THE_JACKET_GARDEN');
+  await expectReachable(choice);
+  await expect(choice).toContainText('Is delayed capture worth the cost?');
+  await choice.click();
+  await expect(choice).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('new-dish-seed')).toHaveValue('305');
+  await expect(page.getByTestId('new-dish-name')).toHaveValue('The Jacket Garden');
+  await expect(page.getByTestId('new-dish-founders-identical')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('new-dish-question')).toHaveText('The Jacket Garden asks: Is delayed capture worth the cost?');
+  await expect(page.getByTestId('new-dish-labels')).toHaveText('Pre-seeded genomes');
+  await expect(page.getByTestId('new-dish-preseeded')).toContainText('present at creation');
+  await expect(page.getByTestId('new-dish-preseeded')).toContainText('6 of the 12 Dartfins start with Mineral jacket; 6 start without');
+  await expect(page.getByTestId('new-dish-authored')).toHaveText('This is The Jacket Garden as written, with its own seed 305.');
+  await expectNoSeriousA11yViolations(page);
+  await expectNoHorizontalOverflow(page);
+  await expectTextAtLeast16px(page, 'main.page');
+
+  await expectReachable(page.getByTestId('new-dish-start'));
+  await page.getByTestId('new-dish-start').click();
+  await expect(page.getByTestId('dish-screen')).toHaveAttribute('data-view', 'lab');
+  await expect(page.getByTestId('run-toggle')).toHaveAttribute('aria-label', 'Run');
+  await expect(page.getByTestId('sim-time')).toContainText('0:00 · 114 alive');
+  await openEvolutionSheet(page);
+  await expect(page.getByTestId('evolution-creation')).toHaveText('Present at creation: 6 of 12 Dartfins carried Mineral jacket.');
+  await expectNoHorizontalOverflow(page);
+  await expectTextAtLeast16px(page, '[data-testid="evolution-sheet"]');
+  await expectNoSeriousA11yViolations(page);
+});
+
+test('New Dish → Under the Canopy (P5.6, Diverse): question, authored seed, Create', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openNewDish(page);
+  const choice = page.getByTestId('new-dish-start-with-curated:L302_UNDER_THE_CANOPY');
+  await expectReachable(choice);
+  await expect(choice).toContainText('Who persists in the shade they create?');
+  await choice.click();
+  await expect(page.getByTestId('new-dish-seed')).toHaveValue('302');
+  await expect(page.getByTestId('new-dish-founders-diverse')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('new-dish-question')).toHaveText('Under the Canopy asks: Who persists in the shade they create?');
+  await expect(page.getByTestId('new-dish-labels')).toHaveCount(0);
+  await expect(page.getByTestId('new-dish-diverse')).toContainText('present at creation');
+  await expect(page.getByTestId('new-dish-summary')).toContainText('30 Sunbeads');
+  await expect(page.getByTestId('new-dish-summary')).toContainText('20 Raftballs');
+  await expectNoHorizontalOverflow(page);
+  await expectTextAtLeast16px(page, 'main.page');
+  await expectNoSeriousA11yViolations(page);
+  await page.getByTestId('new-dish-start').click();
+  await expect(page.getByTestId('dish-screen')).toHaveAttribute('data-view', 'lab');
+  await expect(page.getByTestId('sim-time')).toContainText('0:00 · 50 alive');
+  await openEvolutionSheet(page);
+  await expect(page.getByTestId('evolution-creation')).toHaveText(/^Present at creation: .+\.$/);
+  await expectNoSeriousA11yViolations(page);
 });

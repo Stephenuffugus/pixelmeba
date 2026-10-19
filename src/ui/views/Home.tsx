@@ -6,7 +6,7 @@ import { evolution, meta, openDishThumb, sessionMemory } from '../state';
 import { HOME_TEXT } from '../strings/home';
 import { DishThumb } from './DishThumb';
 import { SessionMemory } from './SessionMemory';
-import { slotModesLine, worldModesLine } from '../strings/modes';
+import { modesFlags, slotModesLine, worldModesLine } from '../strings/modes';
 import { journalUnseen } from '../journal';
 import { unseenStories } from '../stories'; // P4.2: the quiet dot for an unseen story card
 import { StoryDot } from './Notebook';
@@ -40,7 +40,7 @@ export function Home() {
           // P4.3 (D08 "A satisfying stopping point"): after Save and leave, this visit's memory takes the Continue card's place.
           <SessionMemory
             memory={sessionMemory.value}
-            modes={worldModesLine(evolution.value?.preset ?? dishInfo.value!.mutationPreset, dishInfo.value!.founderMode, dishInfo.value!.registry)}
+            modes={worldModesLine(evolution.value?.preset ?? dishInfo.value!.mutationPreset, dishInfo.value!.founderMode, modesFlags(dishInfo.value!.registry, dishInfo.value!.testOverrides))}
           />
         ) : hasDish ? (
           <section class="card" aria-label="Continue">
@@ -53,7 +53,7 @@ export function Home() {
                 <p data-testid="home-continue-text">{continueCardText(dishInfo.value!.name, meta.value?.tick ?? dishInfo.value!.tick)}</p>
                 {/* P2.2: mode labels wherever a world is described (UX §3.3). */}
                 <p class="world-modes" data-testid="home-continue-modes">
-                  {worldModesLine(evolution.value?.preset ?? dishInfo.value!.mutationPreset, dishInfo.value!.founderMode, dishInfo.value!.registry)}
+                  {worldModesLine(evolution.value?.preset ?? dishInfo.value!.mutationPreset, dishInfo.value!.founderMode, modesFlags(dishInfo.value!.registry, dishInfo.value!.testOverrides))}
                 </p>
               </div>
             </div>

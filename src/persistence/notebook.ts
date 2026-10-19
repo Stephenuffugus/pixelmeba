@@ -19,6 +19,7 @@ import { turnsProblem, turnsWorldProblem, type TurnRecord } from './notebookTurn
 import { bookmarksProblem, type Bookmark } from './notebookBookmarks';
 import { galleryProblem, galleryWorldProblem, type GalleryEntry } from './notebookGallery';
 import { challengesProblem, challengesWorldProblem, type ChallengeRecord } from './notebookChallenges';
+import { successionProblem, successionRefsProblem, successionSeenProblem, successionSeenRefsProblem, type SuccessionEntry, type SuccessionSeenLink } from './notebookSuccession';
 
 export const NOTEBOOK_FORMAT = 'pixelmeba-notebook';
 export const NOTEBOOK_VERSION = 1;
@@ -90,6 +91,13 @@ export interface NotebookRecord {
   readonly gallery?: readonly GalleryEntry[];
   /** P4.8c: custom challenges (src/persistence/notebookChallenges.ts; ≤ 20); absent in records written before them (reads as []). */
   readonly challenges?: readonly ChallengeRecord[];
+  /** P5.6: the succession notebook (src/persistence/notebookSuccession.ts; ≤ SUCCESSION_MAX minute entries); absent in records written before it (reads as []). */
+  readonly succession?: readonly SuccessionEntry[];
+  /**
+   * P5.6 fix round 1: every feeding link the succession detector saw in this dish, [key, minute] (≤ SUCCESSION_SEEN_MAX),
+   * so "first seen" holds after the oldest entries are removed and after a reload; absent until a link is seen.
+   */
+  readonly successionSeen?: readonly SuccessionSeenLink[];
   readonly checksum: string;
 }
 
@@ -98,7 +106,7 @@ export interface NotebookRecord {
  * (KIND_PROBLEMS below; a new kind adds its name here; tests/persistence/notebook.test.ts pins one word per kind).
  */
 export const NOTEBOOK_DROPPED_TEXT =
-  "This dish's notebook (favorites, story cards, goals, bookmarks, gallery, challenges and its Try my dish turn) could not be read, so it was left out. The dish itself loaded.";
+  "This dish's notebook (favorites, story cards, goals, bookmarks, gallery, challenges, succession and its Try my dish turn) could not be read, so it was left out. The dish itself loaded.";
 
 export function emptyNotebook(worldId: string): NotebookRecord {
   return {
@@ -256,6 +264,10 @@ function worldRefsProblem(raw: Record<string, unknown>, refs: NotebookWorldRefs)
   if (gallery) return gallery;
   const challenges = challengesWorldProblem(raw, refs); // P4.8c (the recorded manifest, species and fields when the loader passes them)
   if (challenges) return challenges;
+  const succession = successionRefsProblem(raw.succession, refs); // P5.6 (the next event id when the loader passes it)
+  if (succession) return succession;
+  const seen = successionSeenRefsProblem(raw.successionSeen, refs); // P5.6 fix round 1
+  if (seen) return seen;
   return null;
 }
 
@@ -270,6 +282,8 @@ const KIND_PROBLEMS: Readonly<
   bookmarks: bookmarksProblem, // P4.8b (notebookBookmarks.ts)
   gallery: galleryProblem, // P4.8b (notebookGallery.ts)
   challenges: challengesProblem, // P4.8c (notebookChallenges.ts)
+  succession: successionProblem, // P5.6 (notebookSuccession.ts)
+  successionSeen: successionSeenProblem, // P5.6 fix round 1 (notebookSuccession.ts; named by "succession" in NOTEBOOK_DROPPED_TEXT)
 };
 const ENVELOPE_KEYS = ['format', 'notebookVersion', 'worldId', 'nextFavorite', 'checksum'];
 
@@ -351,7 +365,7 @@ export function notebookWithoutNicknames(record: NotebookRecord): NotebookRecord
 
 /** True when the record holds nothing (no favorite, followed or not). Such a record is not written to a file. */
 export function notebookIsEmpty(record: NotebookRecord): boolean {
-  return record.favorites.length === 0 && (record.goals ?? []).length === 0 && (record.stories ?? []).length === 0 && (record.turns ?? []).length === 0 && (record.bookmarks ?? []).length === 0 && (record.gallery ?? []).length === 0 && (record.challenges ?? []).length === 0;
+  return record.favorites.length === 0 && (record.goals ?? []).length === 0 && (record.stories ?? []).length === 0 && (record.turns ?? []).length === 0 && (record.bookmarks ?? []).length === 0 && (record.gallery ?? []).length === 0 && (record.challenges ?? []).length === 0 && (record.succession ?? []).length === 0 && (record.successionSeen ?? []).length === 0;
 }
 
 /** Whether any favorite carries a nickname. */
@@ -363,7 +377,7 @@ export function notebookHasNicknames(record: NotebookRecord): boolean {
  * The record a copy of the dish starts with (Duplicate, an opened checkpoint branch): the favorites
  * only, under the copy's world id. PROPOSED DECISION: story cards and goal attempts belong to the world
  * they were recorded in, so stage 2's kinds are not copied. P4.7: nor a Try my dish turn (a copy is an
- * ordinary dish, D-0081). Unsealed.
+ * ordinary dish, D-0081). P5.6: nor the succession entries and seen links (they belong to the world they were recorded in). Unsealed.
  */
 export function favoritesOnly(record: NotebookRecord, worldId: string): NotebookRecord {
   return { ...emptyNotebook(worldId), favorites: record.favorites, nextFavorite: record.nextFavorite };

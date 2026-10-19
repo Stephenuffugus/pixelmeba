@@ -4025,3 +4025,11 @@ html[data-text-scale='2'] .tab-context {
   margin: 0;
   font-size: var(--fs-body);
 }
+
+/* P5.6 (wave 15, p5-polish): an experiment card's test-only override block (ExperimentCard.tsx), before the setup. */
+.xp-override h2 {
+  margin-top: 0.25rem;
+}
+.xp-override p {
+  overflow-wrap: anywhere;
+}

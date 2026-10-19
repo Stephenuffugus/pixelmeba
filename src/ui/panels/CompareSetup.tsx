@@ -23,7 +23,7 @@ import {
 import type { ComparisonVariantPair } from '@worker/variantPair';
 import { VARIANT_PAIR_UI } from '../strings/variantPair';
 import { clock, describeChanges, horizonLabel } from './CompareText';
-import { worldModesLine } from '../strings/modes';
+import { modesFlags, worldModesLine } from '../strings/modes';
 
 export const PREDICTION_MAX = 280;
 
@@ -43,7 +43,7 @@ export function CompareSetup() {
       </p>
       {/* P2.2: mode labels wherever a world is described (UX §3.3); both copies share them. */}
       <p class="world-modes" data-testid="compare-world-modes">
-        Both copies: {worldModesLine(info.mutationPreset, info.founderMode, info.registry)}
+        Both copies: {worldModesLine(info.mutationPreset, info.founderMode, modesFlags(info.registry, info.testOverrides))}
       </p>
 
       <h3>1 · Change one thing on B</h3>
@@ -128,7 +128,7 @@ function PairSetup(props: { readonly vp: ComparisonVariantPair }) {
       {vp.sequential ? <p data-testid="pair-sequential">{VARIANT_PAIR_UI.sequential}</p> : null}
       {info ? (
         <p class="world-modes" data-testid="compare-world-modes">
-          Both copies: {worldModesLine(info.mutationPreset, info.founderMode, info.registry)}
+          Both copies: {worldModesLine(info.mutationPreset, info.founderMode, modesFlags(info.registry, info.testOverrides))}
         </p>
       ) : null}
       <p class="sub">

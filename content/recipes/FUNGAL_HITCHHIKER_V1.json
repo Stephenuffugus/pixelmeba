@@ -1,0 +1,43 @@
+{
+  "id": "FUNGAL_HITCHHIKER_V1",
+  "revision": 1,
+  "name": "Fungal hitchhiker",
+  "habitatId": "WATER_GARDEN",
+  "seed": 215,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "baseLight": 0.8,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "ops": [
+    {"op": "disk", "center": [64, 64], "radius": 6, "substrate": "gel"}
+  ],
+  "fieldPatches": [
+    {"center": [64, 64], "radius": 6, "substrate": "gel", "add": {"sugar": 0.5, "nutrient": 0.2}, "label": "Gel patch (sugar 0.5 and nutrient 0.2 per cell)"}
+  ],
+  "founders": [
+    {
+      "species": "F02",
+      "count": 10,
+      "center": [64, 64],
+      "radius": 6,
+      "cells": [[60, 62], [63, 62], [66, 62], [60, 66], [63, 66], [66, 66], [62, 59], [65, 59], [62, 69], [65, 69]],
+      "label": "Cordweavers"
+    },
+    {
+      "species": "X02",
+      "count": 5,
+      "center": [64, 64],
+      "radius": 6,
+      "cells": [[61, 62], [64, 62], [67, 62], [61, 66], [64, 66]],
+      "label": "Threadriders, each next to one of the first five Cordweavers"
+    }
+  ],
+  "labels": [],
+  "question": "What does a Threadrider take from a Cordweaver?",
+  "expectedObservationsText": "Ten Cordweavers on a small gel patch with sugar and nutrient, and five Threadriders, each starting next to one of the first five Cordweavers. A Threadrider that touches a free Cordweaver rides it and drains carbon from its body; it cannot feed any other way. The experiment card makes a copy without the Cordweavers, with the Threadriders in the same places.",
+  "phase": 5
+}

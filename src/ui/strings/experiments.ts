@@ -4,10 +4,11 @@
  * biology. Measurement ids follow the grammar in src/sim/pairedRun.ts.
  */
 import type { CommandPayload } from '@sim/commands';
-import { livingCountFor, type CardScheduled, type ClauseResult, type ExperimentCardView, type GateClause, type PlayerStep } from '@sim/experiments';
+import { livingCountFor, type CardScheduled, type ClauseResult, type ExperimentCardView, type GateClause, type PlayerStep, type TestOverrideView } from '@sim/experiments';
 import { REASONS } from '@sim/reasons';
 import type { JournalMeasure } from '../journal';
 import { causeLabel } from '../panels/CompareText';
+import { FIELD_NAMES as ACTIVITY_FIELD_NAMES } from './fields';
 import { evolutionLabel } from './whatif';
 
 /** Plain names for the fields a card can measure (fallback: the field id). */
@@ -25,6 +26,13 @@ const FIELD_NAMES: Readonly<Record<string, string>> = {
   film: 'Film',
   // P3.9 (EXP_105): Pinphage units, measured as their carbon (0.01 C each).
   v01: 'Pinphage',
+  // P5.6 (wave 15): the Phase 5 fields a card measures (the activity fields by their one name, strings/fields.ts).
+  v02: 'Lacephage',
+  salt: 'Salt',
+  silicate: 'Silicate',
+  sGlow: ACTIVITY_FIELD_NAMES.sGlow,
+  quencher: ACTIVITY_FIELD_NAMES.quencher,
+  rival: ACTIVITY_FIELD_NAMES.rival,
 };
 
 const fieldName = (id: string) => FIELD_NAMES[id] ?? id;
@@ -40,8 +48,84 @@ export function groupWords(card: ExperimentCardView, group: string): string {
   return `with ${names.length === 1 ? `a ${names[0]}` : names.join(' + ')}`;
 }
 
+/** P5.6: an edge structure kind in a measure label, as a plural in a sentence (content names, lower case). */
+const GATE_WORDS: Readonly<Record<string, string>> = {
+  S01: 'fine membranes',
+  S02: 'small gates',
+  S03: 'shutter gates',
+  S04: 'one-way channels',
+};
+
+/**
+ * P5.6: a region of the card's habitat in a sentence, from ExperimentCardView.regionNames ("in the Fresh pool");
+ * a label that starts with its own preposition reads as written ("under the roof"). The id when unnamed.
+ */
+export function regionWords(card: ExperimentCardView, region: string): string {
+  const label = card.regionNames?.[region] ?? region;
+  if (/^(Under|Over|Inside|Outside|Behind|Beside|Near|Along|Between|Above|Below)\b/.test(label)) return `${label[0]!.toLowerCase()}${label.slice(1)}`;
+  return `in the ${label}`;
+}
+
+/**
+ * P5.6: the event types events.TYPE.SP counts, in words (a count of event records naming the species since the
+ * run started; one 'modeSwitch' record stands for every switch of that species to that mode in one tick, D-0126).
+ */
+function eventWords(card: ExperimentCardView, type: string, a: string): string {
+  switch (type) {
+    case 'glowOn':
+      return `Glow switch-ons by ${sps(card, a)}`;
+    case 'glowOff':
+      return `Glow switch-offs by ${sps(card, a)}`;
+    case 'modeSwitch':
+      return `Mode-switch records of ${sps(card, a)} (one per tick and new mode)`;
+    case 'rest':
+      return `Times ${sps(card, a)} began resting`;
+    case 'wake':
+      return `Times ${sps(card, a)} woke up`;
+    case 'trapArmed':
+      return `Traps set by ${sps(card, a)}`;
+    case 'trapHold':
+      return `Holds begun in ${sp(card, a)} traps`;
+    case 'trapRelease':
+      return `Holds ended in ${sp(card, a)} traps`;
+    case 'handlingStart':
+      return `Handling attempts begun by ${sps(card, a)}`;
+    case 'handlingBreak':
+      return `Handling attempts by ${sps(card, a)} that ended without a catch`;
+    case 'capture':
+      return `Capture records of ${sps(card, a)}`;
+    case 'linkFormed':
+      return `Links formed by ${sps(card, a)}`;
+    case 'linkBroken':
+      return `Links ended by ${sps(card, a)}`;
+    default:
+      return `“${type}” records of ${sps(card, a)}`;
+  }
+}
+
+/** P5.6: an id with an @REGION suffix in words (alive / resting / biomass .SP, mean.F, moisture). */
+function regionMeasureLabel(card: ExperimentCardView, base: string, region: string): string {
+  const [head, a = ''] = base.split('.');
+  const where = regionWords(card, region);
+  switch (head) {
+    case 'alive':
+      return `${sps(card, a)} ${where}`;
+    case 'resting':
+      return `${sps(card, a)} resting ${where}`;
+    case 'biomass':
+      return `${sp(card, a)} biomass ${where}`;
+    case 'mean':
+      return `Mean ${fieldName(a).toLowerCase()} ${where}`;
+    case 'moisture':
+      return `Mean moisture ${where}`;
+  }
+  return `${base} ${where}`;
+}
+
 /** A measurement id in plain words (the card supplies species, module and patch names). */
 export function measureLabel(card: ExperimentCardView, id: string): string {
+  const at = id.indexOf('@');
+  if (at >= 0) return regionMeasureLabel(card, id.slice(0, at), id.slice(at + 1));
   const [head, a = '', b = ''] = id.split('.');
   switch (head) {
     case 'seconds':
@@ -119,7 +203,8 @@ export function measureLabel(card: ExperimentCardView, id: string): string {
     }
     // P3.9 tracked measures (src/sim/pairedRun.ts).
     case 'infections':
-      return `${sps(card, a)} newly infected`;
+      // P5.6: infections.SP.VIRUS restricts the count to one virus.
+      return b ? `${sps(card, a)} newly infected by ${sp(card, b)}` : `${sps(card, a)} newly infected`;
     case 'limitSeconds': {
       const code = REASONS.indexOf(b as (typeof REASONS)[number]);
       return `Time ${sps(card, a)} spent ${code >= 0 ? limitWords(b) : b} (organism-seconds)`;
@@ -127,7 +212,34 @@ export function measureLabel(card: ExperimentCardView, id: string): string {
     case 'transfer':
       return `Carbon passed along ${sp(card, 'F02')} links`;
     case 'wholeUnitCells':
-      return `Most cells at once holding a whole Pinphage unit and a living ${sp(card, a)}`;
+      return `Most cells at once holding a whole ${b ? sp(card, b) : 'Pinphage'} unit and a living ${sp(card, a)}`;
+    // ---- P5.6 (wave 15; pairedRun.ts P5_MEASURE_HEADS): states now, event records, mode intake, gates.
+    case 'resting':
+      return `${sps(card, a)} resting`;
+    case 'glowing':
+      return `${sps(card, a)} glowing`;
+    case 'glowingStart':
+      return `${sps(card, a)} glowing when the run began`;
+    case 'attached':
+      return `${sps(card, a)} riding a host`;
+    case 'events':
+      return eventWords(card, a, b);
+    case 'firstCaptureAt':
+      return `When ${sps(card, a)} first caught prey`;
+    case 'intakePhoto':
+      return `Carbon ${sps(card, a)} took in while in Photo mode`;
+    case 'intakeSugar':
+      return `Carbon ${sps(card, a)} took in while in Sugar mode`;
+    case 'secretingSeconds':
+      return `Time ${sps(card, a)} spent releasing something (organism-seconds)`;
+    case 'gateTransfer':
+      return `${fieldName(b)} moved across ${GATE_WORDS[a] ?? a}`;
+    case 'gateCrossings':
+      return `Organism crossings of ${GATE_WORDS[a] ?? a}`;
+    case 'mean':
+      return `Mean ${fieldName(a).toLowerCase()}`;
+    case 'moisture':
+      return 'Mean moisture';
   }
   return id;
 }
@@ -144,8 +256,11 @@ function limitWords(reason: string): string {
   }
 }
 
-const COUNT_HEADS = new Set(['aliveTotal', 'speciesAlive', 'interventionAccepted', 'interventionRejected', 'alive', 'births', 'deaths', 'captures', 'founders', 'descendants', 'infections', 'wholeUnitCells']);
-const CARBON_HEADS = new Set(['inputCarbon', 'intake', 'capturedCarbon', 'field', 'consumed', 'converted', 'patchInput', 'biomass', 'biomassStart', 'biomassTotal', 'preyBiomass', 'transfer']);
+const COUNT_HEADS = new Set(['aliveTotal', 'speciesAlive', 'interventionAccepted', 'interventionRejected', 'alive', 'births', 'deaths', 'captures', 'founders', 'descendants', 'infections', 'wholeUnitCells', 'resting', 'glowing', 'glowingStart', 'attached', 'events', 'gateCrossings']);
+const CARBON_HEADS = new Set(['inputCarbon', 'intake', 'capturedCarbon', 'field', 'consumed', 'converted', 'patchInput', 'biomass', 'biomassStart', 'biomassTotal', 'preyBiomass', 'transfer', 'intakePhoto', 'intakeSugar']);
+
+/** P5.6: a measure's head, without an @REGION suffix ("moisture@ROOF" → "moisture", "alive.B01@X" → "alive"). */
+const headOf = (id: string): string => id.split('@')[0]!.split('.')[0]!;
 
 const ENERGY_HEADS = new Set(['meanEnergy', 'groupEnergy', 'groupEnergyMedian', 'groupEnergyMin', 'groupEnergyMax', 'reserveHeld', 'reservePeak']);
 
@@ -167,10 +282,13 @@ export function noneAlive(id: string, rec: Readonly<Record<string, number>> | nu
  */
 export function formatMeasure(id: string, value: number, rec?: Readonly<Record<string, number>> | null): string {
   if (noneAlive(id, rec)) return NONE_ALIVE;
-  const head = id.split('.')[0]!;
+  const head = headOf(id);
   if (head === 'extinctAt' || head === 'groupExtinctAt') return value < 0 ? 'not died out' : `${value} s`;
+  // P5.6: −1 is "no capture in the run" (pairedRun.ts firstCaptureAt).
+  if (head === 'firstCaptureAt') return value < 0 ? 'no capture yet' : `${num(value, 1)} s`;
   if (head === 'seconds' || head === 'runSeconds') return `${value} s`;
-  if (head === 'limitSeconds') return `${num(value, 1)} s`;
+  if (head === 'limitSeconds' || head === 'secretingSeconds') return `${num(value, 1)} s`;
+  if (head === 'mean' || head === 'moisture') return value.toFixed(3);
   if (COUNT_HEADS.has(head)) return String(Math.round(value));
   if (head === 'biomassRatio') return `× ${value.toFixed(2)}`;
   if (head === 'oxygenMean') return value.toFixed(3);
@@ -184,10 +302,10 @@ export function formatMeasure(id: string, value: number, rec?: Readonly<Record<s
  */
 export function formatDiff(id: string, a: number, b: number, recA?: Readonly<Record<string, number>> | null, recB?: Readonly<Record<string, number>> | null): string {
   if (noneAlive(id, recA) || noneAlive(id, recB)) return '—';
-  const head = id.split('.')[0]!;
-  if (head === 'extinctAt' || head === 'groupExtinctAt') return a < 0 || b < 0 ? '—' : signed(b - a, 0) + ' s';
+  const head = headOf(id);
+  if (head === 'extinctAt' || head === 'groupExtinctAt' || head === 'firstCaptureAt') return a < 0 || b < 0 ? '—' : signed(b - a, head === 'firstCaptureAt' ? 1 : 0) + ' s';
   if (head === 'seconds' || head === 'runSeconds') return signed(b - a, 1) + ' s';
-  return signed(b - a, COUNT_HEADS.has(head) ? 0 : head === 'oxygenMean' ? 3 : 2);
+  return signed(b - a, COUNT_HEADS.has(head) ? 0 : head === 'oxygenMean' || head === 'mean' || head === 'moisture' ? 3 : 2);
 }
 
 function num(v: number, d: number): string {
@@ -352,7 +470,19 @@ export function playerStepText(card: ExperimentCardView, step: PlayerStep): stri
     }
     case 'observeInfection':
       return `Tap an infected ${card.stepSpecies.length >= 1 ? sp(card, card.stepSpecies[0]!) : 'organism'}: the inspector shows its infection and when it bursts.`;
+    // P5.6 (CT §10.3 E205, E207, E211): the three Phase 5 steps.
+    case 'inspectGlow':
+      return `Inspect ${/^[aeiou]/i.test(who) ? 'an' : 'a'} ${who}’s glow: tap one and read whether it is glowing.`;
+    case 'toggleShutter':
+      return 'Open or close the shutter: tap the shutter gate and switch it.';
+    case 'inspectMoisture':
+      return 'Inspect moisture in a marked region: tap a cell inside a numbered region and read its moisture.';
   }
+}
+
+/** P5.6: the short label of each player step (the card's checklist, tests/ui/measure-words-p5.test.ts). */
+export function playerStepLabel(card: ExperimentCardView, step: PlayerStep): string {
+  return playerStepText(card, step).split(':')[0]!;
 }
 
 /** Stopping point in words ("3 min", "90 s"). */
@@ -390,4 +520,34 @@ export function journalMeasureCells(measures: readonly JournalMeasure[]): { read
       diff: m.diff !== null && (emptyA || emptyB) ? '—' : m.diff,
     };
   });
+}
+
+// ---- P5.6 test-only override disclosure (SPEC §13.1 "disclosed in the setup panel and export"; UX §3.3; D02 706) ----
+
+/** The setup panel block's heading (ExperimentCard.tsx). */
+export const TEST_OVERRIDE_TITLE = 'Test-only override';
+
+/** The stamp's note on a card whose fixture records a test-only override (ExperimentRun.tsx). */
+export const TEST_OVERRIDE_STAMP_NOTE = 'Recorded with a test-only override.';
+
+/** One overridden field in words: "Needlejaw speed 0 (normally 0.6)". Numbers are game units, as recorded. */
+export function testOverrideEntry(t: Pick<TestOverrideView, 'speciesName' | 'field' | 'value' | 'normal'>): string {
+  const n = (v: number) => String(Number(v.toFixed(3)));
+  return `${t.speciesName} ${t.field} ${n(t.value)} (normally ${n(t.normal)})`;
+}
+
+/**
+ * The setup panel's disclosure lines (UI only; the data is ExperimentCardView.testOverrides): one entry reads as one
+ * sentence ("This card's fixture changes the rules for this test only: Needlejaw speed 0 (normally 0.6). It is never
+ * offered in an ordinary dish."); several read as a lead line, one line per entry and the closing line. `notes` are
+ * the entries' descriptions, verbatim, each once (shown under the lines). Empty for a card without overrides.
+ */
+export function testOverrideLines(list: readonly TestOverrideView[] | undefined): { readonly lines: readonly string[]; readonly notes: readonly string[] } {
+  if (!list || list.length === 0) return { lines: [], notes: [] };
+  const lead = 'This card’s fixture changes the rules for this test only';
+  const never = 'It is never offered in an ordinary dish.';
+  const lines = list.length === 1 ? [`${lead}: ${testOverrideEntry(list[0]!)}. ${never}`] : [`${lead}:`, ...list.map((t) => `${testOverrideEntry(t)}.`), never];
+  const notes: string[] = [];
+  for (const t of list) if (t.description.trim() && !notes.includes(t.description)) notes.push(t.description);
+  return { lines, notes };
 }

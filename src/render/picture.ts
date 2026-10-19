@@ -19,7 +19,8 @@
  * else feeding while still, else move/idle; the animation's reducedMotionFrame; the heading row from
  * E_HEADING), at their snapshot positions, one sprite pixel per picture pixel (7 px per cell, close to
  * the live view's 8). Fungal segments, food objects and film are one-cell tiles, as on the live dish.
- * Substrates and deposits use the live dish's own colours (layers.ts DISH_COLORS) and cosmetic hash.
+ * Substrates and deposits use the live dish's own colours (layers.ts DISH_COLORS) and cosmetic hash; since P5.8
+ * (wave 15) that includes grit (deposit band 7), scaled from the live dish's speck glyph (paintGritSpecks).
  */
 import { CELL_COUNT, GRID_W, MASK_CX, MASK_CY, MASK_R } from '@sim/constants';
 import {
@@ -223,6 +224,8 @@ function paintDishLayer(
   const { substrate, structure, shade, deposits } = input;
   const hasSugar = deposits.length >= 5 * CELL_COUNT;
   const hasCat = deposits.length >= 6 * CELL_COUNT;
+  // P5.8 (wave 15, D-0125): grit, deposit band 7 of a protocol 3 band set (absent from a v1.0 set of seven).
+  const hasGrit = deposits.length >= 8 * CELL_COUNT;
   const k2 = px * px;
   for (let cy = 0; cy < cells; cy++) {
     for (let cx = 0; cx < cells; cx++) {
@@ -260,7 +263,8 @@ function paintDishLayer(
       const prot = deposits[3 * CELL_COUNT + i]!;
       const sugar = hasSugar ? deposits[4 * CELL_COUNT + i]! : 0;
       const cat = hasCat ? deposits[5 * CELL_COUNT + i]! : 0;
-      if ((starch | det | oil | prot | sugar | cat) === 0) continue;
+      const grit = hasGrit ? deposits[7 * CELL_COUNT + i]! : 0;
+      if ((starch | det | oil | prot | sugar | cat | grit) === 0) continue;
       for (let y = 0; y < px; y++) {
         for (let x = 0; x < px; x++) {
           const k = y * px + x;
@@ -275,9 +279,63 @@ function paintDishLayer(
           if (cat > 0 && cosmetic(i * k2 + k, 23) < 0.02 + (cat / 255) * 0.08) put(X, Y, C.catalysis);
         }
       }
+      if (grit > 0) paintGritSpecks(put, cx * px, cy * px, px, i, grit);
     }
   }
   return out;
+}
+
+/**
+ * Grit specks (P5.8, D-0125; layers.ts paintGrit scaled to `px` per cell): each speck a pale square face with its
+ * dark corner square one unit below and to the right (two tones, so it reads on water and gel by the corner and
+ * on sediment by the face), 1 / 2 / 3 specks at grit ≥ 1 / 85 / 170, drawn over the other deposits and clipped
+ * to the cell. A unit is one sprite pixel of the picture (⌊px / 7⌋, at least 1: PICTURE_CELL_PX). Each speck
+ * starts at a position from the cosmetic hash (keys 29 / 31 per speck, as the live dish keys them; distinct from
+ * the substrate's 7 and the deposits' 13 / 17 / 19 / 23), never from simulation randomness, and moves on in scan
+ * order to the first place that neither covers nor touches an earlier speck, so three specks stay three (from
+ * 5 px per cell; below that they may overlap, as on the live dish).
+ */
+function paintGritSpecks(
+  put: (x: number, y: number, rgb: RGB) => void,
+  x0: number,
+  y0: number,
+  px: number,
+  i: number,
+  grit: number,
+): void {
+  const C = DISH_COLORS;
+  const u = Math.max(1, Math.floor(px / PICTURE_CELL_PX));
+  const room = Math.max(1, px - 2 * u + 1);
+  const n = grit >= 170 ? 3 : grit >= 85 ? 2 : 1;
+  const taken = new Uint8Array(px * px);
+  const squares = (sx: number, sy: number, f: (x: number, y: number) => boolean | void): boolean => {
+    for (const [ox, oy] of [[0, 0], [u, u]] as const)
+      for (let y = sy + oy; y < sy + oy + u && y < px; y++) for (let x = sx + ox; x < sx + ox + u && x < px; x++) if (f(x, y)) return true;
+    return false;
+  };
+  const near = (x: number, y: number) =>
+    taken[y * px + x] === 1 || (x > 0 && taken[y * px + x - 1] === 1) || (x + 1 < px && taken[y * px + x + 1] === 1) || (y > 0 && taken[(y - 1) * px + x] === 1) || (y + 1 < px && taken[(y + 1) * px + x] === 1);
+  for (let k = 0; k < n; k++) {
+    const startX = Math.floor(cosmetic(i * 4 + k, 29) * room);
+    const startY = Math.floor(cosmetic(i * 4 + k, 31) * room);
+    let sx = startX;
+    let sy = startY;
+    for (let j = 0; j < room * room; j++) {
+      const q = (startY * room + startX + j) % (room * room);
+      const cx = q % room;
+      const cy = (q - cx) / room;
+      if (!squares(cx, cy, near)) {
+        sx = cx;
+        sy = cy;
+        break;
+      }
+    }
+    squares(sx, sy, (x, y) => {
+      taken[y * px + x] = 1;
+    });
+    for (let y = sy; y < sy + u && y < px; y++) for (let x = sx; x < sx + u && x < px; x++) put(x0 + x, y0 + y, C.gritPale);
+    for (let y = sy + u; y < sy + 2 * u && y < px; y++) for (let x = sx + u; x < sx + 2 * u && x < px; x++) put(x0 + x, y0 + y, C.gritEdge);
+  }
 }
 
 /** The atlas frame the renderer shows for entity k in reduced motion, or null (a virus, or no frame). */

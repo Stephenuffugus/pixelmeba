@@ -1,0 +1,10 @@
+{
+  "id": "SUSTAIN_THREE_SPECIES",
+  "title": "Sustain three species",
+  "predicate": { "type": "keepSpeciesAlive", "params": { "minSpecies": 3 }, "durationSeconds": 180 },
+  "summary": "Keep at least three kinds alive at once for 180 seconds of dish time. Fewer than three starts the count again.",
+  "completedText": "At least three kinds lived at once for 180 seconds, measured in this attempt at {time}.",
+  "offerOn": ["L305_THE_JACKET_GARDEN"],
+  "offerOnHabitats": ["H04_LEAF_POOL", "H06_DUSK_MARSH", "H07_GLASS_GARDEN", "H08_NIGHT_LANTERNS", "H11_GRAZING_MEADOW"],
+  "phase": 5
+}

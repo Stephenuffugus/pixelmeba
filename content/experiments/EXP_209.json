@@ -1,0 +1,58 @@
+{
+  "id": "EXP_209",
+  "seed": 209,
+  "title": "Gate meal",
+  "question": "Can food cross a membrane that organisms cannot?",
+  "recipeId": "GATE_MEAL_V1",
+  "intervention": "Watch the left patch, where Crumbsmiths make sugar from starch, and the Sprinters on the right. Open the dish’s history to read the sugar totals over time.",
+  "predictedTradeoff": "Sugar made from starch on the left can reach the right only through six membrane edges, so the Sprinters there get a trickle at most; most of it stays on the left, where the Crumbsmiths eat it.",
+  "measurements": [
+    "gateTransfer.S01.sugar",
+    "gateCrossings.S01",
+    "converted.starch",
+    "consumed.sugar",
+    "intake.B01",
+    "alive.B06@LEFT_SIDE",
+    "alive.B06@RIGHT_SIDE",
+    "alive.B01@LEFT_SIDE",
+    "alive.B01@RIGHT_SIDE"
+  ],
+  "stoppingSeconds": 180,
+  "confounds": "The tally counts sugar moving across the membranes in either direction, so it is larger than the sugar that stayed on the right. Sprinters eat sugar wherever it is, so their intake shows that they took in sugar, not that it kept them alive. This is one run.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {
+          "measure": "runSeconds",
+          "arm": "A",
+          "op": "gte",
+          "value": 180,
+          "label": "The dish ran 180 seconds"
+        },
+        {
+          "measure": "gateTransfer.S01.sugar",
+          "arm": "A",
+          "op": "gt",
+          "value": 0,
+          "label": "Sugar crossed the membranes"
+        },
+        {
+          "measure": "gateCrossings.S01",
+          "arm": "A",
+          "op": "eq",
+          "value": 0,
+          "label": "No organism crossed the membranes"
+        }
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {
+    "journalStamp": "Watched sugar cross a membrane that no organism crossed",
+    "playerSteps": [
+      "openResourceHistory"
+    ]
+  },
+  "phase": 5
+}

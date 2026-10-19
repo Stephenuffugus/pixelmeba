@@ -1,0 +1,35 @@
+{
+  "id": "EXP_217",
+  "seed": 217,
+  "title": "Rival without a winner",
+  "question": "What does the rivalry chemical cost, and who meets it?",
+  "recipeId": "RIVAL_NO_WINNER_V1",
+  "intervention": "Make a copy of this dish without the twenty Ramparts. The Sprinters and Recyclers start in the same places in both copies. Run both for 180 seconds and compare how long Sprinters met the rivalry chemical, how long Ramparts spent releasing it, and the counts.",
+  "predictedTradeoff": "Releasing the rivalry chemical costs Ramparts energy they could spend growing; Sprinters near them grow more slowly, but nothing promises the Ramparts more room.",
+  "measurements": [
+    "limitSeconds.B01.RIVAL_EXPOSURE",
+    "limitSeconds.B04.RIVAL_EXPOSURE",
+    "secretingSeconds.B13",
+    "meanEnergy.B13",
+    "alive.B01",
+    "alive.B04",
+    "alive.B13",
+    "biomass.B01"
+  ],
+  "stoppingSeconds": 180,
+  "confounds": "The rivalry chemical affects Sprinters, Brinecoils and Sourbuds only, so the Recyclers' exposure reads 0 in both copies; Recyclers still compete for space. Ramparts also eat the sugar the others eat. After the copies differ, every encounter differs: this is one paired run, not proof of a general effect.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "runSeconds", "arm": "A", "op": "gte", "value": 180, "label": "Both copies ran 180 s"},
+        {"measure": "limitSeconds.B01.RIVAL_EXPOSURE", "arm": "A", "op": "gt", "value": 0, "label": "Sprinters met the rivalry chemical in copy A"},
+        {"measure": "secretingSeconds.B13", "arm": "A", "op": "gt", "value": 0, "label": "Ramparts spent time releasing it"}
+      ]
+    }
+  },
+  "paired": true,
+  "change": {"kind": "omitFounders", "founderIndex": 2},
+  "completion": {"journalStamp": "Compared a dish with and without Ramparts", "playerSteps": ["viewComparison"]},
+  "phase": 5
+}

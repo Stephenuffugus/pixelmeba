@@ -1,0 +1,37 @@
+{
+  "id": "TEMPORARY_TRAP_V1",
+  "revision": 2,
+  "name": "A temporary trap",
+  "habitatId": "WATER_GARDEN",
+  "seed": 213,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "baseLight": 0.8,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "ops": [
+    {"op": "disk", "center": [64, 64], "radius": 15, "substrate": "sediment"}
+  ],
+  "fieldPatches": [],
+  "founders": [
+    {
+      "species": "F03",
+      "count": 1,
+      "center": [64, 64],
+      "radius": 0,
+      "cells": [[64, 64]],
+      "initial": [{"B": 2.8, "N": 0.28, "E": 80}],
+      "label": "Traplace (labelled setup)"
+    }
+  ],
+  "scheduledCommands": [
+    {"atSecond": 0, "kind": "inoculate", "payload": {"kind": "inoculate", "speciesId": "P04", "x": 64.5, "y": 64.5, "radius": 0, "count": 1}, "label": "One Siltworm added in the Traplace's cell at 0 s"}
+  ],
+  "labels": ["Labelled setup: the Traplace starts with 2.8 carbon, 0.28 nutrient and 80 energy"],
+  "question": "What does a Traplace's trap cost, and what does it hold?",
+  "expectedObservationsText": "One Traplace in the middle of a sediment disk. At 0 s the dish adds one Siltworm in the Traplace's own cell (founders never share a cell, so it is added as an ordinary inoculation). The Traplace starts with 2.8 carbon, 0.28 nutrient and 80 energy (a labelled setup, not something that grew here), enough to build its trap: building moves 0.20 carbon from its body into the trap and costs 8 energy. A Siltworm whose centre enters the Traplace's own cell can be caught; a caught Siltworm is held and drained for 8 s, then let go, and the trap rests for 30 s. If the Siltworm never enters that cell, nothing is caught.",
+  "phase": 5
+}

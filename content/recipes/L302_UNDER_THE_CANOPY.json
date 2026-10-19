@@ -1,0 +1,26 @@
+{
+  "id": "L302_UNDER_THE_CANOPY",
+  "revision": 1,
+  "name": "Under the Canopy",
+  "habitatId": "WATER_GARDEN",
+  "seed": 302,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": false,
+  "baseLight": 0.8,
+  "mutationPreset": "standard",
+  "founderMode": "diverse",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {"center": [64, 64], "radius": 10, "substrate": "water", "add": {"nutrient": 0.2}, "label": "Nutrient 0.2 per cell"}
+  ],
+  "founders": [
+    {"species": "A05", "count": 20, "center": [64, 64], "radius": 10, "placement": "scatter"},
+    {"species": "A01", "count": 30, "center": [64, 64], "radius": 10, "placement": "scatter"}
+  ],
+  "labels": [],
+  "question": "Who persists in the shade they create?",
+  "expectedObservationsText": "Twenty Raftballs and thirty Sunbeads scattered on a nutrient patch in fixed light. Raftballs float as a canopy that shades the cells under them, so algae beneath a Raftball get less light. Nothing here decides who persists: watch the light and the counts. Diverse Founders: a few founders may start with an extra ability, present at creation.",
+  "phase": 5
+}

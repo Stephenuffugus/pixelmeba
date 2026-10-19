@@ -22,7 +22,7 @@ import { join } from 'node:path';
 import { P } from '../art/src/palette';
 import { SPRITES } from '../art/src/index';
 import { DISH_COLORS, RAMPS, type Colormap } from '../src/render/layers';
-import { speciesHex } from '../src/render/speciesColors';
+import { AGG_INK_HEX, speciesHex } from '../src/render/speciesColors';
 import {
   bestRingRatio,
   contrastRatio,
@@ -369,6 +369,30 @@ for (const [name, bg] of subs) {
     });
   }
 }
+// P5.8 (wave 15; D-0125 leftover (a), org-ui-build.md NEEDS 1): grit specks (deposit band 7, layers.ts paintGrit and
+// picture.ts paintGritSpecks) are two-tone: a pale face with a dark slate corner. Each substrate has a >= 3:1 part, so
+// the part that carries it is required there and the other part is informative.
+for (const [name, bg] of subs) {
+  const pale = name === 'sediment';
+  add({
+    group: 'Dish structures and deposits',
+    id: `grit speck corner/${name}`,
+    what: `grit speck corner (gritEdge) on ${name}`,
+    kind: 'graphic',
+    fg: rgb(DISH_COLORS.gritEdge),
+    bg,
+    ...(pale ? { informative: true } : {}),
+  });
+  add({
+    group: 'Dish structures and deposits',
+    id: `grit speck face/${name}`,
+    what: `grit speck face (gritPale) on ${name}`,
+    kind: 'graphic',
+    fg: rgb(DISH_COLORS.gritPale),
+    bg,
+    ...(pale ? {} : { informative: true }),
+  });
+}
 add({
   group: 'Dish structures and deposits',
   id: 'water/outside',
@@ -468,16 +492,22 @@ for (const s of SPRITES) {
 }
 
 // --- Species identity colours (aggregation at whole-dish zoom on phones; legends; markers) --------
+// P5.8 (wave 15, D-0123 MINOR 5, as built): the aggregation layer draws each identity tone with the sprites' ink
+// outline (speciesColors.ts paintAggregationInked, AGG_INK = palette outlineDark), so a cell's mark is the tone
+// AND its ring, the better one counting (as the sprite silhouette rows). Viruses draw no aggregation cell (they
+// are fields, not entities): their tones appear only in legends beside a text label, so they are measured alone.
 const speciesIds = [...new Set(SPRITES.map((s) => s.speciesId))].sort();
 for (const id of speciesIds) {
+  const virus = id.startsWith('V');
   for (const [name, bg] of subs) {
     add({
       group: 'Species identity colours (aggregation)',
       id: `${id}/${name}`,
-      what: `${id} ${speciesHex(id)} on ${name}`,
+      what: virus ? `${id} ${speciesHex(id)} on ${name} (legend swatch only)` : `${id} ${speciesHex(id)} with its ink ring ${AGG_INK_HEX} on ${name}`,
       kind: 'graphic',
       fg: hex(speciesHex(id)),
       bg,
+      ...(virus ? {} : { rings: [hex(AGG_INK_HEX), hex(speciesHex(id))] }),
     });
   }
 }
@@ -605,27 +635,11 @@ const JUSTIFIED: readonly (readonly [string, string])[] = [
   ],
   ['rim/outside', 'Decorative ring; the dish edge is the water/outside boundary (≥ 3:1).'],
   ['line/surface', 'Informative: controls are identified by their text labels and icons, not by the border.'],
-  [
-    'Y01',
-    'Pale yeast identity tone. On sprites the outline carries the silhouette; at aggregation zoom the accessible species list (DishSummary), the legend and the inspector name it. Proposal: aggregation could draw identity colours with the ink outline the sprites use.',
-  ],
-  ['Y02', 'As Y01.'],
-  ['F01', 'As Y01 (pale ivory hyphae).'],
-  ['P01', 'As Y01 (pale lilac).'],
-  ['P02', 'As Y01 (pale cyan).'],
-  ['P03', 'As Y01 (peach).'],
-  ['P04', 'Brown on sediment: as Y01; the Siltworm sprite outline carries its silhouette.'],
-  ['B01', 'Identity tone at aggregation zoom; see Y01.'],
-  ['B02', 'Identity tone at aggregation zoom; see Y01.'],
-  ['B03', 'Identity tone at aggregation zoom; see Y01.'],
-  ['B04', 'Identity tone at aggregation zoom; see Y01.'],
-  ['B05', 'Identity tone at aggregation zoom; see Y01.'],
-  ['B06', 'Identity tone at aggregation zoom; see Y01.'],
-  ['B07', 'Identity tone at aggregation zoom; see Y01.'],
-  ['B08', 'Identity tone at aggregation zoom; see Y01.'],
-  ['F02', 'Identity tone at aggregation zoom; see Y01.'],
-  ['A01', 'Identity tone at aggregation zoom; see Y01.'],
-  ['X01', 'Identity tone at aggregation zoom; see Y01.'],
+  // P5.8 (wave 15, D-0123 MINOR 5) AS BUILT: the Y01 proposal ("aggregation could draw identity colours with the ink
+  // outline the sprites use") is built (speciesColors.ts paintAggregationInked, AGG_INK #1E2A30). Every identity row of
+  // the 36 organism species now passes by its ring or its tone: the lowest is 3.40:1 (the ink on sediment), the pale
+  // tones on water and gel 11.2:1 or more (docs/reports/contrast.md). The Phase 3 and wave 12 identity justifications
+  // ('Y01' … 'X01', and the Phase 5 list) are gone with the gap; only the viruses, which draw no aggregation cell, stay.
   [
     'V01',
     'Viruses draw no aggregation cell (density overlay only); identity tone used in legends with a text label.',
@@ -648,17 +662,11 @@ const JUSTIFIED: readonly (readonly [string, string])[] = [
     'Trait band rings are tinted rings between two ink outlines: the ring reads against the substrate by its outline; the legend names and counts every band in text (D-0028).',
   ],
   ['inactive/outline', 'Grey ring for inactive loci: named in the legend text.'],
-  // Wave 12 (structures-art-audio): the audit had not been re-run since the Phase 5 organism art (waves 8a, 8b)
-  // and wave 9's warmth overlay; these rows were unexplained at 0316ffc. They are not this task's colours: the
-  // justifications follow the Phase 3 rulings above, and the proposals go to the organism art and render owners.
-  ...['A02', 'A03', 'A04', 'A05', 'B09', 'B10', 'B11', 'B12', 'B13', 'F03', 'F04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'X02'].map(
-    (id) => [`${id}/`, 'Phase 5 identity tone at aggregation zoom; see Y01 (the sprite outline carries the silhouette; the species list, legend and inspector name it).'] as const,
-  ),
+  // Wave 12 (structures-art-audio) justified the Phase 5 identity tones here as the Phase 3 ones; since P5.8 they pass
+  // with the ink ring (above), so only V02's legend-only row is kept.
   ['V02/', 'As V01: viruses draw no aggregation cell (density overlay only); the identity tone appears in legends beside a text label.'],
-  [
-    'f04_sporeveil/silhouette/sediment',
-    'Sporeveil silver on sediment (outline #5F666D, body #B9BEC4, 2.3:1): a real gap, as F02 on sediment. Its spore rings still read by shape and the inspector and species list name it. Proposal (organism art owner): the F04 outline in sporeveilRing #23272B (≥ 3:1 on sediment).',
-  ],
+  // P5.8 (wave 15) AS BUILT: F04 Sporeveil's outline is the ring ink sporeveilRing #23272B (art/src/sprites/phase5_fungi.ts),
+  // so its silhouette on sediment passes at 3.48:1 (it was 2.30:1 with #5F666D, the gap wave 12 justified here).
   [
     'warmth/legend',
     'Warmth is diverging (cool blue, neutral, warm orange) as pH is: both ends contrast with the neutral centre, the legend prints the values, and the cell inspector gives the local warmth in numbers.',

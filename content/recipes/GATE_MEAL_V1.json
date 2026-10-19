@@ -1,0 +1,67 @@
+{
+  "id": "GATE_MEAL_V1",
+  "revision": 2,
+  "name": "Gate meal",
+  "habitatId": "H10_GATE_LAB",
+  "seed": 209,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {
+    "sugar": 0
+  },
+  "fieldPatches": [
+    {
+      "center": [
+        55,
+        64
+      ],
+      "radius": 6,
+      "substrate": "water",
+      "add": {
+        "starch": 0.5,
+        "nutrient": 0.2
+      },
+      "label": "Starch and nutrient"
+    },
+    {
+      "center": [
+        72,
+        64
+      ],
+      "radius": 6,
+      "substrate": "water",
+      "add": {
+        "nutrient": 0.2
+      },
+      "label": "Nutrient"
+    }
+  ],
+  "founders": [
+    {
+      "species": "B06",
+      "count": 30,
+      "center": [
+        55,
+        64
+      ],
+      "radius": 6,
+      "placement": "scatter",
+      "label": "Crumbsmiths (left)"
+    },
+    {
+      "species": "B01",
+      "count": 20,
+      "center": [
+        72,
+        64
+      ],
+      "radius": 6,
+      "placement": "scatter",
+      "label": "Sprinters (right)"
+    }
+  ],
+  "labels": [],
+  "question": "Can food cross a membrane that organisms cannot?",
+  "expectedObservationsText": "The Gate Lab: a wall down the middle with six fine membranes in it, and no sugar in the water at the start (this recipe sets the background sugar to 0). Thirty Crumbsmiths sit on a starch patch on the left; twenty Sprinters wait on the right. The Crumbsmiths' enzyme turns starch into sugar, and nothing else in this dish makes sugar, so any sugar that reaches the membranes came from that starch. Sugar dissolves and diffuses; a fine membrane passes dissolved food but no organism. The membrane's tally counts the sugar that crossed, in either direction, and the organisms that crossed.",
+  "phase": 5
+}

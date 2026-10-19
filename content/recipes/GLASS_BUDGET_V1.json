@@ -1,0 +1,45 @@
+{
+  "id": "GLASS_BUDGET_V1",
+  "revision": 1,
+  "name": "Glass budget",
+  "habitatId": "WATER_GARDEN",
+  "seed": 208,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {
+      "center": [
+        64,
+        64
+      ],
+      "radius": 6,
+      "substrate": "water",
+      "add": {
+        "nutrient": 0.2
+      },
+      "label": "Nutrient patch"
+    }
+  ],
+  "founders": [
+    {
+      "species": "A02",
+      "count": 30,
+      "center": [
+        64,
+        64
+      ],
+      "radius": 6,
+      "placement": "scatter",
+      "label": "Glasswheels"
+    }
+  ],
+  "labels": [],
+  "question": "Does a Glasswheel's shell need silicate?",
+  "expectedObservationsText": "Thirty Glasswheels on a nutrient patch with no silicate in the water. A Glasswheel binds silicate into its shell as it grows; without silicate the inspector reads it as limited by silicate. The experiment card copies the dish and adds silicate (0.50 per cell) over the patch in copy B only.",
+  "phase": 5
+}

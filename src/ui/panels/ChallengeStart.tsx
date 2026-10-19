@@ -62,7 +62,7 @@ function StartView() {
         {c ? (
           <div class="ch-summary">
             <p class="try-text" data-testid="ch-start-goal">
-              {objectiveLine(c, speciesName)}
+              {objectiveLine(c, speciesName, (id) => info?.regions?.find((r) => r.id === id)?.label ?? id)}
             </p>
             <p class="try-text" data-testid="ch-start-restrictions">
               {restrictionsSummary(c)}

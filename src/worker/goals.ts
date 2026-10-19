@@ -27,7 +27,7 @@
 import type { ContentRegistry } from '@sim/content/registry';
 import type { Manifest, ObjectiveDef } from '@sim/content/schema';
 import { variantRecordOf } from '@sim/variants';
-import { objectiveCatalog, objectiveManifestProblem, objectiveSupportProblem, ObjectiveError, ObjectiveWatch } from '@sim/objectives';
+import { objectiveCatalog, objectiveManifestProblem, objectiveSupportProblem, ObjectiveError, ObjectiveStartRefusal, ObjectiveWatch, type ObjectiveProgress } from '@sim/objectives';
 import type { World } from '@sim/world';
 import type { NotebookRecord } from '@persist/notebook';
 import { goalNumber, GOALS_MAX, goalsOf, type GoalEndReason, type GoalRecord } from '@persist/notebookGoals';
@@ -63,14 +63,39 @@ function offerOf(def: ObjectiveDef): GoalOffer {
  * The goals offered for a dish (`world`) or, before a dish exists, for recipe `recipeId` under the build's
  * `manifest` (the Play card): shipped objectives whose offerOn names the recipe and whose predicate the
  * world's own recorded manifest supports. Catalog order (objective id).
+ *
+ * P5.6 (D-0131): also offered when `offerOnHabitats` names the dish's RECORDED habitat (world.content.habitat.id,
+ * never this build's registry); before a dish exists habitats are not considered (only Garden recipes reach the
+ * Play card). An objective with a challengeTemplate is never a goal of this list (challengeTemplates offers it).
  */
 export function goalCatalog(registry: ContentRegistry, at: { readonly world: World } | { readonly recipeId: string | null; readonly manifest: Manifest }): GoalOffer[] {
   const recipe = 'world' in at ? goalRecipeOf(at.world) : at.recipeId;
-  if (recipe === null) return [];
+  const habitat = 'world' in at ? at.world.content.habitat.id : null;
+  if (recipe === null && habitat === null) return [];
   return objectiveCatalog(registry)
-    .filter((o) => o.offerOn.includes(recipe))
+    .filter((o) => o.challengeTemplate === undefined)
+    .filter((o) => (recipe !== null && o.offerOn.includes(recipe)) || (habitat !== null && (o.offerOnHabitats ?? []).includes(habitat)))
     .filter((o) => ('world' in at ? objectiveSupportProblem(at.world, o.predicate) : objectiveManifestProblem(at.manifest, o.predicate)) === null)
     .map(offerOf);
+}
+
+/**
+ * P5.6: the challenge starting points a dish offers (objectives with a challengeTemplate, catalog order) that its
+ * own recorded content supports (objectiveSupportProblem without the template's region, which the challenge
+ * chooses). Each offer carries its predicate and template, so the editor can fill them in.
+ */
+export function challengeTemplates(registry: ContentRegistry, world: World): GoalOffer[] {
+  return objectiveCatalog(registry)
+    .filter((o) => o.challengeTemplate !== undefined && objectiveSupportProblem(world, o.predicate) === null)
+    .map((o) => ({
+      ...offerOf(o),
+      challengeTemplate: {
+        commandBudget: o.challengeTemplate!.commandBudget,
+        allowedTools: [...o.challengeTemplate!.allowedTools],
+        horizonSeconds: o.challengeTemplate!.horizonSeconds,
+        predicate: JSON.parse(JSON.stringify(o.predicate)) as NonNullable<GoalOffer['challengeTemplate']>['predicate'],
+      },
+    }));
 }
 
 function replaceGoal(record: NotebookRecord, id: string, next: GoalRecord): NotebookRecord {
@@ -117,9 +142,22 @@ export function goalsAfterRestore(world: World, record: NotebookRecord, cause: G
   return changed.length > 0 ? { record: { ...record, goals }, changed } : { record, changed };
 }
 
+/** P5.6: whether the clause ticks, amounts or cycle of `a` differ from `b` (absent keys compare equal). */
+function progressMoved(a: ObjectiveProgress, b: ObjectiveProgress): boolean {
+  const same = (x: readonly (number | null)[] | undefined, y: readonly (number | null)[] | undefined) => x === y || (x !== undefined && y !== undefined && x.length === y.length && x.every((v, i) => v === y[i]));
+  return a.cycle !== b.cycle || !same(a.clauses, b.clauses) || !same(a.amounts, b.amounts);
+}
+
 export class GoalRunner {
   private world: World;
   private watch: ObjectiveWatch | null = null;
+  /**
+   * P5.6: read-only stage hook for the running goal's measured clauses (NotebookWatch.hook calls it in the
+   * dish's step); only for the world the runner watches.
+   */
+  readonly hook = (stage: number, w: World): void => {
+    if (w === this.world) this.watch?.hook(stage, w);
+  };
   private goalId: string | null = null;
   /** Changes made while binding (a goal that could not resume), announced by the next afterTick. */
   private pending: NotebookChange[] = [];
@@ -186,9 +224,9 @@ export class GoalRunner {
     const changed = w.afterTick(world);
     if (!changed) {
       // A duration's hold began or reset, or an event-ring goal saw later records: the saved progress
-      // follows, so a reload resumes exactly here.
+      // follows, so a reload resumes exactly here. P5.6: so do the clause ticks, the amounts and the cycle.
       const p = w.progress();
-      if (p.holdSinceTick !== g.progress.holdSinceTick || p.lastEventId !== g.progress.lastEventId) this.ref.set(replaceGoal(record, id, { ...g, progress: p }));
+      if (p.holdSinceTick !== g.progress.holdSinceTick || p.lastEventId !== g.progress.lastEventId || progressMoved(p, g.progress)) this.ref.set(replaceGoal(record, id, { ...g, progress: p }));
       return out;
     }
     const next = settled(g, w);
@@ -213,6 +251,8 @@ export class GoalRunner {
     try {
       watch = new ObjectiveWatch(def.predicate, world);
     } catch (e) {
+      // P5.6: a precondition's own sentence (fromBelow: "This region already has 5 or more active organisms.").
+      if (e instanceof ObjectiveStartRefusal) return { refused: e.message, changes: [] };
       if (e instanceof ObjectiveError) return { refused: GOAL_REFUSALS.unknown, changes: [] };
       throw e;
     }

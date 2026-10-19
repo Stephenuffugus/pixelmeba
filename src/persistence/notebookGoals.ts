@@ -15,7 +15,10 @@
  * manifest, species and fields) and that its saved event position is in the dish's past. A record with
  * any problem drops the whole notebook with a message and the world still loads (D-0073).
  */
-import { holdsForDuration, objectiveRefsProblem, typedPredicate, usesEventRing } from '@sim/objectives';
+import { holdsForDuration, objectiveRefsProblem, progressKeysOf, typedPredicate, usesEventRing } from '@sim/objectives';
+import { CYCLE_PERIOD_TICKS } from '@sim/constants';
+import type { HistorySample } from '@sim/history';
+import type { SimEvent } from '@sim/events';
 import type { ObjectivePredicate, ObjectiveProgress } from '@sim/objectives';
 import type { Manifest } from '@sim/content/schema';
 import { allocatedFieldIds } from '@sim/fields';
@@ -79,7 +82,7 @@ const isInt = (v: unknown, min: number): v is number => typeof v === 'number' &&
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const GOAL_KEYS = ['id', 'objectiveId', 'title', 'predicate', 'state', 'startTick', 'endTick', 'endReason', 'progress', 'value', 'shown'];
 const PREDICATE_KEYS = ['type', 'params', 'durationSeconds'];
-const PROGRESS_KEYS = ['startTick', 'holdSinceTick', 'state', 'lastEventId'];
+const PROGRESS_KEYS = ['startTick', 'holdSinceTick', 'state', 'lastEventId', 'clauses', 'amounts', 'cycle', 'inputs'];
 
 /** The goal id's number, or null when it is not 'goal-<n>'. */
 export function goalNumber(id: string): number | null {
@@ -120,6 +123,24 @@ function goalProblem(raw: unknown): string | null {
   if (g.holdSinceTick !== null && !(isInt(g.holdSinceTick, 0) && g.holdSinceTick >= raw.startTick)) return 'a goal has invalid progress';
   if (g.holdSinceTick !== null && !holdsForDuration(typed.type)) return 'a goal holds a duration its predicate does not have';
   if (g.lastEventId !== undefined && !(ring && isInt(g.lastEventId, 0))) return 'a goal has an invalid event position';
+  // P5.6 (D-0131): clause ticks, amounts and the light cycle, present exactly when the predicate uses them.
+  const keys = progressKeysOf(typed);
+  if ((g.clauses !== undefined) !== (keys.clauses !== null)) return 'a goal has clause progress its predicate does not have';
+  if (g.clauses !== undefined) {
+    if (!Array.isArray(g.clauses) || g.clauses.length !== keys.clauses) return 'a goal has invalid clause progress';
+    for (const t of g.clauses as unknown[]) if (t !== null && !(isInt(t, 0) && t >= (raw.startTick))) return 'a goal has invalid clause progress';
+  }
+  if ((g.amounts !== undefined) !== (keys.amounts !== null)) return 'a goal has measured amounts its predicate does not have';
+  if (g.amounts !== undefined) {
+    if (!Array.isArray(g.amounts) || g.amounts.length !== keys.amounts) return 'a goal has invalid measured amounts';
+    for (const a of g.amounts as unknown[]) if (typeof a !== 'number' || !Number.isFinite(a) || a < 0) return 'a goal has invalid measured amounts';
+  }
+  if ((g.cycle !== undefined) !== keys.cycle) return 'a goal has a light cycle its predicate does not have';
+  if (g.cycle !== undefined && !isInt(g.cycle, 0)) return 'a goal has an invalid light cycle';
+  // Fix round 1: the ledger's input base of a goal ending on 'externalInput' ([c, n, m] at Start).
+  if ((g.inputs !== undefined) !== keys.inputs) return 'a goal has an input base its predicate does not have';
+  if (g.inputs !== undefined && !(Array.isArray(g.inputs) && g.inputs.length === 3 && (g.inputs as unknown[]).every((v) => typeof v === 'number' && Number.isFinite(v) && v >= 0)))
+    return 'a goal has an invalid input base';
   if (!['running', 'completed', 'ended'].includes(g.state as string)) return 'a goal has invalid progress';
   if (!progressStateFits(state, reason as GoalEndReason | undefined, g.state as ObjectiveProgress['state'])) return 'a goal’s progress does not match its state';
   if (raw.value !== undefined && (typeof raw.value !== 'number' || !Number.isFinite(raw.value))) return 'a goal has an invalid value';
@@ -178,12 +199,37 @@ export interface GoalWorldExtras {
   readonly fieldIds: readonly string[];
   /** world.counters.nextEventId. */
   readonly nextEventId: number;
+  /** P5.6: the region ids of the dish's recorded habitat (a running goal's region must be one of them). */
+  readonly regions?: readonly string[];
+  /**
+   * Fix round 1: the dish's cycleStartTick when it runs the light cycle (null: fixed light). A running cycle-window
+   * goal is NOT refused for fixed light (the player may switch it with setLightMode; the watch then ends that
+   * attempt at its next tick); its saved cycle and clause ticks are checked against the cycle the dish ran.
+   */
+  readonly cycleStartTick?: number | null;
+  /** Fix round 1: the ledger's external inputs [c, n, m] (a saved input base never exceeds them). */
+  readonly inputs?: readonly [number, number, number];
+  /**
+   * Fix round 1, the succession kind's check (notebookSuccession.ts successionRefsProblem; the loader passes these
+   * extras to every kind): the dish's per-second history samples and its event ring.
+   */
+  readonly historySeconds?: readonly HistorySample[];
+  readonly eventRing?: readonly SimEvent[];
 }
 export type GoalWorldRefs = NotebookWorldRefs & Partial<GoalWorldExtras>;
 
 /** The extras `goalsWorldProblem` checks a running goal against, read from the dish the file carries. */
 export function goalWorldRefsOf(world: World): GoalWorldExtras {
-  return { manifest: world.content.manifest, fieldIds: allocatedFieldIds(world.fields), nextEventId: world.counters.nextEventId };
+  return {
+    manifest: world.content.manifest,
+    fieldIds: allocatedFieldIds(world.fields),
+    nextEventId: world.counters.nextEventId,
+    regions: (world.content.habitat.regions ?? []).map((r) => r.id),
+    cycleStartTick: world.settings.lightMode === 'cycle' && world.settings.cycleStartTick !== undefined ? world.settings.cycleStartTick : null,
+    inputs: [world.ledger.inputs.c, world.ledger.inputs.n, world.ledger.inputs.m],
+    historySeconds: world.history.seconds,
+    eventRing: world.events.ring,
+  };
 }
 
 /**
@@ -201,12 +247,41 @@ export function goalsWorldProblem(raw: Record<string, unknown>, refs: GoalWorldR
     if (g.state !== 'running') continue;
     if (g.startTick > refs.tick || (g.progress.holdSinceTick ?? 0) > refs.tick) return 'a running goal starts after the dish’s time';
     if (refs.manifest !== undefined && refs.fieldIds !== undefined) {
-      const why = objectiveRefsProblem({ manifest: refs.manifest, speciesIds: refs.speciesIds, fieldIds: refs.fieldIds }, g.predicate as ObjectivePredicate);
+      const why = objectiveRefsProblem(
+        { manifest: refs.manifest, speciesIds: refs.speciesIds, fieldIds: refs.fieldIds, ...(refs.regions !== undefined ? { regions: refs.regions } : {}) },
+        g.predicate as ObjectivePredicate,
+      );
       if (why !== null) return `a running goal cannot run in this dish (${why})`;
     }
+    // P5.6: a clause seen after the dish's time was never seen in this dish.
+    if ((g.progress.clauses ?? []).some((t) => t !== null && t > refs.tick)) return 'a running goal saw a clause after the dish’s time';
+    const cycleProblem = savedCycleProblem(g, refs);
+    if (cycleProblem !== null) return cycleProblem;
+    const inp = g.progress.inputs;
+    if (inp !== undefined && refs.inputs !== undefined && (inp[0] > refs.inputs[0] || inp[1] > refs.inputs[1] || inp[2] > refs.inputs[2])) return 'a running goal saved an input base this dish never had';
     const seen = g.progress.lastEventId;
     if (refs.nextEventId !== undefined && seen !== undefined && seen >= refs.nextEventId) return 'a running goal saw an event this dish never had';
   }
+  return null;
+}
+
+/**
+ * Fix round 1: a running cycle-window goal's saved light cycle against the dish. The index can never exceed
+ * tick / CYCLE_PERIOD_TICKS (cycleStartTick ≥ 0). When the dish ran one cycle since the goal started
+ * (cycleStartTick ≤ startTick: not restarted by setLightMode since), the watch's index is exact: the cycle of
+ * the tick that ran last (startTick's at Start), and every seen clause belongs to it; otherwise (fixed light now,
+ * or the cycle restarted) the next tick ends the attempt or forgets the clauses, so only the bound applies.
+ */
+function savedCycleProblem(g: GoalRecord, refs: GoalWorldRefs): string | null {
+  const cycle = g.progress.cycle;
+  if (cycle === undefined) return null;
+  if (cycle > Math.floor(refs.tick / CYCLE_PERIOD_TICKS)) return 'a running goal saved a light cycle this dish never had';
+  const start = refs.cycleStartTick;
+  if (start === undefined || start === null || start > g.startTick) return null;
+  const idx = (t: number) => Math.max(0, Math.floor((t - start) / CYCLE_PERIOD_TICKS));
+  const last = refs.tick > g.startTick ? idx(refs.tick - 1) : idx(g.startTick);
+  if (cycle !== last) return 'a running goal saved a light cycle this dish was not in';
+  if ((g.progress.clauses ?? []).some((t) => t !== null && idx(t - 1) !== cycle)) return 'a running goal saw a clause outside its light cycle';
   return null;
 }
 

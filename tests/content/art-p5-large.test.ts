@@ -398,7 +398,20 @@ describe('the committed atlas (npm run art:build)', () => {
     }
     // 1342 frames: the 856 v1.0 frames plus stage 1's 486; digest of the same frames read from the 60a4731 atlas.
     expect(old).toHaveLength(1342);
-    expect(h.digest('hex')).toBe('327490bd6265f39530fde0360fcc34af4ef8fd4a8215be05a1053328cf4fdfeb');
+    // P5.8 polish (wave 15; D-0123 MINOR 5, D-0109): F04's outline ink (sporeveilRing) and V02's lace glyph redrew 23
+    // of wave 8a's frames on purpose (f04_sporeveil 21 of its 38, v02_lacephage 2). Re-pinned with that reason: the
+    // other 1302 wave 8a frames are still byte-identical (digest of the same 1302 frames read from the db1c943 atlas,
+    // whose 1342 frames matched 327490bd… above), and every frame outside those two sprites is unchanged.
+    const P58 = /^(f04_sporeveil|v02_lacephage)\//;
+    const kept = old.filter((f) => !P58.test(f.key));
+    const k = createHash('sha256');
+    for (const f of kept) {
+      k.update(f.key);
+      for (let y = 0; y < f.h; y++) k.update(img.data.subarray(((f.y + y) * img.width + f.x) * 4, ((f.y + y) * img.width + f.x + f.w) * 4));
+    }
+    expect(kept).toHaveLength(1302);
+    expect(k.digest('hex')).toBe('9e29ee8027eb653901792efd018c4c0fe379c1e24b1d8cb362d76793123afbf0');
+    expect(h.digest('hex')).toBe('502c97c486578c7c9177cf99217b6a714eb06dac77f298d1ddb4cc1601c80c72');
     // The new frames: 32 px P05/P06/P09 20 each and P07 80; 48 px P08 92 and P10 80; marks (4 + 2) × 4.
     expect(manifest.frames.length - old.length).toBe(20 * 3 + 80 + 92 + 80 + 24 + 13); // + wave 11's 13 device frames
   });

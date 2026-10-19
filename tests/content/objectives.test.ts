@@ -49,7 +49,21 @@ describe('content/objectives', () => {
   it('the three shipped goals validate, with CT §10.5 titles, offered on the Garden', () => {
     const reg = registry();
     expect(reg.manifest.buildPhase).toBeGreaterThanOrEqual(4); // the goals are phase 4 (D-0072), offered from buildPhase 4 on
-    const shipped = objectiveCatalog(reg);
+    // Re-pinned by cause (P5.6 part 3, D-0131): the seven phase 5 play prompts ship beside them
+    // (tests/content/objectives-p5.test.ts); the CT §10.5 goals are the phase 4 ones.
+    expect(objectiveCatalog(reg).map((o) => o.id)).toEqual([
+      'FOOD_RELAY',
+      'KEEP_SPRINTERS_GOING',
+      'LEAVE_A_REFUGE',
+      'LIVING_BRIDGE',
+      'NIGHT_GARDEN',
+      'RECOVER_A_NEIGHBORHOOD',
+      'SEE_SPRINTER_SPLIT',
+      'SUSTAIN_THREE_SPECIES',
+      'TWO_NEIGHBORHOODS',
+      'WATCH_STARCH_BECOME_FOOD',
+    ]);
+    const shipped = objectiveCatalog(reg).filter((o) => o.phase === 4);
     expect(shipped.map((o) => [o.id, o.title])).toEqual([
       ['KEEP_SPRINTERS_GOING', 'Keep Sprinters going'],
       ['SEE_SPRINTER_SPLIT', 'See a Sprinter split'],

@@ -1,0 +1,40 @@
+{
+  "id": "EXP_205",
+  "seed": 205,
+  "title": "Glow threshold",
+  "question": "When do crowded Lanterns start to glow?",
+  "recipeId": "GLOW_THRESHOLD_V1",
+  "intervention": "Watch the crowded patch in dim light. When a Lantern glows, tap it: the inspector shows the signal it senses, its glow thresholds and its energy.",
+  "predictedTradeoff": "Glowing costs energy, so Lanterns that glow spend more than dim ones while sugar lasts; a Lantern low on energy stops glowing.",
+  "measurements": [
+    "events.glowOn.B09",
+    "events.glowOff.B09",
+    "glowing.B09",
+    "alive.B09",
+    "meanEnergy.B09"
+  ],
+  "stoppingSeconds": 120,
+  "confounds": "Signal builds up where Lanterns crowd, so who glows first depends on where each one sits and moves. Glow-on and glow-off counts are counts of records, not of Lanterns: one Lantern can switch more than once. This is one run.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {
+          "measure": "events.glowOn.B09",
+          "arm": "A",
+          "op": "gte",
+          "value": 1,
+          "label": "At least one Lantern started to glow"
+        }
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {
+    "journalStamp": "Watched Lanterns start to glow",
+    "playerSteps": [
+      "inspectGlow"
+    ]
+  },
+  "phase": 5
+}

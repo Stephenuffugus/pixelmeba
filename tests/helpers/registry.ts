@@ -115,7 +115,92 @@ export function withoutRepeats<T>(list: readonly T[]): T[] {
   return list.filter((x, i, a) => a.indexOf(x) === i);
 }
 
-/** A deep copy of the content packs on disk with the manifest fields in `patch` replaced and the content hash rewritten. */
+/**
+ * Wave 15 (P5.6, D-0131): the shipped Phase 5 recipe and card records (experiment recipes and cards, and the
+ * Phase 5 curated dishes L302 and L305). They ship with build phase 5 and need what the shipped manifest enables
+ * (B09, A02, B10, B12, F04, the H05/H09/H10 habitats, S01/S03, signals, silicate …), so a patch that models
+ * another, narrower build leaves them out (patchedRawPacks, below). cards-curated appends its records here.
+ * Guard (fix round 1): every id must name a phase 5 record on disk (phase5RecordsChecked), so the list can never
+ * drop an earlier phase's record, a record that no longer exists, or hide a validator regression on one.
+ */
+export const PHASE5_EXPERIMENT_RECORDS: readonly string[] = Object.freeze([
+  'BRINE_CROSSING_V1',
+  'DIFFERENT_HOST_V1',
+  'EXP_205',
+  'EXP_206',
+  'EXP_207',
+  'EXP_208',
+  'EXP_209',
+  'EXP_210',
+  'EXP_211',
+  'EXP_213',
+  'EXP_214',
+  'EXP_215',
+  'EXP_216',
+  'EXP_217',
+  'EXP_218',
+  'FUNGAL_HITCHHIKER_V1',
+  'GATE_MEAL_V1',
+  'GLASS_BUDGET_V1',
+  'GLOW_THRESHOLD_V1',
+  'L302_UNDER_THE_CANOPY',
+  'L305_THE_JACKET_GARDEN',
+  'NIGHT_SHIFT_V1',
+  'QUIET_NEIGHBORS_V1',
+  'RIVAL_NO_WINNER_V1',
+  'SHELL_HANDLING_V1',
+  'SHELTERED_LACE_V1',
+  'SLEEPING_SHORTAGE_V1',
+  'TEMPORARY_TRAP_V1',
+]);
+
+/**
+ * Wave 15 (P5.6 part 3, prompts-succession): the shipped Phase 5 play prompts (content/objectives). They name
+ * Phase 5 species and habitats (B10, B09, P08, H04–H11 …), so a patch that models a narrower build leaves them
+ * out with the experiment records (patchedRawPacks, below).
+ */
+export const PHASE5_OBJECTIVE_RECORDS: readonly string[] = Object.freeze([
+  'FOOD_RELAY',
+  'LEAVE_A_REFUGE',
+  'LIVING_BRIDGE',
+  'NIGHT_GARDEN',
+  'RECOVER_A_NEIGHBORHOOD',
+  'SUSTAIN_THREE_SPECIES',
+  'TWO_NEIGHBORHOODS',
+]);
+
+const REDUCIBLE_LISTS = ['enabledSpecies', 'enabledModules', 'enabledSystems', 'enabledMaterials', 'enabledHabitats', 'enabledStructures'] as const;
+
+/**
+ * Whether `patch` models a narrower build than the shipped manifest: a list that lacks a shipped id, or a lower
+ * build phase. A patch that only adds ids (or changes nothing) is not narrower.
+ */
+export function narrowsShipped(patch: ManifestPatch, shipped: Record<string, unknown>): boolean {
+  if (patch.buildPhase !== undefined && patch.buildPhase < (shipped.buildPhase as number)) return true;
+  return REDUCIBLE_LISTS.some((k) => {
+    const list = patch[k];
+    return list !== undefined && ((shipped[k] as readonly string[] | undefined) ?? []).some((id) => !(list as readonly string[]).includes(id));
+  });
+}
+
+/**
+ * Throws unless every PHASE5_EXPERIMENT_RECORDS id names a recipe or experiment of `raw` with phase 5, and every
+ * PHASE5_OBJECTIVE_RECORDS id an objective with phase 5 (fix round 1: the narrowing filter drops only these).
+ */
+export function phase5RecordsChecked(raw: RawPacks): void {
+  const phaseOf = (files: readonly RawFile[], id: string) => (files.find((f) => (f.data as { id?: string }).id === id)?.data as { phase?: unknown } | undefined)?.phase;
+  const bad = [
+    ...PHASE5_EXPERIMENT_RECORDS.filter((id) => (phaseOf(raw.recipes, id) ?? phaseOf(raw.experiments, id)) !== 5),
+    ...PHASE5_OBJECTIVE_RECORDS.filter((id) => phaseOf(raw.objectives, id) !== 5),
+  ];
+  if (bad.length > 0) throw new Error(`patchedRawPacks: the Phase 5 drop list names a record that is missing or not phase 5: ${bad.join(', ')}`);
+}
+
+/**
+ * A deep copy of the content packs on disk with the manifest fields in `patch` replaced and the content hash rewritten.
+ * Wave 15 (P5.6): a patch that narrows the shipped manifest (narrowsShipped) also leaves out PHASE5_EXPERIMENT_RECORDS
+ * (they ship only where everything they use is enabled; a test modelling an older build never carries them).
+ */
 export function patchedRawPacks(patch: ManifestPatch): RawPacks {
   const keys = Object.keys(patch);
   for (const k of keys) {
@@ -124,12 +209,21 @@ export function patchedRawPacks(patch: ManifestPatch): RawPacks {
   rawCache ??= loadRawPacksFs();
   const raw = JSON.parse(JSON.stringify(rawCache)) as RawPacks;
   const data = raw.manifest.data as Record<string, unknown>;
+  const narrow = narrowsShipped(patch, rawCache.manifest.data as Record<string, unknown>);
   for (const k of PATCHABLE_MANIFEST_KEYS) {
     const v = patch[k];
     if (v !== undefined) data[k] = JSON.parse(JSON.stringify(Array.isArray(v) ? withoutRepeats(v as readonly string[]) : v)) as unknown;
   }
-  data.contentHash = contentHashOf(raw);
-  return raw;
+  if (narrow) phase5RecordsChecked(raw);
+  const out: RawPacks = narrow
+    ? (() => {
+        const keep = (files: readonly RawFile[]) => files.filter((f) => !PHASE5_EXPERIMENT_RECORDS.includes((f.data as { id?: string }).id ?? ''));
+        const keepObjectives = (files: readonly RawFile[]) => files.filter((f) => !PHASE5_OBJECTIVE_RECORDS.includes((f.data as { id?: string }).id ?? '')); // P5.6 part 3
+        return { ...raw, recipes: keep(raw.recipes), experiments: keep(raw.experiments), objectives: keepObjectives(raw.objectives) };
+      })()
+    : raw;
+  data.contentHash = contentHashOf(out);
+  return out;
 }
 
 /**
@@ -149,7 +243,8 @@ export function registryWith(patch: ManifestPatch, opts: RegistryWithOptions = {
       : (() => {
           const keep = (files: readonly RawFile[]) => files.filter((f) => !omit.includes((f.data as { id?: string }).id ?? ''));
           const left = { ...raw, recipes: keep(raw.recipes), experiments: keep(raw.experiments), variants: keep(raw.variants), objectives: keep(raw.objectives) };
-          const missing = omit.filter((id) => ![raw.recipes, raw.experiments, raw.variants, raw.objectives].some((fs) => fs.some((f) => (f.data as { id?: string }).id === id)));
+          // Wave 15: a narrowing patch already left PHASE5_EXPERIMENT_RECORDS out (patchedRawPacks), so naming one is fine.
+          const missing = omit.filter((id) => !PHASE5_EXPERIMENT_RECORDS.includes(id) && ![raw.recipes, raw.experiments, raw.variants, raw.objectives].some((fs) => fs.some((f) => (f.data as { id?: string }).id === id)));
           if (missing.length > 0) throw new Error(`registryWith: omit names no record: ${missing.join(', ')}`);
           (left.manifest.data as Record<string, unknown>).contentHash = contentHashOf(left);
           return left;

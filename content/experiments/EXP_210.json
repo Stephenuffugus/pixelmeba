@@ -1,0 +1,45 @@
+{
+  "id": "EXP_210",
+  "seed": 210,
+  "title": "Sleeping shortage",
+  "question": "What does a Sleeper do when there is no food?",
+  "recipeId": "SLEEPING_SHORTAGE_V1",
+  "intervention": "Watch the Sleepers with no sugar. At 60 s the dish adds sugar and nutrient over the centre; watch which Sleepers wake.",
+  "predictedTradeoff": "Resting saves energy but a resting Sleeper does not feed or divide; waking costs energy, so a Sleeper that wakes with little left may soon rest again.",
+  "measurements": [
+    "resting.B12",
+    "events.rest.B12",
+    "events.wake.B12",
+    "alive.B12",
+    "meanEnergy.B12"
+  ],
+  "stoppingSeconds": 180,
+  "confounds": "Sleepers rest and wake one by one, as each one’s food and energy allow, so the counts change gradually. Rest and wake counts are counts of records, not of Sleepers. This is one run.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {
+          "measure": "events.rest.B12",
+          "arm": "A",
+          "op": "gte",
+          "value": 1,
+          "label": "A Sleeper went to rest"
+        },
+        {
+          "measure": "events.wake.B12",
+          "arm": "A",
+          "op": "gte",
+          "value": 1,
+          "label": "A Sleeper woke"
+        }
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {
+    "journalStamp": "Watched Sleepers rest and wake",
+    "playerSteps": []
+  },
+  "phase": 5
+}

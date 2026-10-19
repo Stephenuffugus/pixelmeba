@@ -32,11 +32,11 @@ import {
   syncCompareCameras,
   toast,
 } from '../state';
-import { clauseText, describeArms, durationText, formatDiff, formatMeasure, measureLabel, plural, playerStepText } from '../strings/experiments';
+import { clauseText, describeArms, durationText, formatDiff, formatMeasure, measureLabel, plural, playerStepText, TEST_OVERRIDE_STAMP_NOTE } from '../strings/experiments';
 import type { HistorySample } from '@sim/history';
 import { ExperimentViewport } from './ExperimentViewport';
 import { PairSpeedBadge } from '../speedBadge';
-import { worldModesLine } from '../strings/modes';
+import { modesFlags, worldModesLine } from '../strings/modes';
 
 export const PREDICTION_MAX = 280;
 
@@ -198,6 +198,20 @@ export function ExperimentRun() {
   );
 }
 
+/**
+ * P5.6 (UX §3.3): the copies' mode labels, ending "test‑only override" when the experiment's dish records one (its
+ * DishInfo.testOverrides; the card's own list as well, since the copies are made from that dish).
+ */
+function modesOf(info: NonNullable<typeof dishInfo.value>, card: ExperimentCardView): string {
+  const overrides = (info.testOverrides?.length ?? 0) > 0 ? info.testOverrides : card.testOverrides;
+  return worldModesLine(info.mutationPreset, info.founderMode, modesFlags(info.registry, overrides));
+}
+
+/** True when the run records a test-only override (the stamp keeps saying so). */
+function testOnlyRun(info: NonNullable<typeof dishInfo.value>, card: ExperimentCardView): boolean {
+  return (info.testOverrides?.length ?? 0) > 0 || (card.testOverrides?.length ?? 0) > 0;
+}
+
 function Labels({ card }: { card: ExperimentCardView }) {
   const shown = card.labels.filter((l) => !/^Experiment\b/.test(l));
   if (shown.length === 0) return null;
@@ -230,7 +244,7 @@ function ExperimentSetup({ card, x }: { card: ExperimentCardView; x: ComparisonE
       <Labels card={card} />
       {/* P2.2: mode labels wherever a world is described (UX §3.3); both copies share them. */}
       <p class="world-modes" data-testid="experiment-world-modes">
-        Both copies: {worldModesLine(info.mutationPreset, info.founderMode, info.registry)}
+        Both copies: {modesOf(info, card)}
       </p>
       <p class="xp-question">{card.question}</p>
       <h3>The two copies</h3>
@@ -425,11 +439,16 @@ function PopulationHistory({ card }: { card: ExperimentCardView }) {
 
 function ExperimentRunning({ card, x }: { card: ExperimentCardView; x: ComparisonExperiment }) {
   const c = compareState.value!;
+  const info = dishInfo.value!;
   const text = comparePrediction.value.trim();
   return (
     <div class="compare-body xp-body">
       <h2 id="xp-heading">Running A and B</h2>
       <Labels card={card} />
+      {/* P5.6 (UX §3.3): the running card keeps the copies' mode labels, a test-only override included. */}
+      <p class="world-modes" data-testid="experiment-running-modes">
+        Both copies: {modesOf(info, card)}
+      </p>
       <p data-testid="experiment-progress" aria-live="off">
         <strong>{clock(c.ticksRun)}</strong> of {clock(x.horizonTicks)} · both copies at the same moment
       </p>
@@ -447,7 +466,7 @@ function ExperimentRunning({ card, x }: { card: ExperimentCardView; x: Compariso
       <StepList card={card} x={x} />
       {x.stamp ? (
         <p class="constraint xp-stamped" role="status" data-testid="experiment-stamped">
-          Stamped in your Journal at {clock(x.stamp.reachedAtSecond * 10)}. The run goes on.
+          Stamped in your Journal at {clock(x.stamp.reachedAtSecond * 10)}.{testOnlyRun(info, card) ? ` ${TEST_OVERRIDE_STAMP_NOTE}` : ''} The run goes on.
         </p>
       ) : null}
       <figure class="compare-prediction">
@@ -480,7 +499,7 @@ function ExperimentResults({ card, x }: { card: ExperimentCardView; x: Compariso
       <p class={reached ? 'constraint' : 'xp-note'} data-testid="experiment-gate-result" data-reached={reached}>
         {reached && x.gate?.reachedAtSecond !== null && x.gate?.reachedAtSecond !== undefined
           ? stamped
-            ? `Observation gate reached at ${clock(x.gate.reachedAtSecond * 10)}. Your Journal has a stamp: “${card.journalStamp}”.`
+            ? `Observation gate reached at ${clock(x.gate.reachedAtSecond * 10)}. Your Journal has a stamp: “${card.journalStamp}”.${testOnlyRun(info, card) ? ` ${TEST_OVERRIDE_STAMP_NOTE}` : ''}`
             : `The measured part of the gate held at ${clock(x.gate.reachedAtSecond * 10)}. No stamp yet: it also needs ${waiting.length === 1 ? 'the step' : 'the steps'} below.`
           : `The observation gate was not reached${r?.stoppedEarly ? ' (stopped early)' : ''}, so nothing was stamped. What did not happen is a result too; the numbers below say what did.`}
       </p>

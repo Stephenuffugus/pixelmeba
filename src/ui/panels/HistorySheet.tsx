@@ -10,7 +10,7 @@ import { drawFrame, loadAtlas } from '../atlas';
 import { feed } from '../feed';
 import { inheritedLead } from '../strings/inherited';
 import { IconClose } from '../icons';
-import { dishInfo, getClient, historyFocus, inspector, meta, sheet, showToast } from '../state';
+import { dishInfo, getClient, historyFocus, historyMinute, inspector, meta, sheet, showToast } from '../state';
 import { TraitGraphs } from './TraitGraphs';
 import { JournalComposer } from '../views/NotebookJournal';
 import { bookmarkEvent } from '../bookmarks';
@@ -140,9 +140,11 @@ const HISTORY_TABS: readonly { readonly id: HistoryTab; readonly label: string }
 export function HistorySheet() {
   const info = dishInfo.value;
   const focus = historyFocus.value;
+  // P5.6: Look back from a succession entry: "What happened" in that minute.
+  const minute = historyMinute.value;
   const [samples, setSamples] = useState<readonly HistorySample[]>([]);
   const [compacted, setCompacted] = useState(false);
-  const [tab, setTab] = useState<HistoryTab>(focus ? 'events' : 'charts');
+  const [tab, setTab] = useState<HistoryTab>(focus || minute ? 'events' : 'charts');
   const [composing, setComposing] = useState(false);
   // P4.8b: the rows bookmarked in this opening of History (text only; the notebook holds them).
   const [marked, setMarked] = useState<readonly string[]>([]);
@@ -178,10 +180,14 @@ export function HistorySheet() {
     setTab('events');
     setFilter(focus.species);
   }, [focus]);
+  useEffect(() => {
+    if (minute) setTab('events');
+  }, [minute]);
   // The focus belongs to this opening of History only.
   useEffect(
     () => () => {
       historyFocus.value = null;
+      historyMinute.value = null;
     },
     [],
   );
@@ -220,8 +226,8 @@ export function HistorySheet() {
   // P2.8: the recorded debris total (samples from older saves have none, and draw no line).
   const debris = samples.filter((s) => s.debrisTotal !== undefined);
   const deaths = samples.map((s) => s.deaths.reduce((a, b) => a + b, 0));
-  const lines =
-    filter === null ? feed.value : feed.value.filter((l) => l.species === filter || l.species < 0);
+  const byKind = filter === null ? feed.value : feed.value.filter((l) => l.species === filter || l.species < 0);
+  const lines = minute ? byKind.filter((l) => l.tick >= minute.fromTick && l.tick <= minute.toTick) : byKind;
   const filterName = filter === null ? null : (info.speciesNames[filter] ?? '?');
   const focused = focus && inspector.value?.entity?.birthId === focus.birthId ? inspector.value.entity : null;
   void tick;
@@ -462,6 +468,14 @@ export function HistorySheet() {
                 </button>
               </div>
             ) : null}
+            {minute ? (
+              <div class="filter-row" data-testid="history-minute">
+                <span class="sub">Showing {minute.label}, from the events this session still lists.</span>
+                <button class="btn" onClick={() => (historyMinute.value = null)}>
+                  Show every minute
+                </button>
+              </div>
+            ) : null}
             <ul
               style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '0.25rem' }}
               aria-live="polite"
@@ -469,7 +483,7 @@ export function HistorySheet() {
             >
               {lines.length === 0 ? (
                 <li class="sub">
-                  {filterName !== null ? `Nothing recorded for ${filterName} yet.` : 'Nothing recorded yet.'}
+                  {minute ? `Nothing from ${minute.label} is listed in this session.` : filterName !== null ? `Nothing recorded for ${filterName} yet.` : 'Nothing recorded yet.'}
                 </li>
               ) : null}
               {lines.map((l) => (

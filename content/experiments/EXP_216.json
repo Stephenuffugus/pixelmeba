@@ -1,0 +1,33 @@
+{
+  "id": "EXP_216",
+  "seed": 216,
+  "title": "A different host",
+  "question": "Does a Lacephage infect a Sprinter?",
+  "recipeId": "DIFFERENT_HOST_V1",
+  "intervention": "Watch the mesh patch. Tap an infected Velvet, then a Sprinter sitting in a cell with Lacephage units, and compare what the inspector says.",
+  "predictedTradeoff": "Lacephage can only use Velvets: Velvets near whole units can be infected, while Sprinters in the same cells are not.",
+  "measurements": [
+    "infections.B02.V02",
+    "infections.B01.V02",
+    "wholeUnitCells.B01.V02",
+    "wholeUnitCells.B02.V02",
+    "alive.B02",
+    "alive.B01"
+  ],
+  "stoppingSeconds": 180,
+  "confounds": "Sprinters and Velvets share the cells with whole Lacephage units, so a Sprinter's zero is measured against real encounters (the whole-unit cells count). Infections are counted when they happen; an infected Velvet may burst later. This is one run.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "runSeconds", "arm": "A", "op": "gte", "value": 180, "label": "The dish ran 180 s"},
+        {"measure": "infections.B02.V02", "arm": "A", "op": "gte", "value": 1, "label": "A Velvet was infected by Lacephage"},
+        {"measure": "infections.B01.V02", "arm": "A", "op": "eq", "value": 0, "label": "No Sprinter was infected by Lacephage"},
+        {"measure": "wholeUnitCells.B01.V02", "arm": "A", "op": "gt", "value": 0, "label": "Sprinters sat in cells with whole Lacephage units"}
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {"journalStamp": "Saw which host Lacephage infects", "playerSteps": ["observeInfection"]},
+  "phase": 5
+}

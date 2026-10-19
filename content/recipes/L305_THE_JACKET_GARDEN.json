@@ -1,0 +1,27 @@
+{
+  "id": "L305_THE_JACKET_GARDEN",
+  "revision": 1,
+  "name": "The Jacket Garden",
+  "habitatId": "WATER_GARDEN",
+  "seed": 305,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": false,
+  "baseLight": 0.8,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {"center": [64, 64], "radius": 12, "substrate": "water", "add": {"sugar": 0.8, "nutrient": 0.2, "silicate": 0.3}, "label": "Sugar 0.8, nutrient 0.2 and silicate 0.3 per cell"}
+  ],
+  "founders": [
+    {"species": "B01", "count": 100, "center": [64, 64], "radius": 12, "placement": "scatter"},
+    {"species": "P07", "count": 12, "center": [64, 64], "radius": 12, "placement": "scatter", "modules": ["E11"], "moduleAssignment": "alternate-odd", "label": "Dartfins: 6 with a mineral jacket, present at creation"},
+    {"species": "P10", "count": 2, "center": [64, 64], "radius": 12, "placement": "scatter"}
+  ],
+  "labels": ["Pre-seeded genomes"],
+  "question": "Is delayed capture worth the cost?",
+  "expectedObservationsText": "A hundred Sprinters, twelve Dartfins and two Needlejaws scattered on a sugar patch with silicate. Six Dartfins start with Mineral jacket and six without; those abilities were given by the recipe and are present at creation: they did not evolve here. Every jacket starts empty. A jacketed Dartfin spends energy and silicate building its jacket and moves more slowly; a Needlejaw needs longer contact to take a jacketed Dartfin.",
+  "phase": 5
+}

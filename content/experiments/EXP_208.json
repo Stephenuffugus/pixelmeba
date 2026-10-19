@@ -1,0 +1,73 @@
+{
+  "id": "EXP_208",
+  "seed": 208,
+  "title": "Glass budget",
+  "question": "Does a Glasswheel’s shell need silicate?",
+  "recipeId": "GLASS_BUDGET_V1",
+  "intervention": "Make a copy of this dish and add silicate (0.50 per cell) over the patch in copy B only. Run both for 180 seconds and compare how long the Glasswheels were limited by silicate.",
+  "predictedTradeoff": "Copy B’s Glasswheels can build their shells, so more of them should grow and divide; binding silicate also uses it up, so the silicate in copy B falls as they grow, and a larger population can add more limited seconds in total.",
+  "measurements": [
+    "limitSeconds.A02.SILICATE_LIMITED",
+    "field.silicate",
+    "alive.A02",
+    "biomass.A02",
+    "births.A02",
+    "interventionAccepted"
+  ],
+  "stoppingSeconds": 180,
+  "confounds": "Silicate spreads out of the patch, so Glasswheels at its edge get less. Growth also depends on light and nutrient, which are the same in both copies. This is one paired run, not proof of a general effect.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {
+          "measure": "runSeconds",
+          "arm": "A",
+          "op": "gte",
+          "value": 180,
+          "label": "Both copies ran 180 s"
+        },
+        {
+          "measure": "interventionAccepted",
+          "arm": "B",
+          "op": "gte",
+          "value": 1,
+          "label": "Copy B received the silicate"
+        },
+        {
+          "measure": "limitSeconds.A02.SILICATE_LIMITED",
+          "arm": "A",
+          "op": "gt",
+          "value": 0,
+          "label": "Copy A’s Glasswheels were limited by silicate"
+        }
+      ]
+    }
+  },
+  "paired": true,
+  "change": {
+    "kind": "commands",
+    "atSecond": 0,
+    "commands": [
+      {
+        "kind": "deposit",
+        "materialId": "M02",
+        "points": [
+          [
+            64.5,
+            64.5
+          ]
+        ],
+        "radius": 6,
+        "dose": 0.5
+      }
+    ]
+  },
+  "completion": {
+    "journalStamp": "Compared Glasswheels with and without silicate",
+    "playerSteps": [
+      "viewComparison"
+    ]
+  },
+  "phase": 5
+}

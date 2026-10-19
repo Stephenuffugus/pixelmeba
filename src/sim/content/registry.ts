@@ -34,7 +34,7 @@ import { IMPLEMENTED_MODULES, IMPLEMENTED_NATIVE_ABILITIES, IMPLEMENTED_RULES, I
 import { expectedStructureKind, rulesOfManifest, speciesSystemNeeds, STRUCTURE_SYSTEM_NEEDS } from './structureRules';
 import { MODULE_NATIVE_ABILITY, missingModuleParams, moduleSetProblem } from './moduleRules';
 import { MAX_WHAT_IF_CHOICES, variantPatchProblems } from '../variants';
-import { habitatShapeProblems, recipeShapeProblems, recipeTouchesStructures, structurePlacementProblems } from '../recipes';
+import { habitatShapeProblems, hasTestOverrides, recipeShapeProblems, recipeTouchesStructures, structurePlacementProblems, testOverrideProblems } from '../recipes';
 import { communityOfferProblem, habitatOfferIssue } from './habitatRules';
 import { experimentProblems } from '../experiments';
 import { objectivePredicateProblem } from '../objectives';
@@ -337,6 +337,11 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
     // Phase 5 (P5.2): the recipe's placed edges and devices (with its habitat's) on its final grid.
     const rh = habitats.map[r.habitatId];
     if (rh && recipeTouchesStructures(rh, r)) for (const p of structurePlacementProblems(rh, r, null)) err(file, p.path, p.message);
+    // P5.6 (SPEC §13.1; D-0131): test-only overrides name a placed species and only TEST_OVERRIDE_FIELDS, and
+    // a New Dish curated dish (the L3xx records NewDish.tsx lists) never carries one.
+    for (const p of testOverrideProblems(r, species.map)) err(file, p.path, p.message);
+    if (hasTestOverrides(r) && /^L\d{3}_/.test(r.id))
+      err(file, 'testOnlyOverrides', 'a New Dish curated dish cannot carry a test-only override (an experiment fixture opens only from its experiment card)');
   }
   for (const id of experiments.ids) {
     const e = experiments.map[id]!;
@@ -344,7 +349,7 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
     // Experiment cards (SPEC §13.2; P2.5): gate clauses, measurements, the declared change and the
     // recipe's scheduled commands must all be valid; shipped cards may only use enabled content.
     const expRecipe = recipes.map[e.recipeId];
-    const ctx = { species: species.map, materials: materials.map, manifest: manifestRes.success ? manifestRes.data : null };
+    const ctx = { species: species.map, materials: materials.map, manifest: manifestRes.success ? manifestRes.data : null, habitats: habitats.map };
     for (const p of experimentProblems(e, expRecipe, ctx)) {
       err(p.target === 'recipe' && expRecipe ? recipes.files[expRecipe.id]! : experiments.files[id]!, p.path, `${p.target === 'recipe' ? `(experiment ${id}) ` : ''}${p.message}`);
     }
@@ -359,6 +364,9 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
       if ((v.patch.kind === 'patchSet' || v.patch.kind === 'patchMove') && src.fieldPatches[v.patch.patchIndex] === undefined)
         err(file, 'patch.patchIndex', `source recipe has no field patch ${v.patch.patchIndex}`);
     }
+    // P5.6: a What if? idea never remixes an experiment fixture (its test-only override opens only from its card).
+    if (src !== undefined && hasTestOverrides(src))
+      err(file, 'sourceId', `source recipe "${v.sourceId}" is an experiment fixture with a test-only override; a What if? idea cannot remix it`);
     if (v.objectiveId !== undefined && objectives.map[v.objectiveId] === undefined)
       err(file, 'objectiveId', `unknown objective "${v.objectiveId}"`);
     // What if? (SPEC §13.3; D09 §5): the one change must be real and apply exactly, never cropped.
@@ -373,7 +381,8 @@ export function validateContent(raw: RawPacks, opts: ValidateOptions = {}): Vali
   // (phase ≤ buildPhase) names must be enabled. A later phase's objective is skipped, not an error.
   for (const id of objectives.ids) {
     const o = objectives.map[id]!;
-    const ctx = { species: species.map, structures: structures.map, recipes: recipes.map, manifest: manifestRes.success ? manifestRes.data : null };
+    // P5.6: with the habitats (offerOnHabitats, the regions an objective names, the cycle window).
+    const ctx = { species: species.map, structures: structures.map, recipes: recipes.map, manifest: manifestRes.success ? manifestRes.data : null, habitats: habitats.map };
     const p = objectivePredicateProblem(o, ctx);
     if (p) err(objectives.files[id]!, p.path, p.message);
   }

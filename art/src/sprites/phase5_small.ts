@@ -731,32 +731,27 @@ export const X02_THREADRIDER: SpriteDef = {
 };
 
 // -------------------------------------------------------------------------------- V02 Lacephage
-// The inspection glyph: a round lattice head (a lace of holes) ringed by six short fibres, no tail.
-// Like V01 it is never drawn as a moving body: `glyph` for the inspector, `idle` for UI lists.
+// The inspection glyph (UX §6.3 "lace glyph"; P5.8 polish, D-0109 taste note): an OPEN lace net, not a capsid: a
+// thin thread rim and two crossing threads, each outlined, with four open holes between them. Almost nothing is
+// filled, so it differs from V01's filled head-and-tail in silhouette and in alpha. No spikes, no tail. Like V01 it is never drawn as a moving body: `glyph` for the
+// inspector, `idle` (slightly larger) for UI lists.
 const lacePalette = ['', P.outlineDark, P.lacephageGlyph, P.lacephageDeep, P.lacephageLight];
 
 function laceGlyph(big: boolean): Px {
   const p = canvas(16);
-  const r = big ? 4.6 : 4.1;
-  p.fillEllipse(8, 8, r, r, 2);
-  // Lattice holes on a diagonal grid inside the head.
+  const r = big ? 5.5 : 4.8;
+  // The net's rim: a 1-px thread circle (the pixels whose centre lies within half a pixel of radius r).
   for (let y = 0; y < 16; y++)
     for (let x = 0; x < 16; x++) {
-      if (p.get(x, y) !== 2) continue;
-      if ((x + y) % 3 === 0 && (x - y + 15) % 3 === 0 && p.get(x + 1, y) && p.get(x - 1, y) && p.get(x, y + 1) && p.get(x, y - 1)) p.set(x, y, 0);
+      const d = Math.hypot(x + 0.5 - 8, y + 0.5 - 8);
+      if (Math.abs(d - r) <= 0.5) p.set(x, y, 2);
     }
-  p.shadeEdge([2], 3, 1, 1);
-  p.tint(6, 5, 4).tint(5, 6, 4);
-  // Six short fibres.
-  const reach = big ? 6.6 : 6.1;
-  for (let k = 0; k < 6; k++) {
-    const a = (Math.PI / 3) * k + Math.PI / 6;
-    const x0 = Math.round(8 + (r + 0.2) * Math.cos(a) - 0.5);
-    const y0 = Math.round(8 + (r + 0.2) * Math.sin(a) - 0.5);
-    const x1 = Math.round(8 + reach * Math.cos(a) - 0.5);
-    const y1 = Math.round(8 + reach * Math.sin(a) - 0.5);
-    p.line(x0, y0, x1, y1, 3);
-  }
+  // Two crossing threads (the diagonals) inside the rim.
+  const k = Math.floor(r / Math.SQRT2);
+  p.line(8 - k, 8 - k, 7 + k, 7 + k, 2).line(7 + k, 8 - k, 8 - k, 7 + k, 2);
+  // Knots where the threads cross (light) and the lower rim in the deep tone (gentle volume, light from the top left).
+  for (let y = 9; y < 16; y++) for (let x = 0; x < 16; x++) if (p.get(x, y) === 2 && Math.hypot(x + 0.5 - 8, y + 0.5 - 8) > r - 0.6 && x + y > 17) p.set(x, y, 3);
+  p.set(7, 7, 4).set(8, 8, 4);
   return p.outline(O);
 }
 

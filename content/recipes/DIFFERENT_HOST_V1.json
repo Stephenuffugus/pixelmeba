@@ -1,0 +1,29 @@
+{
+  "id": "DIFFERENT_HOST_V1",
+  "revision": 1,
+  "name": "A different host",
+  "habitatId": "WATER_GARDEN",
+  "seed": 216,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "baseLight": 0.8,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "furnish": [
+    {"structure": "S06", "area": {"kind": "disk", "center": [64, 64], "radius": 6}}
+  ],
+  "fieldPatches": [
+    {"center": [64, 64], "radius": 6, "substrate": "water", "add": {"film": 0.2, "filmN": 0.02, "v02": 5, "sugar": 0.5, "nutrient": 0.2}, "label": "Mesh patch (film 0.2 with 0.02 bound nutrient, Lacephage 5 units, sugar 0.5 and nutrient 0.2 per cell)"}
+  ],
+  "founders": [
+    {"species": "B02", "count": 20, "center": [64, 64], "radius": 6, "placement": "scatter", "label": "Velvets"},
+    {"species": "B01", "count": 20, "center": [64, 64], "radius": 6, "placement": "scatter", "label": "Sprinters"}
+  ],
+  "labels": [],
+  "question": "Does a Lacephage infect a Sprinter?",
+  "expectedObservationsText": "Twenty Velvets and twenty Sprinters scattered over a round mesh patch with film, sugar, nutrient and 5 Lacephage units per cell. Lacephage lists only Velvet as its host. The card counts the infections of each species and the cells where Sprinters sat next to whole Lacephage units.",
+  "phase": 5
+}

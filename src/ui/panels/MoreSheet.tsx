@@ -5,7 +5,7 @@ import { IconCompare } from './CompareIcon';
 import { openWhatIf } from './WhatIfState';
 import { openGuideFromDish } from '../views/FieldGuideNav';
 import { WHATIF_TEXT } from '../strings/whatif';
-import { worldModesLine } from '../strings/modes';
+import { modesFlags, worldModesLine } from '../strings/modes';
 import { slotModesLine } from '../strings/modes';
 import { dishClock, evolution } from '../state';
 import {
@@ -50,7 +50,7 @@ export function MoreSheet() {
         {/* UX §3.3: mode labels wherever a world is described (P2.2). */}
         {dishInfo.value ? (
           <p class="world-modes" data-testid="more-world-label">
-            {worldModesLine(evolution.value?.preset ?? dishInfo.value.mutationPreset, evolution.value?.founderMode ?? dishInfo.value.founderMode, dishInfo.value.registry)}
+            {worldModesLine(evolution.value?.preset ?? dishInfo.value.mutationPreset, evolution.value?.founderMode ?? dishInfo.value.founderMode, modesFlags(dishInfo.value.registry, dishInfo.value.testOverrides))}
           </p>
         ) : null}
         <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.5rem' }}>

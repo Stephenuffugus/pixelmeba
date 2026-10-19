@@ -260,7 +260,7 @@ export function migrateWorldState(state: WorldState): WorldState {
       };
     }
   }
-  // SPEC §14.5: a migration tags provenance. Not in the state hash (stateHash never reads provenance).
+  // SPEC §14.5: a migration tags provenance. Not in the state hash (stateHash reads only provenance.testOnlyOverrides, P5.6).
   if (state.schemaVersion < SCHEMA_VERSION) {
     const p = s.content.provenance;
     s = { ...s, content: { ...s.content, provenance: { ...p, migratedFrom: [...(p.migratedFrom ?? []), state.schemaVersion] } } };
@@ -392,7 +392,45 @@ export function stateHash(world: World): string {
   if (world.climate.warmth !== null) h.string('climate.warmth').typed(world.climate.warmth);
   if (world.climate.moisture !== null) h.string('climate.moisture').typed(world.climate.moisture);
   if (c.nextDeviceId !== 1) h.string('nextDeviceId').number(c.nextDeviceId);
+  // P5.6 (SPEC §13.1; D-0131): a world that records test-only overrides hashes the overridden species fields
+  // as its species copies hold them (species, then field order), so two dishes that differ only by an override
+  // never share a hash. Nothing otherwise (the D-0035 rule): every other world hashes exactly as before.
+  const overrides = testOverrideFieldValues(world);
+  if (overrides !== null) h.string('testOnly').string(canonicalJson(overrides));
   return h.hex();
+}
+
+/** One overridden species field as a world's species copy records it (P5.6). */
+export interface TestOverrideFieldValue {
+  readonly speciesId: string;
+  readonly field: string;
+  readonly value: number;
+}
+
+/**
+ * P5.6: the fields a world's recorded test-only overrides (provenance.testOnlyOverrides: { target 'species:<ID>',
+ * values }) set, read from the world's own species copies, sorted by species id then field; null when the
+ * world records none (absent, not a list, or empty). A target or field the copies do not hold is skipped (the
+ * value is what the copy records; recipes.ts realizes and the validator refuses such entries). Reads only.
+ */
+export function testOverrideFieldValues(world: Pick<World, 'content'>): TestOverrideFieldValue[] | null {
+  const list = (world.content.provenance as { readonly testOnlyOverrides?: unknown }).testOnlyOverrides;
+  if (!Array.isArray(list) || list.length === 0) return null;
+  const out: TestOverrideFieldValue[] = [];
+  for (const o of list as unknown[]) {
+    const target = (o as { target?: unknown } | null)?.target;
+    const values = (o as { values?: unknown } | null)?.values;
+    if (typeof target !== 'string' || !target.startsWith('species:') || typeof values !== 'object' || values === null) continue;
+    const speciesId = target.slice('species:'.length);
+    const copy = world.content.species.find((sp) => sp.id === speciesId) as Readonly<Record<string, unknown>> | undefined;
+    if (copy === undefined) continue;
+    for (const field of Object.keys(values).sort()) {
+      const v = copy[field];
+      if (typeof v === 'number') out.push({ speciesId, field, value: v });
+    }
+  }
+  out.sort((a, b) => (a.speciesId < b.speciesId ? -1 : a.speciesId > b.speciesId ? 1 : a.field < b.field ? -1 : a.field > b.field ? 1 : 0));
+  return out;
 }
 
 /**

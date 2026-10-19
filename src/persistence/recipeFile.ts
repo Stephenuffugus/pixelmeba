@@ -17,6 +17,11 @@
  * (realizeRecipe / realizeVariant) and refuses unless the file's recipe, habitat, modules and versions
  * equal this build's and the realized stateHash equals the file's initialStateHash. The file's embedded
  * recipe is a description that must match, never an instruction.
+ *
+ * P5.6 (SPEC §13.1; D-0131): a file whose source names an experiment fixture with a test-only override (the
+ * recipe itself, or a variant's source recipe) is refused with the worker's words before anything is
+ * realized; an experiment dish's export stays 'no-start' (above), so no Starting recipe file of an
+ * overridden dish is written by this build.
  */
 import type { ContentRegistry } from '@sim/content/registry';
 import type { HabitatDef, RecipeDef } from '@sim/content/schema';
@@ -25,9 +30,11 @@ import { canonicalJson, sha256Hex } from '@sim/hash';
 import { isMutationPreset } from '@sim/mutation';
 import {
   applyRecipeOverrides,
+  hasTestOverrides,
   realizeRecipe,
   recipeOverridesOf,
   RecipeError,
+  testOverrideRefusalText,
   type RecipeOverridesRecord,
   type RecipeWorldProvenance,
 } from '@sim/recipes';
@@ -579,6 +586,10 @@ export async function loadRecipeFile(
   worldId: string,
 ): Promise<{ readonly file: RecipeFile; readonly world: World; readonly name: string }> {
   const file = await parseRecipeFile(text, registry);
+  // P5.6: an experiment fixture opens only from its card (SPEC §13.1 "never available in ordinary sandbox").
+  const named = file.source.kind === 'recipe' ? file.source.recipeId : file.source.sourceId;
+  const fixture = Object.prototype.hasOwnProperty.call(registry.recipes, named) ? registry.recipes[named] : undefined;
+  if (fixture !== undefined && hasTestOverrides(fixture)) fail('content', testOverrideRefusalText(fixture.name));
   const compatible = (): never => fail('version', compatibleBuildText(file.versions));
   if (canonicalJson(file.enabledModules) !== canonicalJson(registry.manifest.enabledModules)) compatible();
   let world: World;

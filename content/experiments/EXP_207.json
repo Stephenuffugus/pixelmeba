@@ -1,0 +1,49 @@
+{
+  "id": "EXP_207",
+  "seed": 207,
+  "title": "Brine crossing",
+  "question": "Where does the salt go when the channel shutter is open?",
+  "recipeId": "BRINE_CROSSING_V1",
+  "intervention": "Open and close the shutter across the channel and watch the salt overlay. Tap the shutter to switch it; the card keeps observing.",
+  "predictedTradeoff": "An open shutter lets salt spread along the channel from the brine pool toward the fresh pool. Closing it stops the flow across its four edges, but the pools sit in gel: salt still seeps slowly through the gel around the shutter and around the brine pool, and Sprinters crawl over that gel, so a closed shutter does not keep the pools apart.",
+  "measurements": [
+    "gateTransfer.S03.salt",
+    "mean.salt@FRESH_POOL",
+    "mean.salt@BRINE_POOL",
+    "alive.B01@FRESH_POOL",
+    "alive.B10@BRINE_POOL",
+    "limitSeconds.B01.SUIT_SALINITY",
+    "limitSeconds.B10.SUIT_SALINITY"
+  ],
+  "stoppingSeconds": 180,
+  "confounds": "Salt crosses by diffusion alone, so the amount that crosses the shutter depends on how long it stays open and on the salt difference across it. The tally counts only salt crossing the shutter, in either direction; salt that seeps through the gel around it is not counted. Sprinters swim and also live on gel, so many leave the fresh pool once its food runs low, and some meet salt in the gel around the brine pool whatever the shutter does: the suitability time counts every Sprinter, wherever it met the salt. This is one run.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {
+          "measure": "gateTransfer.S03.salt",
+          "arm": "A",
+          "op": "gt",
+          "value": 0,
+          "label": "Salt crossed the shutter"
+        },
+        {
+          "measure": "limitSeconds.B01.SUIT_SALINITY",
+          "arm": "A",
+          "op": "gt",
+          "value": 0,
+          "label": "Salt lowered a Sprinter’s suitability"
+        }
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {
+    "journalStamp": "Watched salt cross a shutter",
+    "playerSteps": [
+      "toggleShutter"
+    ]
+  },
+  "phase": 5
+}

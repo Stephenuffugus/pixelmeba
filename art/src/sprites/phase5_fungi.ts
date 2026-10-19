@@ -180,7 +180,10 @@ const SL = 5; // light
 const SR = 6; // remains
 const SRD = 7; // remains dark
 
-const sporeveilPalette = ['', P.sporeveilOutline, P.sporeveilSilver, '#959BA2', P.sporeveilRing, P.sporeveilLight, P.remains, P.remainsDark];
+// P5.8 polish (wave 15; D-0123 MINOR 5): the outline (index 1) is the ring ink #23272B, not the mid grey #5F666D, so
+// the silver web reads on sediment too (the grey outline was 2.3:1 there, a real gap; the ink is >= 3:1 on water,
+// gel and sediment). The frames' pixels (indices) are unchanged; only the outline's colour moved.
+const sporeveilPalette = ['', P.sporeveilRing, P.sporeveilSilver, '#959BA2', P.sporeveilRing, P.sporeveilLight, P.remains, P.remainsDark];
 
 /** A ringed speck: a dark ring round a light center at (x, y) (3×3, or 5×5 with a 3×3 core when big). */
 function speck(p: Px, x: number, y: number, big = false): void {

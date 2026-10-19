@@ -1,0 +1,11 @@
+{
+  "id": "LEAVE_A_REFUGE",
+  "title": "Leave a refuge",
+  "predicate": { "type": "keepSpeciesAlive", "params": { "species": ["P08", "F02"] }, "durationSeconds": 180 },
+  "summary": "Keep at least one Waterbear and at least one Cordweaver, which Waterbears eat, alive at once for 180 seconds of dish time. Shelter or gates can keep some Cordweavers out of reach.",
+  "completedText": "Waterbears and Cordweavers were both alive for 180 seconds, measured in this attempt at {time}.",
+  "endedText": "No Waterbears or no Cordweavers remain, so this attempt ended at {time}. The dish keeps going.",
+  "offerOn": [],
+  "offerOnHabitats": ["H11_GRAZING_MEADOW"],
+  "phase": 5
+}

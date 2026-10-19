@@ -66,7 +66,7 @@ import { validateContent, type RawPacks } from '../../src/sim/content/registry';
 import { loadRawPacksFs } from '../../tools/lib/content-fs';
 import { FakeClockHost } from '../helpers/host';
 import { aliveOf, clearWater, place, registry, setField } from '../helpers/world';
-import { G2_LISTS, registryWith } from '../helpers/registry';
+import { G2_LISTS, PHASE5_EXPERIMENT_RECORDS, PHASE5_OBJECTIVE_RECORDS, registryWith } from '../helpers/registry';
 import type { DishInfo } from '../../src/worker/protocol';
 import { describeChange } from '../../src/ui/panels/CompareText';
 import { habitatEditOutcome, livesHereText } from '../../src/ui/strings/lab';
@@ -888,8 +888,15 @@ describe('Lab content comes from the world (P2.7)', () => {
         .issues.filter((i) => i.severity === 'error')
         .map((i) => `${i.file} → ${i.path}: ${i.message}`);
     expect(errors((r) => r)).toEqual([]);
+    // Wave 15 (P5.6, D-0131): a narrower build carries no shipped Phase 5 experiment record (they need its habitats,
+    // species and systems; tests/helpers/registry.ts PHASE5_EXPERIMENT_RECORDS, as patchedRawPacks leaves them out).
+    const notP5Card = (f: RawPacks['recipes'][number]) => !PHASE5_EXPERIMENT_RECORDS.includes((f.data as { id?: string }).id ?? '');
     const withManifest = (r: RawPacks, patch: Record<string, unknown>): RawPacks => ({
       ...r,
+      recipes: r.recipes.filter(notP5Card),
+      experiments: r.experiments.filter(notP5Card),
+      // and no Phase 5 play prompt (they name Phase 5 habitats and L305; PHASE5_OBJECTIVE_RECORDS, as patchedRawPacks).
+      objectives: r.objectives.filter((f) => !PHASE5_OBJECTIVE_RECORDS.includes((f.data as { id?: string }).id ?? '')),
       manifest: { ...r.manifest, data: { ...(r.manifest.data as object), ...patch } },
     });
     const stone = base.structures.find((f) => f.file.endsWith('STONE.json'))!.data as Record<string, unknown>;

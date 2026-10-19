@@ -1,0 +1,14 @@
+{
+  "id": "NIGHT_GARDEN",
+  "title": "Night garden",
+  "predicate": {
+    "type": "observeEvent",
+    "params": { "all": [{ "event": "glowOn", "species": "B09" }, { "event": "intake", "species": "A01" }], "window": "cycle" }
+  },
+  "summary": "See a Lantern start to glow and Sunbeads take in food by light within one light cycle of 240 seconds. Glow supplies no photosynthetic energy.",
+  "completedText": "A Lantern glowed and Sunbeads took in food within one light cycle, measured in this attempt at {time}.",
+  "endedText": "The dish was switched to fixed light, so this attempt ended at {time}. The dish keeps going.",
+  "offerOn": [],
+  "offerOnHabitats": ["H08_NIGHT_LANTERNS"],
+  "phase": 5
+}

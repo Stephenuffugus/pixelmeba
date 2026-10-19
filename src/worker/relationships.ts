@@ -22,7 +22,7 @@
  * in DishHost.stepDish (a played dish), never on comparison copies, rollback replays or experiment arms.
  */
 import { R } from '@sim/reasons';
-import { REACTION_ENZYMES, reactionInCell, reactionInDish, lastCompleteSecond } from '@sim/reactions';
+import { REACTION_ENZYMES, reactionInCell, reactionInDish, lastCompleteSecond, type ReactionEnzyme } from '@sim/reactions';
 import { tookFromPool } from '@sim/intake';
 import { virusIdOfCode } from '@sim/viruses';
 import { CELL_COUNT, TICKS_PER_SECOND } from '@sim/constants';
@@ -246,27 +246,75 @@ export class RelationshipWatcher {
    * (a cell where two producer species were named counts for each; never split between them).
    */
   private conversions(world: World): void {
-    const last = lastCompleteSecond(world);
-    if (last < 0) return;
-    for (const enzyme of REACTION_ENZYMES) {
-      if (!(reactionInDish(world, enzyme).c > 0)) continue;
-      const credited: string[] = [];
-      const carbon: number[] = [];
-      for (let cell = 0; cell < CELL_COUNT; cell++) {
-        const c = reactionInCell(world, enzyme, cell).c;
-        if (!(c > 0)) continue;
-        for (const id of producersNear(world, enzyme, cell)) {
-          const k = credited.indexOf(id);
-          if (k < 0) {
-            credited.push(id);
-            carbon.push(c);
-          } else carbon[k]! += c;
-        }
-      }
-      credited.forEach((id, k) => {
-        this.note(relationshipId('converts', id, enzyme), last);
-        this.ledger.add(last, 'converts', id, enzyme, 0, carbon[k]!);
+    for (const cv of creditedConversions(world)) {
+      cv.credited.forEach((id, k) => {
+        this.note(relationshipId('converts', id, cv.enzyme), cv.second);
+        this.ledger.add(cv.second, 'converts', id, cv.enzyme, 0, cv.carbon[k]!);
       });
     }
   }
+}
+
+/** One enzyme's conversion in the reaction ledger's last complete second, with its credited producers. */
+export interface CreditedConversion {
+  readonly enzyme: ReactionEnzyme;
+  /** The second (lastCompleteSecond). */
+  readonly second: number;
+  /** Carbon the enzyme converted over the dish in that second (> 0). */
+  readonly total: number;
+  /** The cell that converted the most (the lowest index on a tie): the reaction evidence's cell. */
+  readonly topCell: number;
+  /** Species credited (first-credited order) and, per species, the carbon converted in the cells where it was named. */
+  readonly credited: readonly string[];
+  readonly carbon: readonly number[];
+}
+
+/**
+ * The producer credit for the conversions of the last complete second (D-0051; shared by this watcher and the
+ * succession notebook, src/worker/succession.ts): every enzyme that converted carbon, and the species
+ * snapshot.ts producersNear names in the cells that converted (a cell where two producer species were named
+ * counts for each; never split between them). A conversion no producer is credited for has an empty list.
+ * Read-only; call it at a whole second (world.tick % 10 === 0), as the watcher does.
+ */
+export function creditedConversions(world: World): readonly CreditedConversion[] {
+  // One scan per world tick (fix round 1): the watcher and the succession detector both ask at the same whole
+  // second; the answer depends only on the world's reaction ledger and entities at that tick (read-only).
+  const memo = creditMemo.get(world);
+  if (memo !== undefined && memo.tick === world.tick) return memo.out;
+  const out = scanConversions(world);
+  creditMemo.set(world, { tick: world.tick, out });
+  return out;
+}
+
+const creditMemo = new WeakMap<World, { readonly tick: number; readonly out: readonly CreditedConversion[] }>();
+
+function scanConversions(world: World): CreditedConversion[] {
+  const last = lastCompleteSecond(world);
+  if (last < 0) return [];
+  const out: CreditedConversion[] = [];
+  for (const enzyme of REACTION_ENZYMES) {
+    const total = reactionInDish(world, enzyme).c;
+    if (!(total > 0)) continue;
+    const credited: string[] = [];
+    const carbon: number[] = [];
+    let topCell = -1;
+    let topC = 0;
+    for (let cell = 0; cell < CELL_COUNT; cell++) {
+      const c = reactionInCell(world, enzyme, cell).c;
+      if (!(c > 0)) continue;
+      if (c > topC) {
+        topC = c;
+        topCell = cell;
+      }
+      for (const id of producersNear(world, enzyme, cell)) {
+        const k = credited.indexOf(id);
+        if (k < 0) {
+          credited.push(id);
+          carbon.push(c);
+        } else carbon[k]! += c;
+      }
+    }
+    out.push({ enzyme, second: last, total, topCell, credited, carbon });
+  }
+  return out;
 }

@@ -25,7 +25,7 @@ import { cellIndex, maskCells } from '../../src/sim/grid';
 import { killEntity } from '../../src/sim/maintenance';
 import { quarterOf } from '../../src/sim/history';
 import {
-  OBJECTIVE_EVENTS,
+  OBJECTIVE_RING_EVENTS,
   ObjectiveError,
   ObjectiveWatch,
   objectiveSupportProblem,
@@ -428,7 +428,11 @@ describe('save → load at awkward ticks', () => {
 
 describe('save → load between a command and the next tick, every event type (objectives-minors item 3)', () => {
   // Every observeEvent type the validator accepts, for any species and for B01, plus the starch conversion goal.
-  const PREDS: ObjectivePredicate[] = OBJECTIVE_EVENTS.flatMap((event) =>
+  // Re-pinned by cause (P5.6 part 3, D-0131): OBJECTIVE_EVENTS now ends with the measured pseudo-events (intake,
+  // consumption, transfer), which need a species, pool or route and save amounts instead of an event position; this
+  // test covers every event type (OBJECTIVE_RING_EVENTS, the list as v1.0 wrote it plus the Phase 5 event types).
+  // tests/sim/objectives-p5.test.ts covers the measured clauses' save → load.
+  const PREDS: ObjectivePredicate[] = OBJECTIVE_RING_EVENTS.flatMap((event) =>
     event === 'conversion'
       ? [pred('observeEvent', { event, enzyme: 'starch' })]
       : [pred('observeEvent', { event }), pred('observeEvent', { event, species: 'B01' })],

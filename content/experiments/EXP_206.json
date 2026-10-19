@@ -1,0 +1,74 @@
+{
+  "id": "EXP_206",
+  "seed": 206,
+  "title": "Quiet neighbors",
+  "question": "What happens to a glowing crowd when its signal is quenched?",
+  "recipeId": "QUIET_NEIGHBORS_V1",
+  "intervention": "Copy the dish at 120 s and add signal quencher (4 per cell) over the patch in copy B only. Run both for 30 seconds and compare how many Lanterns glow and the glow-offs each copy recorded.",
+  "predictedTradeoff": "Quencher lowers the signal each Lantern senses, so copy B should record more glow-offs and fewer glowing Lanterns; the Lanterns themselves are not harmed, and population loss is not expected within 30 s.",
+  "measurements": [
+    "glowingStart.B09",
+    "glowing.B09",
+    "events.glowOff.B09",
+    "field.quencher",
+    "field.sGlow",
+    "alive.B09",
+    "interventionAccepted"
+  ],
+  "stoppingSeconds": 150,
+  "confounds": "Quencher spreads out of the patch and fades, and Lanterns keep moving, so the difference can change during the run. A Lantern turns off only after its sensed signal stays low for several seconds. This is one paired run, not proof of a general effect.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {
+          "measure": "glowingStart.B09",
+          "arm": "A",
+          "op": "gte",
+          "value": 1,
+          "label": "Both copies started from a glowing dish"
+        },
+        {
+          "measure": "runSeconds",
+          "arm": "A",
+          "op": "gte",
+          "value": 30,
+          "label": "Both copies ran 30 s"
+        },
+        {
+          "measure": "interventionAccepted",
+          "arm": "B",
+          "op": "gte",
+          "value": 1,
+          "label": "Copy B received the quencher"
+        }
+      ]
+    }
+  },
+  "paired": true,
+  "change": {
+    "kind": "commands",
+    "atSecond": 120,
+    "commands": [
+      {
+        "kind": "deposit",
+        "materialId": "M07",
+        "points": [
+          [
+            64.5,
+            64.5
+          ]
+        ],
+        "radius": 6,
+        "dose": 4
+      }
+    ]
+  },
+  "completion": {
+    "journalStamp": "Compared a glowing crowd with and without quencher",
+    "playerSteps": [
+      "viewComparison"
+    ]
+  },
+  "phase": 5
+}

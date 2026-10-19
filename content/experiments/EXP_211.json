@@ -1,0 +1,41 @@
+{
+  "id": "EXP_211",
+  "seed": 211,
+  "title": "Sheltered lace",
+  "question": "Does a shade roof change how Sporeveils fare on drying gel?",
+  "recipeId": "SHELTERED_LACE_V1",
+  "intervention": "Run the dish for 10 minutes. Tap a gel cell under the roof and one on the open gel to compare their moisture, and compare the Sporeveils’ life states in each place.",
+  "predictedTradeoff": "Under the roof the gel dries more slowly, so Sporeveils there should keep their suitability longer; the roof also shades, which a Sporeveil does not need. Neither patch is promised to survive.",
+  "measurements": [
+    "moisture@ROOF",
+    "moisture@OPEN_GEL",
+    "alive.F04@ROOF",
+    "alive.F04@OPEN_GEL",
+    "resting.F04@ROOF",
+    "resting.F04@OPEN_GEL"
+  ],
+  "stoppingSeconds": 600,
+  "confounds": "The two patches also differ in where their spores land and how much debris each group finds. Moisture is read as the mean over each region, so a region’s edge cells count as much as its centre. This is one run.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {
+          "measure": "runSeconds",
+          "arm": "A",
+          "op": "gte",
+          "value": 600,
+          "label": "The dish ran 600 s"
+        }
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {
+    "journalStamp": "Compared Sporeveils under a roof and on open gel",
+    "playerSteps": [
+      "inspectMoisture"
+    ]
+  },
+  "phase": 5
+}

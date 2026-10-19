@@ -1,0 +1,47 @@
+{
+  "id": "QUIET_NEIGHBORS_V1",
+  "revision": 1,
+  "name": "Quiet neighbors",
+  "habitatId": "WATER_GARDEN",
+  "seed": 206,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "baseLight": 0.05,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {
+      "center": [
+        64,
+        64
+      ],
+      "radius": 6,
+      "substrate": "water",
+      "add": {
+        "sugar": 1,
+        "nutrient": 0.2
+      },
+      "label": "Sugar and nutrient patch"
+    }
+  ],
+  "founders": [
+    {
+      "species": "B09",
+      "count": 30,
+      "center": [
+        64,
+        64
+      ],
+      "radius": 4,
+      "placement": "nearest",
+      "label": "Lanterns"
+    }
+  ],
+  "labels": [],
+  "question": "What happens to a glowing crowd when its signal is quenched?",
+  "expectedObservationsText": "The Glow threshold dish on seed 206. The experiment card copies the dish at a fixed second; copy B receives signal quencher (4 per cell) over the patch. Quencher divides the signal each Lantern senses by (1 + quencher). The comparison reports how many glow in each copy and how many glow-offs each recorded.",
+  "phase": 5
+}

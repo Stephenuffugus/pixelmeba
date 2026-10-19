@@ -257,7 +257,9 @@ describe('newDishPreview: the habitat, its regions and the community', () => {
       [RECIPE, { empty: true }],
       [RECIPE, { empty: true, habitatId: 'GEL_COLONY' }],
       [RECIPE, { empty: true, habitatId: 'SEDIMENT_EDGE' }],
-      ...reg.recipeIds.filter((id) => reg.recipes[id]!.phase <= reg.manifest.buildPhase).map((id): [string, RecipeOverrides] => [id, {}]),
+      // Wave 15 (P5.6, D-0131): the v1.0 recipes (phase ≤ 4, the v1.0 build phase); the Phase 5 experiment recipes on
+      // H05, H09 and H10 are habitat dishes and preview their regions (dishinfo / habitat tests cover them).
+      ...reg.recipeIds.filter((id) => reg.recipes[id]!.phase <= Math.min(4, reg.manifest.buildPhase)).map((id): [string, RecipeOverrides] => [id, {}]),
     ];
     for (const [id, o] of starts) {
       const p = h.preview(o, id);

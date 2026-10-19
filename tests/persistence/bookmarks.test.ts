@@ -11,7 +11,8 @@
  * - the worst-case notebook (50 bookmarks + 100 full gallery entries + 3 favorites of 6,000 members in all)
  *   stays under NOTEBOOK_MAX_BYTES (the size is printed);
  * - every kind at its limit in ONE record (favorites, story cards, goals, the turn, bookmarks, gallery,
- *   challenges), written into a real save file, stays under NOTEBOOK_MAX_BYTES and passes notebookProblem.
+ *   challenges and, P5.6, the succession notebook), written into a real save file, stays under NOTEBOOK_MAX_BYTES
+ *   and passes notebookProblem.
  */
 import { describe, expect, it } from 'vitest';
 import { buildSaveFile, loadSaveFile, type SaveFile } from '../../src/persistence/saveFile';
@@ -35,6 +36,7 @@ import {
   type ChallengeRecord,
 } from '../../src/persistence/notebookChallenges';
 import { SHELF_LIMITS } from '../../src/persistence/shelf';
+import { SUCCESSION_DEATH_CAUSES, SUCCESSION_EVIDENCE_MAX, SUCCESSION_LINES_MAX, SUCCESSION_MAX, SUCCESSION_MINUTE_TICKS, SUCCESSION_SEEN_MAX, type SuccessionEntry, type SuccessionLine } from '../../src/persistence/notebookSuccession';
 import { AGENT_CAP } from '../../src/sim/constants';
 import { FIELD_IDS } from '../../src/sim/fields';
 import { MODULE_COST_KEYS } from '../../src/sim/lineage';
@@ -461,25 +463,65 @@ describe('size: every kind at its limit in one record', () => {
       },
     }));
 
-    const notebook: NotebookRecord = { ...emptyNotebook(W), favorites, nextFavorite: BIG, stories, goals, turns, bookmarks, gallery, challenges };
+    /**
+     * P5.6 (D-0131): the succession notebook at SUCCESSION_MAX entries of SUCCESSION_LINES_MAX lines with
+     * SUCCESSION_EVIDENCE_MAX evidence ids each. Generator form (src/worker/succession.ts writes these fields): the
+     * content's longest species id, a loss line's recorded causes (every death cause the generator counts), the
+     * longest pool and enzyme, long values and ids. Validator form (`wide`): the validator's bounds (32-character
+     * species ids, every cause, the longest evidence ids, values just under 1e9).
+     */
+    const succession = (wide: boolean): SuccessionEntry[] => {
+      const spId = wide ? `B${'9'.repeat(31)}` : 'X'.repeat(longest(REG.speciesIds));
+      const value = wide ? 999_999_999.99 : 123_456.78;
+      // Evidence seconds lie in the entry's own minute (the validator checks it): the minute's last seconds.
+      const evidence = (minute: number): string[] =>
+        Array.from({ length: SUCCESSION_EVIDENCE_MAX }, (_, j) =>
+          wide ? `intake:${minute * 60 - j}:${'B'.repeat(32)}:metabolite` : j < 2 ? `history:${minute * 60 - j}` : `event:${999_999_999_999 - j}`,
+        );
+      const line = (minute: number): SuccessionLine => ({
+        kind: 'loss',
+        species: spId,
+        value,
+        deaths: Object.fromEntries(SUCCESSION_DEATH_CAUSES.map((c) => [c, wide ? BIG : 99_999])),
+        evidence: evidence(minute),
+      });
+      return Array.from({ length: SUCCESSION_MAX }, (_, k) => {
+        const minute = 1_000_000 + k;
+        return { id: `succ-${minute}`, minute, fromTick: (minute - 1) * SUCCESSION_MINUTE_TICKS, toTick: minute * SUCCESSION_MINUTE_TICKS, watchedFromTick: (minute - 1) * SUCCESSION_MINUTE_TICKS + 599, lines: Array.from({ length: SUCCESSION_LINES_MAX }, () => line(minute)) };
+      });
+    };
+
+    /**
+     * P5.6 fix round 1: the seen feeding links at SUCCESSION_SEEN_MAX. Generator form: the content's longest species id
+     * on the longest pool ('pool:<id>:metabolite'), minutes of seven digits; validator form: catching links of two
+     * 32-character ids at minute 1e8. Keys are unique (the validator checks it).
+     */
+    const ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_';
+    const code = (k: number, n: number): string => Array.from({ length: n }, (_, j) => ALPHA[Math.floor(k / ALPHA.length ** j) % ALPHA.length]!).join('');
+    const successionSeen = (wide: boolean): [string, number][] =>
+      Array.from({ length: SUCCESSION_SEEN_MAX }, (_, k) =>
+        wide ? [`prey:B${code(k, 31)}:B${code(k + 1, 31)}`, 100_000_000] : [`pool:X${code(k, Math.max(2, longest(REG.speciesIds) - 1))}:metabolite`, 1_000_000 + SUCCESSION_MAX],
+      );
+
+    const notebook: NotebookRecord = { ...emptyNotebook(W), favorites, nextFavorite: BIG, stories, goals, turns, bookmarks, gallery, challenges, succession: succession(false), successionSeen: successionSeen(false) };
     // The real save file, as the worker writes it (nicknames kept: the larger of the two forms).
     const built = await buildSaveFile(w, META, { notebook, includeNicknames: true });
     const written = (JSON.parse(built.text) as SaveFile).notebook as unknown as Record<string, unknown>;
-    expect(Object.keys(written).sort()).toEqual(['bookmarks', 'challenges', 'checksum', 'favorites', 'format', 'gallery', 'goals', 'nextFavorite', 'notebookVersion', 'stories', 'turns', 'worldId']);
+    expect(Object.keys(written).sort()).toEqual(['bookmarks', 'challenges', 'checksum', 'favorites', 'format', 'gallery', 'goals', 'nextFavorite', 'notebookVersion', 'stories', 'succession', 'successionSeen', 'turns', 'worldId']);
     const { checksum: _c, ...payload } = written;
     const units = canonicalJson(payload).length; // what notebookProblem compares with NOTEBOOK_MAX_BYTES
     const utf8 = new TextEncoder().encode(canonicalJson(payload)).byteLength;
     console.log(
       `every kind at its limit: ${units} of ${NOTEBOOK_MAX_BYTES} (${((units / NOTEBOOK_MAX_BYTES) * 100).toFixed(1)} %; ${utf8} bytes as UTF-8; save file ${built.text.length} characters)`,
     );
-    for (const k of ['favorites', 'stories', 'goals', 'turns', 'bookmarks', 'gallery', 'challenges']) console.log(`  ${k}: ${canonicalJson(written[k]).length}`);
+    for (const k of ['favorites', 'stories', 'goals', 'turns', 'bookmarks', 'gallery', 'challenges', 'succession', 'successionSeen']) console.log(`  ${k}: ${canonicalJson(written[k]).length}`);
     expect(units).toBeLessThan(NOTEBOOK_MAX_BYTES * 0.7); // the tripwire for what the app writes (D-0090)
     // Every kind passes its validator, the size check and the seal: a load would read this notebook.
     expect(await notebookProblem(written, W)).toBeNull();
 
     // D-0090: the story cards at the validator's text bounds still fit.
     const wideStories = Array.from({ length: STORIES_MAX }, (_, k) => story(k, true));
-    const wide = await buildSaveFile(w, META, { notebook: { ...notebook, stories: wideStories }, includeNicknames: true });
+    const wide = await buildSaveFile(w, META, { notebook: { ...notebook, stories: wideStories, succession: succession(true), successionSeen: successionSeen(true) }, includeNicknames: true });
     const wideWritten = (JSON.parse(wide.text) as SaveFile).notebook as unknown as Record<string, unknown>;
     const { checksum: _w, ...widePayload } = wideWritten;
     const wideUnits = canonicalJson(widePayload).length;

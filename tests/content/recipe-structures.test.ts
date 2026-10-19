@@ -260,7 +260,15 @@ describe('P5.2 structure worlds are deterministic; a recipe without structures i
 
   it('a recipe without edges or devices realizes byte-identically to one that lists none (empty stores, nextDeviceId 1, no cycle tick)', () => {
     for (const r of [registry(), reg()]) {
-      for (const id of r.recipeIds.filter((x) => r.recipes[x]!.phase <= r.manifest.buildPhase)) {
+      // Wave 15 (P5.6, D-0131): every shipped recipe that places no structure (it lists none, and neither does its
+      // habitat); since wave 15 BRINE_CROSSING_V1 lists a shutter and the H09 / H10 recipes inherit their habitats'.
+      const placesNone = (x: string) => {
+        const rec = r.recipes[x]!;
+        const h = r.habitats[rec.habitatId]!;
+        return rec.edges === undefined && rec.devices === undefined && rec.furnish === undefined && (h.edges?.length ?? 0) + (h.devices?.length ?? 0) + (h.furnish?.length ?? 0) === 0;
+      };
+      expect(r.recipeIds.filter((x) => r.recipes[x]!.phase <= r.manifest.buildPhase && placesNone(x)).length).toBeGreaterThan(15);
+      for (const id of r.recipeIds.filter((x) => r.recipes[x]!.phase <= r.manifest.buildPhase && placesNone(x))) {
         const base = r.recipes[id]!;
         expect(base.edges, id).toBeUndefined();
         expect(base.devices, id).toBeUndefined();
@@ -268,7 +276,11 @@ describe('P5.2 structure worlds are deterministic; a recipe without structures i
         expect(w.edges, id).toEqual([]);
         expect(w.devices, id).toEqual([]);
         expect(w.counters.nextDeviceId, id).toBe(1);
-        expect('cycleStartTick' in w.settings, id).toBe(false);
+        // Schema 5 (D-0106): a cycle-light recipe (wave 15's NIGHT_SHIFT_V1) records the cycle start at tick 0;
+        // every fixed-light recipe records none.
+        const cycle = (base.lightMode ?? r.habitats[base.habitatId]!.lightMode) === 'cycle';
+        if (cycle) expect(w.settings.cycleStartTick, id).toBe(0);
+        else expect('cycleStartTick' in w.settings, id).toBe(false);
         const listed = realizeRecipe(r, { ...base, edges: [], devices: [] });
         expect(JSON.stringify(serializeWorld(listed)), id).toBe(JSON.stringify(serializeWorld(w)));
         expect(trajectoryDigest(listed, 'full'), id).toBe(trajectoryDigest(w, 'full'));

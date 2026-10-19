@@ -157,7 +157,9 @@ export const P = {
   traplaceSlack: '#A88A5C',
   // F04 Sporeveil
   sporeveilSilver: '#B9BEC4',
+  // The speck ring ink, and since P5.8 (wave 15, D-0123 MINOR 5) also the sprite outline (>= 3:1 on sediment).
   sporeveilRing: '#23272B',
+  // The outline before P5.8 (2.3:1 on sediment); kept so the v1.1 palette still names it, used by no frame.
   sporeveilOutline: '#5F666D',
   sporeveilLight: '#E8EBEE',
   // A02 Glasswheel

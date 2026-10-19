@@ -1,0 +1,30 @@
+{
+  "id": "RIVAL_NO_WINNER_V1",
+  "revision": 1,
+  "name": "Rival without a winner",
+  "habitatId": "WATER_GARDEN",
+  "seed": 217,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "baseLight": 0.8,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "ops": [
+    {"op": "disk", "center": [64, 64], "radius": 6, "substrate": "gel"}
+  ],
+  "fieldPatches": [
+    {"center": [64, 64], "radius": 6, "substrate": "gel", "add": {"sugar": 0.5, "detritus": 0.5, "detritusN": 0.05, "nutrient": 0.2}, "label": "Gel patch (sugar 0.5, detritus 0.5 with 0.05 bound nutrient, nutrient 0.2 per cell)"}
+  ],
+  "founders": [
+    {"species": "B01", "count": 20, "center": [64, 64], "radius": 6, "placement": "scatter", "label": "Sprinters"},
+    {"species": "B04", "count": 20, "center": [64, 64], "radius": 6, "placement": "scatter", "label": "Recyclers"},
+    {"species": "B13", "count": 20, "center": [64, 64], "radius": 6, "placement": "scatter", "label": "Ramparts"}
+  ],
+  "labels": [],
+  "question": "What does the rivalry chemical cost, and who meets it?",
+  "expectedObservationsText": "Twenty Sprinters, twenty Recyclers and twenty Ramparts scattered on a gel patch with sugar, detritus and nutrient. Ramparts spend energy releasing a rivalry chemical that lowers the suitability of the cells around them for some neighbours. The experiment card makes a copy without the Ramparts, with the others in the same places.",
+  "phase": 5
+}

@@ -16,6 +16,28 @@ export { evolutionLabel, founderLabel };
 /** UX §3.3: a world whose recorded registry enables fewer modules than the full catalog. */
 export const CORE_PROTOTYPE_LABEL = 'Core prototype — quantitative evolution';
 
+/**
+ * UX §3.3 "Test overrides: 'test‑only override'" (UX's exact words, with its non-breaking hyphen U+2011): a world
+ * that records a test-only override (SPEC §13.1; P5.6, D-0131), appended to its mode labels wherever it is described.
+ */
+export const TEST_ONLY_LABEL = 'test\u2011only override';
+
+/** What the mode line says besides the two settings (RegistryInfo is one: its `partial`). */
+export interface ModesLineFlags {
+  /** True: "Core prototype — quantitative evolution" (UX §3.3). */
+  readonly partial?: boolean;
+  /** True: "test‑only override" (UX §3.3; the world records a test-only override). */
+  readonly testOnly?: boolean;
+}
+
+/**
+ * The flags of a described world (DishInfo or a preview): its recorded registry's `partial`, and testOnly when it
+ * lists any test-only override (DishInfo.testOverrides; absent or empty in every ordinary dish).
+ */
+export function modesFlags(registry: { readonly partial?: boolean } | null | undefined, testOverrides?: readonly unknown[] | null): ModesLineFlags {
+  return { partial: registry?.partial === true, testOnly: (testOverrides?.length ?? 0) > 0 };
+}
+
 export type PresetId = 'standard' | 'accelerated' | 'fixed';
 export type FounderModeId = 'identical' | 'varied' | 'diverse';
 
@@ -74,7 +96,7 @@ export function founderNote(mode: string): string {
 
 /** A saved dish's mode labels (Saved dishes, Continue, the Save sheet), or null when the slot did not record them. */
 export function slotModesLine(m: SlotModes | undefined): string | null {
-  return m ? worldModesLine(m.mutationPreset, m.founderMode, { partial: m.partial === true }) : null;
+  return m ? worldModesLine(m.mutationPreset, m.founderMode, { partial: m.partial === true, testOnly: m.testOnly === true }) : null;
 }
 
 /** The toast after an evolution-setting change (short, so it fits one line at 200 % text). */
@@ -137,14 +159,19 @@ export function startLedgerText(l: {
   return `At the start the dish holds ${fromCents(h + a)} carbon, ${fromCents(cents(l.total.n))} nutrient and ${fromCents(cents(l.total.m))} mineral (game units, to 0.01): the habitat’s own ${fromCents(h)} carbon plus ${fromCents(a)} added with the food and founders.`;
 }
 
-/** "Standard Evolution · Varied founders · Core prototype — quantitative evolution" (UX §3.3). */
+/**
+ * "Standard Evolution · Varied founders · Core prototype — quantitative evolution" (UX §3.3), ending
+ * "· test‑only override" for a world that records one (P5.6). The third argument is a RegistryInfo (its `partial`)
+ * or ModesLineFlags (modesFlags).
+ */
 export function worldModesLine(
   preset: string,
   founderMode: string,
-  registry: Pick<RegistryInfo, 'partial'> | null | undefined,
+  flags: ModesLineFlags | Pick<RegistryInfo, 'partial'> | null | undefined,
 ): string {
   const parts = [evolutionLabel(preset), founderLabel(founderMode)];
-  if (registry?.partial) parts.push(CORE_PROTOTYPE_LABEL);
+  if (flags?.partial) parts.push(CORE_PROTOTYPE_LABEL);
+  if (flags && 'testOnly' in flags && flags.testOnly === true) parts.push(TEST_ONLY_LABEL);
   return parts.join(' · ');
 }
 

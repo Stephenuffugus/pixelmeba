@@ -14,6 +14,8 @@ import { journal, journalUnseen, type JournalStampEntry } from '../journal';
 import { JournalComposer, ObservationCard } from './NotebookJournal';
 import { NotebookFavorites } from './NotebookFavorites';
 import { NotebookStories } from './NotebookStories';
+import { NotebookSuccession } from './NotebookSuccession';
+import { SUCCESSION_TEXT } from '../strings/succession';
 import { NotebookBookmarks } from './NotebookBookmarks';
 import { NotebookGallery } from './NotebookGallery';
 import { BOOKMARK_UI, GALLERY_UI } from '../strings/notebookTools';
@@ -27,10 +29,12 @@ import { durationText, journalMeasureCells, recordedText } from '../strings/expe
 import { clock } from '../panels/CompareText';
 import { DEMO_MODE } from '@platform/web';
 
-type Tab = 'stories' | 'favorites' | 'journal' | 'bookmarks' | 'gallery' | 'experiments';
+type Tab = 'stories' | 'succession' | 'favorites' | 'journal' | 'bookmarks' | 'gallery' | 'experiments';
 const ALL_TABS: readonly { readonly id: Tab; readonly label: string }[] = [
   // P4.1: UX §2 order (Something happened · Favorites · Journal · … · Experiments).
   { id: 'stories', label: STORY_TEXT.tab },
+  // P5.6 part 3 (D02 §23's name; UX-silent, PROPOSED DECISION): after "Something happened".
+  { id: 'succession', label: SUCCESSION_TEXT.tab },
   { id: 'favorites', label: 'Favorites' },
   { id: 'journal', label: 'Journal' },
   // P4.8b: UX §2 order (… Journal · Bookmarks · Gallery · Experiments).
@@ -43,8 +47,10 @@ const TABS = ALL_TABS.filter((t) => !DEMO_MODE || t.id !== 'experiments');
 
 export function Notebook() {
   const r = route.value;
-  const tab: Tab = r.name === 'notebook' && (!DEMO_MODE || r.tab !== 'experiments') ? r.tab : DEMO_MODE ? 'stories' : 'experiments';
-  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ stories: null, favorites: null, journal: null, bookmarks: null, gallery: null, experiments: null });
+  // P5.6: the route's tab union (state.ts) does not name 'succession' yet; this view reads it wider.
+  const rTab = r.name === 'notebook' ? (r.tab as Tab) : null;
+  const tab: Tab = rTab !== null && (!DEMO_MODE || rTab !== 'experiments') ? rTab : DEMO_MODE ? 'stories' : 'experiments';
+  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ stories: null, succession: null, favorites: null, journal: null, bookmarks: null, gallery: null, experiments: null });
 
   useEffect(() => {
     void loadExperimentCards();
@@ -55,7 +61,7 @@ export function Notebook() {
 
   const select = (t: Tab, focus = false) => {
     if (t === 'stories') openStoryId.value = null; // P4.2: the tab opens on its list
-    route.value = { name: 'notebook', tab: t };
+    route.value = { name: 'notebook', tab: t } as typeof route.value; // P5.6: 'succession' (see rTab)
     if (focus) tabRefs.current[t]?.focus();
   };
   const onKey = (e: KeyboardEvent) => {
@@ -108,7 +114,7 @@ export function Notebook() {
           ))}
         </div>
         <section id="nb-panel" role="tabpanel" aria-labelledby={`nb-tab-${tab}`} class="nb-panel">
-          {tab === 'stories' ? <NotebookStories /> : tab === 'favorites' ? <NotebookFavorites /> : tab === 'journal' ? <JournalTab /> : tab === 'bookmarks' ? <NotebookBookmarks /> : tab === 'gallery' ? <NotebookGallery /> : <ExperimentsTab />}
+          {tab === 'stories' ? <NotebookStories /> : tab === 'succession' ? <NotebookSuccession /> : tab === 'favorites' ? <NotebookFavorites /> : tab === 'journal' ? <JournalTab /> : tab === 'bookmarks' ? <NotebookBookmarks /> : tab === 'gallery' ? <NotebookGallery /> : <ExperimentsTab />}
         </section>
       </div>
     </main>

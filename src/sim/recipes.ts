@@ -12,9 +12,16 @@
  * index); explicit `cells` name them. `initial` sets a member's starting B, N and E as a labelled setup
  * (the B and N difference is logged as 'recipe:<id>:initial'); `links: 'chain'` joins listed F02
  * members with transport links (SPEC §7.7).
+ *
+ * Test-only overrides (P5.6; SPEC §13.1 "test-only overrides are applied and disclosed, never available in
+ * ordinary sandbox"; CT §10.3 E214; D-0131): a recipe's `testOnlyOverrides` replace fields of the WORLD's
+ * recorded species copy (never the registry's record) right after worldContentFor, before the species table
+ * compiles anything from the copies, and the list is recorded in provenance.testOnlyOverrides. The recipe is
+ * the fixture, so every realization applies them (headless runner, fence, app); the worker refuses such a
+ * recipe everywhere but its experiment card. A recipe without overrides realizes byte-identically.
  */
 import type { ContentRegistry } from './content/registry';
-import type { DevicePlacement, EdgePlacement, FieldPatch, FurnishArea, GeometryOp, HabitatDef, RecipeDef, Species } from './content/schema';
+import { SpeciesSchema, type DevicePlacement, type EdgePlacement, type FieldPatch, type FurnishArea, type GeometryOp, type HabitatDef, type RecipeDef, type Species, type TestOverride } from './content/schema';
 import { communityOfferProblem, furnishAreaCells, furnishAreaOutsideCell, regionContains } from './content/habitatRules';
 import { climateNeedProblem, placedStructureNeedProblem, PLACEABLE_PHASE5_IDS, type PlacedStructures, type StructureRulesView } from './content/structureRules';
 import { edgeCodeArrays, edgeCodeBetween, edgePermits, edgeStoreProblem, freeClassOfSpecies, sortEdges, type EdgeBarrier } from './barriers';
@@ -51,6 +58,130 @@ import { createEmptyWorld, speciesIndex, type World, type WorldContent } from '.
 import { INITIAL_ENERGY, TICKS_PER_SECOND } from './constants';
 
 export class RecipeError extends Error {}
+
+// ------------------------------------------------------------------ test-only overrides (P5.6)
+
+/**
+ * The species record fields a test-only override may set (PROPOSED DECISION, D-0131): the one profile field
+ * CT §10.3 names (E214 "speed 0"). A later fixture adds a field with a decision.
+ */
+export const TEST_OVERRIDE_FIELDS = ['speed'] as const;
+export type TestOverrideField = (typeof TEST_OVERRIDE_FIELDS)[number];
+
+/** The species id a test-only override targets ('species:<ID>'), or null when the target is not a species. */
+export function testOverrideSpecies(o: Pick<TestOverride, 'target'>): string | null {
+  const m = /^species:([BYFAPXV][0-9]{2})$/.exec(o.target);
+  return m ? m[1]! : null;
+}
+
+/** Whether a recipe carries test-only overrides (an experiment fixture). */
+export function hasTestOverrides(r: { readonly testOnlyOverrides?: readonly unknown[] }): boolean {
+  return (r.testOnlyOverrides?.length ?? 0) > 0;
+}
+
+/** SPEC §13.1: the refusal everywhere but the card ("never available in ordinary sandbox"). */
+export function testOverrideRefusalText(recipeName: string): string {
+  return `${recipeName} is an experiment fixture with a test-only override; it opens only from its experiment card.`;
+}
+
+/** Provenance of a world that records test-only overrides (the recipe's list, a canonical copy). */
+export interface TestOverrideProvenance {
+  readonly testOnlyOverrides?: readonly TestOverride[];
+}
+
+/** A canonical copy of a recipe's overrides (keys of `values` sorted). */
+function canonicalOverrides(list: readonly TestOverride[]): TestOverride[] {
+  return list.map((o) => ({ description: o.description, target: o.target, values: Object.fromEntries(Object.keys(o.values).sort().map((k) => [k, o.values[k]!])) }));
+}
+
+/**
+ * The registry-free checks of a recipe's test-only overrides (the validator runs them on every recipe):
+ * target 'species:<ID>' naming a species among the recipe's founder groups or scheduled inoculations, every
+ * values key in TEST_OVERRIDE_FIELDS, the overridden record still valid under SpeciesSchema, a non-empty
+ * description, at most one entry per species. Paths 'testOnlyOverrides.<i>[.field]'.
+ */
+export function testOverrideProblems(recipe: RecipeDef, species: Readonly<Record<string, Species>>): RecipeShapeProblem[] {
+  const out: RecipeShapeProblem[] = [];
+  const named: string[] = recipe.founders.map((f) => f.species);
+  for (const sc of recipe.scheduledCommands) if (sc.kind === 'inoculate' && typeof sc.payload.speciesId === 'string') named.push(sc.payload.speciesId);
+  const seen: string[] = [];
+  recipe.testOnlyOverrides.forEach((o, i) => {
+    const at = `testOnlyOverrides.${i}`;
+    if (!o.description.trim()) out.push({ path: `${at}.description`, message: 'a test-only override says what it changes' });
+    const id = testOverrideSpecies(o);
+    if (id === null) return out.push({ path: `${at}.target`, message: `target "${o.target}" must be "species:<ID>"` });
+    if (seen.includes(id)) out.push({ path: `${at}.target`, message: `${id} already has a test-only override (one entry per species)` });
+    seen.push(id);
+    if (!named.includes(id)) out.push({ path: `${at}.target`, message: `${id} is not placed by this recipe (its founders or scheduled inoculations)` });
+    const keys = Object.keys(o.values);
+    if (keys.length === 0) out.push({ path: `${at}.values`, message: 'a test-only override sets at least one field' });
+    for (const k of keys) if (!(TEST_OVERRIDE_FIELDS as readonly string[]).includes(k)) out.push({ path: `${at}.values.${k}`, message: `"${k}" cannot be overridden (only ${TEST_OVERRIDE_FIELDS.join(', ')})` });
+    const rec = species[id];
+    if (rec === undefined) out.push({ path: `${at}.target`, message: `unknown species "${id}"` });
+    else if (keys.every((k) => (TEST_OVERRIDE_FIELDS as readonly string[]).includes(k))) {
+      const res = SpeciesSchema.safeParse({ ...rec, ...o.values });
+      if (!res.success) for (const iss of res.error.issues) out.push({ path: `${at}.values.${iss.path.map(String).join('.')}`, message: `the overridden ${id} record is invalid: ${iss.message}` });
+    }
+  });
+  return out;
+}
+
+/**
+ * The world content with a recipe's test-only overrides applied (P5.6): each target species' recorded COPY
+ * replaced by { ...copy, ...values } (the registry's record is never touched) and provenance.testOnlyOverrides
+ * set to a canonical copy of the list (merged into the given provenance). `content` unchanged when none.
+ */
+export function withTestOverrides(content: WorldContent, recipe: Pick<RecipeDef, 'id' | 'testOnlyOverrides'>): WorldContent {
+  const list = recipe.testOnlyOverrides;
+  if (list.length === 0) return content;
+  const species = content.species.slice();
+  for (const o of list) {
+    const id = testOverrideSpecies(o);
+    const k = id === null ? -1 : species.findIndex((sp) => sp.id === id);
+    if (k < 0) throw new RecipeError(`recipe ${recipe.id}: test-only override target "${o.target}" is not a species of this dish`);
+    for (const f of Object.keys(o.values)) if (!(TEST_OVERRIDE_FIELDS as readonly string[]).includes(f)) throw new RecipeError(`recipe ${recipe.id}: "${f}" cannot be overridden`);
+    species[k] = { ...species[k]!, ...o.values };
+  }
+  const provenance = { ...content.provenance, testOnlyOverrides: canonicalOverrides(list) } as WorldContent['provenance'] & TestOverrideProvenance;
+  return { ...content, species, provenance };
+}
+
+/**
+ * P5.6 (fix round 1; saves are sacred): the load-time check of a world's recorded test-only overrides. Null when
+ * provenance has no testOnlyOverrides key or the record is one realizeRecipe could have written: a non-empty
+ * list of { description (non-empty string), target 'species:<ID>' naming a species copy of the world, values a
+ * non-empty object whose keys are in TEST_OVERRIDE_FIELDS and whose numbers equal the copy's }, at most one
+ * entry per species. Otherwise a short reason (the import refuses the file and changes nothing). Reads only.
+ * It cannot see a copy whose override was deleted from provenance (species copies are not hashed; older).
+ */
+export function recordedTestOverridesProblem(content: Pick<WorldContent, 'species' | 'provenance'>): string | null {
+  const prov = content.provenance as Readonly<Record<string, unknown>> | null | undefined;
+  if (prov === null || typeof prov !== 'object' || !Object.prototype.hasOwnProperty.call(prov, 'testOnlyOverrides')) return null;
+  const list = prov.testOnlyOverrides;
+  if (!Array.isArray(list) || list.length === 0) return 'the list is not a non-empty list';
+  const seen: string[] = [];
+  for (let i = 0; i < list.length; i++) {
+    const o = list[i] as Readonly<Record<string, unknown>> | null;
+    if (o === null || typeof o !== 'object' || Array.isArray(o)) return `entry ${i} is not a record`;
+    if (Object.keys(o).some((k) => k !== 'description' && k !== 'target' && k !== 'values')) return `entry ${i} has an unknown key`;
+    if (typeof o.description !== 'string' || o.description.trim() === '') return `entry ${i} has no description`;
+    const id = typeof o.target === 'string' ? testOverrideSpecies({ target: o.target }) : null;
+    if (id === null) return `entry ${i} does not target a species`;
+    if (seen.includes(id)) return `${id} has two entries`;
+    seen.push(id);
+    const copy = content.species.find((sp) => sp.id === id) as Readonly<Record<string, unknown>> | undefined;
+    if (copy === undefined) return `${id} is not a species of this dish`;
+    const values = o.values as Readonly<Record<string, unknown>> | null;
+    if (values === null || typeof values !== 'object' || Array.isArray(values) || Object.keys(values).length === 0) return `entry ${i} sets no field`;
+    for (const f of Object.keys(values)) {
+      if (!(TEST_OVERRIDE_FIELDS as readonly string[]).includes(f)) return `entry ${i} sets a field that cannot be overridden`;
+      const v = values[f];
+      if (typeof v !== 'number' || !Number.isFinite(v)) return `${id} ${f} is not a number`;
+      if (copy[f] !== v) return `${id} ${f} does not match the dish's species record`;
+    }
+  }
+  return null;
+}
 
 /**
  * P5.4: a Suggested Community that cannot be placed, with the habitat field it concerns ('suggestedCommunity',
@@ -270,7 +401,7 @@ export function hasRecipeChanges(o: RecipeOverridesRecord): boolean {
  */
 export function withHabitatOverride(r: RecipeDef, habitatId: string | undefined): RecipeDef {
   if (habitatId === undefined || habitatId === r.habitatId) return r;
-  const { lid: _lid, lightMode: _lightMode, drying: _drying, baseLight: _baseLight, edges: _edges, devices: _devices, community: _community, ...rest } = r;
+  const { lid: _lid, lightMode: _lightMode, drying: _drying, baseLight: _baseLight, edges: _edges, devices: _devices, furnish: _furnish, community: _community, ...rest } = r;
   return { ...rest, habitatId, backgroundOverrides: {}, ops: [], removeStones: false };
 }
 
@@ -343,6 +474,13 @@ export function recipeShapeProblems(
   };
   recipe.ops.forEach((op, i) => {
     if (op.op === 'rect' && (op.x0 > op.x1 || op.y0 > op.y1)) out.push({ path: `ops.${i}`, message: 'rect must have x0 ≤ x1 and y0 ≤ y1' });
+  });
+  // P5.6: a recipe's furnished areas obey the habitat's area rules (habitatShapeProblems).
+  (recipe.furnish ?? []).forEach((f, i) => {
+    if (f.area.kind === 'rect' && (f.area.x0 > f.area.x1 || f.area.y0 > f.area.y1)) out.push({ path: `furnish.${i}.area`, message: 'rect must have x0 ≤ x1 and y0 ≤ y1' });
+    const outside = furnishAreaOutsideCell(f.area);
+    if (outside !== null) out.push({ path: `furnish.${i}.area`, message: `(${outside[0]},${outside[1]}) is outside the dish: a furnished area lies wholly inside it` });
+    else if (furnishAreaCells(f.area).length === 0) out.push({ path: `furnish.${i}.area`, message: 'covers no cell' });
   });
   const grid = habitat ? recipeGrid(habitat, recipe) : null;
   recipe.founders.forEach((f, i) => {
@@ -488,13 +626,14 @@ function furnishOf(list: readonly FurnishArea[] | undefined, out: Device[], next
  * The edge barriers and furnishings or devices a habitat and recipe place (Phase 5; CT §4): pure, no
  * world. Ids run from 1 in this order: the habitat's edges, the habitat's devices, the habitat's
  * furnished areas (area order, each area's cells row-major; P5.4), the recipe's edges, the recipe's
- * devices (a rectangle's cells row-major); the stores are then sorted (sortEdges, sortDevices). A
- * habitat without furnished areas gets exactly the ids it had before them. Not validated here:
+ * devices (a rectangle's cells row-major), the recipe's furnished areas (P5.6, as the habitat's); the
+ * stores are then sorted (sortEdges, sortDevices). A habitat or recipe without furnished areas gets
+ * exactly the ids it had before them. Not validated here:
  * realizeRecipe and the registry run the store checks on the grid.
  */
 export function recipeStructures(
   habitat: Pick<HabitatDef, 'edges' | 'devices' | 'furnish'>,
-  recipe?: Pick<RecipeDef, 'edges' | 'devices'>,
+  recipe?: Pick<RecipeDef, 'edges' | 'devices'> & { readonly furnish?: RecipeDef['furnish'] },
 ): { edges: EdgeBarrier[]; devices: Device[] } {
   let id = 1;
   const nextId = () => id++;
@@ -505,6 +644,7 @@ export function recipeStructures(
   furnishOf(habitat.furnish, devices, nextId);
   edgesOf(recipe?.edges, edges, nextId);
   devicesOf(recipe?.devices, devices, nextId);
+  furnishOf(recipe?.furnish, devices, nextId);
   return { edges: sortEdges(edges), devices: sortDevices(devices) };
 }
 
@@ -558,8 +698,8 @@ function placementProblems(habitat: HabitatDef, recipe: RecipeDef | null, rules:
   if (deviceProblem !== null) {
     // P5.4: a problem that only the habitat's furnished areas bring is reported on 'furnish'.
     let path = 'devices';
-    if ((habitat.furnish?.length ?? 0) > 0) {
-      const without = recipeStructures({ ...habitat, furnish: [] }, recipe ?? undefined);
+    if ((habitat.furnish?.length ?? 0) > 0 || (recipe?.furnish?.length ?? 0) > 0) {
+      const without = recipeStructures({ ...habitat, furnish: [] }, recipe ? { ...recipe, furnish: [] } : undefined);
       if (placedStructureProblem({ edges: [], devices: without.devices }, grid, rules) === null) path = 'furnish';
     }
     out.push({ path, message: deviceProblem });
@@ -659,8 +799,8 @@ export function habitatShapeProblems(h: HabitatDef, species: Readonly<Record<str
  * Whether a recipe's own records bear on its placed structures: it places its own, or it repaints the
  * grid (ops, stone removal) under its habitat's. Otherwise its habitat's are checked on the habitat.
  */
-export function recipeTouchesStructures(habitat: Pick<HabitatDef, 'edges' | 'devices' | 'furnish'>, recipe: Pick<RecipeDef, 'edges' | 'devices' | 'ops' | 'removeStones'>): boolean {
-  if ((recipe.edges?.length ?? 0) > 0 || (recipe.devices?.length ?? 0) > 0) return true;
+export function recipeTouchesStructures(habitat: Pick<HabitatDef, 'edges' | 'devices' | 'furnish'>, recipe: Pick<RecipeDef, 'edges' | 'devices' | 'ops' | 'removeStones'> & { readonly furnish?: RecipeDef['furnish'] }): boolean {
+  if ((recipe.edges?.length ?? 0) > 0 || (recipe.devices?.length ?? 0) > 0 || (recipe.furnish?.length ?? 0) > 0) return true;
   return (habitat.edges?.length ?? 0) + (habitat.devices?.length ?? 0) + (habitat.furnish?.length ?? 0) > 0 && (recipe.ops.length > 0 || recipe.removeStones);
 }
 
@@ -785,14 +925,19 @@ export function realizeRecipe(registry: ContentRegistry, recipeOrId: string | Re
   if (!habitat) throw new RecipeError(`unknown habitat ${recipe.habitatId}`);
   // P5.4 (wave 14, D-0128): a Suggested Community needs one on the habitat (CT §8.2: never silently).
   if (recipe.community === true && habitat.suggestedCommunity === undefined) throw new RecipeError(`recipe ${recipe.id}: habitat ${habitat.id} has no Suggested Community`);
-  const content = worldContentFor(
-    registry,
-    habitat,
-    opts.provenance ?? {
-      recipeId: recipe.id,
-      recipeRevision: recipe.revision,
-      createdFrom: 'recipe',
-    },
+  // P5.6: test-only overrides replace fields of the world's recorded species copies before createEmptyWorld
+  // compiles the species table (and every profile) from them; none: the content is worldContentFor's own.
+  const content = withTestOverrides(
+    worldContentFor(
+      registry,
+      habitat,
+      opts.provenance ?? {
+        recipeId: recipe.id,
+        recipeRevision: recipe.revision,
+        createdFrom: 'recipe',
+      },
+    ),
+    recipe,
   );
   const seed = opts.seed ?? recipe.seed;
   const lightMode = recipe.lightMode ?? habitat.lightMode;

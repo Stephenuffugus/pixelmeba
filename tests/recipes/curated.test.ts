@@ -1,5 +1,5 @@
 /**
- * Curated dishes L301, L303, L304, L306 (CT §9.3; D04 §8; P3.9) and the recipe extensions they and the
+ * Curated dishes L301 … L306 (CT §9.3; D04 §8; P3.9; L302 and L305 in P5.6, wave 15 cards-curated) and the recipe extensions they and the
  * P3.9 experiments use: recipe `ops` (W5-11), founder placement 'scatter' (W5-12), listed `cells`,
  * `initial` values (W5-13) and `links: 'chain'`.
  *
@@ -22,7 +22,7 @@ import { canonicalJson } from '../../src/sim/hash';
 import { speciesIndex, type World } from '../../src/sim/world';
 import { registry } from '../experiments/helpers';
 
-const CURATED = ['L301_TWO_LUNCHES', 'L303_PUBLIC_KITCHEN', 'L304_EMPTY_AFTER_THE_FEAST', 'L306_BORROWED_SHELTER'] as const;
+const CURATED = ['L301_TWO_LUNCHES', 'L302_UNDER_THE_CANOPY', 'L303_PUBLIC_KITCHEN', 'L304_EMPTY_AFTER_THE_FEAST', 'L305_THE_JACKET_GARDEN', 'L306_BORROWED_SHELTER'] as const;
 
 /** Lattice cells within r of (cx, cy) (SPEC §13.1 patch mask: squared distance ≤ r²). */
 function diskCount(r: number): number {
@@ -80,8 +80,11 @@ describe('curated dishes (CT §9.3)', () => {
   it('ship with seed = recipe number, Water Garden defaults, lid open, fixed light 0.8, Standard evolution and a question', () => {
     const expected: Record<string, { seed: number; mode: string; question: string }> = {
       L301_TWO_LUNCHES: { seed: 301, mode: 'varied', question: 'Do separate neighborhoods stay different?' },
+      L302_UNDER_THE_CANOPY: { seed: 302, mode: 'diverse', question: 'Who persists in the shade they create?' },
       L303_PUBLIC_KITCHEN: { seed: 303, mode: 'diverse', question: 'Who benefits from accessible food?' },
       L304_EMPTY_AFTER_THE_FEAST: { seed: 304, mode: 'diverse', question: 'What happens when success consumes its opportunity?' },
+      // PROPOSED DECISION (cards-curated): CT 9.3 names no founder mode for L305; Identical, as L306, keeps the six-and-six split exact.
+      L305_THE_JACKET_GARDEN: { seed: 305, mode: 'identical', question: 'Is delayed capture worth the cost?' },
       L306_BORROWED_SHELTER: { seed: 306, mode: 'identical', question: 'Who pays for the film, who benefits?' },
     };
     for (const id of CURATED) {
@@ -109,20 +112,23 @@ describe('curated dishes (CT §9.3)', () => {
       // Background sugar 0.02 away from the patches.
       expect(w.fields.sugar![cellIndex(64, 20)], id).toBe(0.02);
     }
-    // Only L306 seeds genomes, and it says so.
-    expect(reg.recipes.L306_BORROWED_SHELTER!.labels).toContain('Pre-seeded genomes');
-    for (const id of ['L301_TWO_LUNCHES', 'L303_PUBLIC_KITCHEN', 'L304_EMPTY_AFTER_THE_FEAST']) expect(reg.recipes[id]!.labels).not.toContain('Pre-seeded genomes');
+    // Only L305 and L306 seed genomes, and they say so.
+    for (const id of ['L305_THE_JACKET_GARDEN', 'L306_BORROWED_SHELTER']) expect(reg.recipes[id]!.labels).toContain('Pre-seeded genomes');
+    for (const id of ['L301_TWO_LUNCHES', 'L302_UNDER_THE_CANOPY', 'L303_PUBLIC_KITCHEN', 'L304_EMPTY_AFTER_THE_FEAST']) expect(reg.recipes[id]!.labels).not.toContain('Pre-seeded genomes');
   });
 
   it('realize with exact counts, patch cells and patch totals', () => {
     const cases: Record<string, { founders: Record<string, number>; patches: { cells: number; c: number; n: number }[] }> = {
       L301_TWO_LUNCHES: { founders: { B01: 60 }, patches: [{ cells: 197, c: 0.5, n: 0.2 }, { cells: 197, c: 0.5, n: 0.2 }] },
+      L302_UNDER_THE_CANOPY: { founders: { A05: 20, A01: 30 }, patches: [{ cells: 317, c: 0, n: 0.2 }] },
       // Protein 0.5 C with 0.05 bound N; free nutrient set to 0.1, the Water Garden's own value (no change logged).
       L303_PUBLIC_KITCHEN: { founders: { Y02: 20, B08: 20 }, patches: [{ cells: 197, c: 0.5, n: 0.05 }] },
       L304_EMPTY_AFTER_THE_FEAST: { founders: { B01: 60 }, patches: [{ cells: 317, c: 0.8, n: 0.2 }] },
+      L305_THE_JACKET_GARDEN: { founders: { B01: 100, P07: 12, P10: 2 }, patches: [{ cells: 441, c: 0.8, n: 0.2 }] },
       L306_BORROWED_SHELTER: { founders: { B06: 40 }, patches: [{ cells: 197, c: 0.6, n: 0.2 }] },
     };
     expect(diskCount(8)).toBe(197);
+    expect(diskCount(12)).toBe(441); // L305's r 12 patch misses both stones
     for (const id of CURATED) {
       const recipe = reg.recipes[id]!;
       const w = realizeRecipe(reg, id);
@@ -217,8 +223,46 @@ describe('curated dishes (CT §9.3)', () => {
     expect(w.grid.substrate[cellIndex(64, 64 + 9)]).toBe(SUB_WATER);
   });
 
-  it('L303 and L304 (Diverse) carry only their own founder.module draws at creation, as founderSummary reports', () => {
-    for (const id of ['L303_PUBLIC_KITCHEN', 'L304_EMPTY_AFTER_THE_FEAST']) {
+  it('L305 has Mineral jacket on exactly members 1, 3, 5, 7, 9, 11 of its 12 Dartfins (lineage origin 2), every jacket empty', () => {
+    const w = realizeRecipe(reg, 'L305_THE_JACKET_GARDEN');
+    const fs = founders(w);
+    const dartfins = fs.filter((f) => f.species === 'P07');
+    expect(dartfins).toHaveLength(12);
+    dartfins.forEach((f, k) => {
+      const odd = (k + 1) % 2 === 1;
+      expect(f.modules, `Dartfin ${k + 1}`).toEqual(odd ? ['E11'] : []);
+      expect(f.origin, `Dartfin ${k + 1}`).toBe(odd ? 2 : 1);
+      expect(w.ents.cols.jacketMineral[f.slot], `Dartfin ${k + 1}`).toBe(0);
+    });
+    for (const f of fs.filter((x) => x.species !== 'P07')) {
+      expect(f.modules).toEqual([]);
+      expect(f.origin).toBe(1);
+    }
+    const summary = founderSummary(w).filter((r) => r.withModule > 0);
+    expect(summary).toHaveLength(1);
+    expect(w.species[summary[0]!.species]!.id).toBe('P07');
+    expect([summary[0]!.count, summary[0]!.withModule, summary[0]!.modules]).toEqual([12, 6, [{ id: 'E11', count: 6 }]]);
+    // The group says what it is: six with a mineral jacket, present at creation.
+    expect(reg.recipes.L305_THE_JACKET_GARDEN!.founders[1]!.label).toBe('Dartfins: 6 with a mineral jacket, present at creation');
+    // Silicate 0.3 per patch cell is logged as mineral (441 cells).
+    const patch = w.ledger.entries.find((e) => e.source.startsWith('recipe:patch0'))!;
+    expect(patch.m).toBeCloseTo(441 * 0.3, 9);
+  });
+
+  it('L302 and L305 ship (phase 5 ≤ build phase) and join the New Dish curated list after L301 … in id order', () => {
+    // NewDish.tsx CURATED: every content/recipes/L*.json record with an L3xx id and phase ≤ buildPhase, by file name.
+    const listed = Object.keys(reg.recipes)
+      .filter((id) => /^L\d{3}_/.test(id) && reg.recipes[id]!.phase <= reg.manifest.buildPhase)
+      .sort();
+    expect(listed).toEqual([...CURATED]);
+    for (const id of ['L302_UNDER_THE_CANOPY', 'L305_THE_JACKET_GARDEN']) {
+      expect(reg.recipes[id]!.phase).toBe(5);
+      expect(reg.recipes[id]!.testOnlyOverrides).toEqual([]);
+    }
+  });
+
+  it('L302, L303 and L304 (Diverse) carry only their own founder.module draws at creation, as founderSummary reports', () => {
+    for (const id of ['L302_UNDER_THE_CANOPY', 'L303_PUBLIC_KITCHEN', 'L304_EMPTY_AFTER_THE_FEAST']) {
       const w = realizeRecipe(reg, id);
       const fs = founders(w);
       const byModule: Record<string, Record<string, number>> = {};
@@ -241,7 +285,10 @@ describe('curated dishes (CT §9.3)', () => {
       }
       // Only legal gains (D-0059: B01 E01/E03/E04/E05/E10/E12; Y02 E01/E03/E04/E05/E09; B08 E03/E04/E05; the organism
       // flip, D-0127, adds E02 for B01 and B08).
-      const legal: Record<string, readonly string[]> = { B01: ['E01', 'E02', 'E03', 'E04', 'E05', 'E10', 'E12'], Y02: ['E01', 'E03', 'E04', 'E05', 'E09'], B08: ['E02', 'E03', 'E04', 'E05'] };
+      // L302's algae: the enabled modules whose records list them (E05, E06, E07).
+      const legal: Record<string, readonly string[]> = { B01: ['E01', 'E02', 'E03', 'E04', 'E05', 'E10', 'E12'], Y02: ['E01', 'E03', 'E04', 'E05', 'E09'], B08: ['E02', 'E03', 'E04', 'E05'], A01: ['E05', 'E06', 'E07'], A05: ['E05', 'E06', 'E07'] };
+      for (const sp of ['A01', 'A05'])
+        expect(reg.manifest.enabledModules.filter((m) => reg.modules[m]!.eligibleAncestors.includes(sp)), sp).toEqual(legal[sp]);
       for (const f of fs) for (const m of f.modules) expect(legal[f.species], `${id} ${f.species} ${m}`).toContain(m);
       // About 10 % of eligible founders (an independent chance each): some, never most.
       expect(seeded, id).toBeLessThan(fs.length / 2);

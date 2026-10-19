@@ -12,12 +12,13 @@
 import { IconClose } from '../icons';
 import { CHALLENGE_BUDGET_MAX, CHALLENGE_BUDGET_MIN, CHALLENGE_HORIZON_SECONDS, CHALLENGE_NAME_MAX, CHALLENGE_QUARTERS, CHALLENGE_TOOL_GROUPS } from '@persist/notebookChallenges';
 import { OBJECTIVE_TYPES, type ObjectiveType } from '@sim/objectives';
-import { dishInfo } from '../state';
-import { challengeSheet, closeChallengeSheet, draftToInput, gateAvailable, offeredEvents, offeredFields, offeredSpecies, saveChallenge, toggleTool, updateDraft, type ChallengeDraft } from '../challenge';
+import { dishInfo, latestDishSnapshots } from '../state';
+import { challengeSheet, chooseTemplate, closeChallengeSheet, draftToInput, gateAvailable, offeredEvents, offeredFields, offeredSpecies, saveChallenge, toggleTool, updateDraft, type ChallengeDraft } from '../challenge';
 import {
   CHALLENGE_ENZYME_NAMES,
   CHALLENGE_EVENT_NAMES,
   CHALLENGE_FIELD_NAMES,
+  CHALLENGE_MEASURE_NAMES,
   CHALLENGE_REGION_NAMES,
   CHALLENGE_TEXT,
   CHALLENGE_TOOL_LABELS,
@@ -73,13 +74,32 @@ function ObjectiveFields({ d }: { d: ChallengeDraft }) {
           {duration}
         </>
       );
-    case 'biomassThreshold':
+    case 'biomassThreshold': {
+      // P5.6: what is measured, where (a quarter or one of the dish's own regions) and an optional starting limit
+      // (Recover a neighborhood). The whole dish is not offered once a starting limit is set.
+      const regions: (readonly [string, string])[] = [
+        ...(d.fromBelow.trim() === '' ? [['dish', CHALLENGE_REGION_NAMES.dish!] as const] : []),
+        ...CHALLENGE_QUARTERS.map((r) => [r, CHALLENGE_REGION_NAMES[r]!] as const),
+        ...(info?.regions ?? []).map((r) => [`habitat:${r.id}`, CHALLENGE_TEXT.habitatRegion(r.label)] as const),
+      ];
       return (
         <>
           <SelectField id="ch-species" label={CHALLENGE_TEXT.speciesLabel} value={d.species} options={[['', CHALLENGE_TEXT.allLife], ...kinds]} onChange={(v) => updateDraft({ species: v })} />
-          <NumberField id="ch-threshold" label={CHALLENGE_TEXT.thresholdLabel} value={d.threshold} min={0} onInput={(v) => updateDraft({ threshold: v })} />
+          <SelectField id="ch-measure" label={CHALLENGE_TEXT.measureLabel} value={d.measure} options={Object.entries(CHALLENGE_MEASURE_NAMES)} onChange={(v) => updateDraft({ measure: v })} />
+          <NumberField id="ch-threshold" label={d.measure === '' ? CHALLENGE_TEXT.thresholdLabel : CHALLENGE_TEXT.countLabel} value={d.threshold} min={0} onInput={(v) => updateDraft({ threshold: v })} />
+          <NumberField id="ch-from-below" label={CHALLENGE_TEXT.fromBelowLabel} value={d.fromBelow} min={1} step="1" onInput={(v) => updateDraft({ fromBelow: v })} />
+          {d.measure !== '' || d.fromBelow.trim() !== '' ? (
+            <SelectField
+              id="ch-region"
+              label={CHALLENGE_TEXT.regionLegend}
+              value={regions.some(([v]) => v === d.region) ? d.region : ''}
+              options={regions.some(([v]) => v === d.region) ? regions : [['', CHALLENGE_TEXT.chooseRegion], ...regions]}
+              onChange={(v) => updateDraft({ region: v })}
+            />
+          ) : null}
         </>
       );
+    }
     case 'observeEvent':
       return (
         <>
@@ -103,7 +123,7 @@ function ObjectiveFields({ d }: { d: ChallengeDraft }) {
             label={CHALLENGE_TEXT.regionLegend}
             value={d.region}
             options={(['dish', ...CHALLENGE_QUARTERS] as const).map((r) => [r, CHALLENGE_REGION_NAMES[r]!] as const)}
-            onChange={(v) => updateDraft({ region: v as ChallengeDraft['region'] })}
+            onChange={(v) => updateDraft({ region: v })}
           />
         </>
       );
@@ -117,7 +137,8 @@ export function ChallengeEditor() {
   const info = dishInfo.value;
   if (!s || s.view !== 'edit') return null;
   const d = s.draft;
-  const gate = gateAvailable(info);
+  const geometry = latestDishSnapshots()?.geometry; // P5.6: a placed gate, not only an enabled one
+  const gate = gateAvailable(info, geometry ? (geometry.edges?.list ?? []) : null);
   const preview = draftToInput(d, info);
   const speciesName = (id: string) => info?.speciesNames[info.speciesIds.indexOf(id)] ?? id;
   return (
@@ -130,6 +151,15 @@ export function ChallengeEditor() {
           </button>
         </header>
         <p class="try-text">{CHALLENGE_TEXT.editorIntro}</p>
+        {s.templates.length > 0 ? (
+          <SelectField
+            id="ch-start-from"
+            label={CHALLENGE_TEXT.startFromLabel}
+            value={d.template ?? ''}
+            options={[['', CHALLENGE_TEXT.startFromNone], ...s.templates.map((t) => [t.id, t.title] as const)]}
+            onChange={(v) => chooseTemplate(v === '' ? null : v)}
+          />
+        ) : null}
         <label class="ch-field" for="ch-name">
           <span>{CHALLENGE_TEXT.nameLabel}</span>
           <input id="ch-name" type="text" value={d.name} maxLength={CHALLENGE_NAME_MAX} data-testid="ch-name" onInput={(e) => updateDraft({ name: e.currentTarget.value })} />
@@ -187,7 +217,7 @@ export function ChallengeEditor() {
         </fieldset>
         <div class="ch-summary" data-testid="ch-summary">
           <h3>{CHALLENGE_TEXT.summaryHeading}</h3>
-          {preview.ok ? <p class="try-text">{objectiveLine(preview.input, speciesName)}</p> : null}
+          {preview.ok ? <p class="try-text">{objectiveLine(preview.input, speciesName, (id) => info?.regions?.find((r) => r.id === id)?.label ?? id)}</p> : null}
           <p class="try-text" data-testid="ch-restrictions">
             {restrictionsSummary({ allowedTools: d.allowedTools, commandBudget: preview.ok ? preview.input.commandBudget : /^[0-9]{1,2}$/.test(d.budget.trim()) && Number(d.budget) >= 1 ? Number(d.budget) : null })}
           </p>

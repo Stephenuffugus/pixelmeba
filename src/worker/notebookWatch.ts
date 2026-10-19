@@ -14,6 +14,7 @@ import type { NotebookChange } from './protocol';
 import { FavoriteTracker, reconcileFavorites, recordExtinction } from './favorites';
 import { StoryDetector, storyDetection, storiesAfterRestore } from './stories';
 import { GoalRunner, goalsAfterRestore, type GoalRestoreCause } from './goals';
+import { SuccessionDetector, successionAfterRestore, successionDetection } from './succession';
 
 /** Where the dish keeps its notebook record (the host's Dish.notebook). */
 export interface NotebookRef {
@@ -22,13 +23,18 @@ export interface NotebookRef {
 }
 
 export class NotebookWatch {
-  /** Read-only stage hook for step() (none yet; stage 2's story detector may add one). */
-  readonly hook: ((stage: number, world: World) => void) | undefined = undefined;
+  /**
+   * Read-only stage hook for step(): P5.6, the running goal's measured clauses (GoalRunner.hook) and the
+   * succession detector's intake record (SuccessionDetector.hook).
+   */
+  readonly hook: (stage: number, world: World) => void;
   readonly favorites: FavoriteTracker;
   /** P4.2: the story-card detector (src/worker/stories.ts; null only when a test turns detection off). */
   readonly stories: StoryDetector | null;
   /** P4.4: the dish's goal runner (src/worker/goals.ts; idle until the player starts a goal). */
   readonly goals: GoalRunner;
+  /** P5.6: the succession notebook's minute detector (src/worker/succession.ts; null only when a test turns it off). */
+  readonly succession: SuccessionDetector | null;
   private world: World;
 
   constructor(
@@ -39,6 +45,13 @@ export class NotebookWatch {
     this.favorites = new FavoriteTracker(world, ref.get());
     this.stories = storyDetection.enabled ? new StoryDetector(world, ref) : null; // P4.2
     this.goals = new GoalRunner(world, ref); // P4.4
+    this.succession = successionDetection.enabled ? new SuccessionDetector(world, ref) : null; // P5.6
+    const goals = this.goals;
+    const succession = this.succession;
+    this.hook = (stage, w) => {
+      goals.hook(stage, w);
+      succession?.hook(stage, w);
+    };
   }
 
   watches(world: World): boolean {
@@ -51,6 +64,7 @@ export class NotebookWatch {
     this.favorites.bind(world, this.ref.get());
     this.stories?.rebind(world); // P4.2: rebuilt only when the world was replaced
     this.goals.bind(world); // P4.4: resumes the record's running goal (kept as is when nothing changed)
+    this.succession?.rebind(world); // P5.6: rebuilt only when the world was replaced (watchedFromTick = its tick)
   }
 
   /** The record with every kind's live state written in (members of the followed families). */
@@ -84,6 +98,7 @@ export class NotebookWatch {
     }
     if (this.stories) changes.push(...this.stories.afterTick(world)); // P4.2
     changes.push(...this.goals.afterTick(world)); // P4.4
+    if (this.succession) changes.push(...this.succession.afterTick(world)); // P5.6
     return changes;
   }
 }
@@ -95,7 +110,8 @@ export class NotebookWatch {
  * line each. `cause` says what restored it (a running goal's end reason names it).
  *
  * `changes` lists one change per kind that changed, in this order: favoritesRestored, storiesRestored,
- * then one { kind: 'goal' } per goal that ended (empty when nothing changed). The host posts each as its
+ * then one { kind: 'goal' } per goal that ended, then (P5.6) one { kind: 'successionRestored' } per minute
+ * entry dropped (empty when nothing changed). The host posts each as its
  * own notebookChanged carrying the final `record`, so every kind's listener sees its own change.
  */
 export function notebookAfterRestore(
@@ -106,6 +122,7 @@ export function notebookAfterRestore(
   const gl = goalsAfterRestore(world, record, cause); // P4.4: a running goal ends 'undone' or 'failed' (its observer cannot rewind)
   const fav = reconcileFavorites(world, gl.record);
   const st = storiesAfterRestore(world, fav.record); // P4.2: cards found in the undone time go
+  const sc = successionAfterRestore(world, st.record); // P5.6: minute entries after the restored tick go
   const changes: NotebookChange[] = [];
   if (fav.changed)
     changes.push({
@@ -115,5 +132,7 @@ export function notebookAfterRestore(
     });
   if (st.changed) changes.push({ kind: 'storiesRestored', removed: st.removed });
   for (const g of gl.changed) changes.push({ kind: 'goal', id: g.id, state: g.state }); // P4.4
-  return { record: changes.length > 0 ? st.record : record, changes };
+  for (const id of sc.removed) changes.push({ kind: 'successionRestored', id }); // P5.6: one change per entry dropped
+  // Fix round 1: seen feeding links of the undone minutes also go (no change of their own: the Notebook shows none).
+  return { record: changes.length > 0 || sc.changed ? sc.record : record, changes };
 }

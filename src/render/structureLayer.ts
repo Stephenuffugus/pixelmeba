@@ -15,6 +15,14 @@
  * three from 18), a closed S03 a solid bar, an open S03 two end stubs (below 6 px per cell two short posts
  * ACROSS the edge, so a run never reads as dots or slots), S04 one chevron below 12 px per cell (larger below
  * 6), two from 12. `minPx` is each glyph's minimum stroke width on screen (the shutter the boldest).
+ * P5.8 polish (wave 15, D-0123 MINOR 3): the S01 / S02 rule holds at every zoom from 1.5 px per cell (a phone's
+ * whole dish) up. From EDGE_PAIRED_BELOW (3.5 px per cell) an S02 slot is at least 1.5 × an S01 dot and both are
+ * at least MIN_MARK_PX on screen (tests/render/edge-glyph-sweep.test.ts sweeps 1.5–32 px per cell). Below it a
+ * single edge is too short for both (an S01 dot of 1.5 px and a slot of 2.25 px with a visible gap need 3.5 px),
+ * so S02 switches pattern: two parallel rails along the edge, RAIL_PX either side of it across (a double line,
+ * where S01 is one dotted line and a closed S03 one bold bar); its own detail band, 'whole', so the renderer
+ * redraws when the zoom crosses it. (Wave 12's header claimed the rule down to any zoom; it failed below
+ * about 2.75 px per cell, where the slot was no longer than the dot.)
  *
  * Device frames: the 'device' atlas tile (art/src/tiles/structures.ts) by kind, S09/S10 `on`, and an S08's
  * saturation quartile from SnapshotMsg.resins (min(3, ⌊4 × saturation⌋); CT §4 "darkens as saturated").
@@ -45,14 +53,19 @@ export interface EdgeGlyph {
 }
 
 /**
- * Detail bands by zoom (screen px per cell; camera.ts ZOOM_NEIGHBORHOOD 8, ZOOM_CLOSE 16): 'coarse' below 6 px per
- * cell (the whole-dish view on a phone or a small window), 'fine' from 6 up. Within a band the mark counts and
+ * Detail bands by zoom (screen px per cell; camera.ts ZOOM_NEIGHBORHOOD 8, ZOOM_CLOSE 16): 'whole' below 3.5 px per
+ * cell (a phone's whole dish: S02 as paired rails, P5.8), 'coarse' from 3.5 to 6 (the whole-dish view on a small
+ * window), 'fine' from 6 up; 'whole' is coarse for every other glyph. Within a band the mark counts and
  * lengths follow the zoom (edgeMarks, MIN_MARK_PX); the renderer redraws when the band changes or the zoom moves
  * by more than a quarter.
  */
 export const EDGE_FINE_MIN_ZOOM = 6;
-export function edgeDetail(zoom: number): 'fine' | 'coarse' {
-  return zoom >= EDGE_FINE_MIN_ZOOM ? 'fine' : 'coarse';
+/** P5.8: below this zoom (screen px per cell) an S02 is drawn as paired rails, its 'whole' band (see the header). */
+export const EDGE_PAIRED_BELOW = 3.5;
+/** P5.8: an S02's paired rails lie this many screen px either side of the edge line. */
+export const RAIL_PX = 1.5;
+export function edgeDetail(zoom: number): 'fine' | 'coarse' | 'whole' {
+  return zoom >= EDGE_FINE_MIN_ZOOM ? 'fine' : zoom >= EDGE_PAIRED_BELOW ? 'coarse' : 'whole';
 }
 
 const rgbInt = (c: readonly [number, number, number]): number => (c[0] << 16) | (c[1] << 8) | c[2];
@@ -67,12 +80,12 @@ export const EDGE_GLYPH_COLORS = {
 /** No straight mark is drawn shorter than this many screen pixels (at the zoom the glyph is built for). */
 export const MIN_MARK_PX = 1.5;
 
-/** Marks per edge at `zoom`: S01 one dot per ~4 screen px (1–5), S02 one slot per ~6 screen px (1–3); others fixed. */
+/** Marks per edge at `zoom`: S01 one dot per ~4 screen px (1–5), S02 one slot per ~6 screen px (1–3; its 2 paired rails below EDGE_PAIRED_BELOW); others fixed. */
 export function edgeMarks(code: number, zoom: number): number {
   const base = code & EDGE_CODE_MASK;
   const z = Math.max(1e-6, zoom);
   if (base === EDGE_S01) return Math.min(5, Math.max(1, Math.floor(z / 4)));
-  if (base === EDGE_S02) return Math.min(3, Math.max(1, Math.floor(z / 6)));
+  if (base === EDGE_S02) return z < EDGE_PAIRED_BELOW ? 2 : Math.min(3, Math.max(1, Math.floor(z / 6)));
   if (base === EDGE_SHUTTER_OPEN) return 2;
   if (base === EDGE_CHANNEL) return z >= 12 ? 2 : 1;
   return base === EDGE_NONE ? 0 : 1;
@@ -112,7 +125,8 @@ function spans(seg: readonly [number, number, number, number], parts: readonly (
 export function edgeGlyph(code: number, cell: number, dir: 'R' | 'D', zoom: number = ZOOM_CLOSE): EdgeGlyph | null {
   const base = code & EDGE_CODE_MASK;
   if (base === EDGE_NONE) return null;
-  const coarse = edgeDetail(zoom) === 'coarse';
+  const detail = edgeDetail(zoom);
+  const coarse = detail !== 'fine';
   const seg = edgeSegment(cell, dir);
   const out: number[] = [];
   const z = Math.max(1e-6, zoom);
@@ -122,6 +136,16 @@ export function edgeGlyph(code: number, cell: number, dir: 'R' | 'D', zoom: numb
       spans(seg, evenMarks(edgeMarks(code, z), Math.max(0.1, minLen)), out);
       return { segments: out, color: EDGE_GLYPH_COLORS.membrane, width: 0.16, minPx: 1.5 };
     case EDGE_S02: {
+      if (detail === 'whole') {
+        // Paired rails: the whole edge twice, RAIL_PX either side of it across (x for an 'R' edge, y for a 'D' one).
+        const [x1, y1, x2, y2] = seg;
+        const o = RAIL_PX / z;
+        for (const side of [-1, 1] as const) {
+          if (dir === 'R') out.push(x1 + side * o, y1, x2 + side * o, y2);
+          else out.push(x1, y1 + side * o, x2, y2 + side * o);
+        }
+        return { segments: out, color: EDGE_GLYPH_COLORS.sieve, width: 0.2, minPx: 1.75 };
+      }
       const n = edgeMarks(code, z);
       spans(seg, evenMarks(n, 1 / n - Math.max(0.08, 1.25 / z)), out);
       return { segments: out, color: EDGE_GLYPH_COLORS.sieve, width: 0.2, minPx: 1.75 };

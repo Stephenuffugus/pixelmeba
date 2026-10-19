@@ -1,0 +1,68 @@
+{
+  "id": "SHELTERED_LACE_V1",
+  "revision": 1,
+  "name": "Sheltered lace",
+  "habitatId": "H09_DRYING_LACE",
+  "seed": 211,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {
+      "center": [
+        88,
+        64
+      ],
+      "radius": 6,
+      "substrate": "gel",
+      "add": {
+        "detritus": 0.5,
+        "detritusN": 0.05,
+        "nutrient": 0.2
+      },
+      "label": "Under the roof"
+    },
+    {
+      "center": [
+        64,
+        64
+      ],
+      "radius": 6,
+      "substrate": "gel",
+      "add": {
+        "detritus": 0.5,
+        "detritusN": 0.05,
+        "nutrient": 0.2
+      },
+      "label": "Open gel"
+    }
+  ],
+  "founders": [
+    {
+      "species": "F04",
+      "count": 10,
+      "center": [
+        88,
+        64
+      ],
+      "radius": 6,
+      "placement": "scatter",
+      "label": "Protected"
+    },
+    {
+      "species": "F04",
+      "count": 10,
+      "center": [
+        64,
+        64
+      ],
+      "radius": 6,
+      "placement": "scatter",
+      "label": "Open"
+    }
+  ],
+  "labels": [],
+  "question": "Does a shade roof change how Sporeveils fare on drying gel?",
+  "expectedObservationsText": "Drying Lace: gel that dries out, a water channel on the left and a shade roof on the right. Ten Sporeveils start under the roof and ten on open gel, each group on debris and nutrient. The roof shades the gel and slows its drying; dry gel lowers a Sporeveil's suitability, and a Sporeveil short of food or water can rest. The cell inspector shows each cell's moisture.",
+  "phase": 5
+}

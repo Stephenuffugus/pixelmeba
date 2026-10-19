@@ -1,0 +1,26 @@
+{
+  "id": "NIGHT_SHIFT_V1",
+  "revision": 1,
+  "name": "Night shift",
+  "habitatId": "WATER_GARDEN",
+  "seed": 218,
+  "lid": "open",
+  "lightMode": "cycle",
+  "drying": false,
+  "removeStones": true,
+  "baseLight": 0.8,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "fieldPatches": [
+    {"center": [64, 64], "radius": 6, "substrate": "water", "add": {"sugar": 0.5, "nutrient": 0.2}, "label": "Sugar and nutrient patch"}
+  ],
+  "founders": [
+    {"species": "A04", "count": 20, "center": [64, 64], "radius": 6, "placement": "scatter", "label": "Turnleafs"},
+    {"species": "A01", "count": 20, "center": [64, 64], "radius": 6, "placement": "scatter", "label": "Sunbeads"}
+  ],
+  "labels": [],
+  "question": "What does a Turnleaf do when the light goes?",
+  "expectedObservationsText": "Twenty Turnleafs and twenty Sunbeads on a sugar patch under the day and night light cycle. A Turnleaf makes food from light when there is enough of it and drinks sugar when the light is low; a Sunbead only uses light. The card counts the Turnleafs' mode changes and the carbon they took in each way.",
+  "phase": 5
+}

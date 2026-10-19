@@ -41,10 +41,12 @@ import {
   badgeZoomBand,
   runsOf,
   worldBadges,
+  worldPipsFor,
   type BadgeEdge,
 } from '../../src/render/gateBadges';
+import { tracerCrosses } from '../../src/render/gateTracer';
 import { DISH_COLORS } from '../../src/render/layers';
-import { GATE_FIELD_ROWS, GATE_ORGANISM_ROWS } from '../../src/ui/strings/structures';
+import { GATE_FIELD_ROWS, GATE_ORGANISM_ROWS, gateRows } from '../../src/ui/strings/structures';
 import { contrastRatio, fromInt, GRAPHIC_MIN } from '../../src/ui/a11y/contrast';
 import { barrierDish, place, pushEdges, verticalLine } from '../helpers/world';
 import { trajectoryDigest } from '../helpers/trajectory';
@@ -84,6 +86,37 @@ describe('badgeFor', () => {
   it('the flow bit never changes a non-channel badge; its class order is the gate table row order', () => {
     for (const code of CODES) expect(badgeFor(code | EDGE_FLOW_BACK)).toEqual(badgeFor(code));
     expect([...GATE_FIELD_ROWS, ...GATE_ORGANISM_ROWS].map((r) => r.cls)).toEqual([...BADGE_CLASSES]);
+  });
+});
+
+describe('the open S03 Fixed pip in the world badge (P5.8; D-0123 notes)', () => {
+  it("an OPEN shutter's world badge draws Fixed as 'notApplicable' (never 'pass'); every other pip and code as badgeFor", () => {
+    const open = worldPipsFor(EDGE_SHUTTER_OPEN);
+    expect(open.map((p) => p.state)).toEqual(['pass', 'pass', 'pass', 'pass', 'pass', 'pass', 'notApplicable']);
+    expect(open.find((p) => p.cls === 'fixed')!.state).not.toBe('pass');
+    for (const code of [EDGE_S01, EDGE_S02, EDGE_SHUTTER_CLOSED, EDGE_CHANNEL, EDGE_CHANNEL | EDGE_FLOW_BACK]) expect(worldPipsFor(code)).toEqual(badgeFor(code));
+    expect(worldPipsFor(EDGE_SHUTTER_OPEN | EDGE_FLOW_BACK)).toEqual(open);
+    // The reason: Fixed things never move, so nothing of the class crosses (the tracer) and the table says "Stays put".
+    expect(tracerCrosses(EDGE_SHUTTER_OPEN, 'fixed', 1).crosses).toBe(false);
+    expect(tracerCrosses(EDGE_SHUTTER_OPEN, 'fixed', -1).crosses).toBe(false);
+    expect(gateRows(EDGE_SHUTTER_OPEN).organisms.find((r) => r.label === 'Fixed')!.value).toBe('Stays put');
+    // The gate sheet's own pips (badgeFor, beside those words) are unchanged (tests/e2e/structures-art.spec.ts).
+    expect(badgeFor(EDGE_SHUTTER_OPEN).find((p) => p.cls === 'fixed')!.state).toBe('pass');
+  });
+
+  it('worldBadges uses those pips for a run of open shutters and for a selected open shutter', () => {
+    const r = new Uint8Array(CELL_COUNT);
+    const d = new Uint8Array(CELL_COUNT);
+    const list: GeometryEdges['list'][number][] = [];
+    for (let x = 50; x < 54; x++) {
+      d[cellIndex(x, 70)] = EDGE_SHUTTER_OPEN;
+      list.push({ id: x, kind: 'S03', cell: cellIndex(x, 70), dir: 'D' });
+    }
+    const e: GeometryEdges = { r, d, list };
+    for (const b of [...worldBadges(e, ZOOM_CLOSE, null), ...worldBadges(e, 3, edgeKey(cellIndex(51, 70), 'D'))]) {
+      expect(b.pips.find((p) => p.cls === 'fixed')!.state).toBe('notApplicable');
+    }
+    expect(worldBadges(e, ZOOM_CLOSE, null)).toHaveLength(1);
   });
 });
 

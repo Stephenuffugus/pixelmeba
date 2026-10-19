@@ -1,0 +1,80 @@
+{
+  "id": "SLEEPING_SHORTAGE_V1",
+  "revision": 1,
+  "name": "Sleeping shortage",
+  "habitatId": "WATER_GARDEN",
+  "seed": 210,
+  "lid": "open",
+  "lightMode": "fixed",
+  "drying": false,
+  "removeStones": true,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {
+    "sugar": 0
+  },
+  "ops": [
+    {
+      "op": "disk",
+      "center": [
+        64,
+        64
+      ],
+      "radius": 15,
+      "substrate": "gel"
+    }
+  ],
+  "founders": [
+    {
+      "species": "B12",
+      "count": 20,
+      "center": [
+        64,
+        64
+      ],
+      "radius": 6,
+      "placement": "scatter",
+      "label": "Sleepers"
+    }
+  ],
+  "scheduledCommands": [
+    {
+      "atSecond": 60,
+      "kind": "deposit",
+      "payload": {
+        "kind": "deposit",
+        "materialId": "SUGAR",
+        "points": [
+          [
+            64.5,
+            64.5
+          ]
+        ],
+        "radius": 6,
+        "dose": 0.5
+      },
+      "label": "Sugar at 60 s"
+    },
+    {
+      "atSecond": 60,
+      "kind": "deposit",
+      "payload": {
+        "kind": "deposit",
+        "materialId": "NUTRIENT",
+        "points": [
+          [
+            64.5,
+            64.5
+          ]
+        ],
+        "radius": 6,
+        "dose": 0.2
+      },
+      "label": "Nutrient at 60 s"
+    }
+  ],
+  "labels": [],
+  "question": "What does a Sleeper do when there is no food?",
+  "expectedObservationsText": "Twenty Sleepers on a gel disk with no sugar. A Sleeper short of food can prepare and rest, spending little; a resting Sleeper wakes when food returns and it has the energy to wake. At 60 s the dish adds sugar (0.50) and nutrient (0.20) over the centre. The inspector shows each Sleeper's life state and why.",
+  "phase": 5
+}

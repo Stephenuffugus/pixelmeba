@@ -403,11 +403,17 @@ export const FounderSchema = z.object({
   links: z.literal('chain').optional(),
 });
 
+/**
+ * P5.6 (SPEC §13.1; CT §10.3 E214; D-0131): a test-only override of an experiment fixture: `target`
+ * 'species:<ID>', `values` the species record fields it replaces (recipes.ts TEST_OVERRIDE_FIELDS), applied
+ * to the world's own species copy and recorded in provenance. The validator checks the rest.
+ */
 export const TestOverrideSchema = z.object({
   description: z.string().min(1),
   target: z.string(),
   values: z.record(z.string(), finite),
 });
+export type TestOverride = z.infer<typeof TestOverrideSchema>;
 
 export const ScheduledCommandSchema = z.object({
   atSecond: nonneg,
@@ -443,6 +449,12 @@ export const RecipeSchema = z.object({
    */
   edges: z.array(EdgePlacementSchema).optional(),
   devices: z.array(DevicePlacementSchema).optional(),
+  /**
+   * P5.6 (D-0131; E216's mesh): furnished areas the recipe places after its own devices (FurnishAreaSchema, as a
+   * habitat's: one structure per in-dish cell, the device store rules and the 256 cap shared with devices).
+   * Optional with no default: every earlier recipe parses, realizes and exports byte-identically.
+   */
+  furnish: z.array(FurnishAreaSchema).optional(),
   /**
    * Phase 5 (P5.4): realize the habitat's Suggested Community after the recipe's own founders (optional,
    * no default). Stage 2 realizes it; until then realizeRecipe refuses it.
@@ -514,6 +526,10 @@ export const ExperimentCompletionSchema = z.object({
         // P3.9 (W5-14; CT §10.1): "both species inspected with different O2 limitations", "B01 infection observed".
         'inspectOxygenLimits',
         'observeInfection',
+        // P5.6 (CT §10.3 E205, E207, E211): the inspector shows a glow state; the card's shutter toggled; a moisture reading inspected.
+        'inspectGlow',
+        'toggleShutter',
+        'inspectMoisture',
       ]),
     )
     .default([]),
@@ -576,6 +592,25 @@ export const ObjectiveSchema = z.object({
   endedText: z.string().min(1).optional(),
   /** Recipe ids whose dishes offer this goal; a What if? variant dish counts through its sourceId. */
   offerOn: z.array(z.string().min(1)).default([]),
+  /**
+   * P5.6 (D02 §23 play prompts; D-0131): habitat ids whose dishes also offer this goal (the world's RECORDED
+   * habitat, world.content.habitat.id). Optional, no default: every v1.0 objective parses as before.
+   */
+  offerOnHabitats: z.array(z.string().min(1)).optional(),
+  /**
+   * P5.6 (CT §10.6 "Recover a neighborhood"; D02 "the starting snapshot and allowed tools define the challenge"):
+   * an objective that is a custom challenge's starting point (the challenge editor's "Start from"), never a goal
+   * of the goal choice. Tool groups as src/persistence/notebookChallenges.ts CHALLENGE_TOOL_GROUPS (a test pins
+   * the two lists equal). Optional, no default.
+   */
+  challengeTemplate: z
+    .object({
+      commandBudget: int.min(1).max(99),
+      allowedTools: z.array(z.enum(['addLife', 'feed', 'habitat', 'sample', 'cleanWater', 'lid', 'evolution'])).min(1),
+      horizonSeconds: z.union([z.literal(60), z.literal(180), z.literal(600)]),
+    })
+    .strict()
+    .optional(),
 });
 export type ObjectiveDef = z.infer<typeof ObjectiveSchema>;
 

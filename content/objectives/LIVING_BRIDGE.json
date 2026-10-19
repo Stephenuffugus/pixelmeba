@@ -1,0 +1,14 @@
+{
+  "id": "LIVING_BRIDGE",
+  "title": "A living bridge",
+  "predicate": {
+    "type": "observeEvent",
+    "params": { "all": [{ "event": "transfer", "route": "fungal", "atLeast": 0.5 }], "endOn": ["linkBroken", "externalInput"] }
+  },
+  "summary": "Let Cordweaver links carry 0.5 carbon in game units. A broken link, or anything added to the dish (food, life or a tool input), ends this attempt.",
+  "completedText": "Cordweaver links carried 0.5 carbon in this attempt by {time}.",
+  "endedText": "A link broke or something was added to the dish, so this attempt ended at {time}. The dish keeps going.",
+  "offerOn": ["FUNGAL_SUPPLY_LINE_V1"],
+  "offerOnHabitats": ["H11_GRAZING_MEADOW"],
+  "phase": 5
+}

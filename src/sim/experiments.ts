@@ -11,7 +11,10 @@
  *   declared change: a setup difference before tick 0 (`omitPatch`, `omitScheduled`, `shade`,
  *   `omitFounders` — the recipe's last founder group only), or
  *   commands applied to B through the ordinary command path at `atSecond`, after both arms were
- *   duplicated from one serialized state. Both arms then advance as one paired run.
+ *   duplicated from one serialized state. Both arms then advance as one paired run. P5.6 (D-0131):
+ *   `omitFounders` accepts the last group, or a group whose later groups all list their cells (their cells
+ *   are then the same in both arms; their birth ids shift by the omitted count, and every measure is by
+ *   species or region, never by birth id).
  *
  * Measuring uses the one paired-run model shared with the comparison engine (src/sim/pairedRun.ts):
  * the same observer, stepping and measurement grammar (listed there). Everything measured is
@@ -26,11 +29,14 @@ import type {
   ExperimentChange,
   ExperimentCommand,
   ExperimentDef,
+  HabitatDef,
   Manifest,
   MaterialDef,
   RecipeDef,
   Species,
 } from './content/schema';
+import { habitatOfferProblem, regionContains, type HabitatRegion } from './content/habitatRules';
+import { ST_NONE } from './grid';
 import { ExperimentCommandSchema } from './content/schema';
 import { applyNow, type CommandPayload } from './commands';
 import { TICKS_PER_SECOND } from './constants';
@@ -49,13 +55,14 @@ import {
   PAIRED_RUN_LABEL,
   parseMeasure,
   poolTotal,
+  regionOfRef,
   SINGLE_RUN_LABEL,
   speciesOfRef,
   stepObserved,
   type ConsumablePool,
   type Intervention,
 } from './pairedRun';
-import { realizeRecipe } from './recipes';
+import { hasTestOverrides, realizeRecipe, recipeStructures, testOverrideSpecies } from './recipes';
 import { entitySuitabilityAt } from './crossing';
 import { entityCell } from './spatial';
 import { LIFE_ACTIVE } from './entities';
@@ -73,7 +80,9 @@ export {
   catalogIds,
   CONSUMABLE_POOLS,
   ENZYMES,
+  EVENT_MEASURE_TYPES,
   GROUP_MEASURES,
+  P5_MEASURE_HEADS,
   measureArm,
   PAIRED_RUN_LABEL,
   parseMeasure,
@@ -207,6 +216,17 @@ export interface ExperimentValidationContext {
   readonly materials: Readonly<Record<string, MaterialDef>>;
   /** When given and the card belongs to this build's phase, all content it uses must be enabled. */
   readonly manifest?: Manifest | null;
+  /**
+   * P5.6: the habitat records (the recipe's habitat's regions and structures; a shipped card's habitat must be
+   * enabled and offered). Absent: region, gate and habitat checks are skipped (a caller without habitats).
+   */
+  readonly habitats?: Readonly<Record<string, HabitatDef>>;
+}
+
+/** P5.6 (CT §10.3 E205): whether organisms of `species` follow glow rules (native SIGNAL_GLOW, or E02 on a recipe founder). */
+function speciesGlows(id: string, recipe: RecipeDef | undefined, species: Readonly<Record<string, Species>>): boolean {
+  if (species[id]?.nativeAbilities.includes('SIGNAL_GLOW')) return true;
+  return recipe?.founders.some((f) => f.species === id && f.modules.includes('E02')) ?? false;
 }
 
 const tickAligned = (s: number) => Math.abs(s * TICKS_PER_SECOND - Math.round(s * TICKS_PER_SECOND)) < 1e-9;
@@ -231,11 +251,22 @@ export function experimentProblems(def: ExperimentDef, recipe: RecipeDef | undef
       }
     }
   };
+  const habitat = recipe && ctx.habitats ? ctx.habitats[recipe.habitatId] : undefined;
+  let placedKinds: string[] | null = null;
+  const placedEdgeKinds = (): string[] => (placedKinds ??= habitat && recipe ? recipeStructures(habitat, recipe).edges.map((e) => e.kind).filter((k, i, all) => all.indexOf(k) === i) : []);
   const measureOk = (id: string, path: string) => {
     const ref = parseMeasure(id);
     if (typeof ref === 'string') return bad(path, ref);
     const sp = speciesOfRef(ref);
     if (sp !== null) speciesOk(sp, path);
+    // P5.6: a region of the recipe's habitat; a gate the recipe or its habitat places; a field the build enables.
+    const region = regionOfRef(ref);
+    if (region !== null && habitat && !(habitat.regions ?? []).some((r) => r.id === region))
+      bad(path, `habitat ${habitat.id} has no region "${region}"${(habitat.regions ?? []).length > 0 ? ` (${(habitat.regions ?? []).map((r) => r.id).join(', ')})` : ''}`);
+    if ((ref.kind === 'gateTransfer' || ref.kind === 'gateCrossings') && habitat && !placedEdgeKinds().includes(ref.gate))
+      bad(path, `recipe ${recipe!.id} and its habitat place no ${ref.gate} edge`);
+    if ((ref.kind === 'regionMean' || ref.kind === 'gateTransfer') && FIELD_DEFS[ref.field].system !== 'core' && shipped && !shipped.enabledSystems.includes(FIELD_DEFS[ref.field].system))
+      bad(path, `field "${ref.field}" needs system "${FIELD_DEFS[ref.field].system}", which this build does not enable`);
     if (ref.kind === 'group' && shipped) for (const m of groupModules(ref.group)) if (!shipped.enabledModules.includes(m)) bad(path, `module "${m}" is not enabled in this build`);
     if (ref.kind === 'field' && FIELD_DEFS[ref.field].system !== 'core' && shipped && !shipped.enabledSystems.includes(FIELD_DEFS[ref.field].system))
       bad(path, `field "${ref.field}" needs system "${FIELD_DEFS[ref.field].system}", which this build does not enable`);
@@ -264,6 +295,15 @@ export function experimentProblems(def: ExperimentDef, recipe: RecipeDef | undef
   // P3.9: "both species inspected with different O2 limitations" follows two or more species.
   if (def.completion.playerSteps.includes('inspectOxygenLimits') && GateParamsSchema.safeParse(def.gate.params).success && def.gate.type === 'custom' && stepSpecies(def).length < 2)
     bad('completion.playerSteps', '"inspectOxygenLimits" needs a gate (or measurements) naming at least two species');
+  // P5.6 (CT §10.3 E205, E207, E211): the dish steps need what they inspect or toggle.
+  const gateOk = def.gate.type === 'custom' && GateParamsSchema.safeParse(def.gate.params).success;
+  def.completion.playerSteps.forEach((st, i) => {
+    const at = `completion.playerSteps.${i}`;
+    if (st === 'inspectGlow' && gateOk && !stepSpecies(def).some((sp) => speciesGlows(sp, recipe, ctx.species))) bad(at, '"inspectGlow" needs a followed species with glow rules (native SIGNAL_GLOW or E02)');
+    if (st === 'toggleShutter' && habitat && recipe && !recipeStructures(habitat, recipe).edges.some((e) => e.kind === 'S03')) bad(at, `"toggleShutter" needs a shutter gate (S03) that recipe ${recipe.id} or its habitat places`);
+    if (st === 'inspectMoisture' && gateOk && !cardMeasureIds(def).some((m) => { const r = parseMeasure(m); return typeof r !== 'string' && r.kind === 'regionMoisture'; }))
+      bad(at, '"inspectMoisture" needs a moisture measurement (moisture@REGION)');
+  });
 
   // Gate: a custom predicate over measured state.
   if (def.gate.type !== 'custom') bad('gate.type', `gate type "${def.gate.type}" is not supported for experiments (use "custom" with measurement clauses)`);
@@ -283,11 +323,14 @@ export function experimentProblems(def: ExperimentDef, recipe: RecipeDef | undef
   if (def.paired && ch.kind === 'none') bad('change', 'a paired card declares the one change arm B receives');
   if (!def.paired && ch.kind !== 'none') bad('change', 'only paired cards declare a change');
   if (ch.kind === 'omitPatch' && recipe && ch.patchIndex >= recipe.fieldPatches.length) bad('change.patchIndex', `recipe ${recipe.id} has no field patch ${ch.patchIndex}`);
-  // P3.6: only the last founder group may be omitted, so every earlier group keeps arm A's cells and birthIds.
+  // P3.6: the last founder group may be omitted, so every earlier group keeps arm A's cells and birthIds.
+  // P5.6 (PROPOSED DECISION, D-0131; briefs E215): so may a group whose later groups all list their cells, so
+  // every other group keeps arm A's cells (the later groups' birth ids shift by the omitted count; every
+  // measure is by species or region, never by birth id).
   if (ch.kind === 'omitFounders' && recipe) {
     if (ch.founderIndex >= recipe.founders.length) bad('change.founderIndex', `recipe ${recipe.id} has no founder group ${ch.founderIndex}`);
-    else if (ch.founderIndex !== recipe.founders.length - 1)
-      bad('change.founderIndex', `only the last founder group (${recipe.founders.length - 1}) can be omitted, so the other groups keep their places and birth ids`);
+    else if (!omittableFounderGroup(recipe, ch.founderIndex))
+      bad('change.founderIndex', 'only the last founder group, or a group whose later groups all list their cells, can be omitted');
   }
   if (ch.kind === 'omitScheduled')
     ch.indexes.forEach((k, i) => {
@@ -302,6 +345,14 @@ export function experimentProblems(def: ExperimentDef, recipe: RecipeDef | undef
 
   if (recipe) {
     if (shipped && recipe.phase > shipped.buildPhase) bad('recipeId', `recipe "${recipe.id}" belongs to phase ${recipe.phase} (build phase ${shipped.buildPhase})`);
+    // P5.6: a shipped card's habitat is enabled and offered by this build (habitatRules.ts, the one offer rule).
+    if (shipped && habitat) {
+      if (!shipped.enabledHabitats.includes(habitat.id)) bad('recipeId', `recipe ${recipe.id}'s habitat "${habitat.id}" is not enabled in this build`);
+      else {
+        const offer = habitatOfferProblem(habitat, shipped);
+        if (offer !== null) bad('recipeId', `recipe ${recipe.id}'s habitat: ${offer}`);
+      }
+    }
     // The recipe's scheduled commands are applied through the command path: their payloads must be real commands.
     recipe.scheduledCommands.forEach((sc, i) => {
       const res = ExperimentCommandSchema.safeParse(sc.payload);
@@ -315,6 +366,22 @@ export function experimentProblems(def: ExperimentDef, recipe: RecipeDef | undef
     });
   }
   return out;
+}
+
+/** Every measurement id a card reads (its measurements, then its gate's), each once. */
+function cardMeasureIds(def: ExperimentDef): string[] {
+  const gate = def.gate.type === 'custom' ? GateParamsSchema.safeParse(def.gate.params) : null;
+  const ids = [...def.measurements, ...(gate?.success ? gate.data.all.map((c) => c.measure) : [])];
+  return ids.filter((id, i) => ids.indexOf(id) === i);
+}
+
+/**
+ * P5.6 (PROPOSED DECISION, D-0131): whether founder group `k` can be a paired card's omitted group: the last
+ * group, or one whose every later group lists its cells (so they keep arm A's cells in arm B).
+ */
+export function omittableFounderGroup(recipe: Pick<RecipeDef, 'founders'>, k: number): boolean {
+  if (k < 0 || k >= recipe.founders.length) return false;
+  return recipe.founders.slice(k + 1).every((f) => f.cells !== undefined);
 }
 
 // ------------------------------------------------------------------------------ timeline (inspection)
@@ -496,7 +563,7 @@ function trackedPools(def: ExperimentDef): ConsumablePool[] {
   return out;
 }
 
-/** P3.9: the tracked measures (infections, limit seconds, fungal transfer, whole-unit cells) this card reads. */
+/** P3.9: the tracked measures (infections, limit seconds, fungal transfer, whole-unit cells; P5.6 events, intake by mode, secreting seconds, gates, regions) this card reads. */
 function trackedMeasures(def: ExperimentDef): string[] {
   const ids = [...def.measurements, ...gateClauses(def).map((c) => c.measure)];
   return ids.filter((id, i) => {
@@ -525,7 +592,7 @@ export function resolveExperiment(registry: ContentRegistry, idOrDef: string | E
   if (!def) throw new ExperimentError(`unknown experiment ${typeof idOrDef === 'string' ? idOrDef : idOrDef.id}`);
   const recipe = registry.recipes[def.recipeId];
   if (!recipe) throw new ExperimentError(`${def.id}: unknown recipe ${def.recipeId}`);
-  const problems = experimentProblems(def, recipe, { species: registry.species, materials: registry.materials, manifest: registry.manifest });
+  const problems = experimentProblems(def, recipe, { species: registry.species, materials: registry.materials, manifest: registry.manifest, habitats: registry.habitats });
   if (problems.length > 0) throw new ExperimentError(`${def.id}: ${problems.map((p) => `${p.target} ${p.path}: ${p.message}`).join('; ')}`);
   return { def, recipe };
 }
@@ -812,6 +879,58 @@ export function inspectShowsInfection(world: World, birthId: number, species: re
   return (species.length === 0 || species.includes(world.species[c.species[i]!]!.id)) && c.infectedBy[i] !== 0;
 }
 
+/**
+ * P5.6 (CT §10.3 E205 'inspectGlow'): the organism the inspector shows is alive, belongs to one of `species`
+ * (any when empty) and follows glow rules (its profile's glow: native SIGNAL_GLOW or E02) — the inspector then
+ * shows its glow state and the signal it senses. Reads only.
+ */
+export function inspectShowsGlow(world: World, birthId: number, species: readonly string[]): boolean {
+  const i = livingSlot(world, birthId);
+  if (i < 0) return false;
+  const sp = world.species[world.ents.cols.species[i]!]!;
+  return (species.length === 0 || species.includes(sp.id)) && profileOf(world, i).glow !== null;
+}
+
+/** P5.6: the regions of the world's OWN recorded habitat that a card's measurements and gate name (record order). */
+export function cardRegions(world: World, def: ExperimentDef): HabitatRegion[] {
+  const named: string[] = [];
+  for (const id of cardMeasureIds(def)) {
+    const ref = parseMeasure(id);
+    const r = typeof ref === 'string' ? null : regionOfRef(ref);
+    if (r !== null && !named.includes(r)) named.push(r);
+  }
+  return (world.content.habitat.regions ?? []).filter((r) => named.includes(r.id));
+}
+
+/**
+ * P5.6 (CT §10.3 E211 'inspectMoisture'): the inspector shows a moisture reading — a cell selection on an open
+ * cell (no structure) of one of `regions` (the card's measured regions), or an organism whose suitability
+ * reason the inspector shows is SUIT_MOISTURE. Reads only.
+ */
+export function inspectShowsMoisture(world: World, sel: { readonly kind: 'cell'; readonly cell: number } | { readonly kind: 'entity'; readonly birthId: number }, regions: readonly HabitatRegion[]): boolean {
+  if (sel.kind === 'cell') {
+    const x = sel.cell % 128;
+    const y = Math.floor(sel.cell / 128);
+    return world.grid.structure[sel.cell] === ST_NONE && regions.some((r) => regionContains(r, x, y));
+  }
+  const i = livingSlot(world, sel.birthId);
+  if (i < 0) return false;
+  const c = world.ents.cols;
+  const sp = world.species[c.species[i]!]!;
+  return entitySuitabilityAt(world, i, sp, profileOf(world, i), entityCell(c.x[i]!, c.y[i]!)).reason === R.SUIT_MOISTURE;
+}
+
+/**
+ * P5.6 (CT §10.3 E207 'toggleShutter'): whether `payload` is the card's own shutter toggle — a setDevice with
+ * `open` on an S03 edge the recipe placed (id < `firstPlayerId`, the first id a player placement can get: the
+ * dish's nextDeviceId when the card started). Reads only; the caller checks the command was accepted.
+ */
+export function isCardShutterToggle(world: World, payload: { readonly kind: string; readonly id?: unknown; readonly open?: unknown }, firstPlayerId: number): boolean {
+  if (payload.kind !== 'setDevice' || typeof payload.open !== 'boolean' || typeof payload.id !== 'number' || payload.id >= firstPlayerId) return false;
+  const id = payload.id;
+  return world.edges.some((e) => e.id === id && e.kind === 'S03');
+}
+
 /** The experiment card a world was made from (its recorded provenance), or null for any other dish. */
 export function experimentOf(world: World): string | null {
   const p = world.content.provenance as Partial<ExperimentWorldProvenance> & World['content']['provenance'];
@@ -998,6 +1117,20 @@ export interface CardScheduled {
 }
 
 /**
+ * P5.6 (SPEC §13.1, D02 §22; CT §10.3 E214): one overridden field of a test-only override, for the card's
+ * setup panel, the mode labels and the export (DishInfo.testOverrides carries the same shape for a world).
+ * `value` is the fixture's value, `normal` the build's species record value.
+ */
+export interface TestOverrideView {
+  readonly description: string;
+  readonly speciesId: string;
+  readonly speciesName: string;
+  readonly field: string;
+  readonly value: number;
+  readonly normal: number;
+}
+
+/**
  * Everything the Notebook shows about one card (recorded content only; serializable). Names are
  * resolved here so the UI words measurements without loading content itself.
  */
@@ -1031,6 +1164,10 @@ export interface ExperimentCardView {
   readonly speciesNames: Readonly<Record<string, string>>;
   readonly materialNames: Readonly<Record<string, string>>;
   readonly moduleNames: Readonly<Record<string, string>>;
+  /** P5.6: the recipe's test-only overrides, one entry per overridden field; absent when the recipe has none. */
+  readonly testOverrides?: readonly TestOverrideView[];
+  /** P5.6: region id → label of the recipe's habitat's regions; absent when the habitat has no regions. */
+  readonly regionNames?: Readonly<Record<string, string>>;
 }
 
 export function experimentCardView(registry: ContentRegistry, def: ExperimentDef): ExperimentCardView {
@@ -1042,6 +1179,11 @@ export function experimentCardView(registry: ContentRegistry, def: ExperimentDef
   for (const id of registry.manifest.enabledMaterials) materialNames[id] = registry.materials[id]?.name ?? id;
   const moduleNames: Record<string, string> = {};
   for (const id of registry.manifest.enabledModules) moduleNames[id] = registry.modules[id]?.name ?? id;
+  // P5.6: the recipe's habitat's region labels and the recipe's test-only overrides (one entry per field).
+  const regions = registry.habitats[recipe.habitatId]?.regions ?? [];
+  const regionNames: Record<string, string> = {};
+  for (const r of regions) regionNames[r.id] = r.label;
+  const testOverrides = hasTestOverrides(recipe) ? recipeOverrideViews(registry, recipe) : [];
   return {
     id: def.id,
     title: def.title,
@@ -1069,5 +1211,48 @@ export function experimentCardView(registry: ContentRegistry, def: ExperimentDef
     speciesNames,
     materialNames,
     moduleNames,
+    ...(testOverrides.length > 0 ? { testOverrides } : {}),
+    ...(regions.length > 0 ? { regionNames } : {}),
   };
+}
+
+/** P5.6: a recipe's test-only overrides as the card shows them (normal = the build's species record value). */
+export function recipeOverrideViews(registry: Pick<ContentRegistry, 'species'>, recipe: Pick<RecipeDef, 'testOnlyOverrides'>): TestOverrideView[] {
+  const out: TestOverrideView[] = [];
+  for (const o of recipe.testOnlyOverrides) {
+    const id = testOverrideSpecies(o);
+    if (id === null) continue;
+    const rec = registry.species[id] as (Species & Readonly<Record<string, unknown>>) | undefined;
+    for (const field of Object.keys(o.values).sort()) {
+      const normal = rec?.[field];
+      out.push({ description: o.description, speciesId: id, speciesName: rec?.name ?? id, field, value: o.values[field]!, normal: typeof normal === 'number' ? normal : o.values[field]! });
+    }
+  }
+  return out;
+}
+
+/**
+ * P5.6 (SPEC §13.1 disclosure; DishInfo.testOverrides): the test-only overrides a WORLD records — its
+ * provenance list and its own species copies (speciesName from the copy; normal from `buildSpecies`, this
+ * build's record, or the copy's own value when the build lacks the species). Empty when it records none.
+ */
+export function worldOverrideViews(world: World, buildSpecies: Readonly<Record<string, Species>>): TestOverrideView[] {
+  const list = (world.content.provenance as { readonly testOnlyOverrides?: unknown }).testOnlyOverrides;
+  if (!Array.isArray(list)) return [];
+  const out: TestOverrideView[] = [];
+  for (const o of list as unknown[]) {
+    const entry = o as { description?: unknown; target?: unknown; values?: unknown } | null;
+    if (entry === null || typeof entry.target !== 'string' || typeof entry.values !== 'object' || entry.values === null) continue;
+    const id = testOverrideSpecies({ target: entry.target });
+    const copy = id === null ? undefined : (world.content.species.find((sp) => sp.id === id) as (Species & Readonly<Record<string, unknown>>) | undefined);
+    if (id === null || copy === undefined) continue;
+    const rec = buildSpecies[id] as (Species & Readonly<Record<string, unknown>>) | undefined;
+    for (const field of Object.keys(entry.values).sort()) {
+      const value = copy[field];
+      if (typeof value !== 'number') continue;
+      const normal = rec?.[field];
+      out.push({ description: typeof entry.description === 'string' ? entry.description : '', speciesId: id, speciesName: copy.name, field, value, normal: typeof normal === 'number' ? normal : value });
+    }
+  }
+  return out;
 }

@@ -46,7 +46,14 @@ export const CHALLENGE_HORIZON_DEFAULT = 180;
 export const CHALLENGE_QUARTERS = ['topLeft', 'topRight', 'bottomLeft', 'bottomRight'] as const;
 export type ChallengeQuarter = (typeof CHALLENGE_QUARTERS)[number];
 
-export type ChallengeRegion = { readonly kind: 'dish' } | { readonly kind: 'quarter'; readonly id: ChallengeQuarter };
+/**
+ * Where a challenge measures. P5.6 (D-0131): `habitat` is a region of the baseline dish's RECORDED habitat
+ * (world.content.habitat.regions, listed by label in the editor), measured by a biomassThreshold objective
+ * (Recover a neighborhood); quarters stay.
+ */
+export type ChallengeRegion = { readonly kind: 'dish' } | { readonly kind: 'quarter'; readonly id: ChallengeQuarter } | { readonly kind: 'habitat'; readonly id: string };
+/** A habitat region id (HabitatRegionSchema's pattern). */
+const HABITAT_REGION_ID = /^[A-Z][A-Z0-9_]{0,63}$/;
 
 /** One objective: a named predicate type, its numeric targets and ids, and its duration when it holds for one. */
 export interface ChallengeObjective {
@@ -107,17 +114,22 @@ export function challengeObjectiveId(id: string): string {
   return `CHALLENGE_${challengeNumber(id) ?? 0}`;
 }
 
-/** The region id the engine measures (src/sim/history.ts TRAIT_REGIONS). */
-export function regionIdOf(region: ChallengeRegion): 'dish' | ChallengeQuarter {
+/** The region id the engine measures (src/sim/history.ts TRAIT_REGIONS, or P5.6 a habitat region id). */
+export function regionIdOf(region: ChallengeRegion): string {
   return region.kind === 'dish' ? 'dish' : region.id;
 }
 
-/** The engine predicate of a challenge (a fieldInRange objective measured in the record's region). */
+/**
+ * The engine predicate of a challenge (a fieldInRange objective measured in the record's region; P5.6: a
+ * biomassThreshold measured in a quarter or a habitat region, with no region key for the dish, so every record
+ * written before reads exactly as before).
+ */
 export function challengePredicate(c: Pick<ChallengeRecord, 'objective' | 'region'>): ObjectivePredicate {
   const o = c.objective;
+  const inject = o.type === 'fieldInRange' || (o.type === 'biomassThreshold' && c.region.kind !== 'dish' && (o.params.measure !== undefined || o.params.fromBelow !== undefined));
   return {
     type: o.type,
-    params: o.type === 'fieldInRange' ? { ...o.params, region: regionIdOf(c.region) } : { ...o.params },
+    params: inject ? { ...o.params, region: regionIdOf(c.region) } : { ...o.params },
     ...(o.durationSeconds !== undefined ? { durationSeconds: o.durationSeconds } : {}),
   };
 }
@@ -125,7 +137,9 @@ export function challengePredicate(c: Pick<ChallengeRecord, 'objective' | 'regio
 function regionProblem(raw: unknown): string | null {
   if (!isObj(raw)) return 'a challenge has an invalid region';
   if (raw.kind === 'dish') return Object.keys(raw).length === 1 ? null : 'a challenge has an invalid region';
-  if (raw.kind !== 'quarter' || Object.keys(raw).some((k) => k !== 'kind' && k !== 'id') || !includes(CHALLENGE_QUARTERS, raw.id)) return 'a challenge has an unknown region';
+  if (Object.keys(raw).some((k) => k !== 'kind' && k !== 'id')) return 'a challenge has an unknown region';
+  if (raw.kind === 'habitat') return typeof raw.id === 'string' && HABITAT_REGION_ID.test(raw.id) ? null : 'a challenge has an unknown region';
+  if (raw.kind !== 'quarter' || !includes(CHALLENGE_QUARTERS, raw.id)) return 'a challenge has an unknown region';
   return null;
 }
 
@@ -154,7 +168,13 @@ export function challengeInputProblem(raw: unknown): string | null {
   if (!(CHALLENGE_HORIZON_SECONDS as readonly unknown[]).includes(raw.horizonSeconds)) return 'a challenge has an invalid turn length';
   const region = regionProblem(raw.region);
   if (region) return region;
-  if (o.type !== 'fieldInRange' && (raw.region as ChallengeRegion).kind !== 'dish') return 'only a field-range challenge measures a quarter';
+  const kind = (raw.region as ChallengeRegion).kind;
+  // P5.6: a biomass challenge with a Phase 5 parameter (measure or fromBelow: Recover a neighborhood) may measure a
+  // quarter or a habitat region; a field range a quarter. Every v1.0 shape keeps its rule (only a field range
+  // measures a quarter), so a record refused before is refused still.
+  const regional = o.type === 'biomassThreshold' && isObj(o.params) && (o.params.measure !== undefined || o.params.fromBelow !== undefined);
+  if (o.type === 'fieldInRange' && kind === 'habitat') return 'a field-range challenge measures the dish or a quarter';
+  if (o.type !== 'fieldInRange' && !regional && kind !== 'dish') return 'only a field-range challenge measures a quarter';
   const typed = typedPredicate(challengePredicate({ objective: o as unknown as ChallengeObjective, region: raw.region as ChallengeRegion }));
   if ('path' in typed) return `a challenge has an invalid objective (${typed.message})`;
   if (typeof o.durationSeconds === 'number' && o.durationSeconds > (raw.horizonSeconds as number)) return 'a challenge needs longer than its turn';
@@ -210,7 +230,8 @@ export function challengesWorldProblem(raw: Record<string, unknown>, refs: GoalW
     const sp = pred.params.species;
     if (typeof sp === 'string' && !refs.speciesIds.includes(sp)) return 'a challenge names a species this dish does not have';
     if (refs.manifest !== undefined && refs.fieldIds !== undefined) {
-      const why = objectiveRefsProblem({ manifest: refs.manifest, speciesIds: refs.speciesIds, fieldIds: refs.fieldIds }, pred);
+      // P5.6: with the recorded habitat's regions (a habitat region the dish does not record is refused).
+      const why = objectiveRefsProblem({ manifest: refs.manifest, speciesIds: refs.speciesIds, fieldIds: refs.fieldIds, ...(refs.regions !== undefined ? { regions: refs.regions } : {}) }, pred);
       if (why !== null) return `a challenge cannot run in this dish (${why})`;
     }
   }

@@ -1,0 +1,31 @@
+{
+  "id": "EXP_214",
+  "seed": 214,
+  "title": "Shell handling",
+  "question": "How long does a Needlejaw need to take a Shellglider?",
+  "recipeId": "SHELL_HANDLING_V1",
+  "intervention": "Watch the Needlejaw beside the Shellglider. Tap the Needlejaw: the inspector shows how many seconds of contact it has and how many it needs.",
+  "predictedTradeoff": "A shell makes the Needlejaw hold on for 4 s before it can eat; a hunter that spends that long on one meal catches less in the same time.",
+  "measurements": [
+    "events.handlingStart.P10",
+    "events.handlingBreak.P10",
+    "firstCaptureAt.P10",
+    "captures.P10",
+    "alive.P05"
+  ],
+  "stoppingSeconds": 10,
+  "confounds": "This is a test fixture: a test-only override sets both species' speed to 0 so their contact never breaks. In an ordinary dish both move, contact can break and the count starts again. This is one run.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "events.handlingStart.P10", "arm": "A", "op": "gte", "value": 1, "label": "The Needlejaw started handling"},
+        {"measure": "firstCaptureAt.P10", "arm": "A", "op": "gte", "value": 4, "label": "No capture before 4 s of contact"},
+        {"measure": "captures.P10", "arm": "A", "op": "eq", "value": 1, "label": "Exactly one meal"}
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {"journalStamp": "Timed a Needlejaw handling a Shellglider", "playerSteps": []},
+  "phase": 5
+}

@@ -16,7 +16,7 @@
  */
 import { batch, signal } from '@preact/signals';
 import type { SimClient } from '@worker/client';
-import type { DishInfo, Speed } from '@worker/protocol';
+import { CHALLENGE_TEMPLATES_REQUEST, type DishInfo, type GoalOffer, type Speed } from '@worker/protocol';
 import {
   CHALLENGE_BUDGET_MAX,
   CHALLENGE_BUDGET_MIN,
@@ -30,6 +30,7 @@ import {
   type ChallengeInput,
   type ChallengeQuarter,
   type ChallengeRecord,
+  type ChallengeRegion,
   type ChallengeToolGroup,
 } from '@persist/notebookChallenges';
 import type { ObjectiveType } from '@sim/objectives';
@@ -54,7 +55,14 @@ export interface ChallengeDraft {
   readonly durationSeconds: string;
   readonly event: string;
   readonly enzyme: string;
-  readonly region: 'dish' | ChallengeQuarter;
+  /** 'dish', a quarter, or (P5.6) 'habitat:<region id>' of the dish's recorded habitat. */
+  readonly region: string;
+  /** P5.6 biomassThreshold: '' (living biomass, as v1.0), 'count' or 'activeCount'. */
+  readonly measure: string;
+  /** P5.6 biomassThreshold: '' (none) or the whole number the region must start below. */
+  readonly fromBelow: string;
+  /** P5.6: the challenge starting point the draft was filled from (an objective id), or null. */
+  readonly template: string | null;
   readonly allowedTools: readonly ChallengeToolGroup[];
   /** '' = no limit. */
   readonly budget: string;
@@ -73,6 +81,8 @@ export interface ChallengeSheetState {
   readonly message: string | null;
   /** The dish's run state when the panel opened (restored on close). */
   readonly resumeSpeed: Speed;
+  /** P5.6: the challenge starting points this dish offers (the worker's 'goalCatalog' for CHALLENGE_TEMPLATES_REQUEST). */
+  readonly templates: readonly GoalOffer[];
 }
 
 export const challengeSheet = signal<ChallengeSheetState | null>(null);
@@ -93,8 +103,15 @@ export function offeredSpecies(info: Pick<DishInfo, 'speciesIds'> | null): strin
   return [...(info?.speciesIds ?? [])];
 }
 
-/** Whether this dish has a gate structure a transfer goal could measure (none before Phase 5). */
-export function gateAvailable(info: Pick<DishInfo, 'structureIds'> | null): boolean {
+/**
+ * Whether this dish has a gate structure a transfer goal could measure (none before Phase 5). P5.6 (wave 15):
+ * with `placed` (the dish's latest geometry edges), only a PLACED edge barrier counts, as the engine's own reader
+ * does (objectives.ts WORLD_GATES): since the systems flip (D-0121) DishInfo.structureIds lists every enabled
+ * structure, so the enabled list alone would offer a gate goal on a dish without a gate. Without `placed`, the
+ * enabled list as before.
+ */
+export function gateAvailable(info: Pick<DishInfo, 'structureIds'> | null, placed?: readonly { readonly kind: string }[] | null): boolean {
+  if (placed !== undefined && placed !== null) return placed.some((e) => /^S0[1-4]$/.test(e.kind));
   return (info?.structureIds ?? []).some((id) => /^S[0-9]{2}$/.test(id));
 }
 
@@ -112,6 +129,9 @@ export function newDraft(info: Pick<DishInfo, 'speciesIds' | 'fieldIds'> | null)
     event: 'birth',
     enzyme: 'starch',
     region: 'dish',
+    measure: '',
+    fromBelow: '',
+    template: null,
     allowedTools: [...CHALLENGE_TOOL_GROUPS],
     budget: '',
     horizonSeconds: CHALLENGE_HORIZON_DEFAULT,
@@ -130,7 +150,10 @@ const num = (s: string): number | null => {
  * event, enzyme or region must be one the lists offer on `info`, every number comes from a number field (a
  * non-number is refused, never passed on), and the name is cleaned and kept out of the objective.
  */
-export function draftToInput(d: ChallengeDraft, info: Pick<DishInfo, 'speciesIds' | 'fieldIds' | 'structureIds'> | null): { readonly ok: true; readonly input: ChallengeInput } | { readonly ok: false; readonly message: string } {
+export function draftToInput(
+  d: ChallengeDraft,
+  info: (Pick<DishInfo, 'speciesIds' | 'fieldIds' | 'structureIds'> & Partial<Pick<DishInfo, 'regions'>>) | null,
+): { readonly ok: true; readonly input: ChallengeInput } | { readonly ok: false; readonly message: string } {
   const bad = (message: string) => ({ ok: false as const, message });
   const name = cleanChallengeName(d.name);
   if (name.length === 0) return bad('Give the challenge a name.');
@@ -153,8 +176,15 @@ export function draftToInput(d: ChallengeDraft, info: Pick<DishInfo, 'speciesIds
       const sp = kind(false);
       if (sp === undefined) return bad('Choose a kind, or all living things.');
       const t = num(d.threshold);
-      if (t === null || t <= 0) return bad('Enter a biomass above 0.');
-      objective = { type: d.type, params: { ...(sp ? { species: sp } : {}), threshold: t } };
+      if (t === null || t <= 0) return bad(d.measure === '' ? 'Enter a biomass above 0.' : 'Enter a number above 0.');
+      // P5.6: what is measured, and the number the region must start below (Recover a neighborhood).
+      if (d.measure !== '' && d.measure !== 'count' && d.measure !== 'activeCount') return bad('Choose what to measure.');
+      let from: number | null = null;
+      if (d.fromBelow.trim() !== '') {
+        from = num(d.fromBelow);
+        if (from === null || !Number.isInteger(from) || from < 1 || from > t) return bad('Enter a whole starting limit from 1 up to the number to reach, or leave it empty.');
+      }
+      objective = { type: d.type, params: { ...(sp ? { species: sp } : {}), threshold: t, ...(d.measure !== '' ? { measure: d.measure } : {}), ...(from !== null ? { fromBelow: from } : {}) } };
       break;
     }
     case 'transferAcrossGate':
@@ -188,7 +218,8 @@ export function draftToInput(d: ChallengeDraft, info: Pick<DishInfo, 'speciesIds
     if (b === null || !Number.isInteger(b) || b < CHALLENGE_BUDGET_MIN || b > CHALLENGE_BUDGET_MAX) return bad(`Enter an action limit from ${CHALLENGE_BUDGET_MIN} to ${CHALLENGE_BUDGET_MAX}, or leave it empty.`);
     budget = b;
   }
-  const region = d.type === 'fieldInRange' && (CHALLENGE_QUARTERS as readonly string[]).includes(d.region) ? { kind: 'quarter' as const, id: d.region as ChallengeQuarter } : { kind: 'dish' as const };
+  const region = regionOfDraft(d, info);
+  if (d.type === 'biomassThreshold' && d.fromBelow.trim() !== '' && region.kind === 'dish') return bad('Choose a region to recover: a quarter or one of the dish’s regions.');
   const input: ChallengeInput = {
     name,
     objective,
@@ -199,6 +230,66 @@ export function draftToInput(d: ChallengeDraft, info: Pick<DishInfo, 'speciesIds
   };
   const problem = challengeInputProblem(input);
   return problem ? bad(problem) : { ok: true, input };
+}
+
+/**
+ * The region a draft measures: a quarter for a field range; a quarter or (P5.6) a region of the dish's recorded
+ * habitat for a biomass goal; the whole dish otherwise (and for anything the lists do not offer).
+ */
+function regionOfDraft(d: ChallengeDraft, info: Partial<Pick<DishInfo, 'regions'>> | null): ChallengeRegion {
+  const quarter = (CHALLENGE_QUARTERS as readonly string[]).includes(d.region) ? { kind: 'quarter' as const, id: d.region as ChallengeQuarter } : null;
+  if (d.type === 'fieldInRange') return quarter ?? { kind: 'dish' };
+  // P5.6: only a biomass goal with a measure or a starting limit (Recover a neighborhood) measures a region.
+  if (d.type !== 'biomassThreshold' || (d.measure === '' && d.fromBelow.trim() === '')) return { kind: 'dish' };
+  if (quarter) return quarter;
+  const id = d.region.startsWith('habitat:') ? d.region.slice('habitat:'.length) : null;
+  return id !== null && (info?.regions ?? []).some((r) => r.id === id) ? { kind: 'habitat', id } : { kind: 'dish' };
+}
+
+/** P5.6: the draft a challenge starting point fills in (objective, budget, tools and turn length; editable as any). */
+export function draftFromTemplate(t: GoalOffer, info: (Pick<DishInfo, 'speciesIds' | 'fieldIds'> & Partial<Pick<DishInfo, 'regions'>>) | null): ChallengeDraft {
+  const base = newDraft(info);
+  const tpl = t.challengeTemplate;
+  if (!tpl) return base;
+  const p = tpl.predicate.params;
+  const str = (v: unknown, fallback: string): string => (typeof v === 'number' ? String(v) : typeof v === 'string' ? v : fallback);
+  const firstRegion = info?.regions?.[0];
+  return {
+    ...base,
+    name: t.title,
+    type: (OBJECTIVE_TYPE_IDS as readonly string[]).includes(tpl.predicate.type) ? (tpl.predicate.type as ObjectiveType) : base.type,
+    species: typeof p.species === 'string' ? p.species : '',
+    threshold: str(p.threshold, base.threshold),
+    measure: str(p.measure, ''),
+    fromBelow: str(p.fromBelow, ''),
+    durationSeconds: tpl.predicate.durationSeconds !== undefined ? String(tpl.predicate.durationSeconds) : base.durationSeconds,
+    region: firstRegion ? `habitat:${firstRegion.id}` : CHALLENGE_QUARTERS[0],
+    template: t.id,
+    allowedTools: CHALLENGE_TOOL_GROUPS.filter((g) => tpl.allowedTools.includes(g)),
+    budget: String(tpl.commandBudget),
+    horizonSeconds: tpl.horizonSeconds,
+  };
+}
+
+const OBJECTIVE_TYPE_IDS = ['keepSpeciesAlive', 'biomassThreshold', 'transferAcrossGate', 'observeEvent', 'fieldInRange'] as const;
+
+/** P5.6: "Start from" in the editor: fill the draft from starting point `id` (null: a blank challenge). */
+export function chooseTemplate(id: string | null): void {
+  const s = challengeSheet.value;
+  if (!s || s.view !== 'edit') return;
+  const t = id === null ? null : (s.templates.find((x) => x.id === id) ?? null);
+  challengeSheet.value = { ...s, draft: t ? draftFromTemplate(t, dishInfo.value) : newDraft(dishInfo.value), message: null };
+}
+
+async function loadTemplates(dishId: string): Promise<void> {
+  let templates: readonly GoalOffer[];
+  try {
+    templates = (await getClient().goalCatalog(dishId, CHALLENGE_TEMPLATES_REQUEST)).filter((o) => o.challengeTemplate !== undefined);
+  } catch {
+    return; // the dish is gone already
+  }
+  const s = challengeSheet.peek();
+  if (s && s.dishId === dishId && s.view === 'edit') challengeSheet.value = { ...s, templates };
 }
 
 /** The challenge a start sheet or export means: the turn's challenge, else the latest the dish holds. */
@@ -217,9 +308,10 @@ function pauseForSheet(): { dishId: string; speed: Speed } | null {
 function openSheet(view: ChallengeView, challengeId: string | null): void {
   const p = pauseForSheet();
   if (!p) return;
-  challengeSheet.value = { view, dishId: p.dishId, draft: newDraft(dishInfo.value), challengeId, refusal: view === 'start' ? undefined : null, busy: false, message: null, resumeSpeed: p.speed };
+  challengeSheet.value = { view, dishId: p.dishId, draft: newDraft(dishInfo.value), challengeId, refusal: view === 'start' ? undefined : null, busy: false, message: null, resumeSpeed: p.speed, templates: [] };
   sheet.value = 'challenge';
   if (view === 'start' && challengeId !== null) void checkStart(p.dishId, challengeId);
+  if (view === 'edit') void loadTemplates(p.dishId); // P5.6: the dish's challenge starting points
 }
 
 /** More → Make a challenge… (a blocking panel: the dish pauses; Cancel restores its run state). */

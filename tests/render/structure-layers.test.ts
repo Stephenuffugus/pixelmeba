@@ -104,7 +104,9 @@ describe('edge glyphs', () => {
     const marks = (code: number, z: number) => edgeGlyph(code, cell, 'R', z)!.segments.length / 4;
     const at = (z: number) => [EDGE_S01, EDGE_S02, EDGE_SHUTTER_CLOSED, EDGE_SHUTTER_OPEN].map((c) => marks(c, z));
     // Whole dish on a phone (~3 px per cell) … neighborhood (8) … close (16) … the maximum (32).
-    expect(at(3)).toEqual([1, 1, 1, 2]);
+    // Re-pinned in P5.8 (wave 15, D-0123 MINOR 3): below 3.5 px per cell an S02 is two paired rails (was one slot,
+    // no longer than the S01 dot below ~2.75 px per cell); the sweep is tests/render/edge-glyph-sweep.test.ts.
+    expect(at(3)).toEqual([1, 2, 1, 2]);
     expect(at(8)).toEqual([2, 1, 1, 2]);
     expect(at(16)).toEqual([4, 2, 1, 2]);
     expect(at(32)).toEqual([5, 3, 1, 2]);

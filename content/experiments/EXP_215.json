@@ -1,0 +1,34 @@
+{
+  "id": "EXP_215",
+  "seed": 215,
+  "title": "Fungal hitchhiker",
+  "question": "What does a Threadrider take from a Cordweaver?",
+  "recipeId": "FUNGAL_HITCHHIKER_V1",
+  "intervention": "Make a copy of this dish without the ten Cordweavers. The Threadriders start in the same places in both copies. Run both for 120 seconds and compare what the Threadriders took in and how many were born.",
+  "predictedTradeoff": "A riding Threadrider drains its Cordweaver's body, so the host grows less; with no host a Threadrider has nothing to feed on.",
+  "measurements": [
+    "attached.X02",
+    "intake.X02",
+    "births.X02",
+    "alive.X02",
+    "alive.F02",
+    "biomass.F02"
+  ],
+  "stoppingSeconds": 120,
+  "confounds": "Cordweavers also eat the patch's sugar, so a host's body changes with its own feeding as well as the drain. Attachment is read as the Threadriders riding a host at the end; a rider that let go earlier is not counted. After the copies differ, every encounter differs: this is one paired run.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "runSeconds", "arm": "A", "op": "gte", "value": 120, "label": "Both copies ran 120 s"},
+        {"measure": "attached.X02", "arm": "A", "op": "gte", "value": 1, "label": "A Threadrider rides a Cordweaver in copy A"},
+        {"measure": "intake.X02", "arm": "A", "op": "gt", "value": 0, "label": "Threadriders drained carbon in copy A"},
+        {"measure": "births.X02", "arm": "B", "op": "eq", "value": 0, "label": "No Threadrider was born without hosts (copy B)"}
+      ]
+    }
+  },
+  "paired": true,
+  "change": {"kind": "omitFounders", "founderIndex": 0},
+  "completion": {"journalStamp": "Compared Threadriders with and without Cordweavers", "playerSteps": ["viewComparison"]},
+  "phase": 5
+}

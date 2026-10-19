@@ -1,0 +1,33 @@
+{
+  "id": "EXP_213",
+  "seed": 213,
+  "title": "A temporary trap",
+  "question": "What does a Traplace's trap cost, and what does it hold?",
+  "recipeId": "TEMPORARY_TRAP_V1",
+  "intervention": "Watch the Traplace build its trap, then tap it while it holds the Siltworm: the inspector shows the trap's reserve, the seconds held and the carbon it drains.",
+  "predictedTradeoff": "Building the trap takes carbon out of the Traplace's body and costs energy before anything is caught; a hold drains the Siltworm only for 8 s, and then the trap must rest.",
+  "measurements": [
+    "events.trapArmed.F03",
+    "events.trapHold.F03",
+    "events.trapRelease.F03",
+    "intake.F03",
+    "alive.P04",
+    "biomass.P04"
+  ],
+  "stoppingSeconds": 12,
+  "confounds": "The Traplace's starting body and energy are a labelled setup. A Siltworm is caught only if its centre enters the Traplace's own cell, so the moment of capture depends on where it wanders. A trap holds and drains; it does not have to kill. This is one run.",
+  "gate": {
+    "type": "custom",
+    "params": {
+      "all": [
+        {"measure": "events.trapArmed.F03", "arm": "A", "op": "gte", "value": 1, "label": "The trap was built"},
+        {"measure": "events.trapHold.F03", "arm": "A", "op": "gte", "value": 1, "label": "The trap caught the Siltworm"},
+        {"measure": "events.trapRelease.F03", "arm": "A", "op": "gte", "value": 1, "label": "The trap let it go"},
+        {"measure": "intake.F03", "arm": "A", "op": "gt", "value": 0, "label": "The Traplace took in carbon"}
+      ]
+    }
+  },
+  "paired": false,
+  "completion": {"journalStamp": "Watched a Traplace build, hold and release its trap", "playerSteps": []},
+  "phase": 5
+}

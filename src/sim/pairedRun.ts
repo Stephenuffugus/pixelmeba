@@ -50,17 +50,49 @@
  *   as the history sums them)
  *   wholeUnitCells.SP (the most cells at the end of any tick holding at least one whole Pinphage unit
  *   (v01 ≥ 1) and a living SP: the precondition of an infection there)
+ * Phase 5 (P5.6; CT §10.3; D-0131). Plain reads (not tracked):
+ *   resting.SP (living SP in a life state other than Active now: Preparing, Resting or Waking)
+ *   glowing.SP (living SP with glowState 1 now) · glowingStart.SP (that count when the observer started:
+ *   "the copies were made from a glowing dish") · attached.SP (living SP riding a host now: hostBirthId ≠ 0)
+ *   firstCaptureAt.SP (the dish second at the end of the tick that wrote SP's first 'capture' record in the run,
+ *   (record tick + 1) / 10, the clock seconds, extinctAt and a gate's second read; −1 if none)
+ * Phase 5 tracked measures (recorded only when `observe` names them):
+ *   events.TYPE.SP (event RECORDS of TYPE naming species SP since the run started, counted from the event
+ *   ring after every tick; TYPE in EVENT_MEASURE_TYPES. A count of records, never of organisms: one
+ *   'modeSwitch' record stands for every switch of that species to that mode in one tick, D-0126)
+ *   intakePhoto.SP · intakeSugar.SP (carbon SP took in during the run while its mode column read Photo /
+ *   Sugar: each organism's intake between the stage 5 and stage 6 hooks, split by its mode at stage 6; 0
+ *   for a species without MIXOTROPHY, whose mode is always none)
+ *   infections.SP.VIRUS · wholeUnitCells.SP.VIRUS (as the two-part ids, restricted to one virus: the
+ *   infectedBy code of that virus, and that virus's own unit field, v01 or v02)
+ *   secretingSeconds.SP (organism-seconds of living SP that released something this tick — an enzyme,
+ *   RIVAL or the glow signal: the `secreting` bits, the inspector's SECRETING — 0.1 s per organism per tick)
+ *   gateTransfer.KIND.F (field F moved across the dish's edges of structure KIND, S01–S04, since the run
+ *   started: the gate tally (objectives.ts WORLD_GATES.transferred) now minus its value at the start)
+ *   gateCrossings.KIND (organism crossings of those edges since the run started, WORLD_GATES.organisms)
+ *   alive.SP@REGION · resting.SP@REGION · biomass.SP@REGION (living SP whose cell, entityCell, lies in the
+ *   region) · mean.F@REGION (mean of field F over the region's cells) · moisture@REGION (mean of the derived
+ *   moisture over the region's cells). REGION is a region of the WORLD's recorded habitat
+ *   (world.content.habitat.regions; habitatRules.ts regionCells), never this build's registry.
+ * A gate measure whose dish has no edge of that kind, or a region measure naming a region the world's habitat
+ * does not record, is a MeasureError when the observer is created. catalogIds lists none of these unless the
+ * observer was asked for them (the comparison engine's rows are unchanged).
  */
 import type { CommandPayload, CommandResult } from './commands';
-import { CELL_COUNT, ENERGY_CAP_BASE, TICKS_PER_SECOND } from './constants';
+import { AGENT_CAP, CELL_COUNT, ENERGY_CAP_BASE, TICKS_PER_SECOND } from './constants';
 import { FIELD_DEFS, FIELD_IDS, isFieldId, type FieldId } from './fields';
 import { entitySuitabilityAt } from './crossing';
 import { maskCells } from './grid';
 import { field as lineageField } from './lineage';
 import { activeLoci } from './phenotype';
 import { profileOf } from './profiles';
+import { regionCells } from './content/habitatRules';
+import { LIFE_ACTIVE } from './entities';
+import type { EventType } from './events';
+import { MODE_PHOTO, MODE_SUGAR } from './mixotrophy';
 import { REASONS } from './reasons';
 import { entityCell } from './spatial';
+import { isFieldVirus, virusIdOfCode } from './viruses';
 import { stateHash } from './serialize';
 import { step } from './tick';
 import type { World } from './world';
@@ -115,6 +147,56 @@ export type Enzyme = (typeof ENZYMES)[number];
 export const CONSUMABLE_POOLS = ['starch', 'oil', 'protein', 'broth', 'detritus', 'film', 'sugar', 'metabolite', 'co2'] as const satisfies readonly FieldId[];
 export type ConsumablePool = (typeof CONSUMABLE_POOLS)[number];
 
+/** P5.6: per-species reads of the current state (not tracked; never listed by catalogIds). */
+export const STATE_MEASURES = ['resting', 'glowing', 'attached'] as const;
+export type StateMeasure = (typeof STATE_MEASURES)[number];
+
+/** P5.6: the event types events.TYPE.SP counts (records naming that species). */
+export const EVENT_MEASURE_TYPES = [
+  'glowOn',
+  'glowOff',
+  'modeSwitch',
+  'rest',
+  'wake',
+  'trapArmed',
+  'trapHold',
+  'trapRelease',
+  'handlingStart',
+  'handlingBreak',
+  'capture',
+  'linkFormed',
+  'linkBroken',
+] as const satisfies readonly EventType[];
+export type EventMeasureType = (typeof EVENT_MEASURE_TYPES)[number];
+
+/** P5.6: the edge structures a gate measure reads (CT §4). */
+export const GATE_KINDS = ['S01', 'S02', 'S03', 'S04'] as const;
+export type GateKind = (typeof GATE_KINDS)[number];
+
+/** P5.6: the per-species measures that take an @REGION suffix (besides mean.F@REGION and moisture@REGION). */
+export const REGION_SPECIES_MEASURES = ['alive', 'resting', 'biomass'] as const;
+export type RegionSpeciesMeasure = (typeof REGION_SPECIES_MEASURES)[number];
+
+/**
+ * P5.6: the measurement heads Phase 5 adds (p5-polish words each one). Besides these, the existing heads gain
+ * three forms: infections.SP.VIRUS, wholeUnitCells.SP.VIRUS, and the @REGION suffix on alive.SP and biomass.SP.
+ */
+export const P5_MEASURE_HEADS = [
+  'resting',
+  'glowing',
+  'glowingStart',
+  'attached',
+  'events',
+  'firstCaptureAt',
+  'intakePhoto',
+  'intakeSugar',
+  'secretingSeconds',
+  'gateTransfer',
+  'gateCrossings',
+  'mean',
+  'moisture',
+] as const;
+
 export type MeasureRef =
   | { readonly kind: 'scalar'; readonly name: ScalarMeasure }
   | { readonly kind: 'species'; readonly stat: SpeciesMeasure; readonly species: string }
@@ -124,24 +206,43 @@ export type MeasureRef =
   | { readonly kind: 'consumed'; readonly field: ConsumablePool }
   | { readonly kind: 'converted'; readonly enzyme: Enzyme }
   | { readonly kind: 'patchInput'; readonly index: number }
-  | { readonly kind: 'infections'; readonly species: string }
+  /** `virus` (P5.6): restricted to one virus (infections.SP.VIRUS); absent = any virus (the P3.9 id). */
+  | { readonly kind: 'infections'; readonly species: string; readonly virus?: string }
   | { readonly kind: 'limitSeconds'; readonly species: string; readonly reason: number }
   | { readonly kind: 'transfer'; readonly route: 'fungal' }
-  | { readonly kind: 'wholeUnitCells'; readonly species: string };
+  /** `virus` (P5.6): that virus's units (wholeUnitCells.SP.VIRUS); absent = Pinphage v01 (the P3.9 id). */
+  | { readonly kind: 'wholeUnitCells'; readonly species: string; readonly virus?: string }
+  // ---- P5.6
+  | { readonly kind: 'state'; readonly stat: StateMeasure; readonly species: string }
+  | { readonly kind: 'glowingStart'; readonly species: string }
+  | { readonly kind: 'firstCaptureAt'; readonly species: string }
+  | { readonly kind: 'events'; readonly type: EventMeasureType; readonly species: string }
+  | { readonly kind: 'intakeMode'; readonly mode: 'photo' | 'sugar'; readonly species: string }
+  | { readonly kind: 'secretingSeconds'; readonly species: string }
+  | { readonly kind: 'gateTransfer'; readonly gate: GateKind; readonly field: FieldId }
+  | { readonly kind: 'gateCrossings'; readonly gate: GateKind }
+  | { readonly kind: 'region'; readonly stat: RegionSpeciesMeasure; readonly species: string; readonly region: string }
+  | { readonly kind: 'regionMean'; readonly field: FieldId; readonly region: string }
+  | { readonly kind: 'regionMoisture'; readonly region: string };
 
 /** P3.9: reasons a limitSeconds measure reads from the suitability (the inspector's), not the intake limit. */
 export function isSuitabilityReason(name: string): boolean {
-  return name.startsWith('SUIT_') || name === 'INHIBITOR_EXPOSURE';
+  // P5.6: RIVAL_EXPOSURE is the suitability reason where RIVAL leads the exposure (suitability.ts, D-0119).
+  return name.startsWith('SUIT_') || name === 'INHIBITOR_EXPOSURE' || name === 'RIVAL_EXPOSURE';
 }
 
 const SPECIES_RE = /^[BYFAPXV][0-9]{2}$/;
 const GROUP_RE = /^(none|E[0-9]{2}(\+E[0-9]{2})*)$/;
+const REGION_RE = /^[A-Z][A-Z0-9_]*$/;
 const includes = <T extends string>(list: readonly T[], v: string): v is T => (list as readonly string[]).includes(v);
 
 /** Parse a measurement id; returns a readable error string when it is not in the grammar. */
 export function parseMeasure(id: string): MeasureRef | string {
+  const at = id.indexOf('@');
+  if (at >= 0) return parseRegionMeasure(id, id.slice(0, at), id.slice(at + 1));
   const parts = id.split('.');
   const [head, a, b] = parts;
+  if (head === 'mean' || head === 'moisture') return `"${id}" needs a region, e.g. ${head === 'mean' ? 'mean.salt' : 'moisture'}@REGION`;
   if (parts.length === 1) return includes(SCALAR_MEASURES, head!) ? { kind: 'scalar', name: head } : `unknown measurement "${id}"`;
   if (head === 'limitSeconds') {
     if (parts.length !== 3) return `"${id}" needs a species and a reason, e.g. limitSeconds.B01.OXYGEN_LIMITED`;
@@ -162,7 +263,30 @@ export function parseMeasure(id: string): MeasureRef | string {
     if (!GROUP_RE.test(b!)) return `"${b}" is not a founder group (none, or module ids joined by +)`;
     return { kind: 'group', stat: head, species: a!, group: b! };
   }
+  if (head === 'events') {
+    if (parts.length !== 3) return `"${id}" needs an event type and a species, e.g. events.glowOn.B09`;
+    if (!includes(EVENT_MEASURE_TYPES, a!)) return `"${a}" is not a counted event type (${EVENT_MEASURE_TYPES.join(', ')})`;
+    if (!SPECIES_RE.test(b!)) return `"${b}" is not a species id`;
+    return { kind: 'events', type: a, species: b! };
+  }
+  if ((head === 'infections' || head === 'wholeUnitCells') && parts.length === 3) {
+    if (!SPECIES_RE.test(a!)) return `"${a}" is not a species id`;
+    if (!isFieldVirus(b!) || !isFieldId(b!.toLowerCase())) return `"${b}" is not a virus`;
+    return { kind: head, species: a!, virus: b! };
+  }
+  if (head === 'gateTransfer') {
+    if (parts.length !== 3) return `"${id}" needs an edge structure and a field, e.g. gateTransfer.S01.sugar`;
+    if (!includes(GATE_KINDS, a!)) return `"${a}" is not an edge structure (S01, S02, S03 or S04)`;
+    return isFieldId(b!) ? { kind: 'gateTransfer', gate: a, field: b } : `unknown field "${b}"`;
+  }
   if (parts.length !== 2) return `unknown measurement "${id}"`;
+  if (head === 'gateCrossings') return includes(GATE_KINDS, a!) ? { kind: 'gateCrossings', gate: a } : `"${a}" is not an edge structure (S01, S02, S03 or S04)`;
+  if (includes(STATE_MEASURES, head!) || head === 'glowingStart' || head === 'firstCaptureAt' || head === 'intakePhoto' || head === 'intakeSugar' || head === 'secretingSeconds') {
+    if (!SPECIES_RE.test(a!)) return `"${a}" is not a species id`;
+    if (includes(STATE_MEASURES, head)) return { kind: 'state', stat: head, species: a! };
+    if (head === 'intakePhoto' || head === 'intakeSugar') return { kind: 'intakeMode', mode: head === 'intakePhoto' ? 'photo' : 'sugar', species: a! };
+    return { kind: head, species: a! };
+  }
   if (includes(SPECIES_MEASURES, head!)) {
     if (!SPECIES_RE.test(a!)) return `"${a}" is not a species id`;
     return { kind: 'species', stat: head, species: a! };
@@ -179,20 +303,48 @@ export function parseMeasure(id: string): MeasureRef | string {
   return `unknown measurement "${id}"`;
 }
 
+/** P5.6: an id with an @REGION suffix (alive.SP, resting.SP, biomass.SP, mean.F, moisture). */
+function parseRegionMeasure(id: string, base: string, region: string): MeasureRef | string {
+  if (!REGION_RE.test(region)) return `"${region}" is not a region id`;
+  const parts = base.split('.');
+  const [head, a] = parts;
+  if (head === 'moisture' && parts.length === 1) return { kind: 'regionMoisture', region };
+  if (head === 'mean' && parts.length === 2) return isFieldId(a!) ? { kind: 'regionMean', field: a, region } : `unknown field "${a}"`;
+  if (includes(REGION_SPECIES_MEASURES, head!) && parts.length === 2) {
+    if (!SPECIES_RE.test(a!)) return `"${a}" is not a species id`;
+    return { kind: 'region', stat: head, species: a!, region };
+  }
+  return `"${id}" cannot be measured in a region (alive.SP, resting.SP, biomass.SP, mean.F or moisture, then @REGION)`;
+}
+
 export function speciesOfRef(ref: MeasureRef): string | null {
-  return ref.kind === 'species' ||
-    ref.kind === 'deathCause' ||
-    ref.kind === 'group' ||
-    ref.kind === 'infections' ||
-    ref.kind === 'limitSeconds' ||
-    ref.kind === 'wholeUnitCells'
-    ? ref.species
-    : null;
+  return 'species' in ref ? ref.species : null;
+}
+
+/** P5.6: the region a measurement reads, or null. */
+export function regionOfRef(ref: MeasureRef): string | null {
+  return ref.kind === 'region' || ref.kind === 'regionMean' || ref.kind === 'regionMoisture' ? ref.region : null;
 }
 
 /** P3.9: whether a measurement is a tracked one (recorded only when the observer is asked for it). */
 export function isTrackedRef(ref: MeasureRef): boolean {
-  return ref.kind === 'infections' || ref.kind === 'limitSeconds' || ref.kind === 'transfer' || ref.kind === 'wholeUnitCells';
+  switch (ref.kind) {
+    case 'infections':
+    case 'limitSeconds':
+    case 'transfer':
+    case 'wholeUnitCells':
+    case 'events':
+    case 'intakeMode':
+    case 'secretingSeconds':
+    case 'gateTransfer':
+    case 'gateCrossings':
+    case 'region':
+    case 'regionMean':
+    case 'regionMoisture':
+      return true;
+    default:
+      return false;
+  }
 }
 
 /** The module ids a founder-group name lists (`none` → []). */
@@ -254,6 +406,41 @@ export function patchInputsOf(world: World, omittedPatch: number | null = null):
 
 // ------------------------------------------------------------------------------ observer
 
+/**
+ * One tracked measure as the observer keeps it (P3.9; P5.6). A gate measure records its start reading and a
+ * region measure its region's cells; a gate the dish does not have, or a region its recorded habitat does not
+ * record, is a MeasureError here, when the observer is created.
+ */
+function trackedOf(world: World, id: string, ref: MeasureRef, speciesIds: readonly string[]): Tracked {
+  const sp = speciesOfRef(ref);
+  let cells: number[] | null = null;
+  let inRegion: Uint8Array | null = null;
+  let start = 0;
+  let virusCode = 0;
+  let unitField: FieldId | null = null;
+  if (ref.kind === 'gateTransfer' || ref.kind === 'gateCrossings') {
+    const r = gateReading(world, ref.gate, ref.kind === 'gateTransfer' ? ref.field : null);
+    if (r === null) throw new MeasureError(`${id}: world ${world.worldId} has no ${ref.gate} edge`);
+    start = r;
+  }
+  const region = regionOfRef(ref);
+  if (region !== null) {
+    const def = (world.content.habitat.regions ?? []).find((r) => r.id === region);
+    if (def === undefined) throw new MeasureError(`${id}: the habitat ${world.content.habitat.id} of world ${world.worldId} records no region ${region}`);
+    cells = regionCells(def);
+    if (ref.kind === 'region') {
+      inRegion = new Uint8Array(CELL_COUNT);
+      for (const cell of cells) inRegion[cell] = 1;
+    }
+  }
+  if ((ref.kind === 'infections' || ref.kind === 'wholeUnitCells') && ref.virus !== undefined) {
+    virusCode = virusCodeOf(ref.virus);
+    const f = ref.virus.toLowerCase();
+    unitField = isFieldId(f) ? f : null;
+  }
+  return { id, ref, species: sp === null ? -1 : speciesIds.indexOf(sp), value: 0, cells, inRegion, start, virusCode, unitField };
+}
+
 const NO_CAUSES = REASONS.length;
 
 export interface ArmObserverOptions {
@@ -279,6 +466,59 @@ interface Tracked {
   /** Species index in this world (−1: not in this world, so it stays 0). */
   readonly species: number;
   value: number;
+  /** P5.6 region measures: the region's cells (regionCells of the world's recorded habitat); null otherwise. */
+  readonly cells: readonly number[] | null;
+  /** P5.6 region species measures: 1 per cell of the region (CELL_COUNT); null otherwise. */
+  readonly inRegion: Uint8Array | null;
+  /** P5.6 gate measures: the reading when the observer started; 0 otherwise. */
+  readonly start: number;
+  /** P5.6 virus-restricted infections / wholeUnitCells: the virus's infectedBy code and unit field. */
+  readonly virusCode: number;
+  readonly unitField: FieldId | null;
+}
+
+/** P5.6: the dish's gate reading (objectives.ts WORLD_GATES, read here without importing objectives.ts, which imports this file). */
+function gateTallyRecordOf(world: World, id: number): World['gateTally'][number] | undefined {
+  const list = world.gateTally;
+  let lo = 0;
+  let hi = list.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (list[mid]!.id < id) lo = mid + 1;
+    else hi = mid;
+  }
+  const t = list[lo];
+  return t !== undefined && t.id === id ? t : undefined;
+}
+
+/**
+ * P5.6: the cumulative tally of the dish's edges of structure `gate` — field `field` moved (|flux|, field units)
+ * or, with field null, organism crossings — or null when the dish has no edge of that kind. The same sum as
+ * objectives.ts WORLD_GATES.transferred / organisms (current edges in store order). Reads only.
+ */
+export function gateReading(world: World, gate: string, field: FieldId | null): number | null {
+  let found = false;
+  let sum = 0;
+  for (const e of world.edges) {
+    if (e.kind !== gate) continue;
+    found = true;
+    const t = gateTallyRecordOf(world, e.id);
+    if (t === undefined) continue;
+    sum += field === null ? t.organisms : (t.fields[field] ?? 0);
+  }
+  return found ? sum : null;
+}
+
+/** The infectedBy code of a virus species (viruses.ts VIRUSES: V01 → 1, V02 → 2), found by its code. */
+function virusCodeOf(virus: string): number {
+  for (let code = 1; code < 16; code++) if (virusIdOfCode(code) === virus) return code;
+  return 0;
+}
+
+/** P5.6 per-slot scratch for intakePhoto / intakeSugar (birthId and intakeAccum at the stage 5 hook). */
+interface ModeScratch {
+  readonly birth: Uint32Array;
+  readonly accum: Float64Array;
 }
 
 /**
@@ -304,6 +544,10 @@ export class ArmObserver {
   readonly reservePeak: Float64Array;
   readonly consumed: Partial<Record<ConsumablePool, number>> = {};
   readonly patchInputs: readonly number[];
+  /** P5.6: living organisms of each species with glowState 1 when the observer started (glowingStart.SP). */
+  readonly glowingStart: Float64Array;
+  /** P5.6: dish second (record tick / 10) of each species' first 'capture' record in the run, −1 if none. */
+  readonly firstCaptureAt: Float64Array;
   /** Founder groups, in first-seen order: "SP.GROUP", species index, members at the start. */
   readonly groupKeys: string[] = [];
   readonly groupSpecies: number[] = [];
@@ -334,6 +578,10 @@ export class ArmObserver {
   /** P3.9 tracked measures, by id (insertion = first-requested order). */
   private readonly trackedMeasures: Tracked[] = [];
   private pendingTransfer: number;
+  /** P5.6 tracked event counts (events.TYPE.SP) and intake-by-mode measures, split out of trackedMeasures. */
+  private readonly eventCounts: Tracked[] = [];
+  private readonly modeIntake: Tracked[] = [];
+  private modeScratch: ModeScratch | null = null;
   /** Stage hook for step(); reads only. */
   readonly hook: (stage: number, world: World) => void;
 
@@ -351,6 +599,8 @@ export class ArmObserver {
     this.capturedCarbon = new Float64Array(n);
     this.everPresent = new Uint8Array(n);
     this.extinctAt = new Float64Array(n).fill(-1);
+    this.glowingStart = new Float64Array(n);
+    this.firstCaptureAt = new Float64Array(n).fill(-1);
     this.reservePeak = new Float64Array(n);
     this.heldNow = new Float64Array(n);
     this.pre6Intake = new Float64Array(n);
@@ -365,6 +615,7 @@ export class ArmObserver {
       const s = c.species[i]!;
       this.biomassStart[s]! += c.B[i]!;
       this.everPresent[s] = 1;
+      if (c.glowState[i] === 1) this.glowingStart[s]!++;
       const key = `${this.speciesIds[s]}.${groupName(world.genomes.get(c.genome[i]!).modules)}`;
       let g = this.groupKeys.indexOf(key);
       if (g < 0) {
@@ -389,12 +640,17 @@ export class ArmObserver {
     for (const id of opts.observe ?? []) {
       const ref = parseMeasure(id);
       if (typeof ref === 'string' || !isTrackedRef(ref) || this.trackedMeasures.some((t) => t.id === id)) continue;
-      const sp = speciesOfRef(ref);
-      this.trackedMeasures.push({ id, ref, species: sp === null ? -1 : this.speciesIds.indexOf(sp), value: 0 });
+      const t = trackedOf(world, id, ref, this.speciesIds);
+      this.trackedMeasures.push(t);
+      if (ref.kind === 'events') this.eventCounts.push(t);
+      if (ref.kind === 'intakeMode') this.modeIntake.push(t);
     }
     const infections = this.trackedMeasures.filter((t) => t.ref.kind === 'infections' && t.species >= 0);
+    const modeIntake = this.modeIntake.filter((t) => t.species >= 0);
+    if (modeIntake.length > 0) this.modeScratch = { birth: new Uint32Array(AGENT_CAP), accum: new Float64Array(AGENT_CAP) };
     this.hook = (stage, w) => {
       if (stage === 5 && infections.length > 0) this.countInfections(w, infections);
+      if (this.modeScratch !== null && (stage === 5 || stage === 6)) this.intakeByMode(w, stage, modeIntake, this.modeScratch);
       if (stage === 5) {
         this.sumIntake(w, this.pre6Intake);
         for (let k = 0; k < this.tracked.length; k++) this.pre6Pool[k] = poolTotal(w, this.tracked[k]!);
@@ -415,7 +671,31 @@ export class ArmObserver {
     const c = world.ents.cols;
     for (let i = 0; i < world.ents.highWater; i++) {
       if (c.alive[i] !== 1 || c.infectedBy[i] === 0 || c.infectionTimer[i] !== 0) continue;
-      for (const t of list) if (t.species === c.species[i]) t.value++;
+      for (const t of list) if (t.species === c.species[i] && (t.virusCode === 0 || t.virusCode === c.infectedBy[i])) t.value++;
+    }
+  }
+
+  /**
+   * P5.6 intakePhoto / intakeSugar: at the stage 5 hook, each living organism's birthId and intakeAccum; at the
+   * stage 6 hook, the same organism's intake since then is added under the mode its metabolicMode column reads.
+   */
+  private intakeByMode(world: World, stage: number, list: readonly Tracked[], scratch: ModeScratch): void {
+    const c = world.ents.cols;
+    const hw = world.ents.highWater;
+    if (stage === 5) {
+      for (let i = 0; i < hw; i++) {
+        scratch.birth[i] = c.alive[i] === 1 ? c.birthId[i]! : 0;
+        scratch.accum[i] = c.intakeAccum[i]!;
+      }
+      return;
+    }
+    for (let i = 0; i < hw; i++) {
+      if (c.alive[i] !== 1 || scratch.birth[i] !== c.birthId[i]) continue;
+      const mode = c.metabolicMode[i];
+      if (mode !== MODE_PHOTO && mode !== MODE_SUGAR) continue;
+      const d = c.intakeAccum[i]! - scratch.accum[i]!;
+      if (d === 0) continue;
+      for (const t of list) if (t.species === c.species[i] && (t.ref.kind === 'intakeMode' && (t.ref.mode === 'photo') === (mode === MODE_PHOTO))) t.value += d;
     }
   }
 
@@ -433,6 +713,12 @@ export class ArmObserver {
         continue;
       }
       if (t.species < 0) continue;
+      if (ref.kind === 'secretingSeconds') {
+        let n = 0;
+        for (let i = 0; i < world.ents.highWater; i++) if (c.alive[i] === 1 && c.species[i] === t.species && c.secreting[i] !== 0) n++;
+        t.value += n / TICKS_PER_SECOND;
+        continue;
+      }
       if (ref.kind === 'limitSeconds') {
         const suit = isSuitabilityReason(REASONS[ref.reason]!);
         let n = 0;
@@ -443,7 +729,7 @@ export class ArmObserver {
         }
         t.value += n / TICKS_PER_SECOND;
       } else if (ref.kind === 'wholeUnitCells') {
-        const units = world.fields.v01;
+        const units = world.fields[t.unitField ?? 'v01'];
         if (!units) continue;
         const seen: number[] = [];
         for (let i = 0; i < world.ents.highWater; i++) {
@@ -460,9 +746,44 @@ export class ArmObserver {
     }
   }
 
-  /** A tracked measure's value, or undefined when this observer does not track it. */
-  trackedValue(id: string): number | undefined {
-    return this.trackedMeasures.find((t) => t.id === id)?.value;
+  /**
+   * A tracked measure's value, or undefined when this observer does not track it. The P5.6 gate and region
+   * measures are read from the world now (gate: the reading minus its start; region: a pass over its cells).
+   */
+  trackedValue(id: string, world?: World): number | undefined {
+    const t = this.trackedMeasures.find((m) => m.id === id);
+    if (t === undefined) return undefined;
+    const ref = t.ref;
+    if (world === undefined) return t.value;
+    switch (ref.kind) {
+      case 'gateTransfer':
+      case 'gateCrossings':
+        return (gateReading(world, ref.gate, ref.kind === 'gateTransfer' ? ref.field : null) ?? t.start) - t.start;
+      case 'regionMean':
+      case 'regionMoisture': {
+        const arr = ref.kind === 'regionMean' ? world.fields[ref.field] : world.derived.moisture;
+        const cells = t.cells!;
+        if (!arr || cells.length === 0) return 0;
+        let sum = 0;
+        for (let k = 0; k < cells.length; k++) sum += arr[cells[k]!]!;
+        return sum / cells.length;
+      }
+      case 'region': {
+        if (t.species < 0) return 0;
+        const c = world.ents.cols;
+        const mask = t.inRegion!;
+        let v = 0;
+        for (let i = 0; i < world.ents.highWater; i++) {
+          if (c.alive[i] !== 1 || c.species[i] !== t.species || mask[entityCell(c.x[i]!, c.y[i]!)] !== 1) continue;
+          if (ref.stat === 'alive') v++;
+          else if (ref.stat === 'biomass') v += c.B[i]!;
+          else if (c.lifeState[i] !== LIFE_ACTIVE) v++;
+        }
+        return v;
+      }
+      default:
+        return t.value;
+    }
   }
 
   /** The ids this observer tracks (P3.9), in the order requested. */
@@ -521,7 +842,11 @@ export class ArmObserver {
       } else if (ev.type === 'capture' && ev.species !== undefined) {
         this.captures[ev.species]!++;
         this.capturedCarbon[ev.species]! += ev.amount ?? 0;
+        // A record's tick is the tick that ran (world.tick − 1 after it); the dish clock then reads tick + 1 (cards-curated, E214).
+        if (this.firstCaptureAt[ev.species]! < 0) this.firstCaptureAt[ev.species] = (ev.tick + 1) / TICKS_PER_SECOND;
       }
+      if (this.eventCounts.length > 0 && ev.species !== undefined)
+        for (const t of this.eventCounts) if (t.species === ev.species && t.ref.kind === 'events' && t.ref.type === ev.type) t.value++;
     }
     this.lastEventId = world.counters.nextEventId - 1;
     // The tick that just ran is world.tick − 1.
@@ -769,12 +1094,35 @@ export function measureArm(world: World, obs: ArmObserver, ids: readonly string[
       case 'infections':
       case 'limitSeconds':
       case 'transfer':
-      case 'wholeUnitCells': {
-        if (ref.kind !== 'transfer') spIdx(ref.species);
-        const v = obs.trackedValue(id);
+      case 'wholeUnitCells':
+      case 'events':
+      case 'intakeMode':
+      case 'secretingSeconds':
+      case 'region':
+      case 'gateTransfer':
+      case 'gateCrossings':
+      case 'regionMean':
+      case 'regionMoisture': {
+        const sp = speciesOfRef(ref);
+        if (sp !== null) spIdx(sp);
+        const v = obs.trackedValue(id, world);
         if (v === undefined) throw new MeasureError(`${id} is not tracked in world ${world.worldId}`);
         return v;
       }
+      case 'state': {
+        const s = spIdx(ref.species);
+        const c = world.ents.cols;
+        let n = 0;
+        for (let i = 0; i < world.ents.highWater; i++) {
+          if (c.alive[i] !== 1 || c.species[i] !== s) continue;
+          if (ref.stat === 'resting' ? c.lifeState[i] !== LIFE_ACTIVE : ref.stat === 'glowing' ? c.glowState[i] === 1 : c.hostBirthId[i] !== 0) n++;
+        }
+        return n;
+      }
+      case 'glowingStart':
+        return obs.glowingStart[spIdx(ref.species)]!;
+      case 'firstCaptureAt':
+        return obs.firstCaptureAt[spIdx(ref.species)]!;
     }
     throw new MeasureError('unreachable measurement');
   };

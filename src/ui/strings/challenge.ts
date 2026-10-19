@@ -43,6 +43,13 @@ export const CHALLENGE_REGION_NAMES: Readonly<Record<string, string>> = {
   bottomRight: 'Bottom-right quarter',
 };
 
+/** P5.6: what a biomass goal measures ('' = living biomass, as v1.0). */
+export const CHALLENGE_MEASURE_NAMES: Readonly<Record<string, string>> = {
+  '': 'Living biomass (carbon, game units)',
+  count: 'Living organisms',
+  activeCount: 'Active organisms',
+};
+
 export const CHALLENGE_TYPE_NAMES = {
   keepSpeciesAlive: 'Keep a kind alive',
   biomassThreshold: 'Reach a biomass',
@@ -72,6 +79,14 @@ export const CHALLENGE_TEXT = {
   minLabel: 'At least',
   maxLabel: 'At most',
   regionLegend: 'Where',
+  /** P5.6: the challenge starting points (objectives with a challengeTemplate). */
+  startFromLabel: 'Start from',
+  startFromNone: 'A blank challenge',
+  measureLabel: 'Measure',
+  countLabel: 'Number to reach',
+  fromBelowLabel: 'Start below (optional): the region must have fewer than this when the challenge starts',
+  habitatRegion: (label: string) => `${label} (a region of this dish)`,
+  chooseRegion: 'Choose a region',
   eventLabel: 'What to see',
   enzymeLabel: 'Enzyme',
   toolsLegend: 'Tools a player may use',
@@ -119,7 +134,7 @@ export function restrictionsSummary(c: Pick<ChallengeInput, 'allowedTools' | 'co
 }
 
 /** The goal in words, from typed values only (`speciesName` names a species id, e.g. B01 → "Sprinters"). */
-export function objectiveLine(c: Pick<ChallengeInput, 'objective' | 'region'>, speciesName: (id: string) => string): string {
+export function objectiveLine(c: Pick<ChallengeInput, 'objective' | 'region'>, speciesName: (id: string) => string, regionName?: (id: string) => string): string {
   const o = c.objective;
   const p = o.params;
   const sp = (v: unknown) => (typeof v === 'string' ? speciesName(v) : null);
@@ -127,8 +142,17 @@ export function objectiveLine(c: Pick<ChallengeInput, 'objective' | 'region'>, s
   switch (o.type) {
     case 'keepSpeciesAlive':
       return `Keep at least one ${sp(p.species) ?? 'of them'} alive for ${secs} s of dish time.`;
-    case 'biomassThreshold':
-      return `Reach a living biomass of ${String(p.threshold)}${sp(p.species) ? ` (${sp(p.species)})` : ' (all living things)'}.`;
+    case 'biomassThreshold': {
+      // P5.6: a measure, a region and a starting limit (Recover a neighborhood); without them, as v1.0.
+      if (p.measure === undefined && p.fromBelow === undefined && c.region.kind === 'dish')
+        return `Reach a living biomass of ${String(p.threshold)}${sp(p.species) ? ` (${sp(p.species)})` : ' (all living things)'}.`;
+      const what = p.measure === 'activeCount' ? 'active organisms' : p.measure === 'count' ? 'living organisms' : 'carbon of living biomass';
+      const who = sp(p.species) ? ` (${sp(p.species)})` : '';
+      const where = c.region.kind === 'dish' ? 'the whole dish' : c.region.kind === 'quarter' ? CHALLENGE_REGION_NAMES[c.region.id]!.toLowerCase() : `the region “${regionName?.(c.region.id) ?? c.region.id}”`;
+      return p.fromBelow !== undefined
+        ? `Bring ${where} from fewer than ${String(p.fromBelow)} to at least ${String(p.threshold)} ${what}${who}.`
+        : `Reach ${String(p.threshold)} ${what}${who} in ${where}.`;
+    }
     case 'transferAcrossGate':
       return `Move ${String(p.threshold)} ${CHALLENGE_FIELD_NAMES[String(p.field)] ?? String(p.field)} across gate ${String(p.gate)}.`;
     case 'observeEvent': {
@@ -137,7 +161,7 @@ export function objectiveLine(c: Pick<ChallengeInput, 'objective' | 'region'>, s
       return `See this happen: ${what.charAt(0).toLowerCase()}${what.slice(1)}${sp(p.species) ? ` (${sp(p.species)})` : ''}.`;
     }
     case 'fieldInRange': {
-      const where = CHALLENGE_REGION_NAMES[c.region.kind === 'dish' ? 'dish' : c.region.id]!.toLowerCase();
+      const where = (CHALLENGE_REGION_NAMES[c.region.kind === 'dish' ? 'dish' : c.region.id] ?? c.region.kind).toLowerCase();
       return `Keep ${(CHALLENGE_FIELD_NAMES[String(p.field)] ?? String(p.field)).toLowerCase()} between ${String(p.min)} and ${String(p.max)} in ${where} for ${secs} s of dish time.`;
     }
   }

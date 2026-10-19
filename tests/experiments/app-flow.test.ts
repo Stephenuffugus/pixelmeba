@@ -64,7 +64,9 @@ describe('Notebook → Experiments: the catalog', () => {
   it('lists the eleven cards with every part SPEC §13.2 names, from recorded content', () => {
     const h = harness();
     const cards = h.ask('experimentCatalog', (requestId) => ({ type: 'experimentCatalog', requestId })).cards;
-    expect(cards.map((c) => c.id)).toEqual(['EXP_101', 'EXP_102', 'EXP_103', 'EXP_104', 'EXP_105', 'EXP_106', 'EXP_201', 'EXP_202', 'EXP_203', 'EXP_204', 'EXP_212', 'EXP_A', 'EXP_B', 'EXP_C']);
+    // Re-pinned in wave 15 (P5.6, D-0131): the Phase 5 cards EXP_205 … EXP_211 and (stage 2, cards-curated) EXP_213 …
+    // EXP_218 ship (phase 5 ≤ buildPhase 5).
+    expect(cards.map((c) => c.id)).toEqual(['EXP_101', 'EXP_102', 'EXP_103', 'EXP_104', 'EXP_105', 'EXP_106', 'EXP_201', 'EXP_202', 'EXP_203', 'EXP_204', 'EXP_205', 'EXP_206', 'EXP_207', 'EXP_208', 'EXP_209', 'EXP_210', 'EXP_211', 'EXP_212', 'EXP_213', 'EXP_214', 'EXP_215', 'EXP_216', 'EXP_217', 'EXP_218', 'EXP_A', 'EXP_B', 'EXP_C']);
     for (const c of cards) {
       for (const text of [c.question, c.recipeName, c.intervention, c.predictedTradeoff, c.confounds, c.journalStamp]) expect(text.length, c.id).toBeGreaterThan(0);
       expect(c.measurements.length).toBeGreaterThan(0);

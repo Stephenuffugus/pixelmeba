@@ -289,6 +289,141 @@
       "g2Digest": null,
       "currentDigest": "593ab3a0df1affb2",
       "changedBy": []
+    },
+    {
+      "id": "GLOW_THRESHOLD_V1",
+      "kind": "recipe",
+      "recipe": "GLOW_THRESHOLD_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "79801e16a2dbfe8a",
+      "changedBy": []
+    },
+    {
+      "id": "QUIET_NEIGHBORS_V1",
+      "kind": "recipe",
+      "recipe": "QUIET_NEIGHBORS_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "48dc6a955d0dc3e0",
+      "changedBy": []
+    },
+    {
+      "id": "BRINE_CROSSING_V1",
+      "kind": "recipe",
+      "recipe": "BRINE_CROSSING_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "c1437b199aa09552",
+      "changedBy": []
+    },
+    {
+      "id": "GLASS_BUDGET_V1",
+      "kind": "recipe",
+      "recipe": "GLASS_BUDGET_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "57e7e79d2e4c2b93",
+      "changedBy": []
+    },
+    {
+      "id": "SLEEPING_SHORTAGE_V1",
+      "kind": "recipe",
+      "recipe": "SLEEPING_SHORTAGE_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "f7c93ed9f366c3ab",
+      "changedBy": []
+    },
+    {
+      "id": "SHELTERED_LACE_V1",
+      "kind": "recipe",
+      "recipe": "SHELTERED_LACE_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "34d06949946765e2",
+      "changedBy": []
+    },
+    {
+      "id": "TEMPORARY_TRAP_V1",
+      "kind": "recipe",
+      "recipe": "TEMPORARY_TRAP_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "5f397c53b60510e5",
+      "changedBy": []
+    },
+    {
+      "id": "SHELL_HANDLING_V1",
+      "kind": "recipe",
+      "recipe": "SHELL_HANDLING_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "ab9e517d4714f62b",
+      "changedBy": []
+    },
+    {
+      "id": "FUNGAL_HITCHHIKER_V1",
+      "kind": "recipe",
+      "recipe": "FUNGAL_HITCHHIKER_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "541b8ac345ead08a",
+      "changedBy": []
+    },
+    {
+      "id": "DIFFERENT_HOST_V1",
+      "kind": "recipe",
+      "recipe": "DIFFERENT_HOST_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "a949762c26f6d108",
+      "changedBy": []
+    },
+    {
+      "id": "RIVAL_NO_WINNER_V1",
+      "kind": "recipe",
+      "recipe": "RIVAL_NO_WINNER_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "24da801ffaa33390",
+      "changedBy": []
+    },
+    {
+      "id": "NIGHT_SHIFT_V1",
+      "kind": "recipe",
+      "recipe": "NIGHT_SHIFT_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "36c23b7a8b5275ab",
+      "changedBy": []
+    },
+    {
+      "id": "L302_UNDER_THE_CANOPY",
+      "kind": "recipe",
+      "recipe": "L302_UNDER_THE_CANOPY",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "facc10e3dc344926",
+      "changedBy": []
+    },
+    {
+      "id": "L305_THE_JACKET_GARDEN",
+      "kind": "recipe",
+      "recipe": "L305_THE_JACKET_GARDEN",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "5adf21ea083420aa",
+      "changedBy": []
+    },
+    {
+      "id": "GATE_MEAL_V1",
+      "kind": "recipe",
+      "recipe": "GATE_MEAL_V1",
+      "ticks": 1200,
+      "g2Digest": null,
+      "currentDigest": "80b5c90f1c5c7327",
+      "changedBy": []
     }
   ]
 }

@@ -21,7 +21,7 @@ import { variantRecordOf } from '@sim/variants';
 import { IMPLEMENTED_MODULES, IMPLEMENTED_NATIVE_ABILITIES, IMPLEMENTED_RULES, IMPLEMENTED_STRUCTURES, IMPLEMENTED_SYSTEMS, RULES_VERSIONS } from '@sim/content/implemented';
 import { MODULE_SYSTEM_NEEDS, nativeAbilityPairingProblem, speciesSystemNeeds } from '@sim/content/registry';
 import { isMutationPreset } from '@sim/mutation';
-import { habitatRecordProblems } from '@sim/recipes';
+import { habitatRecordProblems, recordedTestOverridesProblem } from '@sim/recipes';
 import { historyProblem, journalProblem } from '@sim/history';
 import { generatedBranchName } from '@sim/branches';
 import type { Command } from '@sim/commands';
@@ -63,6 +63,12 @@ export interface SaveMeta {
   readonly registry?: SaveMetaRegistry;
   /** P2.2: the world's evolution setting and founder mode when it was written (always from the world). */
   readonly evolution?: SaveMetaEvolution;
+  /**
+   * P5.6 (SPEC §13.1 "test-only overrides disclosed"): true when the world records a test-only override (its
+   * provenance.testOnlyOverrides); absent otherwise. A display copy outside the checksum, like `evolution`:
+   * the world's provenance and species copies in the checksummed state stay authoritative.
+   */
+  readonly testOverrides?: true;
 }
 
 /**
@@ -79,6 +85,23 @@ export interface SaveMetaRegistry {
 export interface SaveMetaEvolution {
   readonly mutationPreset: string;
   readonly founderMode: string;
+  /**
+   * P5.6: a slot index's copy of the file's meta.testOverrides (src/worker/host.ts slotMetaCopies folds it in
+   * here, since a slot index keeps only the evolution and registry copies). Never written in a file's meta.
+   */
+  readonly testOverrides?: true;
+}
+
+/** P5.6: whether a world records test-only overrides (a non-empty provenance.testOnlyOverrides list). */
+function worldHasTestOverrides(world: World): boolean {
+  const list = (world.content.provenance as { readonly testOnlyOverrides?: unknown }).testOnlyOverrides;
+  return Array.isArray(list) && list.length > 0;
+}
+
+/** P5.6: the test-only flag in a file's meta (or a slot index's evolution copy), true only when exactly true. */
+export function saveMetaTestOverrides(meta: unknown): boolean {
+  const m = meta as { testOverrides?: unknown; evolution?: { testOverrides?: unknown } } | null;
+  return m?.testOverrides === true || m?.evolution?.testOverrides === true;
 }
 
 function metaRegistryOf(world: World): SaveMetaRegistry {
@@ -224,10 +247,11 @@ export async function buildSaveFile(world: World, meta: SaveMeta, options: Build
   const state = options.stripNames ? withoutPlayerNames(world, { ...serialized, history: { ...serialized.history, journal: [] } }) : serialized;
   // The variant identity and the mode labels always come from the world itself (never from the caller's
   // meta), read with the state, before the await: a running dish can change its setting meanwhile.
-  const { variant: _callerVariant, ...given } = meta;
+  const { variant: _callerVariant, testOverrides: _callerTestOverrides, ...given } = meta;
   const variant = metaVariantOf(world);
   const registry = metaRegistryOf(world);
   const evolution = { mutationPreset: world.settings.mutationPreset, founderMode: world.settings.founderMode };
+  const testOverrides = worldHasTestOverrides(world);
   const checksum = `sha256:${await sha256Hex(canonicalJson(state))}`;
   const notebook = nbShown ? await sealNotebook(nbShown) : null;
   const file: SaveFile = {
@@ -239,7 +263,7 @@ export async function buildSaveFile(world: World, meta: SaveMeta, options: Build
     contentHash: world.content.manifest.contentHash,
     // The serialized tick: a running dish (an automatic checkpoint, an autosave) keeps stepping during the await above.
     tick: state.tick,
-    meta: { ...given, name: options.stripNames ? 'Shared dish' : cleanName(meta.name), ...(options.stripNames ? { note: '' } : {}), ...(variant ? { variant } : {}), registry, evolution },
+    meta: { ...given, name: options.stripNames ? 'Shared dish' : cleanName(meta.name), ...(options.stripNames ? { note: '' } : {}), ...(variant ? { variant } : {}), registry, evolution, ...(testOverrides ? { testOverrides: true as const } : {}) },
     state,
     checksum,
     ...(notebook ? { notebook } : {}),
@@ -364,6 +388,10 @@ export async function parseSaveFile(text: string): Promise<SaveFile> {
   if (!man.success) fail('content', `Manifest: ${man.error.issues[0]?.message ?? 'invalid'}`);
   if (man.data.simulationVersion !== 3) fail('version', 'Unsupported simulation version.');
   for (const sp of c.species) if (!SpeciesSchema.safeParse(sp).success) fail('content', `Species definition ${String((sp as { id?: string }).id)} is invalid.`);
+  // P5.6 (fix round 1): a recorded test-only override must be one the dish's recipe could have written (it is
+  // disclosed and hashed), so a forged or contradictory record is refused rather than shown.
+  const overrideProblem = recordedTestOverridesProblem(c);
+  if (overrideProblem !== null) fail('content', `This dish's test-only override record is invalid (${overrideProblem}). Nothing was loaded.`);
   // P2.2: an ability this build cannot simulate is refused by name before its definition is checked, so
   // a newer build's module whose definition this build's schema does not know is still named.
   if (Array.isArray(c.modules)) {

@@ -32,7 +32,7 @@
 import type { CommandPayload } from '@sim/commands';
 import type { ContentRegistry } from '@sim/content/registry';
 import type { ObjectiveDef } from '@sim/content/schema';
-import { objectivePredicateProblem, objectiveSupportProblem, typedPredicate, type ObjectivePredicate } from '@sim/objectives';
+import { objectivePredicateProblem, objectiveStartProblem, objectiveSupportProblem, typedPredicate, type ObjectivePredicate } from '@sim/objectives';
 import type { World } from '@sim/world';
 import { emptyNotebook, sealNotebook, type NotebookRecord } from '@persist/notebook';
 import { turnOf, type TurnChallenge } from '@persist/notebookTurns';
@@ -71,6 +71,8 @@ export const CHALLENGE_REFUSALS = {
   inUse: 'That new dish id is already in use.',
   noBaseline: 'The saved starting point for this challenge is not on this device. Import the challenge file to export or start it.',
   cannotRun: (why: string) => `This dish cannot run that objective: ${why}.`,
+  /** P5.6 (Recover a neighborhood): the baseline already reaches fromBelow ("This region already has 5 or more active organisms."). */
+  nothingToRecover: (startProblem: string) => `${startProblem.replace(/\.$/, '')}, so there is nothing to recover.`,
 } as const;
 
 /** The tool group a command belongs to, or null when it is free (names, pins, saved specimens). */
@@ -210,7 +212,10 @@ export function challengeSaveProblem(registry: ContentRegistry, world: World, in
   const problem = objectivePredicateProblem(def, { species: registry.species, structures: registry.structures, recipes: registry.recipes, manifest: m });
   if (problem) return CHALLENGE_REFUSALS.cannotRun(problem.message);
   const why = objectiveSupportProblem(world, pred);
-  return why === null ? null : CHALLENGE_REFUSALS.cannotRun(why);
+  if (why !== null) return CHALLENGE_REFUSALS.cannotRun(why);
+  // P5.6: a Recover challenge (fromBelow) whose region already holds that many at the baseline has nothing to recover.
+  const start = objectiveStartProblem(world, pred);
+  return start === null ? null : CHALLENGE_REFUSALS.nothingToRecover(start);
 }
 
 /** The turn's challenge field for `c` (startSeq: the turn world's next command sequence number at its start). */

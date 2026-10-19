@@ -1,0 +1,15 @@
+{
+  "id": "TWO_NEIGHBORHOODS",
+  "title": "Two neighborhoods",
+  "predicate": {
+    "type": "keepSpeciesAlive",
+    "params": { "species": ["B01", "B10"], "regions": ["FRESH_POOL", "BRINE_POOL"], "minCount": 6 },
+    "durationSeconds": 180
+  },
+  "summary": "Keep more than 5 Sprinters in the fresh pool and more than 5 Brinecoils in the brine pool, both at once, for 180 seconds of dish time. Falling below starts the count again.",
+  "completedText": "Both neighborhoods held more than 5 for 180 seconds, measured in this attempt at {time}.",
+  "endedText": "No Sprinters or no Brinecoils remain anywhere in the dish, so this attempt ended at {time}. The dish keeps going.",
+  "offerOn": [],
+  "offerOnHabitats": ["H05_BRINE_MOSAIC"],
+  "phase": 5
+}

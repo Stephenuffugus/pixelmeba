@@ -101,7 +101,11 @@ describe('store listing', () => {
     const curated = readdirSync(join(ROOT, 'content', 'recipes')).filter((f) => /^L3\d\d_/.test(f)).filter((f) => (JSON.parse(readFileSync(join(ROOT, 'content', 'recipes', f), 'utf8')) as { phase: number }).phase <= manifest.buildPhase);
     expect(curated).toHaveLength(4);
     expect(texts.full).toContain('four curated dishes');
-    const experiments = readdirSync(join(ROOT, 'content', 'experiments')).filter((f) => f.endsWith('.json'));
+    // Wave 15 (P5.6, D-0131): the cards this build offers (phase ≤ the build phase), as the curated dishes above;
+    // the Phase 5 cards E205–E211 belong to the v1.1 listing.
+    const experiments = readdirSync(join(ROOT, 'content', 'experiments'))
+      .filter((f) => f.endsWith('.json'))
+      .filter((f) => (JSON.parse(readFileSync(join(ROOT, 'content', 'experiments', f), 'utf8')) as { phase: number }).phase <= manifest.buildPhase);
     expect(experiments).toHaveLength(14);
     expect(texts.full).toContain('14 guided experiments');
     expect(texts.release).toContain('14 Notebook experiments');

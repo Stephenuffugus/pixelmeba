@@ -142,6 +142,8 @@ export const settings = signal<Settings>(loadSettings());
 export const familyView = signal<FamilyAnswer | null>(null);
 /** History opened from "What changed?": show "What happened", filtered to one species. */
 export const historyFocus = signal<{ readonly species: number; readonly birthId: number } | null>(null);
+/** P5.6: History opened from a succession entry's Look back: show "What happened" for that minute (ticks fromTick … toTick). */
+export const historyMinute = signal<{ readonly fromTick: number; readonly toTick: number; readonly label: string } | null>(null);
 /**
  * A single-arm experiment card's measured gate held on a dish and its Journal stamp waits for player
  * steps (P2.5): the dish view's one small notice naming them, until the stamp arrives, the observation
@@ -397,6 +399,7 @@ function enterDish(info: DishInfo, promptText: string | null): void {
     inspector.value = null;
     familyView.value = null;
     historyFocus.value = null;
+    historyMinute.value = null; // P5.6
     tool.value = { kind: 'look' };
     sheet.value = 'none';
     overlay.value = null;

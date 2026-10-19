@@ -50,8 +50,8 @@ import {
   type FungalPick,
 } from './world3';
 import { Camera, ZOOM_CLOSE, ZOOM_NEIGHBORHOOD } from './camera';
-import { DISH_PX_PER_CELL, DISH_TEX, paintAggregation, paintDeposits, paintDish, paintOverlay, repaintDepositCells, type DirtyRect } from './layers';
-import { speciesRgb } from './speciesColors';
+import { DISH_PX_PER_CELL, DISH_TEX, paintDeposits, paintDish, paintOverlay, repaintDepositCells, type DirtyRect } from './layers';
+import { AGG_PX, aggOutlineTexels, paintAggregationInked, speciesRgb } from './speciesColors';
 import {
   bodyAnimFor,
   bodyFrameIndex,
@@ -340,6 +340,8 @@ export class DishRenderer {
   private readonly depositDirty: DirtyRect = { x: 0, y: 0, w: 0, h: 0 };
   private overlayImg: ImageData | null = null;
   private aggImg: ImageData | null = null;
+  /** The outline thickness (texels) the aggregation layer was last painted with (aggOutlineTexels of the zoom). */
+  private aggOutline = 0;
   private aggDominant = new Int16Array(CELL_COUNT);
   private aggDensity = new Uint16Array(CELL_COUNT);
   private aggPerCell = new Uint16Array(0);
@@ -422,7 +424,8 @@ export class DishRenderer {
     this.dishCanvas = mk(DISH_TEX, DISH_TEX);
     this.depositCanvas = mk(DISH_TEX, DISH_TEX);
     this.overlayCanvas = mk(GRID_W, GRID_W);
-    this.aggCanvas = mk(GRID_W, GRID_W);
+    // P5.8 (wave 15): AGG_PX texels per cell, so the identity tones carry the sprites' ink outline (speciesColors.ts).
+    this.aggCanvas = mk(GRID_W * AGG_PX, GRID_W * AGG_PX);
     this.dishTex = Texture.from(this.dishCanvas);
     this.depositTex = Texture.from(this.depositCanvas);
     this.overlayTex = Texture.from(this.overlayCanvas);
@@ -432,6 +435,7 @@ export class DishRenderer {
     this.depositSprite.texture = this.depositTex;
     this.overlaySprite.texture = this.overlayTex;
     this.aggSprite.texture = this.aggTex;
+    this.aggSprite.scale.set(1 / AGG_PX);
     this.dishSprite.scale.set(1 / DISH_PX_PER_CELL);
     this.depositSprite.scale.set(1 / DISH_PX_PER_CELL);
     this.overlaySprite.alpha = this.opts.overlayOpacity;
@@ -674,7 +678,7 @@ export class DishRenderer {
     }
   }
 
-  /** One pip by shape: filled = pass, half-filled = partial, hollow = blocked, a chevron (in the flow direction) = one way. */
+  /** One pip by shape: filled = pass, half-filled = partial, hollow = blocked, a dashed ring = not applicable (P5.8), a chevron (in the flow direction) = one way. */
   private drawPip(g: Graphics, state: PipState, x: number, y: number, r: number, px: number, dir: 'R' | 'D', back: boolean): void {
     const color = BADGE_COLORS.pip;
     const line = { width: 1.25 * px, color, alpha: 1 };
@@ -683,6 +687,13 @@ export class DishRenderer {
     else if (state === 'partial') {
       g.circle(x, y, r - 0.6 * px).stroke(line);
       g.moveTo(x, y - r).arc(x, y, r, -Math.PI / 2, Math.PI / 2, true).closePath().fill({ color, alpha: 1 });
+    } else if (state === 'notApplicable') {
+      // P5.8 (gateBadges.ts worldPipsFor): four short arcs, never filled, so it reads neither as pass nor as blocked.
+      const rr = r - 0.6 * px;
+      for (let q = 0; q < 4; q++) {
+        const a0 = (q * Math.PI) / 2 + Math.PI / 12;
+        g.moveTo(x + rr * Math.cos(a0), y + rr * Math.sin(a0)).arc(x, y, rr, a0, a0 + Math.PI / 3).stroke(line);
+      }
     } else {
       // Chevron toward the flow: +x for an 'R' edge (−x with EDGE_FLOW_BACK), +y for a 'D' edge (−y back).
       const s = back ? -1 : 1;
@@ -960,8 +971,9 @@ export class DishRenderer {
       if (d < 0 || v > perCell[cell * nSp + d]!) dominant[cell] = sp;
     }
     const ctx = this.aggCanvas.getContext('2d')!;
-    const img = (this.aggImg ??= ctx.createImageData(GRID_W, GRID_W));
-    paintAggregation(img, dominant, density, this.speciesColors);
+    const img = (this.aggImg ??= ctx.createImageData(GRID_W * AGG_PX, GRID_W * AGG_PX));
+    this.aggOutline = aggOutlineTexels(this.camera.zoom);
+    paintAggregationInked(img, dominant, density, this.speciesColors, this.aggOutline, GRID_W);
     ctx.putImageData(img, 0, 0);
     this.aggTex.source.update();
   }
@@ -1086,7 +1098,8 @@ export class DishRenderer {
     this.statusParticles.visible = !wide;
     this.particles.alpha = 1;
     if (!s) return;
-    if (wide && this.aggDirty && refreshDue(this.lastAggPaint, now, this.budget.aggregationRefreshMs)) {
+    // P5.8: a zoom that changes the outline's thickness repaints too (a paused dish keeps a one-pixel ring).
+    if (wide && (this.aggDirty || aggOutlineTexels(cam.zoom) !== this.aggOutline) && refreshDue(this.lastAggPaint, now, this.budget.aggregationRefreshMs)) {
       this.paintAggregation(s);
       this.lastAggPaint = now;
     }
@@ -1549,8 +1562,9 @@ export class DishRenderer {
       if (d < 0 || v > perCell[cell * nB + d]! || (v === perCell[cell * nB + d]! && band < d)) dominant[cell] = band;
     }
     const ctx = this.aggCanvas.getContext('2d')!;
-    const img = (this.aggImg ??= ctx.createImageData(GRID_W, GRID_W));
-    paintAggregation(img, dominant, density, TRAIT_BAND_AGG);
+    const img = (this.aggImg ??= ctx.createImageData(GRID_W * AGG_PX, GRID_W * AGG_PX));
+    this.aggOutline = aggOutlineTexels(this.camera.zoom);
+    paintAggregationInked(img, dominant, density, TRAIT_BAND_AGG, this.aggOutline, GRID_W);
     ctx.putImageData(img, 0, 0);
     this.aggTex.source.update();
     return true;

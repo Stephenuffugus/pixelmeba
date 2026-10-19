@@ -342,6 +342,20 @@ function keepSelectionVisible(sheetEl: HTMLElement, entityId: number, fallback: 
   }
 }
 
+/**
+ * P5.8 (wave 15; D-0125 leftover (b)): INHIBITOR_EXPOSURE when it is ONLY the suitability reason (EntityInspect
+ * suitFactors.reason; the intake limit is something else), as the rival line shows RIVAL_EXPOSURE: UX §5.2's words,
+ * and in Lab the suitability it measured. Null when the reason is not INHIBITOR_EXPOSURE, or when the limit is
+ * INHIBITOR_EXPOSURE too (the lead constraint and "What's holding it back" already say it: never twice).
+ */
+export function inhibitorSuitLine(e: Pick<EntityInspect, 'suitFactors' | 'limitCode' | 'divisionBlockers' | 'suitability'>, view: 'explore' | 'lab'): string | null {
+  if (e.suitFactors.reason !== R.INHIBITOR_EXPOSURE) return null;
+  if (e.limitCode === R.INHIBITOR_EXPOSURE || e.divisionBlockers.includes(R.INHIBITOR_EXPOSURE)) return null;
+  const words = reasonText(R.INHIBITOR_EXPOSURE, 'explore');
+  if (view === 'explore') return words;
+  return `${words.replace(/\.$/, '')}: conditions ${Math.round(e.suitability * 100)} % suitable here.`;
+}
+
 function EntityView({ e }: { e: EntityInspect }) {
   const info = dishInfo.value;
   const [tab, setTab] = useState<'now' | 'inherited' | 'evidence'>('now');
@@ -588,6 +602,11 @@ function EntityView({ e }: { e: EntityInspect }) {
               ) : null}
               {/* Wave 13 (P5.7): the Phase 5 organism lines, each from one optional inspector field (absent in a v1.0 dish). */}
               <OrganismLines e={e} view={dishView.value} names={info?.speciesNames ?? []} />
+              {inhibitorSuitLine(e, dishView.value) ? (
+                <p class="inspector-line" data-testid="inhibitor-line">
+                  {inhibitorSuitLine(e, dishView.value)}
+                </p>
+              ) : null}
               {/* P3.4: infections, attached parasites and the host a parasite rides, from recorded state
                   (UX §5.2: Explore wording in Explore, Lab wording with the measured value in Lab), as
                   body text above the small key/value grid. */}

@@ -8,7 +8,7 @@ import { playCue } from '@audio/cues';
 import { IconBack, IconPlay } from '../icons';
 import { journal } from '../journal';
 import { busy, experimentCard, experimentCards, experimentCardsError, loadExperimentCards, route, startExperiment } from '../state';
-import { clauseText, completionText, describeArms, durationText, measureLabel, playerStepText } from '../strings/experiments';
+import { clauseText, completionText, describeArms, durationText, measureLabel, playerStepText, TEST_OVERRIDE_TITLE, testOverrideLines } from '../strings/experiments';
 import { KeepPlanLine } from '../panels/KeepPlanLine';
 
 export function ExperimentCard() {
@@ -44,6 +44,8 @@ export function ExperimentCard() {
   const labels = card.labels.filter((l) => !/^Experiment\b/.test(l));
   const startAt = card.change.kind === 'commands' ? card.change.atSecond : 0;
   const stamps = journal.value.filter((e) => e.experimentId === card.id).length;
+  // P5.6 (SPEC §13.1 "disclosed in the setup panel"): a card whose recipe carries a test-only override says so first.
+  const overrides = testOverrideLines(card.testOverrides);
   return (
     <main class="page" aria-labelledby="xp-card-title" data-testid="experiment-card">
       <div class="home-grid">
@@ -65,6 +67,20 @@ export function ExperimentCard() {
           ) : null}
           <h2>Question</h2>
           <p class="xp-question">{card.question}</p>
+
+          {overrides.lines.length > 0 ? (
+            <section class="constraint xp-override" aria-labelledby="xp-override-title" data-testid="experiment-test-override">
+              <h2 id="xp-override-title">{TEST_OVERRIDE_TITLE}</h2>
+              {overrides.lines.map((l) => (
+                <p key={l}>{l}</p>
+              ))}
+              {overrides.notes.map((n) => (
+                <p key={n} class="xp-note" data-testid="experiment-test-override-note">
+                  {n}
+                </p>
+              ))}
+            </section>
+          ) : null}
 
           <h2>Recipe</h2>
           <p>

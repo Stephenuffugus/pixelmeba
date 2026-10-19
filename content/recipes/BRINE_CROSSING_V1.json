@@ -1,0 +1,77 @@
+{
+  "id": "BRINE_CROSSING_V1",
+  "revision": 1,
+  "name": "Brine crossing",
+  "habitatId": "H05_BRINE_MOSAIC",
+  "seed": 207,
+  "mutationPreset": "standard",
+  "founderMode": "identical",
+  "backgroundOverrides": {},
+  "edges": [
+    {
+      "structure": "S03",
+      "dir": "R",
+      "x0": 63,
+      "x1": 63,
+      "y0": 62,
+      "y1": 65,
+      "open": true
+    }
+  ],
+  "fieldPatches": [
+    {
+      "center": [
+        40,
+        64
+      ],
+      "radius": 18,
+      "substrate": "water",
+      "add": {
+        "sugar": 0.5,
+        "nutrient": 0.2
+      },
+      "label": "Fresh pool food"
+    },
+    {
+      "center": [
+        88,
+        64
+      ],
+      "radius": 18,
+      "substrate": "water",
+      "add": {
+        "sugar": 0.5,
+        "nutrient": 0.2
+      },
+      "label": "Brine pool food"
+    }
+  ],
+  "founders": [
+    {
+      "species": "B01",
+      "count": 20,
+      "center": [
+        40,
+        64
+      ],
+      "radius": 6,
+      "placement": "scatter",
+      "label": "Sprinters (fresh pool)"
+    },
+    {
+      "species": "B10",
+      "count": 20,
+      "center": [
+        88,
+        64
+      ],
+      "radius": 6,
+      "placement": "scatter",
+      "label": "Brinecoils (brine pool)"
+    }
+  ],
+  "labels": [],
+  "question": "Where does the salt go when the channel shutter is open?",
+  "expectedObservationsText": "A fresh pool and a brine pool (salt 0.6) joined by a channel with a shutter gate across it, open at the start. Twenty Sprinters live in the fresh pool and twenty Brinecoils in the brine pool, each pool with sugar and nutrient. Salt spreads along the channel through the open shutter; closing it stops the flow across the shutter's four edges, while salt still seeps slowly through the gel around it and organisms can crawl over the gel. The shutter's tally counts only the salt that crossed the shutter, and the inspector shows when salt lowers an organism's suitability.",
+  "phase": 5
+}

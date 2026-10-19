@@ -10,6 +10,7 @@ import { applyNow, type CommandPayload } from '@sim/commands';
 import type { ContentRegistry } from '@sim/content/registry';
 import type { RecipeDef } from '@sim/content/schema';
 import { applyRecipeOverrides, hasRecipeChanges, realizeRecipe, recipeGrid, recipeOverridesOf, type RecipeOverridesRecord, type RecipeWorldProvenance } from '@sim/recipes';
+import { hasTestOverrides, testOverrideRefusalText } from '@sim/recipes';
 import { deserializeWorld, serializeWorld, stateHash, type WorldState } from '@sim/serialize';
 import { canonicalJson } from '@sim/hash';
 import { step } from '@sim/tick';
@@ -19,12 +20,13 @@ import { worldHasSystem } from '@sim/gates';
 import { buildFamily, buildInspector, lociOfBirth, packDeposits, packEntities, packEnvironment, packGeometry, packLinks, packObjects, packOverlay, packResins, speciesFreeClasses, visualEvents } from './snapshot';
 import { buildLineage, packLineageMarks } from '@sim/lineage';
 import type { LineageMarks, LineageView } from './protocol';
-import { stamp, type DishInfo, type DishSource, type Envelope, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
+import { CHALLENGE_TEMPLATES_REQUEST, stamp, type DishInfo, type DishSource, type Envelope, type FromWorker, type OverlayId, type Selection, type SlotSummary, type SnapshotMsg, type Speed, type ToWorker } from './protocol';
 import type { ExperimentStampMsg } from './protocol';
 import { captureBaseline, PairedRun, realizeArm, type CompareSpeed, type CompareStatus, type ComparisonResults, type ComparisonState, type Intervention } from './comparison';
 import type { ComparisonExperiment } from './comparison';
 import { prepareVariantPair, realizePairArm, VARIANT_PAIR_TEXT, VARIANT_PAIR_TICKS, variantPairRefusal, VariantPairRun, type ComparisonVariantPair, type VariantPairFacts, type VariantPairSugar } from './variantPair';
 import { experimentCardView, experimentCatalog, experimentOf, GateWatch, inspectedOxygenReading, inspectShowsFoodUse, inspectShowsInfection, PlayerSteps, realizeExperimentArms, stepSpecies, type PlayerStep } from '@sim/experiments';
+import { cardRegions, inspectShowsGlow, inspectShowsMoisture, isCardShutterToggle, worldOverrideViews } from '@sim/experiments';
 import { PAIRED_RUN_LABEL, SINGLE_RUN_LABEL, type ArmObserver } from '@sim/pairedRun';
 import { TICKS_PER_SECOND } from '@sim/constants';
 import { isIntervention } from '@sim/specimens';
@@ -39,6 +41,7 @@ import { communityOffered, habitatOffered } from '@sim/content/habitatRules';
 import type { SlotModes } from './protocol';
 import { buildSaveFile, loadSaveFile, SaveFileError, saveMetaVariant } from '@persist/saveFile';
 import { saveMetaEvolution, saveMetaRegistry, type SaveFile, type SaveMetaEvolution, type SaveMetaRegistry } from '@persist/saveFile';
+import { saveMetaTestOverrides } from '@persist/saveFile';
 import { AUTOSAVE_SLOT, type SaveStore, type SlotInfo } from '@persist/store';
 import { holdsSave, SaveStore as SaveStoreClass, type SaveRequest } from '@persist/store';
 import { isCheckpointSlot } from '@persist/store';
@@ -65,7 +68,7 @@ import { emptyMap, isMapWindow } from './relationshipMap';
 import { probeSetProblem, ProbeSet } from './probes';
 import { emptyNotebook, favoritesOnly, notebookHasNicknames, notebookIsEmpty, notebookWithoutNicknames, sealNotebook, type NotebookRecord } from '@persist/notebook';
 import { notebookAfterRestore, NotebookWatch } from './notebookWatch';
-import { GOAL_REFUSALS, goalCatalog } from './goals';
+import { challengeTemplates, GOAL_REFUSALS, goalCatalog } from './goals';
 import { markStory } from '@persist/notebookStories';
 import { applyFavoriteOp, FAVORITE_REFUSALS, readFavoriteOp, withPatterns } from './favorites';
 import type { FavoriteMarks, NotebookChange } from './protocol';
@@ -260,12 +263,19 @@ function slotModes(s: SlotInfo, catalogSize: number): SlotModes | null {
   const evolution = saveMetaEvolution(s);
   if (!evolution) return null;
   const registry = saveMetaRegistry(s);
-  return { ...evolution, ...(registry ? { partial: registry.enabledModules.length < catalogSize } : {}) };
+  // P5.6: the index's copy of meta.testOverrides rides in its evolution copy (slotMetaCopies); SlotModes.testOnly.
+  const { testOverrides: _testOverrides, ...modes } = evolution;
+  return { ...modes, ...(registry ? { partial: registry.enabledModules.length < catalogSize } : {}), ...(saveMetaTestOverrides(s) ? { testOnly: true as const } : {}) };
 }
 
-/** P2.2: the meta copies a slot index keeps with each save (mode labels on Saved dishes and Continue). */
+/**
+ * P2.2: the meta copies a slot index keeps with each save (mode labels on Saved dishes and Continue). P5.6: a
+ * file whose meta says testOverrides has the flag folded into the evolution copy (the only copies an index
+ * keeps; store.ts, checkpoints.ts and shelf.ts copy `evolution` whole), so the slot's SlotModes.testOnly reads it.
+ */
 function slotMetaCopies(file: SaveFile): { evolution?: SaveMetaEvolution; registry?: SaveMetaRegistry } {
-  return { ...(file.meta.evolution ? { evolution: file.meta.evolution } : {}), ...(file.meta.registry ? { registry: file.meta.registry } : {}) };
+  const evolution = file.meta.evolution ? (file.meta.testOverrides === true ? { ...file.meta.evolution, testOverrides: true as const } : file.meta.evolution) : undefined;
+  return { ...(evolution ? { evolution } : {}), ...(file.meta.registry ? { registry: file.meta.registry } : {}) };
 }
 
 /** An authored recipe's recorded start: the ledger's initial totals and its tick-0 recipe inputs. */
@@ -350,6 +360,13 @@ interface SingleArmExperiment {
   readonly steps: PlayerSteps;
   /** The species those steps follow (e.g. the Sprinters whose food use the inspector shows). */
   readonly species: readonly string[];
+  /**
+   * P5.6 'toggleShutter': the first structure id a player placement can get on the card's dish (its nextDeviceId
+   * when the card started): a smaller id is a structure the recipe placed. 'inspectMoisture': the regions of the
+   * dish's recorded habitat the card measures.
+   */
+  readonly firstPlayerId: number;
+  readonly regions: readonly HabitatRegion[];
   /** The stamp as recorded when the measured gate held, kept until every listed step is taken. */
   pending: ExperimentStampMsg | null;
   /** The stamp was posted (the observation is complete). */
@@ -945,7 +962,12 @@ export class DishHost {
         // A command that placed nothing (accepted 0) left the dish unchanged: the card keeps observing,
         // and it is no undo point (the previous one, if any, stays exactly as it was).
         const changed = cmd.result === undefined || cmd.result.accepted > 0;
-        if (d.experiment && !d.experiment.ended && changed && (msg.payload.kind !== 'lineage' || isIntervention(msg.payload))) this.endExperiment(d, 'changed');
+        // P5.6 (CT §10.3 E207): the one command a card's 'toggleShutter' step names — an accepted open toggle of a
+        // shutter the recipe placed — is the card's own step, not a change to its dish: the card keeps observing.
+        const x0 = d.experiment;
+        const cardToggle = x0 !== null && x0 !== undefined && !x0.ended && changed && x0.steps.required.includes('toggleShutter') && isCardShutterToggle(d.world, msg.payload, x0.firstPlayerId);
+        if (cardToggle) this.experimentSteps(d, 'toggleShutter');
+        else if (d.experiment && !d.experiment.ended && changed && (msg.payload.kind !== 'lineage' || isIntervention(msg.payload))) this.endExperiment(d, 'changed');
         if (before && changed) {
           d.undo = before;
           // The pre-command state doubles as the rollback checkpoint.
@@ -1198,7 +1220,9 @@ export class DishHost {
       case 'goalCatalog': {
         // P4.4: read-only (content and the dish's recorded manifest).
         const d = msg.targetDishId !== null ? this.dishes[msg.targetDishId] : undefined;
-        const goals = d ? (d.arm ? [] : goalCatalog(this.registry, { world: d.world })) : goalCatalog(this.registry, { recipeId: msg.recipeId, manifest: this.registry.manifest });
+        // P5.6: an open dish's challenge starting points (recipeId CHALLENGE_TEMPLATES_REQUEST; an arm has none).
+        const templates = d !== undefined && msg.recipeId === CHALLENGE_TEMPLATES_REQUEST;
+        const goals = templates ? (d.arm ? [] : challengeTemplates(this.registry, d.world)) : d ? (d.arm ? [] : goalCatalog(this.registry, { world: d.world })) : goalCatalog(this.registry, { recipeId: msg.recipeId, manifest: this.registry.manifest });
         this.post({ type: 'goalCatalog', requestId: msg.requestId, goals });
         return;
       }
@@ -1459,7 +1483,7 @@ export class DishHost {
     const keptField = kept ? { kept } : {};
     if (!def.paired || !ids || !arms.B || !arms.obsB) {
       const dish = this.addDish(msg.newDishId, arms.A, name);
-      dish.experiment = { watch, obs: arms.obsA, labels, ended: false, steps, species: stepSpecies(def), pending: null, posted: false, waitingFor: null };
+      dish.experiment = { watch, obs: arms.obsA, labels, ended: false, steps, species: stepSpecies(def), firstPlayerId: arms.A.counters.nextDeviceId, regions: cardRegions(arms.A, def), pending: null, posted: false, waitingFor: null };
       this.post({ type: 'experimentStarted', requestId: msg.requestId, cardId: def.id, info: this.info(dish), compare: null, ...keptField });
       this.sendSnapshot(dish);
       return;
@@ -1561,6 +1585,9 @@ export class DishHost {
       if (seen) x.steps.noteOxygenLimit(seen.species, seen.reason, x.species);
     }
     if (x.steps.needs('observeInfection') && sel?.kind === 'entity' && inspectShowsInfection(d.world, sel.birthId, x.species)) x.steps.note('observeInfection');
+    // P5.6 (CT §10.3 E205, E211): a glowing-rules organism of the followed species; a moisture reading in a measured region.
+    if (x.steps.needs('inspectGlow') && sel?.kind === 'entity' && inspectShowsGlow(d.world, sel.birthId, x.species)) x.steps.note('inspectGlow');
+    if (x.steps.needs('inspectMoisture') && sel && inspectShowsMoisture(d.world, sel, x.regions)) x.steps.note('inspectMoisture');
     if (!x.pending) return;
     if (x.steps.complete) {
       x.posted = true;
@@ -2169,6 +2196,10 @@ export class DishHost {
 
   private build(source: DishSource, dishId: string): World {
     if (source.kind === 'recipe') {
+      // P5.6 (SPEC §13.1 "never available in ordinary sandbox"): an experiment fixture with a test-only override
+      // opens only from its card (realizeExperimentArms), never as a New Dish, Try my dish, compare or What if? start.
+      const fixture = this.registry.recipes[source.recipeId];
+      if (fixture !== undefined && hasTestOverrides(fixture)) throw new Error(testOverrideRefusalText(fixture.name));
       // P2.2: only the recorded evolution settings exist (a malformed request builds nothing).
       const o0 = source.overrides;
       if (o0?.mutationPreset !== undefined && !isMutationPreset(o0.mutationPreset)) throw new Error(`Unknown evolution setting "${String(o0.mutationPreset)}".`);
@@ -3359,7 +3390,15 @@ export class DishHost {
             regions: w.content.habitat.regions.map((r: HabitatRegion, k) => ({ id: r.id, label: r.label, number: k + 1, anchor: [r.anchor[0], r.anchor[1]] as const })),
           }
         : {}),
+      // P5.6 (SPEC §13.1): the test-only overrides the WORLD records (its provenance and species copies); absent when none.
+      ...this.testOverridesInfo(w),
     };
+  }
+
+  /** P5.6: DishInfo.testOverrides of a world (normal = this build's species record value); {} when it records none. */
+  private testOverridesInfo(w: World): Pick<DishInfo, 'testOverrides'> {
+    const views = worldOverrideViews(w, this.registry.species);
+    return views.length > 0 ? { testOverrides: views } : {};
   }
 
   /** A slot as the Saved dishes list and Continue show it, with its mode labels when recorded (P2.2). */

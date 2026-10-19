@@ -24,6 +24,7 @@ import {
   registryLine,
   simTime,
   worldModesLine,
+  modesFlags,
   type PresetId,
 } from '../strings/modes';
 
@@ -167,7 +168,7 @@ export function EvolutionSheet(): JSX.Element | null {
           </button>
         </header>
         <p class="world-modes" data-testid="evolution-world-label">
-          {worldModesLine(evo?.preset ?? info.mutationPreset, evo?.founderMode ?? info.founderMode, registry)}
+          {worldModesLine(evo?.preset ?? info.mutationPreset, evo?.founderMode ?? info.founderMode, modesFlags(registry, info.testOverrides))}
         </p>
         {evo ? (
           <>
