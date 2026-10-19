@@ -3,12 +3,33 @@
 > **FIRST READ `docs/agent/fast-track.md` — the owner wants v1.0 in about three sessions; it overrides the old
 > per-builder verification, three-project e2e runs and six-wave layout below.**
 >
+> **Update 2026‑10‑19 02:05 UTC — CODESPACE CLOSES ABOUT 03:50. main = the enable 47f8399 + docs, pushed. WAVE 15 IS IN ITS FIX
+> ROUND AND NOT INTEGRATED: run wf_5b321cad-dcf (4 builders and 4 verifiers done; round-1 fixers for measures-overrides and
+> cards-curated running since 01:17; the prompts-succession fixer queued; then one re-verifier). Its uncommitted work is backed
+> up every 30 min to origin wip/g5-wave-15 (reports: docs/reports/reviews/g5-wave-15/). The lead stops the workflow at an agent
+> boundary by 03:20 and updates this banner. START HERE after the restart:**
+> 1. `git status`: if the wave 15 work is missing, `git checkout wip/g5-wave-15 -- . && git reset -q`.
+> 2. Same session (`claude --continue`): Workflow({ scriptPath: <scratchpad>/g5-wave-15.run.workflow.js (recreate it with cp from
+>    docs/agent/g5-wave-15.run.workflow.js.txt if /tmp was wiped; the content must be identical), resumeFromRunId: 'wf_5b321cad-dcf' }):
+>    finished agents return cached, the rest run live.
+> 3. New session (no resume): finish the fix round with a small hand-written run: one fixer per task whose
+>    docs/reports/reviews/g5-wave-15/<key>-fix1.md is missing (its MAJORs: wave-verify-1.md, wave-verify-2.md, saves-verify-*.md),
+>    then one re-verifier over the fixed tasks (the runner's prompts: docs/agent/g5-wave-15.run.workflow.js.txt, the fix loop near the end).
+> 4. Then LEAD AFTER WAVE 15 (docs/agent/g5-wave-15.tasks.js.txt). The verifiers' [lead] MAJORs: habitats-p5-equivalence compares
+>    the key list, and the 15 new Phase 5 recipes are extra recipe: keys (compare the golden's keys only); lab-commands:904 gains
+>    offerOnHabitats objectives (H04/H05/H08/H11) and SUSTAIN_THREE_SPECIES' L305 under its v1.0-habitat build; E205 and E206 can
+>    never be completed as shipped (sensed signal < 0.1 against the 0.30 on-threshold; seed 206 never glows): a recipe revision,
+>    never a rule change, or hold them back. Then the MINORs, the check, journeys, commit, and the full e2e sweep.
+
 > **Update 2026‑10‑18 19:30 UTC — THE HABITAT ENABLE COMMITTED 47f8399 (D-0130; P5.4 ticked; journeys 58/58 after the new
 > journey's helper fix). D-0131 (wave 15 scope) in DECISIONS; the wave 15 task + run files carry 47f8399. START HERE:**
+> 0. LAUNCHED 19:22 UTC: run wf_5b321cad-dcf (scratchpad copy g5-wave-15.run.workflow.js; backup loop pid in tmp/lead/backup-15.pid;
+>    phone preview of 47f8399 on port 4310). After a restart: resume it (same scriptPath + resumeFromRunId), do not relaunch.
 > 1. Wave 15: Workflow scriptPath = a .js copy of docs/agent/g5-wave-15.run.workflow.js.txt in the scratchpad (A.only = the four
 >    tasks, verifyGroups set); backups → wip/g5-wave-15 (tools/lead/backup-loop.sh, pid in tmp/lead/backup-15.pid). If the
 >    workflow died, resume it with its runId (resumeFromRunId) rather than relaunching.
-> 2. During wave 15: the full e2e sweep owed (desktop + phone-portrait) niced in tmp/wt-w11 checked out at 47f8399; re-pin by cause.
+> 2. After wave 15's integration (not beside its builders: 2 cores / 7 GB): the full e2e sweep owed (every spec, desktop +
+>    phone-portrait) on the integrated tree; re-pin by cause (g5-plan "Full e2e sweep owed", 2026-10-18 note).
 > 3. Then LEAD AFTER WAVE 15 (the task file's checklist), the wave 16 task writer, wave 16 (the G5 gate, v1.1.0).
 
 > **Update 2026‑10‑18 18:25 UTC — ENABLE CHECK DONE (3,643/3,645; the 2 failures were older-build models, re-pinned by cause:

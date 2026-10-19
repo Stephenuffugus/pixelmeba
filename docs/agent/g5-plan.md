@@ -225,3 +225,6 @@ this plan and the relevant slice of g5-briefs.md, not the whole spec.
   stale since the systems flip (chemistry-habitats' Lab light line, D-0121) and two phone layout faults (D-0127): wave
   journeys cover only touched features, so run every spec on desktop and phone-portrait once after THE HABITAT ENABLE
   (or at the latest in wave 16 before the gate run) and re-pin by cause.
+  2026-10-18 (lead): moved to after wave 15's integration, on the integrated tree, so ONE sweep covers the enable
+  (47f8399) and wave 15; running it beside wave 15's builders on 2 cores / 7 GB would slow their own journeys into
+  timeouts. The wave 16 task writer (reading only) can run during it.
